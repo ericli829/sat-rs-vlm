@@ -1,0 +1,76 @@
+model:
+  model_id: "Qwen/Qwen3-VL-8B-Instruct"
+  processor_id: "Qwen/Qwen3-VL-8B-Instruct"
+  trust_remote_code: true
+  local_files_only: false
+  torch_dtype: "bfloat16"
+  attn_implementation: "sdpa"
+  device_map: "auto"
+
+data:
+  train_file: "data/processed/qwen3vl_train.jsonl"
+  val_file: "data/processed/qwen3vl_val.jsonl"
+  image_root: "."
+  max_seq_length: 4096
+  max_train_samples: null
+  max_eval_samples: null
+  task_sampling_weights:
+    captioning: 1.0
+    vqa: 1.0
+    detection: 1.3
+    counting: 1.3
+    change_detection: 1.5
+    scene_classification: 1.0
+
+training:
+  output_dir: "checkpoints/qwen3vl-rs-lora"
+  method: "qlora"
+  freeze_vision_encoder: true
+  freeze_projector: false
+  num_train_epochs: 3
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 16
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  warmup_ratio: 0.03
+  lr_scheduler_type: "cosine"
+  logging_steps: 10
+  save_steps: 500
+  eval_steps: 500
+  save_total_limit: 3
+  bf16: true
+  fp16: false
+  gradient_checkpointing: true
+  max_grad_norm: 1.0
+  seed: 42
+  resume_from_checkpoint: null
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+qlora:
+  load_in_4bit: true
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_compute_dtype: "bfloat16"
+  bnb_4bit_use_double_quant: true
+
+evaluation:
+  do_eval: true
+  predict_with_generate: true
+  max_new_tokens: 256
+  num_beams: 1
+
+logging:
+  report_to: "none"
+  experiment_name: "qwen3vl-rs-lora-baseline"

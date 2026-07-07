@@ -1,0 +1,3 @@
+{"image_path":"examples/demo_image.jpg","prompt":"请描述这张遥感图像中的主要地物。"}
+{"image_path":"examples/demo_image.jpg","prompt":"请检测机场跑道位置。"}
+{"image_path":"examples/before.jpg","second_image_path":"examples/after.jpg","prompt":"请分析前后图像中的新增建筑。"}

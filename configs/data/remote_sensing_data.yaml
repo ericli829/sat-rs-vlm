@@ -1,0 +1,20 @@
+raw_data:
+  vrsbench: "data/raw/vrsbench"
+  mme_real_rs: "data/raw/mme_real_rs"
+  xlrs_bench: "data/raw/xlrs_bench"
+  levir_cc: "data/raw/levir_cc"
+
+processed:
+  output_dir: "data/processed"
+  train_file: "data/processed/rs_train.jsonl"
+  val_file: "data/processed/rs_val.jsonl"
+  test_file: "data/processed/rs_test.jsonl"
+  qwen_train_file: "data/processed/qwen3vl_train.jsonl"
+  qwen_val_file: "data/processed/qwen3vl_val.jsonl"
+  qwen_test_file: "data/processed/qwen3vl_test.jsonl"
+
+split:
+  train_ratio: 0.8
+  val_ratio: 0.1
+  test_ratio: 0.1
+  seed: 42

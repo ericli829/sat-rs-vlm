@@ -1,0 +1,21 @@
+model:
+  base_model: "Qwen/Qwen3-VL-8B-Instruct"
+  adapter_path: "checkpoints/qwen3vl-rs-lora"
+  processor_id: "Qwen/Qwen3-VL-8B-Instruct"
+  torch_dtype: "bfloat16"
+  device_map: "auto"
+
+data:
+  eval_file: "data/processed/qwen3vl_val.jsonl"
+  image_root: "."
+  max_eval_samples: 100
+
+generation:
+  max_new_tokens: 256
+  do_sample: false
+  temperature: 0.0
+  num_beams: 1
+
+output:
+  summary_file: "reports/eval/qwen3vl_eval_summary.json"
+  predictions_file: "reports/eval/qwen3vl_predictions.jsonl"

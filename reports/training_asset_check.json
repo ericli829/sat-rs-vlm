@@ -1,0 +1,38 @@
+{
+  "success": true,
+  "errors": [],
+  "model_dir": "D:\\Desktop\\tzb-2026\\Qwen3-VL-2B-Instruct",
+  "processor_dir": "D:\\Desktop\\tzb-2026\\Qwen3-VL-2B-Instruct",
+  "train_file": {
+    "path": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\data\\processed\\qwen3vl_train.jsonl",
+    "num_checked": 5,
+    "image_found": true
+  },
+  "val_file": {
+    "path": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\data\\processed\\qwen3vl_val.jsonl",
+    "num_checked": 5,
+    "image_found": true
+  },
+  "image_root": "D:\\Desktop\\tzb-2026\\sat-rs-vlm",
+  "dependencies": {
+    "torch": {
+      "available": true,
+      "version": "2.6.0+cu126",
+      "cuda_available": true,
+      "device_name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+      "total_memory_mb": 8187.5
+    },
+    "transformers": {
+      "available": true
+    },
+    "peft": {
+      "available": true
+    },
+    "PIL": {
+      "available": true
+    },
+    "qwen_vl_utils": {
+      "available": true
+    }
+  }
+}
