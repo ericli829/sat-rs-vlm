@@ -28,8 +28,32 @@ def test_profiler_without_torch(monkeypatch: pytest.MonkeyPatch) -> None:
         "sat_rs_vlm.infrastructure.profiler.importlib.util.find_spec",
         fake_find_spec,
     )
-    with InferenceProfiler(backend="mock", device="cpu") as profiler:
+    with InferenceProfiler(backend="huggingface", device="cpu") as profiler:
         pass
     payload = profiler.to_dict()
     assert payload["cuda_available"] is False
     assert payload["latency_ms"] is not None
+
+
+def test_profiler_degrades_when_torch_dll_cannot_load(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "sat_rs_vlm.infrastructure.profiler.importlib.util.find_spec",
+        lambda name: object(),
+    )
+
+    def fail_import(name: str) -> object:
+        raise OSError(f"cannot load {name} c10.dll")
+
+    monkeypatch.setattr(
+        "sat_rs_vlm.infrastructure.profiler.importlib.import_module",
+        fail_import,
+    )
+
+    with InferenceProfiler(backend="huggingface", device="cuda") as profiler:
+        pass
+
+    payload = profiler.to_dict()
+    assert payload["cuda_available"] is False
+    assert "c10.dll" in payload["torch_error"]

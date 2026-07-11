@@ -48,6 +48,64 @@ def print_trainable_parameters(model: Any) -> None:
     print(f"Trainable ratio: {ratio:.6f}")
 
 
+def model_input_device(model: Any, torch: Any) -> Any:
+    """返回模型输入 token 应放置的设备。
+
+    算法：
+        优先读取输入嵌入层权重设备，因为 `device_map="auto"` 可能把不同模块分配到
+        不同设备；若模型不暴露输入嵌入层，则回退到首个参数设备，最后根据 CUDA
+        可用性选择 `cuda:0` 或 `cpu`。
+
+    参数：
+        model：已经加载的 HuggingFace/PyTorch 模型。
+        torch：动态导入的 torch 模块。
+
+    返回值：
+        torch.device：输入张量应移动到的设备。
+    """
+
+    get_embeddings = getattr(model, "get_input_embeddings", None)
+    if callable(get_embeddings):
+        embeddings = get_embeddings()
+        weight = getattr(embeddings, "weight", None)
+        device = getattr(weight, "device", None)
+        if device is not None and str(device) != "meta":
+            return device
+
+    parameters = getattr(model, "parameters", None)
+    if callable(parameters):
+        first_parameter = next(iter(parameters()), None)
+        device = getattr(first_parameter, "device", None)
+        if device is not None and str(device) != "meta":
+            return device
+
+    fallback = "cuda:0" if bool(torch.cuda.is_available()) else "cpu"
+    return torch.device(fallback)
+
+
+def move_to_device(value: Any, device: Any, torch: Any) -> Any:
+    """递归地把 batch 中的 tensor 移动到指定设备。
+
+    参数：
+        value：tensor、字典、列表、元组或其他保持不变的值。
+        device：目标 torch.device。
+        torch：动态导入的 torch 模块，用于判断 tensor。
+
+    返回值：
+        Any：结构保持不变、其中 tensor 已移动到目标设备的对象。
+    """
+
+    if bool(torch.is_tensor(value)):
+        return value.to(device)
+    if isinstance(value, dict):
+        return {key: move_to_device(item, device, torch) for key, item in value.items()}
+    if isinstance(value, list):
+        return [move_to_device(item, device, torch) for item in value]
+    if isinstance(value, tuple):
+        return tuple(move_to_device(item, device, torch) for item in value)
+    return value
+
+
 def safe_import_model_dependencies(require_bitsandbytes: bool = False) -> dict[str, Any]:
     """安全导入模型训练依赖。
 

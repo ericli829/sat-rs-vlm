@@ -144,6 +144,14 @@ def parse_args() -> argparse.Namespace:
         help="Install optional model dependencies.",
     )
     parser.add_argument("--clean", action="store_true", help="Recreate .venv from scratch.")
+    parser.add_argument(
+        "--torch-index-url",
+        default=None,
+        help=(
+            "Optional official PyTorch wheel index, for example "
+            "https://download.pytorch.org/whl/cu130."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -168,7 +176,28 @@ def main() -> int:
     )
     run_command([str(python), "-m", "pip", "install", "-e", ".[dev]"], root)
     if args.with_model:
+        if args.torch_index_url:
+            run_command(
+                [
+                    str(python),
+                    "-m",
+                    "pip",
+                    "install",
+                    "--upgrade",
+                    "--force-reinstall",
+                    "--timeout",
+                    "1000",
+                    "--retries",
+                    "10",
+                    "torch",
+                    "torchvision",
+                    "--index-url",
+                    args.torch_index_url,
+                ],
+                root,
+            )
         run_command([str(python), "-m", "pip", "install", "-e", ".[model]"], root)
+        run_command([str(python), "scripts/check_env.py", "--require-model"], root)
 
     print_activation_hint(root)
     return 0

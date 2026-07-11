@@ -31,6 +31,8 @@ try:
     from sat_rs_vlm.training.utils import (
         MODEL_DEPS_ERROR,
         count_trainable_parameters,
+        model_input_device,
+        move_to_device,
         safe_import_model_dependencies,
         set_seed,
         torch_device_summary,
@@ -340,6 +342,7 @@ def forward_only(config: Qwen3VLTrainingConfig, paths: ResolvedTrainingPaths) ->
     """执行单 batch 前向传播并打印 loss。"""
 
     modules = safe_import_model_dependencies(require_bitsandbytes=config.training.method == "qlora")
+    torch = modules["torch"]
     transformers = modules["transformers"]
     processor = transformers.AutoProcessor.from_pretrained(
         paths.processor_source,
@@ -355,7 +358,13 @@ def forward_only(config: Qwen3VLTrainingConfig, paths: ResolvedTrainingPaths) ->
         debug_shapes=True,
     )
     batch = collator([train_dataset[0]])
-    output = model(**batch)
+    input_device = model_input_device(model, torch)
+    batch = move_to_device(batch, input_device, torch)
+    print(f"Forward-only input device: {input_device}")
+    if hasattr(model, "eval"):
+        model.eval()
+    with torch.inference_mode():
+        output = model(**batch)
     loss = getattr(output, "loss", None)
     print(f"Forward-only loss: {float(loss.detach().cpu()) if loss is not None else None}")
 

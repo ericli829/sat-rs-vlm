@@ -164,9 +164,15 @@ def check_dependencies(errors: list[str]) -> dict[str, Any]:
         try:
             importlib.import_module(name)
             deps[name] = {"available": True}
-        except ModuleNotFoundError:
-            deps[name] = {"available": False, "hint": MODEL_DEPS_HINT}
-            errors.append(f"Missing model dependency: {name}. Run: {MODEL_DEPS_HINT}")
+        except (ImportError, OSError) as exc:
+            deps[name] = {
+                "available": False,
+                "hint": MODEL_DEPS_HINT,
+                "error": str(exc),
+            }
+            errors.append(
+                f"Model dependency cannot be imported: {name}: {exc}. Run: {MODEL_DEPS_HINT}"
+            )
     torch_module = deps.get("torch")
     if torch_module and torch_module.get("available"):
         torch = importlib.import_module("torch")

@@ -1,0 +1,26 @@
+{
+  "success": true,
+  "cpu_ok": false,
+  "steps": [
+    {
+      "name": "validate assets",
+      "returncode": 0,
+      "duration_seconds": 15.370827100006863
+    },
+    {
+      "name": "dry run",
+      "returncode": 0,
+      "duration_seconds": 0.5444682999805082
+    },
+    {
+      "name": "forward only",
+      "returncode": 0,
+      "duration_seconds": 20.369768900010968
+    },
+    {
+      "name": "max_steps=2 train",
+      "returncode": 0,
+      "duration_seconds": 30.829006099986145
+    }
+  ]
+}

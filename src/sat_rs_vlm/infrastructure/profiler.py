@@ -40,6 +40,7 @@ class InferenceProfiler:
         self.latency_ms: float | None = None
         self.cuda_available = False
         self.peak_memory_mb: float | None = None
+        self.torch_error: str | None = None
         self._perf_start: float | None = None
         self._torch: Any | None = None
 
@@ -52,7 +53,12 @@ class InferenceProfiler:
 
         self.start_time = time.time()
         self._perf_start = time.perf_counter()
-        self._torch = self._load_torch()
+        if self.backend != "mock":
+            try:
+                self._torch = self._load_torch()
+            except (ImportError, OSError) as exc:
+                self.torch_error = str(exc)
+                self._torch = None
         if self._torch is not None:
             self.cuda_available = bool(self._torch.cuda.is_available())
             if self.cuda_available:
@@ -99,6 +105,7 @@ class InferenceProfiler:
             "device": self.device,
             "cuda_available": self.cuda_available,
             "peak_memory_mb": self.peak_memory_mb,
+            "torch_error": self.torch_error,
         }
 
     @staticmethod
