@@ -27,7 +27,7 @@ run-api:
 	uvicorn sat_rs_vlm.interfaces.http.app:app --reload --host 127.0.0.1 --port 8000
 
 infer-demo:
-	python -m sat_rs_vlm.interfaces.cli infer --image examples/demo_image.jpg --prompt "请描述这张遥感图像中的主要地物。"
+	python -m sat_rs_vlm.interfaces.cli infer --image data/samples/demo_image.png --prompt "请描述这张遥感图像中的主要地物。"
 
 prepare-data:
 	python scripts/prepare_rs_instruction_data.py --config configs/data/remote_sensing_data.yaml
@@ -45,7 +45,7 @@ eval-qwen3vl:
 	python scripts/evaluate_rs_vlm.py --config configs/eval/qwen3vl_eval.yaml
 
 merge-lora:
-	python scripts/merge_lora.py --base-model Qwen/Qwen3-VL-8B-Instruct --adapter checkpoints/qwen3vl-rs-lora/best --output checkpoints/qwen3vl-rs-merged
+	python scripts/merge_lora.py --base-model $(MODEL_DIR) --adapter $(ADAPTER_DIR) --output $(MERGED_DIR)
 
 validate-training-assets:
 	python scripts/validate_training_assets.py --config configs/train/qwen3vl_local_smoke.yaml

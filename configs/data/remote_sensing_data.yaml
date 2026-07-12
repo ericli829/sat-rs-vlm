@@ -1,8 +1,23 @@
+source: vrsbench
+
 raw_data:
-  vrsbench: "data/raw/vrsbench"
-  mme_real_rs: "data/raw/mme_real_rs"
-  xlrs_bench: "data/raw/xlrs_bench"
-  levir_cc: "data/raw/levir_cc"
+  vrsbench:
+    root: "F:/VIT-data/VRSBench"
+    train_images: "Images/Images_train"
+    val_images: "Images/Images_val"
+    train_annotations: "Annotations/Annotations_train"
+    val_annotations: "Annotations/Annotations_val"
+    official_train: "official/VRSBench_train.json"
+    official_eval_caption: "official/VRSBench_EVAL_Cap.json"
+    official_eval_referring: "official/VRSBench_EVAL_referring.json"
+    official_eval_vqa: "official/VRSBench_EVAL_vqa.json"
+    include_caption: true
+    include_detection: true
+    include_qa: true
+    coordinate_policy: "clip_0_1"
+    ignore_patterns:
+      - "__MACOSX"
+      - "._*"
 
 processed:
   output_dir: "data/processed"
@@ -14,7 +29,5 @@ processed:
   qwen_test_file: "data/processed/qwen3vl_test.jsonl"
 
 split:
-  train_ratio: 0.8
-  val_ratio: 0.1
-  test_ratio: 0.1
-  seed: 42
+  strategy: "official"
+  note: "VRSBench train/val are preserved; no independent test annotation is provided."

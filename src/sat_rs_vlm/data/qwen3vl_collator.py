@@ -22,11 +22,13 @@ class Qwen3VLDataCollator:
         image_root: str | Path,
         *,
         debug_shapes: bool = False,
+        for_generation: bool = False,
     ) -> None:
         self.processor = processor
         self.max_seq_length = max_seq_length
         self.image_root = Path(image_root)
         self.debug_shapes = debug_shapes
+        self.for_generation = for_generation
 
     def __call__(self, batch: list[dict[str, Any]]) -> dict[str, Any]:
         """编码一个 batch 并生成 labels。"""
@@ -34,12 +36,17 @@ class Qwen3VLDataCollator:
         if self.processor is None:
             raise ValueError("processor is required when collating a real batch.")
         normalized_messages = [self._messages_with_resolved_images(sample) for sample in batch]
+        if self.for_generation:
+            normalized_messages = [
+                [message for message in messages if message.get("role") != "assistant"]
+                for messages in normalized_messages
+            ]
         texts = [
             str(
                 self.processor.apply_chat_template(
                     messages,
                     tokenize=False,
-                    add_generation_prompt=False,
+                    add_generation_prompt=self.for_generation,
                 )
             )
             for messages in normalized_messages
@@ -54,14 +61,15 @@ class Qwen3VLDataCollator:
             max_length=self.max_seq_length,
             return_tensors="pt",
         )
-        labels = encoded["input_ids"].clone()
-        pad_token_id = getattr(self.processor, "pad_token_id", None)
-        if pad_token_id is None and getattr(self.processor, "tokenizer", None) is not None:
-            pad_token_id = getattr(self.processor.tokenizer, "pad_token_id", None)
-        if pad_token_id is not None:
-            labels[labels == pad_token_id] = -100
-        # TODO: 精确定位 assistant answer token span，将 user prompt token 也 mask 为 -100。
-        encoded["labels"] = labels
+        if not self.for_generation:
+            labels = encoded["input_ids"].clone()
+            pad_token_id = getattr(self.processor, "pad_token_id", None)
+            if pad_token_id is None and getattr(self.processor, "tokenizer", None) is not None:
+                pad_token_id = getattr(self.processor.tokenizer, "pad_token_id", None)
+            if pad_token_id is not None:
+                labels[labels == pad_token_id] = -100
+            # TODO: 精确定位 assistant answer token span，将 user prompt token 也 mask 为 -100。
+            encoded["labels"] = labels
         if self.debug_shapes:
             shapes = {
                 key: tuple(value.shape) for key, value in encoded.items() if hasattr(value, "shape")

@@ -9,10 +9,11 @@ rs_*.jsonl 格式。第三阶段第一版保留真实数据集接入接口；当
 from __future__ import annotations
 
 import argparse
-import random
 import struct
 import sys
 import zlib
+from collections import Counter
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,7 @@ if str(SRC_DIR) not in sys.path:
 
 import yaml
 
+from sat_rs_vlm.data.vrsbench import VRSBenchLayout, iter_vrsbench_samples
 from sat_rs_vlm.utils.jsonl import write_jsonl
 
 TASK_TEMPLATES: tuple[tuple[str, str, str], ...] = (
@@ -46,6 +48,18 @@ def parse_args() -> argparse.Namespace:
         "--config",
         default="configs/data/remote_sensing_data.yaml",
         help="Path to data YAML config.",
+    )
+    parser.add_argument(
+        "--source",
+        choices=("sample", "vrsbench"),
+        default=None,
+        help="Override the data source selected in YAML.",
+    )
+    parser.add_argument(
+        "--max-images-per-split",
+        type=int,
+        default=None,
+        help="Limit source images per split for a conversion smoke test.",
     )
     return parser.parse_args()
 
@@ -98,13 +112,6 @@ def ensure_sample_images(root: Path) -> dict[str, Path]:
         if not path.exists():
             write_placeholder_png(path, colors[key])
     return paths
-
-
-def real_dataset_dirs_exist(config: dict[str, Any], root: Path) -> bool:
-    """检查是否存在任意真实数据集目录。"""
-
-    raw_data = dict(config.get("raw_data", {}))
-    return any((root / str(path)).exists() for path in raw_data.values())
 
 
 def build_sample(split: str, index: int, image_path: Path, root: Path) -> dict[str, Any]:
@@ -162,39 +169,69 @@ def build_sample_rows(root: Path) -> dict[str, list[dict[str, Any]]]:
     return rows
 
 
-def load_real_dataset_rows(config: dict[str, Any], root: Path) -> list[dict[str, Any]]:
-    """真实数据集接入预留接口。
+def output_paths(config: dict[str, Any], root: Path) -> dict[str, Path]:
+    """解析内部 JSONL 的 train/val/test 输出路径。"""
 
-    第一版暂不解析具体 benchmark 的原始标注格式。后续可在这里接入 VRSBench、
-    MME Real RS、XLRS-bench、LEVIR-CC，并返回统一 rs_*.jsonl 行。
-    """
-
-    del config, root
-    return []
-
-
-def split_rows(
-    rows: list[dict[str, Any]],
-    config: dict[str, Any],
-) -> dict[str, list[dict[str, Any]]]:
-    """按配置比例切分真实数据行。"""
-
-    split_cfg = dict(config.get("split", {}))
-    rng = random.Random(int(split_cfg.get("seed", 42)))
-    shuffled = list(rows)
-    rng.shuffle(shuffled)
-    train_ratio = float(split_cfg.get("train_ratio", 0.8))
-    val_ratio = float(split_cfg.get("val_ratio", 0.1))
-    train_end = int(len(shuffled) * train_ratio)
-    val_end = train_end + int(len(shuffled) * val_ratio)
+    processed = dict(config.get("processed", {}))
     return {
-        "train": shuffled[:train_end],
-        "val": shuffled[train_end:val_end],
-        "test": shuffled[val_end:],
+        "train": root / str(processed.get("train_file", "data/processed/rs_train.jsonl")),
+        "val": root / str(processed.get("val_file", "data/processed/rs_val.jsonl")),
+        "test": root / str(processed.get("test_file", "data/processed/rs_test.jsonl")),
     }
 
 
-def prepare_data(config_path: Path) -> dict[str, Path]:
+def count_rows(rows: Iterable[dict[str, Any]], counts: Counter[str]) -> Iterator[dict[str, Any]]:
+    """在保持流式输出的同时统计总样本数和任务类型。"""
+
+    for row in rows:
+        counts["total"] += 1
+        counts[str(row.get("task_type", "unknown"))] += 1
+        yield row
+
+
+def prepare_vrsbench_data(
+    config: dict[str, Any],
+    root: Path,
+    outputs: dict[str, Path],
+    max_images_per_split: int | None,
+) -> None:
+    """按官方 train/val 目录流式转换 VRSBench。"""
+
+    raw_data = dict(config.get("raw_data", {}))
+    vrsbench_config = raw_data.get("vrsbench")
+    if not isinstance(vrsbench_config, dict):
+        raise ValueError("raw_data.vrsbench must be a mapping with root/images/annotations paths.")
+    coordinate_policy = str(vrsbench_config.get("coordinate_policy", "clip_0_1"))
+    if coordinate_policy != "clip_0_1":
+        raise ValueError(
+            f"Unsupported VRSBench coordinate_policy: {coordinate_policy}. Use 'clip_0_1'."
+        )
+    layout = VRSBenchLayout.from_config(vrsbench_config, root)
+    include_caption = bool(vrsbench_config.get("include_caption", True))
+    include_detection = bool(vrsbench_config.get("include_detection", True))
+    include_qa = bool(vrsbench_config.get("include_qa", True))
+    for split, path in outputs.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        counts: Counter[str] = Counter()
+        rows = iter_vrsbench_samples(
+            layout,
+            split,
+            max_images=max_images_per_split,
+            include_caption=include_caption,
+            include_detection=include_detection,
+            include_qa=include_qa,
+        )
+        write_jsonl(path, count_rows(rows, counts))
+        task_counts = {key: value for key, value in counts.items() if key != "total"}
+        print(f"Wrote {counts['total']} {split} VRSBench samples to {path}; tasks={task_counts}")
+
+
+def prepare_data(
+    config_path: Path,
+    *,
+    source_override: str | None = None,
+    max_images_per_split: int | None = None,
+) -> dict[str, Path]:
     """执行数据准备并返回输出路径。"""
 
     root = Path.cwd()
@@ -202,18 +239,15 @@ def prepare_data(config_path: Path) -> dict[str, Path]:
     processed = dict(config.get("processed", {}))
     output_dir = root / str(processed.get("output_dir", "data/processed"))
     output_dir.mkdir(parents=True, exist_ok=True)
+    outputs = output_paths(config, root)
+    source = source_override or str(config.get("source", "sample"))
+    if source == "vrsbench":
+        prepare_vrsbench_data(config, root, outputs, max_images_per_split)
+        return outputs
+    if source != "sample":
+        raise ValueError(f"Unsupported data source: {source}")
 
-    if real_dataset_dirs_exist(config, root):
-        real_rows = load_real_dataset_rows(config, root)
-        rows_by_split = split_rows(real_rows, config) if real_rows else build_sample_rows(root)
-    else:
-        rows_by_split = build_sample_rows(root)
-
-    outputs = {
-        "train": root / str(processed.get("train_file", "data/processed/rs_train.jsonl")),
-        "val": root / str(processed.get("val_file", "data/processed/rs_val.jsonl")),
-        "test": root / str(processed.get("test_file", "data/processed/rs_test.jsonl")),
-    }
+    rows_by_split = build_sample_rows(root)
     for split, path in outputs.items():
         path.parent.mkdir(parents=True, exist_ok=True)
         write_jsonl(path, rows_by_split[split])
@@ -225,7 +259,11 @@ def main() -> int:
     """脚本入口。"""
 
     args = parse_args()
-    prepare_data(Path(args.config))
+    prepare_data(
+        Path(args.config),
+        source_override=args.source,
+        max_images_per_split=args.max_images_per_split,
+    )
     return 0
 
 

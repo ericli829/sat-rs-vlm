@@ -1,163 +1,203 @@
 # sat-rs-vlm
 
-`sat-rs-vlm` 是一个面向受限星载算力场景的多模态遥感视觉语言模型工程框架，支持推理、数据准备、训练、评估和环境自动化。项目当前包含可运行的第一阶段骨架、第二阶段环境脚手架、模型工厂接入、可选的 HuggingFace 模型集成，以及轻量级推理性能分析。
+`sat-rs-vlm` 第一版是一个面向受限星载算力场景的遥感视觉语言模型工程框架。它把
+自然语言任务路由、统一推理结果、VRSBench 数据转换、本地 Qwen3-VL LoRA 微调、
+评估和可靠性接口放在同一套可测试的 Python 工程中。
 
-完整的中文操作流程、Windows 命令、本地 Qwen3-VL 训练步骤和故障排查见
-[使用说明](docs/usage_guide.md)。
+第一版的目标是建立一条可复现的本地研发链路，而不是宣称已经完成星载部署或获得
+遥感 benchmark 的最终精度。
 
-## 功能
+## 第一版状态
 
-- 面向检测、场景分类、分割、变化检测、计数、描述和 VQA 的自然语言任务路由。
-- 清晰分层的接口层、应用层、领域层、模型层、数据层和基础设施层。
-- 使用 YAML 配置并映射到 Pydantic 配置模型。
-- 提供 Typer CLI 和 FastAPI HTTP API。
-- 提供比特翻转模拟和校验和验证等可靠性扩展点。
-- 为 LoRA 微调、蒸馏、剪枝、量化和星载故障恢复预留接口。
-- 默认依赖保持轻量，真实模型依赖放在 `[model]` 可选扩展中，便于本地开发和 CI 使用。
+| 能力 | 当前状态 | 说明 |
+| --- | --- | --- |
+| Mock CLI / HTTP 推理 | 可用 | 支持任务路由和统一 JSON 结果，不读取真实图像内容。 |
+| HuggingFace 推理 | 可用 | 支持 Qwen3-VL 多模态聊天模板和本地模型加载。 |
+| VRSBench 转换 | 可用 | 展开 caption、referring/detection、counting、scene classification、VQA。 |
+| 坐标处理 | 可用 | VRSBench 检测框裁剪并规范到 `[0,1]`，保留原始坐标 metadata。 |
+| 本地 Qwen3-VL-2B LoRA smoke | 已验证 | 使用 `Qwen3-VL-2B-Instruct`、4 个训练样本、2 个 step。 |
+| 本地 adapter 评估链路 | 可用 | 使用 generation prompt，不把标准答案送入模型。 |
+| 完整 VRSBench 训练与正式指标 | 待执行 | 当前 smoke adapter 只用于验证链路，不代表模型精度。 |
+| 量化、剪枝、蒸馏、故障恢复 | 接口预留 | 尚未形成完整训练或部署流程。 |
 
-## 目录结构
+## 当前资产
+
+本工作区已经配置为使用：
 
 ```text
-configs/                 YAML 配置
-examples/                提示词示例和演示输入
-src/sat_rs_vlm/
-  interfaces/            CLI 和 HTTP 适配层
-  application/           用例服务
-  domain/                任务、实体、结果和路由模型
-  models/                VLM 引擎接口与实现
-  data/                  数据集抽象和注册表
-  infrastructure/        配置、日志、设备和随机种子工具
-  utils/                 通用辅助工具
-tests/                   单元测试和集成测试
+本地模型：D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct
+VRSBench：F:\VIT-data\VRSBench
 ```
+
+VRSBench 转换后的内部数据写入 `data/processed/`：
+
+```text
+rs_train.jsonl              142,390 条内部指令样本
+rs_val.jsonl                 62,918 条内部指令样本
+qwen3vl_train.jsonl         142,390 条 Qwen3-VL messages 样本
+qwen3vl_val.jsonl            62,918 条 Qwen3-VL messages 样本
+```
+
+VRSBench 没有独立 test 标注，因此 test JSONL 为空；不要把它误当作转换失败。
+
+## 架构
+
+```text
+CLI / HTTP
+    -> InferenceService
+        -> TaskRouter
+        -> BaseVLMEngine
+            -> MockVLMEngine / HuggingFaceVLMEngine
+
+VRSBench 原始标注
+    -> rs_*.jsonl
+    -> qwen3vl_*.jsonl
+    -> Qwen3VLDataCollator
+    -> LoRA 训练 / generation 评估
+```
+
+业务逻辑集中在 `application/` 与 `domain/`；模型加载在 `models/`；数据适配在 `data/`；
+CLI 与 HTTP 只承担协议适配。
 
 ## 安装
 
-```bash
+要求 Python 3.10 或更高版本。基础开发环境：
+
+```powershell
 python scripts/bootstrap_env.py
-pip install -e ".[dev]"
-```
-
-如果你需要 HuggingFace 后端，再安装可选的模型依赖：
-
-```bash
-python scripts/bootstrap_env.py --with-model
-pip install -e ".[model]"
-pip install -e ".[dev,model]"
-```
-
-真实模型栈包含 `torch`、`transformers`、`peft`、`accelerate` 等包，因此不会默认安装。这样可以让 mock 推理、API 测试和本地 CI 在没有 GPU 或大模型运行时的机器上正常工作。
-
-检查当前环境：
-
-```bash
+.\.venv\Scripts\Activate.ps1
 python scripts/check_env.py
-make check-env
 ```
 
-## 运行
+真实模型、训练和评估需要可选依赖：
 
-```bash
-python -m sat_rs_vlm.interfaces.cli config
-python -m sat_rs_vlm.interfaces.cli infer --image examples/demo_image.jpg --prompt "请描述这张遥感图像中的主要地物。"
-python -m sat_rs_vlm.interfaces.cli infer --backend mock --image examples/demo_image.jpg --prompt "请检测图像中的飞机。"
-uvicorn sat_rs_vlm.interfaces.http.app:app --reload --host 127.0.0.1 --port 8000
+```powershell
+python scripts/bootstrap_env.py --with-model
+python scripts/check_env.py --require-model
 ```
 
-后端选择由 `configs/default.yaml` 控制：
+Windows NVIDIA GPU 建议从 PyTorch 官方 CUDA wheel index 安装 Torch；完整命令与
+`c10.dll` 排障见 [使用说明](docs/usage_guide.md)。
 
-```yaml
-model:
-  backend: mock
-  model_id: ""
-```
+## 快速开始
 
-如果要使用真实的 HuggingFace 兼容 VLM，先安装 `[model]`，然后设置 `model.backend: huggingface`，填写 `model.model_id`，也可以在 CLI 中直接覆盖：
+Mock 推理不需要 GPU：
 
-```bash
-python -m sat_rs_vlm.interfaces.cli infer \
-  --backend huggingface \
-  --model-id your-org/your-vlm \
-  --image examples/demo_image.jpg \
+```powershell
+python -m sat_rs_vlm.interfaces.cli infer `
+  --backend mock `
+  --image data/samples/demo_image.png `
   --prompt "请描述这张遥感图像中的主要地物。"
 ```
 
-HTTP 示例：
+启动 HTTP 服务：
 
-```bash
-curl http://127.0.0.1:8000/health
-curl -X POST http://127.0.0.1:8000/infer \
-  -H "Content-Type: application/json" \
-  -d '{"image_path":"examples/demo_image.jpg","prompt":"请检测图像中的机场跑道。"}'
+```powershell
+uvicorn sat_rs_vlm.interfaces.http.app:app --reload --host 127.0.0.1 --port 8000
 ```
+
+健康检查返回：
+
+```json
+{"status":"ok"}
+```
+
+## VRSBench 数据准备
+
+默认配置 [remote_sensing_data.yaml](configs/data/remote_sensing_data.yaml) 指向当前
+VRSBench 路径。完整转换：
+
+```powershell
+python scripts/prepare_rs_instruction_data.py `
+  --config configs/data/remote_sensing_data.yaml
+
+python scripts/convert_to_qwen3vl_format.py `
+  --config configs/data/remote_sensing_data.yaml
+```
+
+只验证少量图像：
+
+```powershell
+python scripts/prepare_rs_instruction_data.py `
+  --config configs/data/remote_sensing_data.yaml `
+  --max-images-per-split 2
+```
+
+这个 smoke 命令会覆盖 `data/processed/` 中同名真实数据。示例数据使用独立配置
+`configs/data/sample_data.yaml`，输出到 `data/processed/sample/`，不会覆盖 VRSBench。
+
+## 本地 Qwen3-VL-2B 训练
+
+先声明本地训练路径：
+
+```powershell
+$env:LOCAL_MODEL_DIR="D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct"
+$env:DATA_ROOT="F:\VIT-data\VRSBench"
+$env:TRAIN_JSONL="D:\Desktop\tzb-2026\sat-rs-vlm\data\processed\qwen3vl_train.jsonl"
+$env:VAL_JSONL="D:\Desktop\tzb-2026\sat-rs-vlm\data\processed\qwen3vl_val.jsonl"
+```
+
+推荐按这个顺序运行：
+
+```powershell
+python scripts/validate_training_assets.py `
+  --config configs/train/qwen3vl_local_smoke.yaml
+
+python scripts/train_qwen3vl_lora.py `
+  --config configs/train/qwen3vl_local_smoke.yaml `
+  --dry-run
+
+python scripts/train_qwen3vl_lora.py `
+  --config configs/train/qwen3vl_local_smoke.yaml `
+  --forward-only
+
+python scripts/run_local_smoke_train.py `
+  --model-dir "$env:LOCAL_MODEL_DIR" `
+  --train-file "$env:TRAIN_JSONL" `
+  --val-file "$env:VAL_JSONL" `
+  --image-root "$env:DATA_ROOT"
+```
+
+正式本地 LoRA 使用 `configs/train/qwen3vl_local.yaml`。`configs/train/qwen3vl_lora*.yaml`
+保留为远程 8B QLoRA 模板，需要网络、较大显存和额外验证，不是当前默认路径。
+
+## 评估
+
+默认评估配置使用已生成的两步 smoke adapter，因此只用于验证评估流程：
+
+```powershell
+python scripts/evaluate_rs_vlm.py --config configs/eval/qwen3vl_eval.yaml
+```
+
+结果写入：
+
+```text
+reports/eval/qwen3vl_eval_summary.json
+reports/eval/qwen3vl_predictions.jsonl
+```
+
+评估会校验 adapter 文件、使用不含 assistant 标准答案的 generation prompt，并报告
+`empty_prediction_rate`。正式训练得到 adapter 后，将 `adapter_path` 改为其输出目录。
 
 ## 测试与质量
 
-```bash
-pytest -q
-make test
-make lint
-make format
+```powershell
+python -m pytest -q
+python -m ruff check src tests scripts
+python -m mypy src
 ```
 
-## 第二阶段
+当前测试不下载模型、不执行完整 VRSBench 训练，也不替换真实 processed 数据。
 
-第二阶段增加了可复现的 `.venv` 引导、环境诊断、模型工厂、延迟加载的 `HuggingFaceVLMEngine`，以及 `InferenceProfiler`。CLI 和 HTTP 层现在从配置构建 `InferenceService`，而不是直接实例化具体模型类，这样业务层只依赖 `BaseVLMEngine` 抽象。
+## 文档
 
-## 第三阶段：Qwen3-VL 遥感指令微调
+- [使用说明](docs/usage_guide.md)：Windows 环境、CLI、HTTP、训练、评估和排障。
+- [训练说明](docs/training_qwen3vl.md)：本地 Qwen3-VL-2B LoRA 工作流和产物说明。
+- [数据格式](docs/data_format.md)：内部 JSONL、Qwen messages、VRSBench 映射和坐标规则。
+- [Smoke Checklist](docs/local_smoke_train_checklist.md)：最小模型验证清单。
+- [实验记录](docs/experiment_log.md)：当前第一版验证记录和待完成事项。
 
-第三阶段加入了配置驱动的 Qwen3-VL LoRA/QLoRA 训练流水线。当前临时基座模型是 `Qwen/Qwen3-VL-8B-Instruct`，默认训练使用 QLoRA/LoRA，并冻结视觉编码器，以降低显存压力并减少视觉骨干遗忘。
+## 后续范围
 
-准备样例或真实数据转换后的内部 JSONL：
-
-```bash
-python scripts/prepare_rs_instruction_data.py \
-  --config configs/data/remote_sensing_data.yaml
-```
-
-将内部 `rs_*.jsonl` 转换为 Qwen3-VL 的聊天消息格式：
-
-```bash
-python scripts/convert_to_qwen3vl_format.py \
-  --config configs/data/remote_sensing_data.yaml
-```
-
-安装模型依赖并运行一个 smoke training：
-
-```bash
-python scripts/bootstrap_env.py --with-model
-python scripts/train_qwen3vl_lora.py \
-  --config configs/train/qwen3vl_lora_smoke.yaml
-```
-
-运行完整基线配置：
-
-```bash
-python scripts/train_qwen3vl_lora.py \
-  --config configs/train/qwen3vl_lora.yaml
-```
-
-多卡启动：
-
-```bash
-torchrun --nproc_per_node=4 scripts/train_qwen3vl_lora.py \
-  --config configs/train/qwen3vl_lora.yaml
-```
-
-评估和合并 LoRA：
-
-```bash
-python scripts/evaluate_rs_vlm.py \
-  --config configs/eval/qwen3vl_eval.yaml
-
-python scripts/merge_lora.py \
-  --base-model Qwen/Qwen3-VL-8B-Instruct \
-  --adapter checkpoints/qwen3vl-rs-lora/best \
-  --output checkpoints/qwen3vl-rs-merged
-```
-
-默认的 `pytest -q` 不会下载 Qwen3-VL，不需要 GPU，也不会执行真实训练。真实模型测试应通过 `RUN_MODEL_TRAINING_TESTS=1` 之类的环境变量显式开启。
-
-## 扩展方向
-
-真实模型集成应在 `src/sat_rs_vlm/models/base.py` 中实现 `BaseVLMEngine`，把模型加载和设备放置放到模型层内部，同时保持 CLI 和 HTTP 适配层不变。第三阶段后续将重点推进遥感数据集接入、LoRA/QLoRA 微调、评估流水线、量化部署、剪枝、蒸馏，以及比特翻转注入、校验和、看门狗恢复和降级模式等星载可靠性能力。
+第一版后的重点是正式 VRSBench LoRA 实验、任务专用指标（mAP、CIDEr、BLEU/ROUGE 等）、
+量化与蒸馏、模型校验和、bit flip 注入，以及面向星载的故障检测与恢复策略。

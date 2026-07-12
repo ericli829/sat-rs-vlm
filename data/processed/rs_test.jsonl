@@ -1,4 +1,0 @@
-{"id": "test_captioning_000000", "task_type": "captioning", "images": ["data/samples/demo_image.png"], "instruction": "请描述这张遥感图像中的主要地物。", "answer": "图像中包含建筑物、道路和植被区域。", "metadata": {"dataset": "sample", "split": "test"}}
-{"id": "test_vqa_000001", "task_type": "vqa", "images": ["data/samples/demo_image.png"], "instruction": "图像中是否存在道路？", "answer": "是，图像中可以观察到道路结构。", "metadata": {"dataset": "sample", "split": "test"}}
-{"id": "test_detection_000002", "task_type": "detection", "images": ["data/samples/demo_image.png"], "instruction": "请检测图像中的飞机。", "answer": "检测到疑似飞机目标，位于机场跑道附近。", "metadata": {"dataset": "sample", "split": "test"}}
-{"id": "test_counting_000003", "task_type": "counting", "images": ["data/samples/demo_image.png"], "instruction": "请统计图像中的建筑物数量。", "answer": "图像中大约有 5 个建筑物。", "metadata": {"dataset": "sample", "split": "test"}}

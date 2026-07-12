@@ -25,8 +25,8 @@ D:\Desktop\tzb-2026\sat-rs-vlm
 - `HuggingFaceVLMEngine` 是通用模型适配器，目前把真实模型输出统一收敛到
   `answer`，还没有把文本自动解析成检测框或分割掩膜。
 - Qwen3-VL 训练脚本支持项目内部 JSONL 和 Qwen3-VL `messages` JSONL。
-- `prepare_rs_instruction_data.py` 中的 VRSBench 原始标注解析器仍是预留接口。
-  当前脚本会生成示例数据，不会自动转换 `F:\VIT-data\VRSBench`。
+- `prepare_rs_instruction_data.py` 已支持 VRSBench 逐图标注，能够展开 caption、
+  referring/detection 和 QA，并把越界框裁剪到 `[0,1]`。
 - `__MACOSX` 及其中的 `._*` 文件是 macOS 压缩包元数据，不是训练图片或标注，
   数据扫描时应忽略。
 
@@ -234,7 +234,7 @@ Transformers 版本的 Qwen3-VL 自动类不兼容，应优先完成第 9 节的
 
 ## 7. 准备训练数据
 
-### 7.1 先用项目示例数据跑通流程
+### 7.1 转换 VRSBench
 
 生成内部格式数据：
 
@@ -261,6 +261,24 @@ data/processed/qwen3vl_val.jsonl
 data/processed/qwen3vl_test.jsonl
 ```
 
+默认配置使用 `F:/VIT-data/VRSBench`，保留官方 train/val 划分。VRSBench 没有独立
+test 标注，因此 `rs_test.jsonl` 和 `qwen3vl_test.jsonl` 为空文件。只验证少量图片时：
+
+```powershell
+python scripts/prepare_rs_instruction_data.py `
+  --config configs/data/remote_sensing_data.yaml `
+  --max-images-per-split 2
+```
+
+该参数会覆盖同名 processed 文件，仅用于转换冒烟。需要生成原来的占位样本时使用：
+
+```powershell
+python scripts/prepare_rs_instruction_data.py `
+  --config configs/data/sample_data.yaml
+```
+
+sample 配置固定写入 `data/processed/sample/`，不会覆盖真实 VRSBench 的 processed 文件。
+
 ### 7.2 内部 JSONL 格式
 
 每行一个样本：
@@ -269,7 +287,7 @@ data/processed/qwen3vl_test.jsonl
 {
   "id": "sample_001",
   "task_type": "captioning",
-  "images": ["Images_train/000001.png"],
+  "images": ["Images/Images_train/000001.png"],
   "instruction": "请描述这张遥感图像。",
   "answer": "图像中包含建筑、道路和植被。",
   "metadata": {"dataset": "VRSBench", "split": "train"}
@@ -288,7 +306,7 @@ data/processed/qwen3vl_test.jsonl
     {
       "role": "user",
       "content": [
-        {"type": "image", "image": "Images_train/000001.png"},
+        {"type": "image", "image": "Images/Images_train/000001.png"},
         {"type": "text", "text": "请描述这张遥感图像。"}
       ]
     },
@@ -302,25 +320,33 @@ data/processed/qwen3vl_test.jsonl
 训练数据集类会自动识别这两种格式。更完整的字段定义见
 `docs/data_format.md`。
 
-### 7.4 VRSBench 当前接入方式
+### 7.4 VRSBench 展开和坐标规则
 
-在 VRSBench 原始转换器实现前，需要先把标注转换为上述任一 JSONL 格式。推荐保留
-原始数据不动，将转换结果写入本项目：
+转换器读取以下有效目录，自动忽略 `__MACOSX` 和 `._*`：
 
 ```text
-F:\VIT-data\VRSBench\              原始数据，只读保存
-D:\Desktop\tzb-2026\sat-rs-vlm\
-  data\processed\vrsbench_train.jsonl
-  data\processed\vrsbench_val.jsonl
+F:\VIT-data\VRSBench\
+  Images\Images_train
+  Images\Images_val
+  Annotations\Annotations_train
+  Annotations\Annotations_val
 ```
 
-若 JSONL 中图片路径写成 `Images_train/xxx.png`，训练时应设置：
+每张图展开为一条 caption、每个 object 一条 detection、每个 QA 一条任务样本。
+`object quantity` 映射为 counting，`scene type` 映射为 scene_classification，其余为
+VQA。检测答案格式为：
+
+```json
+{"label":"trainstation","bbox":[0.6,0.83,1.0,0.94]}
+```
+
+`obj_coord` 会裁剪并重排到 `[0,1]`，原始框写入 `metadata.bbox_raw`，裁剪结果写入
+`metadata.bbox_clipped`。JSONL 图片路径相对 VRSBench 根目录，因此训练时设置：
 
 ```text
 image_root = F:\VIT-data\VRSBench
 ```
 
-转换时应跳过所有 `__MACOSX` 目录和 `._*` 文件。
 
 ## 8. 配置本地训练路径
 
@@ -330,7 +356,7 @@ image_root = F:\VIT-data\VRSBench
 
 ```powershell
 $env:LOCAL_MODEL_DIR="D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct"
-$env:DATA_ROOT="D:\Desktop\tzb-2026\sat-rs-vlm"
+$env:DATA_ROOT="F:\VIT-data\VRSBench"
 $env:TRAIN_JSONL="D:\Desktop\tzb-2026\sat-rs-vlm\data\processed\qwen3vl_train.jsonl"
 $env:VAL_JSONL="D:\Desktop\tzb-2026\sat-rs-vlm\data\processed\qwen3vl_val.jsonl"
 ```
@@ -466,13 +492,22 @@ adapter、验证 JSONL 和图片根目录：
 ```yaml
 model:
   base_model: "D:/Desktop/tzb-2026/Qwen3-VL-2B-Instruct"
-  adapter_path: "checkpoints/qwen3vl-2b-vrsbench-lora"
+  adapter_path: "checkpoints/smoke/qwen3vl-local-smoke"
   processor_id: "D:/Desktop/tzb-2026/Qwen3-VL-2B-Instruct"
+  local_files_only: true
+  torch_dtype: "bfloat16"
+  device_map: "auto"
 
 data:
-  eval_file: "D:/path/to/vrsbench_val.jsonl"
+  eval_file: "data/processed/qwen3vl_val.jsonl"
   image_root: "F:/VIT-data/VRSBench"
+  max_seq_length: 1024
 ```
+
+`adapter_path` 目录必须包含 `adapter_config.json` 和 `adapter_model.safetensors`（或
+`adapter_model.bin`）。本地评估会在加载基座模型前检查这些文件；路径错误时直接失败，
+不会把本地路径误当成 Hugging Face 仓库名。上面的 smoke adapter 只训练了两步，适合
+验证评估链路，不代表有效的 VRSBench 模型精度。
 
 运行评估：
 
@@ -486,6 +521,9 @@ python scripts/evaluate_rs_vlm.py --config configs/eval/qwen3vl_eval.yaml
 reports/eval/qwen3vl_eval_summary.json
 reports/eval/qwen3vl_predictions.jsonl
 ```
+
+评估 collator 只编码 user 消息并添加 generation prompt，不会把标准答案送入模型。
+summary 会报告整体及分任务 `empty_prediction_rate`；正常生成时该值应接近 0。
 
 将 LoRA adapter 合并到基座模型：
 
@@ -592,8 +630,8 @@ image_root / JSONL 中的 image 路径
 ```
 
 例如 `image_root=F:\VIT-data\VRSBench`，图片字段为
-`Images_train/000001.png`，最终路径就是
-`F:\VIT-data\VRSBench\Images_train\000001.png`。
+`Images/Images_train/000001.png`，最终路径就是
+`F:\VIT-data\VRSBench\Images\Images_train\000001.png`。
 
 ### CUDA out of memory
 
@@ -613,9 +651,8 @@ image_root / JSONL 中的 image 路径
 ## 15. 推荐的实际使用顺序
 
 1. 使用 Mock CLI 和 HTTP 验证上层接口。
-2. 使用项目示例 JSONL 完成资产检查、dry run、forward only 和两步训练。
-3. 实现或运行 VRSBench 转换器，生成真实训练/验证 JSONL。
-4. 对真实 JSONL 再运行资产检查和小样本冒烟训练。
-5. 启动正式 LoRA 训练，保存 adapter 和训练报告。
-6. 在固定验证集上评估，再决定是否合并、量化、蒸馏或剪枝。
-7. 部署前加入 checksum、bit flip 注入和故障恢复策略验证。
+2. 运行已接入的 VRSBench 转换器，生成真实训练/验证 JSONL。
+3. 对真实 JSONL 运行资产检查、dry run、forward only 和两步 smoke 训练。
+4. 启动独立配置的正式 LoRA 训练，保存 adapter 和训练报告。
+5. 在固定验证集上评估，再决定是否合并、量化、蒸馏或剪枝。
+6. 部署前加入 checksum、bit flip 注入和故障恢复策略验证。

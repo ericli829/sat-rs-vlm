@@ -106,6 +106,25 @@ def move_to_device(value: Any, device: Any, torch: Any) -> Any:
     return value
 
 
+def resolve_torch_dtype(torch: Any, dtype_name: str) -> Any | None:
+    """解析 torch dtype，并在设备不支持 bfloat16 时安全降级。"""
+
+    if dtype_name == "auto":
+        return None
+    if dtype_name == "bfloat16":
+        if not bool(torch.cuda.is_available()):
+            print("WARNING: CUDA is not available; falling back from bfloat16 to float32.")
+            return torch.float32
+        if hasattr(torch.cuda, "is_bf16_supported") and not bool(torch.cuda.is_bf16_supported()):
+            print(
+                "WARNING: bfloat16 is not supported on this CUDA device; falling back to float16."
+            )
+            return torch.float16
+    if not hasattr(torch, dtype_name):
+        raise ValueError(f"Unsupported torch dtype: {dtype_name}")
+    return getattr(torch, dtype_name)
+
+
 def safe_import_model_dependencies(require_bitsandbytes: bool = False) -> dict[str, Any]:
     """安全导入模型训练依赖。
 

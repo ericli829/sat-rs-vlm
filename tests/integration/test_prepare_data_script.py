@@ -11,7 +11,7 @@ def test_prepare_data_script_generates_sample_data() -> None:
             sys.executable,
             "scripts/prepare_rs_instruction_data.py",
             "--config",
-            "configs/data/remote_sensing_data.yaml",
+            "configs/data/sample_data.yaml",
         ],
         cwd=ROOT,
         check=False,
@@ -19,6 +19,6 @@ def test_prepare_data_script_generates_sample_data() -> None:
         text=True,
     )
     assert result.returncode == 0, result.stderr
-    assert (ROOT / "data/processed/rs_train.jsonl").exists()
-    assert (ROOT / "data/processed/rs_val.jsonl").exists()
-    assert (ROOT / "data/processed/rs_test.jsonl").exists()
+    assert (ROOT / "data/processed/sample/rs_train.jsonl").exists()
+    assert (ROOT / "data/processed/sample/rs_val.jsonl").exists()
+    assert (ROOT / "data/processed/sample/rs_test.jsonl").exists()

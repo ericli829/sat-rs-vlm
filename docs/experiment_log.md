@@ -1,56 +1,51 @@
-# 实验记录
+# 第一版实验记录
 
 ## 实验编号
 
-EXP-0001
+`V1-SMOKE-001`
 
-## Base Model
+## 目标
 
-Qwen/Qwen3-VL-8B-Instruct
+验证本地 Qwen3-VL-2B、VRSBench 转换数据、LoRA 训练脚本和 adapter 工件流转可以在同一条端到端链路中运行。该实验是工程 smoke test，不用于报告模型能力或 benchmark 排名。
 
-## Dataset Version
+## 基座与数据
 
-sample-v0，后续替换为 VRSBench / MME Real RS / XLRS-bench / LEVIR-CC 转换结果。
+| 项目 | 记录 |
+| --- | --- |
+| 基座模型 | `D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct` |
+| 原始数据 | `F:\VIT-data\VRSBench` |
+| 训练 JSONL | `data/processed/qwen3vl_train.jsonl`，142390 条 |
+| 验证 JSONL | `data/processed/qwen3vl_val.jsonl`，62918 条 |
+| 图片根目录 | `F:\VIT-data\VRSBench` |
 
-## Training Method
+## 训练方法
 
-QLoRA，默认冻结视觉编码器。
+- LoRA，冻结视觉编码器。
+- 最大序列长度：1024。
+- smoke 配置仅采样少量数据，`max_steps=2`。
+- 目标模块、秩和 alpha 以 `configs/train/qwen3vl_local_smoke.yaml` 为准。
 
-## LoRA 参数
+## 已验证结果
 
-- r: 16
-- alpha: 32
-- dropout: 0.05
-- target_modules: q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj
+| 检查项 | 结果 |
+| --- | --- |
+| VRSBench 转换 | 通过，生成训练/验证 Qwen3-VL JSONL |
+| 资产校验 | 通过 |
+| 单 batch 前向传播 | 通过 |
+| 两步 LoRA smoke 训练 | 通过 |
+| 训练时长 | 约 27.42 秒 |
+| 最终训练 loss | 约 21.7669 |
+| 峰值显存 | 约 4834 MiB（RTX 4060） |
+| adapter 输出 | `checkpoints/smoke/qwen3vl-local-smoke/` |
 
-## 数据量
+## 评估状态
 
-- train: 待填写
-- val: 待填写
-- test: 待填写
+早期评估输出曾出现全空预测，该结果不能作为模型质量结论。原因是评估输入没有按 generation 场景构造，且 batch 存在 CPU/CUDA 设备混用。当前代码已改用 generation collator，移除参考答案、补充 generation prompt，并在调用 `generate()` 前迁移全部模型输入。
 
-## 训练命令
+需要使用修复后的 `scripts/evaluate_rs_vlm.py` 重新执行评估。smoke adapter 只有两步训练，重跑得到的分数仍只用于验证链路，不代表正式模型性能。
 
-```bash
-python scripts/train_qwen3vl_lora.py \
-  --config configs/train/qwen3vl_lora.yaml
-```
+## 下一步
 
-## 评测结果
-
-- exact_match: 待填写
-- keyword_hit_rate: 待填写
-- counting_mae: 待填写
-- valid_json_rate: 待填写
-
-## 问题记录
-
-- 是否出现显存不足：待填写
-- 是否需要降低 max_seq_length：待填写
-- 是否需要更换更小模型：待填写
-
-## 下一步计划
-
-- 接入真实遥感 benchmark。
-- 增加 mAP、CIDEr、BLEU/ROUGE 等任务指标。
-- 尝试更小模型、蒸馏模型和量化部署。
+1. 以独立配置运行完整 VRSBench LoRA 实验，并记录数据采样、随机种子、超参数和 adapter 版本。
+2. 对正式 adapter 重跑验证集，按任务补充 mAP、CIDEr、BLEU/ROUGE、IoU 与变化检测指标。
+3. 对比 LoRA、QLoRA、蒸馏和量化配置，记录显存、延迟、精度和容错影响。

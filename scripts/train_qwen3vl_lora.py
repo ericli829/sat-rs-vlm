@@ -33,6 +33,7 @@ try:
         count_trainable_parameters,
         model_input_device,
         move_to_device,
+        resolve_torch_dtype,
         safe_import_model_dependencies,
         set_seed,
         torch_device_summary,
@@ -102,25 +103,6 @@ def load_config_with_overrides(args: argparse.Namespace) -> Qwen3VLTrainingConfi
             update={"evaluation": config.evaluation.model_copy(update={"do_eval": False})}
         )
     return config
-
-
-def resolve_torch_dtype(torch: Any, dtype_name: str) -> Any | None:
-    """解析 torch dtype，并在不支持 bf16 时自动降级。"""
-
-    if dtype_name == "auto":
-        return None
-    if dtype_name == "bfloat16":
-        if not bool(torch.cuda.is_available()):
-            print("WARNING: CUDA is not available; falling back from bfloat16 to float32.")
-            return torch.float32
-        if hasattr(torch.cuda, "is_bf16_supported") and not bool(torch.cuda.is_bf16_supported()):
-            print(
-                "WARNING: bfloat16 is not supported on this CUDA device; falling back to float16."
-            )
-            return torch.float16
-    if not hasattr(torch, dtype_name):
-        raise ValueError(f"Unsupported torch dtype: {dtype_name}")
-    return getattr(torch, dtype_name)
 
 
 def precision_flags(torch: Any, config: Qwen3VLTrainingConfig) -> tuple[bool, bool]:

@@ -13,7 +13,7 @@
     "num_checked": 5,
     "image_found": true
   },
-  "image_root": "D:\\Desktop\\tzb-2026\\sat-rs-vlm",
+  "image_root": "F:\\VIT-data\\VRSBench",
   "dependencies": {
     "torch": {
       "available": true,

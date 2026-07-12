@@ -18,7 +18,7 @@
 字段说明：
 
 - `id`：全局唯一样本 ID。
-- `task_type`：支持 `detection`、`counting`、`captioning`、`vqa`、`scene_classification`、`change_detection`。
+- `task_type`：支持 `detection`、`counting`、`captioning`、`vqa`、`scene_classification`、`segmentation`、`change_detection` 和 `unknown`。
 - `images`：一个或多个图像路径；变化检测使用两张图。
 - `instruction`：用户指令。
 - `answer`：监督微调目标回答。
@@ -90,3 +90,20 @@ change_detection：
 - `resolution`：空间分辨率。
 - `region`：区域或城市。
 - `license`：数据授权信息。
+
+## VRSBench 转换约定
+
+VRSBench 的每张原始图像会展开为 caption、object referring 和 QA 样本。检测任务的
+`answer` 是 JSON 字符串：
+
+```json
+{"label":"building","bbox":[0.0,0.2,1.0,0.8]}
+```
+
+边界框采用归一化 `[x_min,y_min,x_max,y_max]`，所有坐标裁剪到 `[0,1]`。原始值、
+裁剪值和是否发生裁剪分别保存在 `metadata.bbox_raw`、`metadata.bbox_clipped` 和
+`metadata.coordinate_clipped`。
+
+转换后的 VRSBench 图片路径以数据集根目录为基准，例如
+`Images/Images_train/000001.png`。因此训练或评估配置中的 `image_root` 应设置为
+VRSBench 根目录，而不是其 `Images` 子目录。

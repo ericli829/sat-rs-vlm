@@ -5,22 +5,22 @@
     {
       "name": "validate assets",
       "returncode": 0,
-      "duration_seconds": 15.370827100006863
+      "duration_seconds": 14.371452899998985
     },
     {
       "name": "dry run",
       "returncode": 0,
-      "duration_seconds": 0.5444682999805082
+      "duration_seconds": 3.8555300000007264
     },
     {
       "name": "forward only",
       "returncode": 0,
-      "duration_seconds": 20.369768900010968
+      "duration_seconds": 21.33938569999009
     },
     {
       "name": "max_steps=2 train",
       "returncode": 0,
-      "duration_seconds": 30.829006099986145
+      "duration_seconds": 29.227315399999497
     }
   ]
 }
