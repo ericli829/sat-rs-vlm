@@ -1,67 +1,23 @@
 # sat-rs-vlm
 
-`sat-rs-vlm` 第一版是一个面向受限星载算力场景的遥感视觉语言模型工程框架。它把
-自然语言任务路由、统一推理结果、VRSBench 数据转换、本地 Qwen3-VL LoRA 微调、
-评估和可靠性接口放在同一套可测试的 Python 工程中。
+`sat-rs-vlm` 是面向卫星平台受限算力部署的遥感视觉语言模型工程框架。第一版提供统一任务领域模型、Mock/HuggingFace 推理、CLI/HTTP 接口、VRSBench 数据转换、本地 Qwen3-VL LoRA 训练与评估，以及 bit flip、checksum 等可靠性基础接口。
 
-第一版的目标是建立一条可复现的本地研发链路，而不是宣称已经完成星载部署或获得
-遥感 benchmark 的最终精度。
+主仓库将已经跑通的 LoRA 作为稳定基线。QLoRA、DoRA、AdaLoRA、IA3、Partial Unfreeze、Full SFT 和 Prompt Tuning 属于实验性方法，保存在 Git 忽略的本地插件包中，只有用户显式指定插件根目录时才会被发现和加载。
 
-## 第一版状态
+## 当前能力
 
-| 能力 | 当前状态 | 说明 |
-| --- | --- | --- |
-| Mock CLI / HTTP 推理 | 可用 | 支持任务路由和统一 JSON 结果，不读取真实图像内容。 |
-| HuggingFace 推理 | 可用 | 支持 Qwen3-VL 多模态聊天模板和本地模型加载。 |
-| VRSBench 转换 | 可用 | 展开 caption、referring/detection、counting、scene classification、VQA。 |
-| 坐标处理 | 可用 | VRSBench 检测框裁剪并规范到 `[0,1]`，保留原始坐标 metadata。 |
-| 本地 Qwen3-VL-2B LoRA smoke | 已验证 | 使用 `Qwen3-VL-2B-Instruct`、4 个训练样本、2 个 step。 |
-| 本地 adapter 评估链路 | 可用 | 使用 generation prompt，不把标准答案送入模型。 |
-| 完整 VRSBench 训练与正式指标 | 待执行 | 当前 smoke adapter 只用于验证链路，不代表模型精度。 |
-| 量化、剪枝、蒸馏、故障恢复 | 接口预留 | 尚未形成完整训练或部署流程。 |
-
-## 当前资产
-
-本工作区已经配置为使用：
-
-```text
-本地模型：D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct
-VRSBench：F:\VIT-data\VRSBench
-```
-
-VRSBench 转换后的内部数据写入 `data/processed/`：
-
-```text
-rs_train.jsonl              142,390 条内部指令样本
-rs_val.jsonl                 62,918 条内部指令样本
-qwen3vl_train.jsonl         142,390 条 Qwen3-VL messages 样本
-qwen3vl_val.jsonl            62,918 条 Qwen3-VL messages 样本
-```
-
-VRSBench 没有独立 test 标注，因此 test JSONL 为空；不要把它误当作转换失败。
-
-## 架构
-
-```text
-CLI / HTTP
-    -> InferenceService
-        -> TaskRouter
-        -> BaseVLMEngine
-            -> MockVLMEngine / HuggingFaceVLMEngine
-
-VRSBench 原始标注
-    -> rs_*.jsonl
-    -> qwen3vl_*.jsonl
-    -> Qwen3VLDataCollator
-    -> LoRA 训练 / generation 评估
-```
-
-业务逻辑集中在 `application/` 与 `domain/`；模型加载在 `models/`；数据适配在 `data/`；
-CLI 与 HTTP 只承担协议适配。
+| 能力 | 状态 | 说明 |
+|---|---|---|
+| Mock CLI / HTTP 推理 | 可用 | 无 GPU、无真实模型也可运行 |
+| 本地 Qwen3-VL 推理 | 可用 | 使用 HuggingFace 本地模型目录 |
+| VRSBench 转换 | 可用 | caption、检测、计数、场景分类、VQA，框坐标裁剪到 `[0,1]` |
+| Qwen3-VL LoRA | 已验证 | 本地数据、forward-only、2-step smoke、checkpoint 和评估链路 |
+| 外部实验插件 API | 可用 | 显式发现、manifest、依赖检查、路径隔离、无静默回退 |
+| 星载压缩与容错 | 接口预留 | 蒸馏、剪枝、量化、bit flip、checksum 和恢复仍需继续实现 |
 
 ## 安装
 
-要求 Python 3.10 或更高版本。基础开发环境：
+Python 3.10 或更高版本：
 
 ```powershell
 python scripts/bootstrap_env.py
@@ -69,19 +25,22 @@ python scripts/bootstrap_env.py
 python scripts/check_env.py
 ```
 
-真实模型、训练和评估需要可选依赖：
+真实模型训练与评估：
 
 ```powershell
 python scripts/bootstrap_env.py --with-model
 python scripts/check_env.py --require-model
 ```
 
-Windows NVIDIA GPU 建议从 PyTorch 官方 CUDA wheel index 安装 Torch；完整命令与
-`c10.dll` 排障见 [使用说明](docs/usage_guide.md)。
+也可直接安装：
 
-## 快速开始
+```powershell
+python -m pip install -e ".[dev,model]"
+```
 
-Mock 推理不需要 GPU：
+实验插件拥有各自的 `requirements.txt`。主项目不会因 QLoRA 自动安装 bitsandbytes。
+
+## Mock 推理
 
 ```powershell
 python -m sat_rs_vlm.interfaces.cli infer `
@@ -90,114 +49,123 @@ python -m sat_rs_vlm.interfaces.cli infer `
   --prompt "请描述这张遥感图像中的主要地物。"
 ```
 
-启动 HTTP 服务：
-
 ```powershell
 uvicorn sat_rs_vlm.interfaces.http.app:app --reload --host 127.0.0.1 --port 8000
 ```
 
-健康检查返回：
+`GET /health` 返回 `{"status":"ok"}`，`POST /infer` 返回统一 `InferenceResult`。
 
-```json
-{"status":"ok"}
+## VRSBench 数据
+
+当前本地约定：
+
+```text
+模型：D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct
+数据：F:\VIT-data\VRSBench
 ```
 
-## VRSBench 数据准备
-
-默认配置 [remote_sensing_data.yaml](configs/data/remote_sensing_data.yaml) 指向当前
-VRSBench 路径。完整转换：
+转换命令：
 
 ```powershell
-python scripts/prepare_rs_instruction_data.py `
-  --config configs/data/remote_sensing_data.yaml
-
-python scripts/convert_to_qwen3vl_format.py `
-  --config configs/data/remote_sensing_data.yaml
+python scripts/prepare_rs_instruction_data.py --config configs/data/remote_sensing_data.yaml
+python scripts/convert_to_qwen3vl_format.py --config configs/data/remote_sensing_data.yaml
 ```
 
-只验证少量图像：
+输出位于 `data/processed/`。VRSBench 没有独立 test 标注，因此 test JSONL 为空不是转换失败。详细字段和坐标规则见 [data_format.md](docs/data_format.md)。
 
-```powershell
-python scripts/prepare_rs_instruction_data.py `
-  --config configs/data/remote_sensing_data.yaml `
-  --max-images-per-split 2
-```
+## 稳定 LoRA 基线
 
-这个 smoke 命令会覆盖 `data/processed/` 中同名真实数据。示例数据使用独立配置
-`configs/data/sample_data.yaml`，输出到 `data/processed/sample/`，不会覆盖 VRSBench。
-
-## 本地 Qwen3-VL-2B 训练
-
-先声明本地训练路径：
+设置本地资产：
 
 ```powershell
 $env:LOCAL_MODEL_DIR="D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct"
 $env:DATA_ROOT="F:\VIT-data\VRSBench"
-$env:TRAIN_JSONL="D:\Desktop\tzb-2026\sat-rs-vlm\data\processed\qwen3vl_train.jsonl"
-$env:VAL_JSONL="D:\Desktop\tzb-2026\sat-rs-vlm\data\processed\qwen3vl_val.jsonl"
+$env:TRAIN_JSONL="$PWD\data\processed\qwen3vl_train.jsonl"
+$env:VAL_JSONL="$PWD\data\processed\qwen3vl_val.jsonl"
 ```
 
-推荐按这个顺序运行：
+按顺序检查：
 
 ```powershell
-python scripts/validate_training_assets.py `
-  --config configs/train/qwen3vl_local_smoke.yaml
-
-python scripts/train_qwen3vl_lora.py `
-  --config configs/train/qwen3vl_local_smoke.yaml `
-  --dry-run
-
-python scripts/train_qwen3vl_lora.py `
-  --config configs/train/qwen3vl_local_smoke.yaml `
-  --forward-only
-
-python scripts/run_local_smoke_train.py `
-  --model-dir "$env:LOCAL_MODEL_DIR" `
-  --train-file "$env:TRAIN_JSONL" `
-  --val-file "$env:VAL_JSONL" `
-  --image-root "$env:DATA_ROOT"
+python scripts/validate_training_assets.py --config configs/train/qwen3vl_local_smoke.yaml
+python scripts/train_qwen3vl_lora.py --config configs/train/qwen3vl_local_smoke.yaml --dry-run
+python scripts/train_qwen3vl_lora.py --config configs/train/qwen3vl_local_smoke.yaml --forward-only
+python scripts/train_qwen3vl_lora.py --config configs/train/qwen3vl_local_smoke.yaml
 ```
 
-正式本地 LoRA 使用 `configs/train/qwen3vl_local.yaml`。`configs/train/qwen3vl_lora*.yaml`
-保留为远程 8B QLoRA 模板，需要网络、较大显存和额外验证，不是当前默认路径。
+正式训练使用 `configs/train/qwen3vl_local.yaml`。原 LoRA 命令、配置、checkpoint 和评估方式保持不变。
 
-## 评估
-
-默认评估配置使用已生成的两步 smoke adapter，因此只用于验证评估流程：
+评估：
 
 ```powershell
 python scripts/evaluate_rs_vlm.py --config configs/eval/qwen3vl_eval.yaml
 ```
 
-结果写入：
+## 外部实验插件
+
+默认本地插件包位于：
 
 ```text
-reports/eval/qwen3vl_eval_summary.json
-reports/eval/qwen3vl_predictions.jsonl
+.local_plugins/sat-rs-vlm-local-plugins/
 ```
 
-评估会校验 adapter 文件、使用不含 assistant 标准答案的 generation prompt，并报告
-`empty_prediction_rate`。正式训练得到 adapter 后，将 `adapter_path` 改为其输出目录。
+该目录已加入 `.gitignore`，不会被主项目导入或自动扫描。显式列出和验证：
+
+```powershell
+python scripts/list_external_plugins.py `
+  --plugin-root .local_plugins/sat-rs-vlm-local-plugins `
+  --validate
+
+python scripts/validate_external_plugin.py `
+  --plugin-root .local_plugins/sat-rs-vlm-local-plugins `
+  --strategy qlora
+```
+
+先做依赖检查，再做 dry-run：
+
+```powershell
+python scripts/run_external_strategy.py `
+  --plugin-root .local_plugins/sat-rs-vlm-local-plugins `
+  --strategy qlora `
+  --check-only
+
+python scripts/run_external_strategy.py `
+  --plugin-root .local_plugins/sat-rs-vlm-local-plugins `
+  --strategy dora `
+  --config .local_plugins/sat-rs-vlm-local-plugins/plugins/dora/configs/smoke.yaml `
+  --dry-run
+```
+
+默认不安装依赖、不联网。`--install-missing` 只安装当前插件缺失且不冲突的依赖；离线安装还需提供 wheel 目录。未知策略、API 不兼容、模块未匹配或依赖冲突都会明确失败，绝不回退到 LoRA。
+
+完整说明见 [external_plugins.md](docs/external_plugins.md)。本地插件包中的 `MIGRATION_REPORT.md` 记录了原实验文件与新位置的映射。
 
 ## 测试与质量
 
 ```powershell
 python -m pytest -q
 python -m ruff check src tests scripts
+python -m ruff format --check src tests scripts
 python -m mypy src
 ```
 
-当前测试不下载模型、不执行完整 VRSBench 训练，也不替换真实 processed 数据。
+默认测试不联网、不加载真实 Qwen3-VL、不要求 GPU，也不扫描本地插件目录。
+
+## 项目边界
+
+- `domain/`：任务、输入和统一结果模型。
+- `application/`：推理用例编排。
+- `models/`：Mock/HuggingFace 引擎与可靠性模块。
+- `data/`：遥感数据集、VRSBench 转换和 Qwen3-VL collator。
+- `training/`：稳定 LoRA 需要的配置、冻结和通用工具。
+- `plugins/`：外部插件公开 API、显式发现、依赖和运行服务。
+- `interfaces/`：CLI 与 HTTP 协议适配。
 
 ## 文档
 
-- [使用说明](docs/usage_guide.md)：Windows 环境、CLI、HTTP、训练、评估和排障。
-- [训练说明](docs/training_qwen3vl.md)：本地 Qwen3-VL-2B LoRA 工作流和产物说明。
-- [数据格式](docs/data_format.md)：内部 JSONL、Qwen messages、VRSBench 映射和坐标规则。
-- [Smoke Checklist](docs/local_smoke_train_checklist.md)：最小模型验证清单。
-- [实验记录](docs/experiment_log.md)：当前第一版验证记录和待完成事项。
-
-## 后续范围
-
-第一版后的重点是正式 VRSBench LoRA 实验、任务专用指标（mAP、CIDEr、BLEU/ROUGE 等）、
-量化与蒸馏、模型校验和、bit flip 注入，以及面向星载的故障检测与恢复策略。
+- [使用说明](docs/usage_guide.md)
+- [LoRA 训练说明](docs/training_qwen3vl.md)
+- [外部插件说明](docs/external_plugins.md)
+- [数据格式](docs/data_format.md)
+- [本地 smoke 清单](docs/local_smoke_train_checklist.md)
+- [实验记录](docs/experiment_log.md)

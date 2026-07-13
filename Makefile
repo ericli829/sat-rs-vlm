@@ -1,4 +1,7 @@
-.PHONY: install bootstrap bootstrap-model check-env test lint format run-api infer-demo prepare-data convert-qwen3vl train-smoke train-qwen3vl eval-qwen3vl merge-lora validate-training-assets train-local-smoke train-local train-local-dry-run train-local-forward
+.PHONY: install bootstrap bootstrap-model check-env test lint format run-api infer-demo prepare-data convert-qwen3vl train-smoke train-qwen3vl eval-qwen3vl merge-lora validate-training-assets train-local-smoke train-local train-local-dry-run train-local-forward plugin-list plugin-validate plugin-check plugin-dry-run
+
+PLUGIN_ROOT ?= .local_plugins/sat-rs-vlm-local-plugins
+PLUGIN_STRATEGY ?= qlora
 
 install:
 	pip install -e ".[dev]"
@@ -36,7 +39,7 @@ convert-qwen3vl:
 	python scripts/convert_to_qwen3vl_format.py --config configs/data/remote_sensing_data.yaml
 
 train-smoke:
-	python scripts/train_qwen3vl_lora.py --config configs/train/qwen3vl_lora_smoke.yaml
+	python scripts/train_qwen3vl_lora.py --config configs/train/qwen3vl_local_smoke.yaml
 
 train-qwen3vl:
 	python scripts/train_qwen3vl_lora.py --config configs/train/qwen3vl_lora.yaml
@@ -61,3 +64,15 @@ train-local-dry-run:
 
 train-local-forward:
 	python scripts/train_qwen3vl_lora.py --config configs/train/qwen3vl_local_smoke.yaml --forward-only
+
+plugin-list:
+	python scripts/list_external_plugins.py --plugin-root $(PLUGIN_ROOT) --validate
+
+plugin-validate:
+	python scripts/validate_external_plugin.py --plugin-root $(PLUGIN_ROOT) --strategy $(PLUGIN_STRATEGY)
+
+plugin-check:
+	python scripts/run_external_strategy.py --plugin-root $(PLUGIN_ROOT) --strategy $(PLUGIN_STRATEGY) --check-only
+
+plugin-dry-run:
+	python scripts/run_external_strategy.py --plugin-root $(PLUGIN_ROOT) --strategy $(PLUGIN_STRATEGY) --dry-run

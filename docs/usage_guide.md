@@ -17,7 +17,7 @@ D:\Desktop\tzb-2026\sat-rs-vlm
 | --- | --- | --- |
 | Mock 推理 | 验证任务路由、统一结果、CLI 和 HTTP 接口 | 否 |
 | HuggingFace 推理 | 使用本地或 HuggingFace 兼容 VLM 做基础生成式推理 | 建议使用 |
-| Qwen3-VL LoRA/QLoRA | 数据校验、前向检查、冒烟训练、正式微调、评估和 adapter 合并 | 训练时需要 |
+| Qwen3-VL 多策略微调 | LoRA baseline 与七种独立策略、统一评估和实验对比 | 训练时需要 |
 
 需要特别注意：
 
@@ -400,7 +400,7 @@ python scripts/train_qwen3vl_lora.py `
   --model-dir "D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct" `
   --train-file "data\processed\qwen3vl_train.jsonl" `
   --val-file "data\processed\qwen3vl_val.jsonl" `
-  --image-root "D:\Desktop\tzb-2026\sat-rs-vlm" `
+  --image-root "F:\VIT-data\VRSBench" `
   --dry-run
 ```
 
@@ -470,11 +470,18 @@ python scripts/train_qwen3vl_lora.py `
 - `method: lora`
 - 用 `gradient_accumulation_steps` 调整有效 batch size
 
-Windows 下先使用 LoRA。只有确认当前 CUDA 和 bitsandbytes 组合支持 4 bit 后，再用：
+Windows 下先使用已验证的 LoRA。实验性 QLoRA 已迁移到外部插件包，不通过旧 LoRA
+入口启动。确认 CUDA 和 bitsandbytes 兼容后，先显式检查插件：
 
 ```powershell
---method qlora
+python scripts/run_external_strategy.py `
+  --plugin-root .local_plugins/sat-rs-vlm-local-plugins `
+  --strategy qlora `
+  --check-only
 ```
+
+DoRA、AdaLoRA、IA3、Partial Unfreeze、Full SFT 与 Prompt Tuning 的入口、依赖和
+checkpoint 隔离规则见 `docs/external_plugins.md`。
 
 训练目录会保存 LoRA adapter、processor、训练状态和 `smoke_train_report.json`。断点续训
 可在 YAML 中设置：

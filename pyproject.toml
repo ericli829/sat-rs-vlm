@@ -11,6 +11,7 @@ requires-python = ">=3.10"
 dependencies = [
     "pydantic>=2.0",
     "pyyaml>=6.0",
+    "packaging>=23.0",
     "typer>=0.12",
     "fastapi>=0.110",
     "uvicorn>=0.27",
@@ -29,12 +30,10 @@ model = [
     "transformers>=4.57,<6",
     "accelerate>=0.30",
     "peft>=0.10",
-    "bitsandbytes>=0.43",
     "safetensors>=0.4",
     "pillow>=10.0",
     "qwen-vl-utils>=0.0.8",
 ]
-
 [project.scripts]
 sat-rs-vlm = "sat_rs_vlm.interfaces.cli:app"
 

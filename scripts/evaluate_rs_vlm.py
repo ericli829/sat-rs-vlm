@@ -7,6 +7,7 @@ import argparse
 import json
 import re
 import sys
+import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,10 @@ import yaml
 
 from sat_rs_vlm.data.qwen3vl_collator import Qwen3VLDataCollator
 from sat_rs_vlm.data.qwen3vl_dataset import Qwen3VLDataset
+from sat_rs_vlm.evaluation.checkpoint_loader import (
+    load_finetuned_checkpoint,
+    read_strategy_manifest,
+)
 from sat_rs_vlm.training.utils import (
     MODEL_DEPS_ERROR,
     model_input_device,
@@ -38,6 +43,11 @@ def parse_args() -> argparse.Namespace:
         "--config",
         default="configs/eval/qwen3vl_eval.yaml",
         help="Path to eval YAML config.",
+    )
+    parser.add_argument(
+        "--checkpoint",
+        default=None,
+        help="Experiment directory containing strategy_manifest.json.",
     )
     return parser.parse_args()
 
@@ -227,6 +237,12 @@ def summarize(predictions: list[dict[str, Any]]) -> dict[str, Any]:
             "num_samples": len(predictions),
             "empty_predictions": empty_predictions,
             "empty_prediction_rate": empty_predictions / len(predictions) if predictions else 0.0,
+            "inference_latency_ms": (
+                sum(float(row.get("inference_latency_ms", 0.0)) for row in predictions)
+                / len(predictions)
+                if predictions
+                else None
+            ),
         },
         "by_task": {},
     }
@@ -258,7 +274,7 @@ def summarize(predictions: list[dict[str, Any]]) -> dict[str, Any]:
     return summary
 
 
-def evaluate(config_path: Path) -> None:
+def evaluate(config_path: Path, checkpoint: Path | None = None) -> None:
     """执行评测。"""
 
     config = load_yaml(config_path)
@@ -266,8 +282,18 @@ def evaluate(config_path: Path) -> None:
     eval_file = resolve_project_path(str(data_cfg["eval_file"]))
     if not eval_file.is_file():
         raise FileNotFoundError(f"Evaluation JSONL file does not exist: {eval_file}")
-    modules = safe_import_model_dependencies(require_bitsandbytes=False)
-    model, processor = load_model(config, modules)
+    require_bitsandbytes = False
+    if checkpoint is not None:
+        require_bitsandbytes = bool(read_strategy_manifest(checkpoint).get("quantized_base", False))
+    modules = safe_import_model_dependencies(require_bitsandbytes=require_bitsandbytes)
+    if checkpoint is None:
+        model, processor = load_model(config, modules)
+    else:
+        model, processor, _ = load_finetuned_checkpoint(
+            checkpoint,
+            dict(config.get("model", {})),
+            modules,
+        )
     torch = modules["torch"]
     generation_cfg = dict(config.get("generation", {}))
     dataset = Qwen3VLDataset(eval_file, data_cfg.get("max_eval_samples"))
@@ -280,6 +306,7 @@ def evaluate(config_path: Path) -> None:
 
     predictions: list[dict[str, Any]] = []
     for index, sample in enumerate(dataset, start=1):
+        started = time.perf_counter()
         prediction = generate_prediction(
             model,
             processor,
@@ -295,14 +322,20 @@ def evaluate(config_path: Path) -> None:
                 "prediction": prediction,
                 "reference": extract_reference(sample["messages"]),
                 "metadata": sample.get("metadata", {}),
+                "inference_latency_ms": (time.perf_counter() - started) * 1000,
             }
         )
         if index == 1 or index % 10 == 0 or index == len(dataset):
             print(f"Evaluated {index}/{len(dataset)} samples")
 
     output_cfg = dict(config["output"])
-    summary_file = resolve_project_path(str(output_cfg["summary_file"]))
-    predictions_file = resolve_project_path(str(output_cfg["predictions_file"]))
+    if checkpoint is None:
+        summary_file = resolve_project_path(str(output_cfg["summary_file"]))
+        predictions_file = resolve_project_path(str(output_cfg["predictions_file"]))
+    else:
+        eval_output = checkpoint.resolve() / "evaluation"
+        summary_file = eval_output / "summary.json"
+        predictions_file = eval_output / "predictions.jsonl"
     summary_file.parent.mkdir(parents=True, exist_ok=True)
     predictions_file.parent.mkdir(parents=True, exist_ok=True)
     summary_file.write_text(
@@ -319,7 +352,8 @@ def main() -> int:
 
     args = parse_args()
     try:
-        evaluate(Path(args.config))
+        checkpoint = Path(args.checkpoint) if args.checkpoint else None
+        evaluate(Path(args.config), checkpoint)
     except ImportError as exc:
         raise SystemExit(str(exc) or MODEL_DEPS_ERROR) from exc
     return 0

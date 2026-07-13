@@ -1,0 +1,15 @@
+enabled: false
+
+plugin_roots: []
+
+security:
+  trusted_roots_only: true
+  allow_entrypoint_parent_escape: false
+
+dependencies:
+  allow_install: false
+  require_venv_for_install: true
+  offline_by_default: true
+
+runtime:
+  default_timeout_seconds: null

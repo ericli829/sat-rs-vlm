@@ -4,7 +4,9 @@
 
 第一版的真实模型基线是本地 `Qwen3-VL-2B-Instruct`，训练数据来自 VRSBench，并经过项目内转换器生成统一的遥感指令 JSONL 和 Qwen3-VL messages JSONL。已完成资产校验、数据转换、LoRA 两步 smoke 训练以及训练前向传播验证。
 
-第一版并不宣称已经完成全量训练或取得 benchmark 分数。`configs/train/qwen3vl_lora*.yaml` 中保留的远程 8B/QLoRA 配置是后续扩展模板，不是当前默认执行路径。
+第一版并不宣称已经完成全量训练或取得 benchmark 分数。LoRA 基线保持原入口；
+实验性微调方法已经移到 Git 忽略的本地插件包，使用方式见
+`docs/external_plugins.md`。稳定 LoRA 不依赖该插件包。
 
 ## 当前资产
 

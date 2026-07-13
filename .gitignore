@@ -12,3 +12,8 @@ build/
 .coverage
 htmlcov/
 checkpoints/
+.local_plugins/
+external_plugins/
+sat-rs-vlm-local-plugins/
+plugin_checkpoints/
+plugin_reports/
