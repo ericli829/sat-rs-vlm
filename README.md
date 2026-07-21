@@ -11,9 +11,25 @@
 | Mock CLI / HTTP 推理 | 可用 | 无 GPU、无真实模型也可运行 |
 | 本地 Qwen3-VL 推理 | 可用 | 使用 HuggingFace 本地模型目录 |
 | VRSBench 转换 | 可用 | caption、检测、计数、场景分类、VQA，框坐标裁剪到 `[0,1]` |
-| Qwen3-VL LoRA | 已验证 | 本地数据、forward-only、2-step smoke、checkpoint 和评估链路 |
+| Qwen3-VL LoRA 训练 | ✅ 已验证 | 50-step CPU: loss 24→6.68, 12.6 min, 0% empty predictions, valid_json 100% |
+| Qwen3-VL LoRA 评估 | ✅ 已验证 | 评估链路完整，分任务指标可用 |
 | 外部实验插件 API | 可用 | 显式发现、manifest、依赖检查、路径隔离、无静默回退 |
 | 星载压缩与容错 | 接口预留 | 蒸馏、剪枝、量化、bit flip、checksum 和恢复仍需继续实现 |
+
+### 初步训练验证 (2026-07-16)
+
+**硬件**：Intel Core Ultra 7 155H, 32 GB RAM, CPU-only（无 NVIDIA GPU）
+
+**数据**：50 张 VRSBench 图片 → 318 训练 / 328 验证样本（6 种遥感任务）
+
+**方法**：LoRA (r=16, alpha=32), max_steps=50, seq_len=1024, bs=1, adamw + cosine lr
+
+| 阶段 | 关键结果 |
+|---|---|
+| 训练 | 757.7s (≈12.6 min), loss 24.01 → **6.68** (↓72%), trainable 17.4M / 2.14B (0.81%) |
+| 评估 | empty_prediction_rate **0%**, detection valid_json_rate **100%**, keyword_hit 100% (caption/detection/scene) |
+
+> **结论**：50-step CPU 训练即可让模型对遥感图像产生有意义的回答，完整链路已验证。正式训练需 NVIDIA GPU（RTX 4060 8 GB 预计 2.5-5 h/epoch），CPU 完整训练 ≈58 天不切实际。
 
 ## 安装
 
@@ -60,8 +76,8 @@ uvicorn sat_rs_vlm.interfaces.http.app:app --reload --host 127.0.0.1 --port 8000
 当前本地约定：
 
 ```text
-模型：D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct
-数据：F:\VIT-data\VRSBench
+模型：D:\Models\Qwen3-VL-2B-Instruct
+数据：d:\project\database\VRSBench
 ```
 
 转换命令：
@@ -78,8 +94,8 @@ python scripts/convert_to_qwen3vl_format.py --config configs/data/remote_sensing
 设置本地资产：
 
 ```powershell
-$env:LOCAL_MODEL_DIR="D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct"
-$env:DATA_ROOT="F:\VIT-data\VRSBench"
+$env:LOCAL_MODEL_DIR="D:\Models\Qwen3-VL-2B-Instruct"
+$env:DATA_ROOT="d:\project\database\VRSBench"
 $env:TRAIN_JSONL="$PWD\data\processed\qwen3vl_train.jsonl"
 $env:VAL_JSONL="$PWD\data\processed\qwen3vl_val.jsonl"
 ```

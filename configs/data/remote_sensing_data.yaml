@@ -2,7 +2,7 @@ source: vrsbench
 
 raw_data:
   vrsbench:
-    root: "F:/VIT-data/VRSBench"
+    root: "d:/project/database/VRSBench"
     train_images: "Images/Images_train"
     val_images: "Images/Images_val"
     train_annotations: "Annotations/Annotations_train"

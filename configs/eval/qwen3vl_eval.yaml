@@ -1,7 +1,7 @@
 model:
-  base_model: "D:/Desktop/tzb-2026/Qwen3-VL-2B-Instruct"
+  base_model: "D:/Models/Qwen3-VL-2B-Instruct"
   adapter_path: "checkpoints/smoke/qwen3vl-local-smoke"
-  processor_id: "D:/Desktop/tzb-2026/Qwen3-VL-2B-Instruct"
+  processor_id: "D:/Models/Qwen3-VL-2B-Instruct"
   local_files_only: true
   trust_remote_code: true
   torch_dtype: "bfloat16"
@@ -10,9 +10,9 @@ model:
 
 data:
   eval_file: "data/processed/qwen3vl_val.jsonl"
-  image_root: "F:/VIT-data/VRSBench"
+  image_root: "d:/project/database/VRSBench"
   max_seq_length: 1024
-  max_eval_samples: 100
+  max_eval_samples: 10
 
 generation:
   max_new_tokens: 256
