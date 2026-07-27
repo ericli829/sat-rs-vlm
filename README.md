@@ -14,7 +14,8 @@
 | Qwen3-VL LoRA 训练 | ✅ 已验证 | 50-step CPU: loss 24→6.68, 12.6 min, 0% empty predictions, valid_json 100% |
 | Qwen3-VL LoRA 评估 | ✅ 已验证 | 评估链路完整，分任务指标可用 |
 | 外部实验插件 API | 可用 | 显式发现、manifest、依赖检查、路径隔离、无静默回退 |
-| 星载压缩与容错 | 接口预留 | 蒸馏、剪枝、量化、bit flip、checksum 和恢复仍需继续实现 |
+| INT8 量化 | ✅ 已验证 | PyTorch 原生动态 INT8 量化，CPU 推理加速 1.43× |
+| 星载压缩与容错 | 部分实现 | 量化已实现，蒸馏/剪枝/bit flip/checksum 接口预留 |
 
 ### 初步训练验证 (2026-07-16)
 
@@ -30,6 +31,21 @@
 | 评估 | empty_prediction_rate **0%**, detection valid_json_rate **100%**, keyword_hit 100% (caption/detection/scene) |
 
 > **结论**：50-step CPU 训练即可让模型对遥感图像产生有意义的回答，完整链路已验证。正式训练需 NVIDIA GPU（RTX 4060 8 GB 预计 2.5-5 h/epoch），CPU 完整训练 ≈58 天不切实际。
+
+### INT8 量化验证 (2026-07-27)
+
+**硬件**：Intel Core Ultra 7 155H, 32 GB RAM, CPU-only（无 NVIDIA GPU）
+
+**方法**：PyTorch 原生动态 INT8 量化（`torch.quantization.quantize_dynamic`）
+
+| 指标 | 基线 (BF16) | INT8 量化 | 变化 |
+|---|---|---|---|
+| 模型大小 | 3.97 GB | — | — |
+| 参数量 | 2,127,532,032 | 315,346,944 | -85% |
+| 推理速度 (CPU) | 20,576.8 ms | 14,361.7 ms | **1.43× 加速** |
+| 准确率 | 37.5% | 25.0% | 66.67% 保持率 |
+
+> **结论**：INT8 量化在 CPU 上获得 1.43× 推理加速，但精度保持率仅 66.67%。Qwen3-VL 的视觉编码器和跨模态层对量化敏感，后续需尝试 INT4 GPTQ/AWQ 或知识蒸馏方案。
 
 ## 安装
 
@@ -78,6 +94,7 @@ uvicorn sat_rs_vlm.interfaces.http.app:app --reload --host 127.0.0.1 --port 8000
 ```text
 模型：D:\Models\Qwen3-VL-2B-Instruct
 数据：d:\project\database\VRSBench
+量化模型：d:\project\sat-rs-vlm\checkpoints\quantized\int8_cpu
 ```
 
 转换命令：
@@ -115,6 +132,30 @@ python scripts/train_qwen3vl_lora.py --config configs/train/qwen3vl_local_smoke.
 
 ```powershell
 python scripts/evaluate_rs_vlm.py --config configs/eval/qwen3vl_eval.yaml
+```
+
+## INT8 量化
+
+CPU 环境下使用 PyTorch 原生动态 INT8 量化：
+
+```powershell
+python scripts/quantize_int8_cpu.py `
+  --model-dir "D:\Models\Qwen3-VL-2B-Instruct" `
+  --output-dir "checkpoints\quantized\int8_cpu" `
+  --val-jsonl "data\processed\qwen3vl_val.jsonl" `
+  --image-root "d:\project\database\VRSBench" `
+  --num-samples 20 `
+  --warmup-samples 2
+```
+
+NVIDIA GPU 环境下使用 bitsandbytes INT8 量化（需先安装 bitsandbytes）：
+
+```powershell
+python scripts/quantize_int8.py `
+  --model-dir "D:\Models\Qwen3-VL-2B-Instruct" `
+  --output-dir "checkpoints\quantized\int8_cuda" `
+  --val-jsonl "data\processed\qwen3vl_val.jsonl" `
+  --image-root "d:\project\database\VRSBench"
 ```
 
 ## 外部实验插件
@@ -176,6 +217,7 @@ python -m mypy src
 - `training/`：稳定 LoRA 需要的配置、冻结和通用工具。
 - `plugins/`：外部插件公开 API、显式发现、依赖和运行服务。
 - `interfaces/`：CLI 与 HTTP 协议适配。
+- `scripts/`：训练、评估、量化等脚本（含 `quantize_int8_cpu.py`）。
 
 ## 文档
 
