@@ -28,7 +28,7 @@
 | 阶段 | 关键结果 |
 |---|---|
 | 训练 | 757.7s (≈12.6 min), loss 24.01 → **6.68** (↓72%), trainable 17.4M / 2.14B (0.81%) |
-| 评估 | empty_prediction_rate **0%**, detection valid_json_rate **100%**, keyword_hit 100% (caption/detection/scene) |
+| 评估 | empty_prediction_rate **0%**, detection valid_json_rate **100%**, keyword_hit 100% (caption/detection/scene), 25% (VQA) |
 
 > **结论**：50-step CPU 训练即可让模型对遥感图像产生有意义的回答，完整链路已验证。正式训练需 NVIDIA GPU（RTX 4060 8 GB 预计 2.5-5 h/epoch），CPU 完整训练 ≈58 天不切实际。
 
@@ -89,6 +89,8 @@ uvicorn sat_rs_vlm.interfaces.http.app:app --reload --host 127.0.0.1 --port 8000
 
 ## VRSBench 数据
 
+> **注意**：以下路径为本地开发环境约定，请根据实际情况修改。
+
 当前本地约定：
 
 ```text
@@ -107,6 +109,8 @@ python scripts/convert_to_qwen3vl_format.py --config configs/data/remote_sensing
 输出位于 `data/processed/`。VRSBench 没有独立 test 标注，因此 test JSONL 为空不是转换失败。详细字段和坐标规则见 [data_format.md](docs/data_format.md)。
 
 ## 稳定 LoRA 基线
+
+> **注意**：以下路径为本地开发环境约定，请根据实际情况修改。
 
 设置本地资产：
 
@@ -135,6 +139,8 @@ python scripts/evaluate_rs_vlm.py --config configs/eval/qwen3vl_eval.yaml
 ```
 
 ## INT8 量化
+
+> **注意**：以下路径为本地开发环境约定，请根据实际情况修改。
 
 CPU 环境下使用 PyTorch 原生动态 INT8 量化：
 
