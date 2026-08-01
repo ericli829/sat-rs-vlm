@@ -1,0 +1,12 @@
+environment:
+  name: local
+data:
+  manifest_path: tests/fixtures/miniature_dataset/dataset_manifest.json
+  split: validation
+  max_eval_samples: 2
+runtime:
+  device: cpu
+  mock: true
+output:
+  summary_file: outputs/smoke/evaluation/summary.json
+  predictions_file: outputs/smoke/evaluation/predictions.jsonl

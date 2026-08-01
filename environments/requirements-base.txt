@@ -1,0 +1,7 @@
+# Generated compatibility view; dependency source of truth is pyproject.toml.
+pydantic>=2.5,<3
+pyyaml>=6,<7
+typer>=0.12,<1
+fastapi>=0.110,<1
+uvicorn>=0.27,<1
+pillow>=10,<12

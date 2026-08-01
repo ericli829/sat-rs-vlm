@@ -1,171 +1,259 @@
 # sat-rs-vlm
 
-`sat-rs-vlm` 是面向卫星平台受限算力部署的遥感视觉语言模型工程框架。第一版提供统一任务领域模型、Mock/HuggingFace 推理、CLI/HTTP 接口、VRSBench 数据转换、本地 Qwen3-VL LoRA 训练与评估，以及 bit flip、checksum 等可靠性基础接口。
+`sat-rs-vlm` 是面向卫星平台受限算力部署的多模态遥感大模型工程框架。项目提供
+遥感检测、分类、分割、变化检测、计数、描述和 VQA 的统一领域接口，并包含
+Mock 推理、FastAPI/CLI、本地 Qwen3-VL、VRSBench 转换、LoRA 训练与评估链路。
 
-主仓库将已经跑通的 LoRA 作为稳定基线。QLoRA、DoRA、AdaLoRA、IA3、Partial Unfreeze、Full SFT 和 Prompt Tuning 属于实验性方法，保存在 Git 忽略的本地插件包中，只有用户显式指定插件根目录时才会被发现和加载。
+当前稳定基线是已经实际跑通的 Qwen3-VL-2B LoRA。此次版本增加本地与 AutoDL
+共用的配置、数据 manifest、训练包装、环境检查和结果备份，但保留
+`scripts/train_qwen3vl_lora.py` 原命令及原配置兼容性。
 
-## 当前能力
+当前版本还整合了 single-event-upset/bit flip 可靠性工具。旧实验脚本已重构为统一核心、
+应用服务和少量薄入口，保留当前云端配置、数据和 LoRA 评测架构。
 
-| 能力 | 状态 | 说明 |
-|---|---|---|
-| Mock CLI / HTTP 推理 | 可用 | 无 GPU、无真实模型也可运行 |
-| 本地 Qwen3-VL 推理 | 可用 | 使用 HuggingFace 本地模型目录 |
-| VRSBench 转换 | 可用 | caption、检测、计数、场景分类、VQA，框坐标裁剪到 `[0,1]` |
-| Qwen3-VL LoRA | 已验证 | 本地数据、forward-only、2-step smoke、checkpoint 和评估链路 |
-| 外部实验插件 API | 可用 | 显式发现、manifest、依赖检查、路径隔离、无静默回退 |
-| 星载压缩与容错 | 接口预留 | 蒸馏、剪枝、量化、bit flip、checksum 和恢复仍需继续实现 |
+本次选择性整合还加入 SHC 结构化训练协议和统一 INT8 benchmark：assistant-only loss、
+detection/counting JSON、E0/E1/E1b/E1d 实验、CPU dynamic INT8 与 bitsandbytes INT8。
+来源分支中的完整派生数据、本地报告、绝对路径和未经复现的性能数字没有合入。
 
-## 安装
+## 环境边界
 
-Python 3.10 或更高版本：
+- 本地 Windows/Linux/macOS：代码检查、微型数据验证、Mock 训练和可选真实模型 smoke。
+- AutoDL/Linux GPU：真实 smoke、正式训练、断点恢复和结果备份。
+- 业务 Python 代码不包含 AutoDL 绝对路径；云路径集中在 `configs/cloud/` 和 shell 脚本。
+- 默认 pytest 不联网、不下载模型、不读取完整 VRSBench，也不要求 GPU。
 
-```powershell
-python scripts/bootstrap_env.py
-.\.venv\Scripts\Activate.ps1
-python scripts/check_env.py
-```
-
-真实模型训练与评估：
+## 五分钟本地启动
 
 ```powershell
-python scripts/bootstrap_env.py --with-model
-python scripts/check_env.py --require-model
+python scripts/environment/bootstrap_local.py --with-dev
+.venv\Scripts\Activate.ps1
+python scripts/environment/check_environment.py
+pytest -q
+python scripts/data/validate_dataset.py --dataset-root tests/fixtures/miniature_dataset
+python scripts/training/run_smoke_train.py --config configs/local/train_lora_smoke.yaml
 ```
 
-也可直接安装：
+本仓库当前开发机验证约定使用系统默认的 Windows Store Python 3.11，不使用依赖
+不完整的现有 `.venv`。上面的 bootstrap 命令是提供给新环境或其他开发者的标准流程。
 
-```powershell
-python -m pip install -e ".[dev,model]"
+## 五分钟 AutoDL 初始化
+
+```bash
+cd /root/autodl-tmp/sat-rs-vlm
+bash scripts/environment/setup_autodl.sh \
+  --env-name rs-vlm --clone-current --install-dev --install-model
+source /root/autodl_env.sh
+conda activate rs-vlm
+python scripts/environment/check_environment.py --require-model --require-gpu
 ```
 
-实验插件拥有各自的 `requirements.txt`。主项目不会因 QLoRA 自动安装 bitsandbytes。
+初始化脚本不会替换镜像中已经匹配 CUDA 的 PyTorch。模型依赖通过
+`environments/requirements-model.txt` 单独安装。
 
-## Mock 推理
+## 配置分层
 
-```powershell
-python -m sat_rs_vlm.interfaces.cli infer `
-  --backend mock `
-  --image data/samples/demo_image.png `
-  --prompt "请描述这张遥感图像中的主要地物。"
-```
-
-```powershell
-uvicorn sat_rs_vlm.interfaces.http.app:app --reload --host 127.0.0.1 --port 8000
-```
-
-`GET /health` 返回 `{"status":"ok"}`，`POST /infer` 返回统一 `InferenceResult`。
-
-## VRSBench 数据
-
-当前本地约定：
+优先级从高到低：
 
 ```text
-模型：D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct
-数据：F:\VIT-data\VRSBench
+CLI > 环境变量 > 实验配置 > local/cloud 配置 > base 配置 > 代码默认值
 ```
 
-转换命令：
+基础模型、数据与 LoRA 超参数位于 `configs/base/`；本地覆盖位于
+`configs/local/`；AutoDL 路径和运行参数位于 `configs/cloud/`；可比较实验位于
+`configs/experiments/`。支持 `PROJECT_ROOT`、`DATA_ROOT`、`MODEL_ROOT`、
+`OUTPUT_ROOT`、各类缓存和备份环境变量。
 
-```powershell
-python scripts/prepare_rs_instruction_data.py --config configs/data/remote_sensing_data.yaml
-python scripts/convert_to_qwen3vl_format.py --config configs/data/remote_sensing_data.yaml
+## 数据组织
+
+VRSBench 原始图片和标注保持不变，只新增：
+
+```text
+VRSBench/project_metadata/
+├── dataset_manifest.json
+├── train.jsonl
+├── validation.jsonl
+├── test.jsonl
+├── smoke.jsonl
+├── statistics.json
+└── splits/
 ```
 
-输出位于 `data/processed/`。VRSBench 没有独立 test 标注，因此 test JSONL 为空不是转换失败。详细字段和坐标规则见 [data_format.md](docs/data_format.md)。
+JSONL 中保存相对图片路径，运行时使用 `dataset_root / relative_path`。校验：
 
-## 稳定 LoRA 基线
-
-设置本地资产：
-
-```powershell
-$env:LOCAL_MODEL_DIR="D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct"
-$env:DATA_ROOT="F:\VIT-data\VRSBench"
-$env:TRAIN_JSONL="$PWD\data\processed\qwen3vl_train.jsonl"
-$env:VAL_JSONL="$PWD\data\processed\qwen3vl_val.jsonl"
+```bash
+python scripts/data/validate_dataset.py \
+  --dataset-root /path/to/VRSBench \
+  --manifest-name project_metadata/dataset_manifest.json
 ```
 
-按顺序检查：
+详见 [数据目录说明](docs/dataset_layout.md) 和 [data/README.md](data/README.md)。
+
+## 训练
+
+本地 Mock smoke：
+
+```bash
+python scripts/training/run_smoke_train.py \
+  --config configs/local/train_lora_smoke.yaml
+```
+
+本地真实模型前向、短 LoRA 训练和 CLI 推理：
 
 ```powershell
-python scripts/validate_training_assets.py --config configs/train/qwen3vl_local_smoke.yaml
-python scripts/train_qwen3vl_lora.py --config configs/train/qwen3vl_local_smoke.yaml --dry-run
+$env:LOCAL_MODEL_DIR="<model-parent>\\Qwen3-VL-2B-Instruct"
+$env:DATA_ROOT="<data-parent>\\VRSBench"
+$env:TRAIN_JSONL="$PWD\\data\\processed\\qwen3vl_train.jsonl"
+$env:VAL_JSONL="$PWD\\data\\processed\\qwen3vl_val.jsonl"
 python scripts/train_qwen3vl_lora.py --config configs/train/qwen3vl_local_smoke.yaml --forward-only
-python scripts/train_qwen3vl_lora.py --config configs/train/qwen3vl_local_smoke.yaml
+python scripts/train_qwen3vl_lora.py --config configs/train/qwen3vl_local_smoke.yaml --max-steps 2
+python -m sat_rs_vlm.interfaces.cli infer --config configs/local/qwen3vl_real_infer.yaml --image "<image>" --prompt "请描述主要地物。"
 ```
 
-正式训练使用 `configs/train/qwen3vl_local.yaml`。原 LoRA 命令、配置、checkpoint 和评估方式保持不变。
+外部微调插件必须显式指定根目录；先执行 `--check-only`，再选择策略的 smoke 配置运行。
+完整命令见 [训练命令清单](docs/training_commands.md)。
 
-评估：
+统一真实训练：
 
-```powershell
-python scripts/evaluate_rs_vlm.py --config configs/eval/qwen3vl_eval.yaml
+```bash
+python scripts/training/run_train.py \
+  --config configs/experiments/lora_baseline.yaml \
+  --environment local
 ```
 
-## 外部实验插件
+AutoDL 正式训练：
 
-默认本地插件包位于：
+```bash
+bash scripts/training/run_autodl_train.sh \
+  --config configs/cloud/train_lora_autodl.yaml
+```
+
+断点恢复：
+
+```bash
+python scripts/training/resume_train.py \
+  --config configs/experiments/lora_baseline.yaml \
+  --environment local \
+  --output-dir outputs/qwen3_vl_2b_lora/<run> \
+  --latest
+```
+
+旧命令继续可用：
+
+```bash
+python scripts/train_qwen3vl_lora.py \
+  --config configs/train/qwen3vl_local_smoke.yaml
+```
+
+统一入口只负责分层配置、预检、快照和恢复点解析；真实训练仍委托上述稳定脚本。
+
+### 结构化微调
+
+```bash
+python scripts/prepare_e1_datasets.py
+python scripts/train_qwen3vl_lora.py --config configs/train/qwen3vl_local_e1_balanced.yaml
+python scripts/evaluate_rs_vlm.py --config configs/eval/qwen3vl_eval_e0_zeroshot.yaml
+```
+
+训练 labels 只保留 assistant 答案；截断后没有监督 token 会带 sample id 失败。E1d 已拆为
+data、sampler 和 combined 三种配置，避免把配额倾斜和加权采样混为同一变量。详见
+[结构化微调实验](docs/finetune_playbook.md) 和 [数据协议](docs/data_format.md)。
+
+## INT8 量化
+
+```bash
+python scripts/quantize_rs_vlm.py \
+  --config configs/compression/qwen3vl_torch_dynamic_int8.yaml --dry-run
+```
+
+`torch_dynamic_int8` 是 CPU Linear 动态量化；`bnb_int8` 是 CUDA bitsandbytes 8-bit 加载，
+二者不会混称。统一 benchmark 固定 messages 样本、Processor、生成参数和任务指标，并记录
+失败样本、延迟分位数、内存、参数量和产物大小。当前只验证无模型 dry-run 与 toy Linear，
+真实 Qwen3-VL CPU/CUDA 结果等待本地或 AutoDL 实验。详见 [量化说明](docs/quantization.md)。
+
+## 实验输出
 
 ```text
-.local_plugins/sat-rs-vlm-local-plugins/
+outputs/<group>/<timestamp>_<experiment>_seed<seed>/
+├── config_resolved.yaml
+├── command.txt
+├── environment.json
+├── git_commit.txt
+├── preflight.json
+├── logs/
+├── checkpoints/
+├── predictions/
+├── metrics/
+└── artifacts/
 ```
 
-该目录已加入 `.gitignore`，不会被主项目导入或自动扫描。显式列出和验证：
+备份只复制关键文件和最新若干 checkpoint：
 
-```powershell
-python scripts/list_external_plugins.py `
-  --plugin-root .local_plugins/sat-rs-vlm-local-plugins `
-  --validate
-
-python scripts/validate_external_plugin.py `
-  --plugin-root .local_plugins/sat-rs-vlm-local-plugins `
-  --strategy qlora
+```bash
+bash scripts/storage/backup_results.sh \
+  --experiment-dir /root/autodl-tmp/outputs/<experiment> \
+  --backup-root /root/autodl-fs/experiments
 ```
 
-先做依赖检查，再做 dry-run：
+## Bit Flip 可靠性
 
-```powershell
-python scripts/run_external_strategy.py `
-  --plugin-root .local_plugins/sat-rs-vlm-local-plugins `
-  --strategy qlora `
-  --check-only
+| 能力 | 状态 |
+|---|---|
+| bytes/int/bytearray bit flip | 本地已测试 |
+| float16/bfloat16/float32/int8/uint8 tensor bit flip | 本地 CPU 已测试 |
+| state dict 与 LoRA A/B/正则/层筛选 | 本地 CPU 已测试 |
+| LoRA safetensors 独立故障 Adapter | 小型 Adapter 本地已测试 |
+| checksum manifest 与原子备份恢复 | 本地已测试 |
+| counting/detection/VQA 输出验证与 output guard vote | 本地已测试 |
+| 实验性 weight clamp | 本地 state dict smoke 已测试 |
+| 本地统一 reliability smoke | 本地已测试，明确标记 `smoke_mock` |
+| 云端 Qwen3-VL clean/fault/recovery 入口 | 代码已实现，等待 AutoDL 真实验证 |
 
-python scripts/run_external_strategy.py `
-  --plugin-root .local_plugins/sat-rs-vlm-local-plugins `
-  --strategy dora `
-  --config .local_plugins/sat-rs-vlm-local-plugins/plugins/dora/configs/smoke.yaml `
-  --dry-run
+本地全量 smoke，不加载 Qwen3-VL：
+
+```bash
+python scripts/reliability/run_smoke.py --case all
 ```
 
-默认不安装依赖、不联网。`--install-missing` 只安装当前插件缺失且不冲突的依赖；离线安装还需提供 wheel 目录。未知策略、API 不兼容、模块未匹配或依赖冲突都会明确失败，绝不回退到 LoRA。
+AutoDL 真实入口复用已有模型、Processor、LoRA checkpoint loader、数据 Collator 和评测脚本：
 
-完整说明见 [external_plugins.md](docs/external_plugins.md)。本地插件包中的 `MIGRATION_REPORT.md` 记录了原实验文件与新位置的映射。
-
-## 测试与质量
-
-```powershell
-python -m pytest -q
-python -m ruff check src tests scripts
-python -m ruff format --check src tests scripts
-python -m mypy src
+```bash
+python scripts/reliability/run_experiment.py \
+  --config configs/reliability/experiments/lora_bitflip.yaml \
+  --mode full \
+  --environment autodl
 ```
 
-默认测试不联网、不加载真实 Qwen3-VL、不要求 GPU，也不扫描本地插件目录。
+真实模式缺少 CUDA、依赖、模型、数据或 Adapter 时会直接失败，不会回退为 Mock。本地 smoke
+结果只证明工程流程可运行，不代表 Qwen3-VL 或星载硬件的实际抗辐射能力。详见
+[可靠性模块](docs/reliability/README.md)、[实验流程](docs/reliability/experiment_workflow.md) 和
+[命令清单](docs/reliability/commands.md)。
 
-## 项目边界
+## 质量检查
 
-- `domain/`：任务、输入和统一结果模型。
-- `application/`：推理用例编排。
-- `models/`：Mock/HuggingFace 引擎与可靠性模块。
-- `data/`：遥感数据集、VRSBench 转换和 Qwen3-VL collator。
-- `training/`：稳定 LoRA 需要的配置、冻结和通用工具。
-- `plugins/`：外部插件公开 API、显式发现、依赖和运行服务。
-- `interfaces/`：CLI 与 HTTP 协议适配。
+```bash
+ruff check src tests scripts
+ruff format --check src tests scripts
+mypy src
+pytest -q
+```
+
+真实模型测试必须显式设置 `RUN_REAL_MODEL_TESTS=1`，并使用 `real_model`、`gpu`、
+`slow` 或 `cloud` marker。当前默认环境缺失哪些依赖可通过
+`scripts/environment/check_environment.py` 查看。
 
 ## 文档
 
-- [使用说明](docs/usage_guide.md)
-- [LoRA 训练说明](docs/training_qwen3vl.md)
-- [外部插件说明](docs/external_plugins.md)
-- [数据格式](docs/data_format.md)
-- [本地 smoke 清单](docs/local_smoke_train_checklist.md)
-- [实验记录](docs/experiment_log.md)
+- [本地环境](docs/local_setup.md)
+- [AutoDL 环境](docs/autodl_setup.md)
+- [数据布局](docs/dataset_layout.md)
+- [结构化微调](docs/finetune_playbook.md)
+- [INT8 量化](docs/quantization.md)
+- [完整命令清单](docs/training_commands.md)
+- [环境版本](docs/environment_versions.md)
+- [实验工作流](docs/experiment_workflow.md)
+- [故障排查](docs/troubleshooting.md)
+- [原 LoRA 训练说明](docs/training_qwen3vl.md)
+- [外部实验插件](docs/external_plugins.md)
+- [Bit Flip 可靠性](docs/reliability/README.md)
+- [可靠性命令](docs/reliability/commands.md)
+- [Bit Flip 迁移映射](docs/reliability/bitflip_migration_plan.md)

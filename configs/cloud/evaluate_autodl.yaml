@@ -1,0 +1,10 @@
+environment:
+  name: autodl
+data:
+  manifest_path: ${DATA_ROOT}/VRSBench/project_metadata/dataset_manifest.json
+  split: validation
+runtime:
+  device: cuda
+output:
+  summary_file: ${OUTPUT_ROOT}/evaluation/summary.json
+  predictions_file: ${OUTPUT_ROOT}/evaluation/predictions.jsonl

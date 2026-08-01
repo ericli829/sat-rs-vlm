@@ -1,19 +1,14 @@
 """合并 LoRA adapter 到基座模型。"""
-# ruff: noqa: E402
 
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 from typing import Any
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SRC_DIR = PROJECT_ROOT / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
-
 from sat_rs_vlm.training.utils import MODEL_DEPS_ERROR, safe_import_model_dependencies
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def parse_args() -> argparse.Namespace:

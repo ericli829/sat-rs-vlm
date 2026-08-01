@@ -1,0 +1,37 @@
+schema_version: "1"
+
+validated_lora_environment:
+  source: "Existing local LoRA run recorded before dual-environment refactor"
+  python: "3.11"
+  torch: "2.12.1"
+  torchvision: "0.27.1"
+  transformers: "5.13.0"
+  peft: "0.19.1"
+  accelerate: "1.14.0"
+  bitsandbytes: "0.49.2"
+  qwen-vl-utils: "0.0.14"
+
+default_validation_environment:
+  executable: "Windows Store Python 3.11"
+  python: "3.11.9"
+  pydantic: "2.13.4"
+  pyyaml: "6.0.3"
+  pytest: "9.1.1"
+  pillow: "11.0.0"
+  torch: "2.6.0+cu126"
+  transformers: "5.13.0"
+  peft: "0.19.1"
+  accelerate: "1.14.0"
+  bitsandbytes: "0.49.2"
+  note: "This is the user-selected default environment; .venv is not used for validation."
+
+minimum:
+  python: "3.10"
+  pydantic: "2.5"
+  pyyaml: "6.0"
+  pytest: "7.4"
+
+policy:
+  - "pyproject.toml is the dependency source of truth."
+  - "AutoDL setup does not replace the image-provided torch build."
+  - "Prompt or optional experimental dependencies must not force a global upgrade."

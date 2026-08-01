@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sat-rs-vlm.local/schemas/dataset-manifest-v1.json",
+  "title": "sat-rs-vlm Dataset Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "dataset_name",
+    "dataset_version",
+    "root_format",
+    "image_path_type",
+    "coordinate_format",
+    "coordinate_range",
+    "splits"
+  ],
+  "properties": {
+    "schema_version": {"type": "string", "const": "1.0"},
+    "dataset_name": {"type": "string", "minLength": 1},
+    "dataset_version": {"type": "string", "minLength": 1},
+    "root_format": {"enum": ["external", "embedded"]},
+    "image_path_type": {"const": "relative"},
+    "coordinate_format": {"const": "xyxy"},
+    "coordinate_range": {
+      "type": "array",
+      "prefixItems": [{"type": "number"}, {"type": "number"}],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "splits": {
+      "type": "object",
+      "required": ["train", "validation", "test", "smoke"],
+      "additionalProperties": {"type": "string", "minLength": 1}
+    },
+    "statistics": {"type": ["string", "null"]},
+    "classes": {"type": "array", "items": {"type": "string"}}
+  }
+}

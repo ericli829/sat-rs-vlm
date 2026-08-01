@@ -1,0 +1,54 @@
+experiment:
+  name: lora_bitflip
+  seed: 2026
+  execution_mode: real_inference
+
+model:
+  base_model: ${MODEL_ROOT}/Qwen3-VL-2B-Instruct
+  adapter_path: ${OUTPUT_ROOT}/training/lora_baseline/best_adapter
+  local_files_only: true
+  trust_remote_code: true
+  device_map: auto
+  torch_dtype: bfloat16
+  attn_implementation: sdpa
+
+data:
+  dataset_root: ${DATA_ROOT}/VRSBench
+  dataset_manifest: ${DATA_ROOT}/VRSBench/project_metadata/dataset_manifest.json
+  eval_manifest: ${DATA_ROOT}/VRSBench/project_metadata/reliability/eval.jsonl
+  reliability_eval_manifest: ${DATA_ROOT}/VRSBench/project_metadata/reliability/eval.jsonl
+  eval_split: validation
+  samples_per_task: 20
+  max_eval_samples: null
+  max_seq_length: 1024
+
+fault:
+  target: lora_adapter
+  injection_mode: random
+  bit_flip_counts:
+    - 1
+    - 10
+    - 100
+  repeats: 3
+  bit_scope: all
+  parameter_pattern: null
+  modules: []
+  layers: []
+
+checks:
+  enable_checksum: true
+  enable_output_validation: true
+  enable_nan_inf_check: true
+
+recovery:
+  enable_adapter_backup: true
+  retry_count: 3
+
+generation:
+  max_new_tokens: 256
+  do_sample: false
+  num_beams: 1
+
+output:
+  output_dir: null
+

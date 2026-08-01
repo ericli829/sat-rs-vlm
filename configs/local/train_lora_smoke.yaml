@@ -1,0 +1,22 @@
+experiment:
+  name: local_lora_smoke
+  seed: 42
+
+data:
+  manifest_path: tests/fixtures/miniature_dataset/dataset_manifest.json
+  max_train_samples: 4
+  max_validation_samples: 2
+  max_seq_length: 512
+
+training:
+  max_steps: 1
+  gradient_accumulation_steps: 1
+  logging_steps: 1
+  eval_steps: 1
+  save_steps: 1
+  save_total_limit: 1
+  bf16: null
+  fp16: null
+
+runtime:
+  mock: true

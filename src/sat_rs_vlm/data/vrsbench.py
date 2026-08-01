@@ -9,10 +9,19 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from sat_rs_vlm.data.prompt_templates import (
+    CAPTION_INSTRUCTION,
+    counting_instruction,
+    detection_instruction,
+    scene_instruction,
+)
+from sat_rs_vlm.data.task_protocol import BBoxFormat, counting_json, normalize_bbox
 
 
 @dataclass(frozen=True)
@@ -88,7 +97,13 @@ def clip_unit(value: Any) -> float:
     return min(1.0, max(0.0, number))
 
 
-def clipped_bbox(raw_bbox: Any) -> tuple[list[float], list[float], bool]:
+def clipped_bbox(
+    raw_bbox: Any,
+    *,
+    source_format: str | BBoxFormat = BBoxFormat.NORMALIZED_0_1,
+    target_format: str | BBoxFormat = BBoxFormat.NORMALIZED_0_1,
+    image_size: tuple[int, int] | None = None,
+) -> tuple[list[float], list[float], bool]:
     """校验并裁剪 VRSBench 的 `[x_min, y_min, x_max, y_max]`。
 
     返回值：
@@ -98,21 +113,38 @@ def clipped_bbox(raw_bbox: Any) -> tuple[list[float], list[float], bool]:
     raw = [float(value) for value in list(raw_bbox or [])]
     if len(raw) != 4:
         raise ValueError(f"VRSBench obj_coord must contain 4 values, got: {raw}")
-    clipped = [clip_unit(value) for value in raw]
-    x_min, x_max = sorted((clipped[0], clipped[2]))
-    y_min, y_max = sorted((clipped[1], clipped[3]))
-    normalized = [x_min, y_min, x_max, y_max]
-    return raw, normalized, raw != normalized
+    normalized, changed = normalize_bbox(
+        raw,
+        source_format=source_format,
+        target_format=target_format,
+        image_size=image_size,
+        clip=True,
+    )
+    return raw, normalized, changed
 
 
-def qa_task_type(qa_type: str) -> str:
+def qa_task_type(qa_type: str, question: str = "") -> str:
     """把 VRSBench QA 子类型映射到框架任务类型。"""
 
     normalized = qa_type.strip().lower()
     if normalized == "object quantity":
         return "counting"
     if normalized == "scene type":
-        return "scene_classification"
+        text = " ".join(question.strip().lower().split())
+        yes_no = re.match(
+            r"^(?:is|are|does|do|did|can|could|has|have|will|would)\b",
+            text,
+        )
+        scene_patterns = (
+            "what type of area",
+            "what is the scene",
+            "what scene",
+            "scene type",
+            "scene category",
+            "type of scene",
+        )
+        if not yes_no and any(pattern in text for pattern in scene_patterns):
+            return "scene_classification"
     return "vqa"
 
 
@@ -145,6 +177,9 @@ def annotation_to_samples(
     include_caption: bool = True,
     include_detection: bool = True,
     include_qa: bool = True,
+    bbox_source_format: str | BBoxFormat = BBoxFormat.NORMALIZED_0_1,
+    bbox_target_format: str | BBoxFormat = BBoxFormat.NORMALIZED_0_1,
+    image_size: tuple[int, int] | None = None,
 ) -> Iterator[dict[str, Any]]:
     """把单张图的 VRSBench 标注展开为内部指令样本。"""
 
@@ -158,7 +193,7 @@ def annotation_to_samples(
             "id": f"vrsbench_{split}_{stem}_caption",
             "task_type": "captioning",
             "images": [image_path],
-            "instruction": "Describe this remote sensing image in detail.",
+            "instruction": CAPTION_INSTRUCTION,
             "answer": caption,
             "metadata": {**metadata, "source_task": "caption"},
         }
@@ -167,7 +202,12 @@ def annotation_to_samples(
         for index, obj in enumerate(list(row.get("objects", []))):
             if not isinstance(obj, Mapping):
                 raise ValueError(f"Invalid VRSBench object in {annotation_path}: {obj}")
-            raw_bbox, bbox, was_clipped = clipped_bbox(obj.get("obj_coord"))
+            raw_bbox, bbox, was_clipped = clipped_bbox(
+                obj.get("obj_coord"),
+                source_format=bbox_source_format,
+                target_format=bbox_target_format,
+                image_size=image_size,
+            )
             label = str(obj.get("obj_cls", "object")).strip() or "object"
             referring = str(obj.get("referring_sentence", "")).strip()
             obj_id = obj.get("obj_id", index)
@@ -180,10 +220,7 @@ def annotation_to_samples(
                 "id": f"vrsbench_{split}_{stem}_det_{index:03d}",
                 "task_type": "detection",
                 "images": [image_path],
-                "instruction": (
-                    f'Locate the object described as: "{referring}". '
-                    "Return its class and normalized bounding box."
-                ),
+                "instruction": detection_instruction(referring),
                 "answer": answer,
                 "metadata": {
                     **metadata,
@@ -192,6 +229,8 @@ def annotation_to_samples(
                     "bbox_raw": raw_bbox,
                     "bbox_clipped": bbox,
                     "coordinate_clipped": was_clipped,
+                    "bbox_source_format": BBoxFormat(bbox_source_format).value,
+                    "bbox_target_format": BBoxFormat(bbox_target_format).value,
                 },
             }
 
@@ -205,17 +244,33 @@ def annotation_to_samples(
             ques_id = qa.get("ques_id", index)
             if not question or not answer:
                 raise ValueError(f"Empty VRSBench QA pair in {annotation_path}: {qa}")
+            task_type = qa_task_type(qa_type, question)
+            normalized_answer = answer
+            unresolved_counting = False
+            if task_type == "counting":
+                structured_count = counting_json(answer)
+                if structured_count is None:
+                    task_type = "vqa"
+                    unresolved_counting = True
+                else:
+                    normalized_answer = structured_count
+            instruction = question
+            if task_type == "counting":
+                instruction = counting_instruction(question)
+            elif task_type == "scene_classification":
+                instruction = scene_instruction(question)
             yield {
                 "id": f"vrsbench_{split}_{stem}_qa_{index:03d}",
-                "task_type": qa_task_type(qa_type),
+                "task_type": task_type,
                 "images": [image_path],
-                "instruction": question,
-                "answer": answer,
+                "instruction": instruction,
+                "answer": normalized_answer,
                 "metadata": {
                     **metadata,
                     "source_task": "vqa",
                     "qa_type": qa_type,
                     "question_id": ques_id,
+                    "counting_unresolved": unresolved_counting,
                 },
             }
 
@@ -228,6 +283,8 @@ def iter_vrsbench_samples(
     include_caption: bool = True,
     include_detection: bool = True,
     include_qa: bool = True,
+    bbox_source_format: str | BBoxFormat = BBoxFormat.NORMALIZED_0_1,
+    bbox_target_format: str | BBoxFormat = BBoxFormat.NORMALIZED_0_1,
 ) -> Iterator[dict[str, Any]]:
     """按标注文件名顺序流式生成一个 VRSBench split 的指令样本。"""
 
@@ -254,6 +311,11 @@ def iter_vrsbench_samples(
             )
         image_name = str(row["image"])
         image_path = image_relative_path(layout, image_dir, image_name)
+        image_size = None
+        width = row.get("image_width", row.get("width"))
+        height = row.get("image_height", row.get("height"))
+        if width is not None and height is not None:
+            image_size = (int(width), int(height))
         yield from annotation_to_samples(
             row,
             split=split,
@@ -262,4 +324,7 @@ def iter_vrsbench_samples(
             include_caption=include_caption,
             include_detection=include_detection,
             include_qa=include_qa,
+            bbox_source_format=bbox_source_format,
+            bbox_target_format=bbox_target_format,
+            image_size=image_size,
         )

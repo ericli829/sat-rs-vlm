@@ -1,0 +1,16 @@
+experiment:
+  name: qwen3_vl_2b_lora_baseline
+  strategy: lora
+  seed: 42
+
+model:
+  model_path: ${MODEL_ROOT}/Qwen3-VL-2B-Instruct
+  processor_path: ${MODEL_ROOT}/Qwen3-VL-2B-Instruct
+
+data:
+  manifest_path: ${DATA_ROOT}/VRSBench/project_metadata/dataset_manifest.json
+  split: train
+  validation_split: validation
+
+training:
+  output_name: qwen3_vl_2b_lora

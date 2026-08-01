@@ -1,5 +1,4 @@
 """显式运行普通本地目录中的外部微调插件。"""
-# ruff: noqa: E402
 
 from __future__ import annotations
 
@@ -10,9 +9,6 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from sat_rs_vlm.plugins.capability import validate_platform_capability
 from sat_rs_vlm.plugins.dependency import (
@@ -30,6 +26,8 @@ from sat_rs_vlm.plugins.runtime import (
     execute_external_plugin,
     load_external_config,
 )
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def parse_args() -> argparse.Namespace:

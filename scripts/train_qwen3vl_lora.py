@@ -1,51 +1,39 @@
 """Qwen3-VL 本地 LoRA/QLoRA 遥感指令微调脚本。"""
-# ruff: noqa: E402
 
 from __future__ import annotations
 
 import argparse
 import json
 import shutil
-import sys
 import time
 from pathlib import Path
 from typing import Any
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SRC_DIR = PROJECT_ROOT / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
+from sat_rs_vlm.data.qwen3vl_collator import Qwen3VLDataCollator
+from sat_rs_vlm.data.qwen3vl_dataset import Qwen3VLDataset
+from sat_rs_vlm.data.task_sampler import build_weighted_sampler, create_trainer
+from sat_rs_vlm.models.qwen3vl_loader import compatible_model_class
+from sat_rs_vlm.training.config import (
+    Qwen3VLTrainingConfig,
+    ResolvedTrainingPaths,
+    TrainingPathOverrides,
+    apply_training_overrides,
+    load_training_config,
+    resolve_training_paths,
+)
+from sat_rs_vlm.training.freeze import freeze_projector, freeze_vision_encoder
+from sat_rs_vlm.training.utils import (
+    MODEL_DEPS_ERROR,
+    count_trainable_parameters,
+    model_input_device,
+    move_to_device,
+    resolve_torch_dtype,
+    safe_import_model_dependencies,
+    set_seed,
+    torch_device_summary,
+)
 
-try:
-    from sat_rs_vlm.data.qwen3vl_collator import Qwen3VLDataCollator
-    from sat_rs_vlm.data.qwen3vl_dataset import Qwen3VLDataset
-    from sat_rs_vlm.training.config import (
-        Qwen3VLTrainingConfig,
-        ResolvedTrainingPaths,
-        TrainingPathOverrides,
-        apply_training_overrides,
-        load_training_config,
-        resolve_training_paths,
-    )
-    from sat_rs_vlm.training.freeze import freeze_projector, freeze_vision_encoder
-    from sat_rs_vlm.training.utils import (
-        MODEL_DEPS_ERROR,
-        count_trainable_parameters,
-        model_input_device,
-        move_to_device,
-        resolve_torch_dtype,
-        safe_import_model_dependencies,
-        set_seed,
-        torch_device_summary,
-    )
-except ModuleNotFoundError as exc:
-    missing = exc.name or "unknown"
-    raise SystemExit(
-        f"Missing required project dependency: {missing}\n"
-        'Run: pip install -e ".[dev]"\n'
-        'For model training dependencies, also run: pip install -e ".[model]"\n'
-        "Make sure you run the command with the same Python interpreter used for this script."
-    ) from exc
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def parse_args() -> argparse.Namespace:
@@ -153,17 +141,7 @@ def load_qwen3vl_model(
 ) -> Any:
     """加载 Qwen3-VL 模型。"""
 
-    transformers = modules["transformers"]
-    model_cls = getattr(transformers, "Qwen3VLForConditionalGeneration", None)
-    if model_cls is None:
-        model_cls = getattr(transformers, "AutoModelForVision2Seq", None)
-    if model_cls is None:
-        model_cls = getattr(transformers, "AutoModelForImageTextToText", None)
-    if model_cls is None:
-        raise ImportError(
-            "Transformers cannot find a Qwen3-VL compatible model class. "
-            'Please upgrade model dependencies with: pip install -e ".[model]"'
-        )
+    model_cls = compatible_model_class(modules["transformers"])
     return model_cls.from_pretrained(paths.model_source, **build_model_kwargs(config, modules))
 
 
@@ -276,6 +254,8 @@ def print_resolved_summary(
         print(f"CUDA available: {device['cuda_available']}")
         print(f"CUDA device name: {device.get('device_name')}")
     print(f"Training method: {config.training.method}")
+    print(f"Data composition: {config.data.data_composition}")
+    print(f"Sampling mode: {config.data.sampling_mode}")
     print(f"LoRA rank: {config.lora.r}")
     print(f"Train samples: {train_samples}")
     print(f"Eval samples: {eval_samples}")
@@ -394,12 +374,24 @@ def train(
         paths.image_root,
         debug_shapes=True,
     )
-    trainer = transformers.Trainer(
-        model=model,
-        args=build_training_arguments(config, paths, transformers, torch),
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        data_collator=collator,
+    train_sampler = None
+    if config.data.sampling_mode == "weighted":
+        train_sampler = build_weighted_sampler(
+            train_dataset,
+            config.data.task_sampling_weights,
+            seed=config.training.seed,
+        )
+        print(f"Task-weighted sampling enabled: {config.data.task_sampling_weights}")
+    trainer = create_trainer(
+        transformers,
+        train_sampler=train_sampler,
+        trainer_kwargs={
+            "model": model,
+            "args": build_training_arguments(config, paths, transformers, torch),
+            "train_dataset": train_dataset,
+            "eval_dataset": eval_dataset,
+            "data_collator": collator,
+        },
     )
     trainer.train(resume_from_checkpoint=config.training.resume_from_checkpoint)
     paths.output_dir.mkdir(parents=True, exist_ok=True)
@@ -426,6 +418,9 @@ def train(
         "val_file": str(paths.val_file),
         "output_dir": str(paths.output_dir),
         "max_steps": config.training.max_steps,
+        "data_composition": config.data.data_composition,
+        "sampling_mode": config.data.sampling_mode,
+        "task_sampling_weights": config.data.task_sampling_weights,
         "train_samples": len(train_dataset),
         "eval_samples": len(eval_dataset) if eval_dataset is not None else 0,
         "final_loss": final_loss,
@@ -457,8 +452,8 @@ def main() -> int:
         error_report = {"success": False, "error": str(exc)}
         try:
             save_report(error_report, paths.output_dir)
-        except Exception:
-            pass
+        except (OSError, TypeError) as report_error:
+            print(f"WARNING: could not save failure report: {report_error}")
         if isinstance(exc, ImportError):
             raise SystemExit(str(exc) or MODEL_DEPS_ERROR) from exc
         raise

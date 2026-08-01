@@ -6,7 +6,7 @@
 以下命令默认在项目根目录执行：
 
 ```text
-D:\Desktop\tzb-2026\sat-rs-vlm
+<project-root>\sat-rs-vlm
 ```
 
 ## 1. 当前能力与边界
@@ -214,7 +214,7 @@ uvicorn sat_rs_vlm.interfaces.http.app:app --host 127.0.0.1 --port 8000
 本地模型目录为：
 
 ```text
-D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct
+<model-parent>\Qwen3-VL-2B-Instruct
 ```
 
 使用通用 HuggingFace 后端：
@@ -222,7 +222,7 @@ D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct
 ```powershell
 python -m sat_rs_vlm.interfaces.cli infer `
   --backend huggingface `
-  --model-id "D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct" `
+  --model-id "<model-parent>\Qwen3-VL-2B-Instruct" `
   --image "data\samples\demo_image.png" `
   --prompt "请描述这张遥感图像。"
 ```
@@ -261,7 +261,8 @@ data/processed/qwen3vl_val.jsonl
 data/processed/qwen3vl_test.jsonl
 ```
 
-默认配置使用 `F:/VIT-data/VRSBench`，保留官方 train/val 划分。VRSBench 没有独立
+默认配置使用 `${DATA_ROOT}/VRSBench`，保留官方 train/val 划分。这里的 `DATA_ROOT`
+是数据集父目录。VRSBench 没有独立
 test 标注，因此 `rs_test.jsonl` 和 `qwen3vl_test.jsonl` 为空文件。只验证少量图片时：
 
 ```powershell
@@ -325,7 +326,7 @@ sample 配置固定写入 `data/processed/sample/`，不会覆盖真实 VRSBench
 转换器读取以下有效目录，自动忽略 `__MACOSX` 和 `._*`：
 
 ```text
-F:\VIT-data\VRSBench\
+<data-parent>\VRSBench\
   Images\Images_train
   Images\Images_val
   Annotations\Annotations_train
@@ -344,7 +345,7 @@ VQA。检测答案格式为：
 `metadata.bbox_clipped`。JSONL 图片路径相对 VRSBench 根目录，因此训练时设置：
 
 ```text
-image_root = F:\VIT-data\VRSBench
+image_root = <data-parent>\VRSBench
 ```
 
 
@@ -355,10 +356,10 @@ image_root = F:\VIT-data\VRSBench
 方式一：PowerShell 环境变量：
 
 ```powershell
-$env:LOCAL_MODEL_DIR="D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct"
-$env:DATA_ROOT="F:\VIT-data\VRSBench"
-$env:TRAIN_JSONL="D:\Desktop\tzb-2026\sat-rs-vlm\data\processed\qwen3vl_train.jsonl"
-$env:VAL_JSONL="D:\Desktop\tzb-2026\sat-rs-vlm\data\processed\qwen3vl_val.jsonl"
+$env:LOCAL_MODEL_DIR="<model-parent>\Qwen3-VL-2B-Instruct"
+$env:DATA_ROOT="<data-parent>\VRSBench"
+$env:TRAIN_JSONL="$PWD\data\processed\qwen3vl_train.jsonl"
+$env:VAL_JSONL="$PWD\data\processed\qwen3vl_val.jsonl"
 ```
 
 设置后可以直接使用 `configs/train/qwen3vl_local_smoke.yaml`。PowerShell 环境变量只对
@@ -375,10 +376,10 @@ $env:VAL_JSONL="D:\Desktop\tzb-2026\sat-rs-vlm\data\processed\qwen3vl_val.jsonl"
 ```powershell
 python scripts/validate_training_assets.py `
   --config configs/train/qwen3vl_local_smoke.yaml `
-  --model-dir "D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct" `
+  --model-dir "$env:LOCAL_MODEL_DIR" `
   --train-file "data\processed\qwen3vl_train.jsonl" `
   --val-file "data\processed\qwen3vl_val.jsonl" `
-  --image-root "D:\Desktop\tzb-2026\sat-rs-vlm"
+  --image-root "$env:DATA_ROOT"
 ```
 
 检查内容包括模型配置、processor 配置、训练依赖、JSONL 结构、前五条样本及图片路径。
@@ -397,10 +398,10 @@ Dry run 不加载模型权重，主要检查配置解析、数据集和 collator
 ```powershell
 python scripts/train_qwen3vl_lora.py `
   --config configs/train/qwen3vl_local_smoke.yaml `
-  --model-dir "D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct" `
+  --model-dir "$env:LOCAL_MODEL_DIR" `
   --train-file "data\processed\qwen3vl_train.jsonl" `
   --val-file "data\processed\qwen3vl_val.jsonl" `
-  --image-root "F:\VIT-data\VRSBench" `
+  --image-root "$env:DATA_ROOT" `
   --dry-run
 ```
 
@@ -411,10 +412,10 @@ Forward only 会加载 processor 和模型，整理一条样本并执行一次�
 ```powershell
 python scripts/train_qwen3vl_lora.py `
   --config configs/train/qwen3vl_local_smoke.yaml `
-  --model-dir "D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct" `
+  --model-dir "$env:LOCAL_MODEL_DIR" `
   --train-file "data\processed\qwen3vl_train.jsonl" `
   --val-file "data\processed\qwen3vl_val.jsonl" `
-  --image-root "D:\Desktop\tzb-2026\sat-rs-vlm" `
+  --image-root "$env:DATA_ROOT" `
   --max-seq-length 1024 `
   --forward-only
 ```
@@ -427,10 +428,10 @@ python scripts/train_qwen3vl_lora.py `
 
 ```powershell
 python scripts/run_local_smoke_train.py `
-  --model-dir "D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct" `
+  --model-dir "$env:LOCAL_MODEL_DIR" `
   --train-file "data\processed\qwen3vl_train.jsonl" `
   --val-file "data\processed\qwen3vl_val.jsonl" `
-  --image-root "D:\Desktop\tzb-2026\sat-rs-vlm" `
+  --image-root "$env:DATA_ROOT" `
   --max-seq-length 1024
 ```
 
@@ -453,10 +454,10 @@ checkpoints/smoke/qwen3vl-local-smoke/
 ```powershell
 python scripts/train_qwen3vl_lora.py `
   --config configs/train/qwen3vl_local.yaml `
-  --model-dir "D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct" `
-  --train-file "D:\path\to\vrsbench_train.jsonl" `
-  --val-file "D:\path\to\vrsbench_val.jsonl" `
-  --image-root "F:\VIT-data\VRSBench" `
+  --model-dir "$env:LOCAL_MODEL_DIR" `
+  --train-file "<path-to>\vrsbench_train.jsonl" `
+  --val-file "<path-to>\vrsbench_val.jsonl" `
+  --image-root "$env:DATA_ROOT" `
   --output-dir "checkpoints\qwen3vl-2b-vrsbench-lora" `
   --method lora
 ```
@@ -498,16 +499,16 @@ adapter、验证 JSONL 和图片根目录：
 
 ```yaml
 model:
-  base_model: "D:/Desktop/tzb-2026/Qwen3-VL-2B-Instruct"
+  base_model: "${MODEL_ROOT}/Qwen3-VL-2B-Instruct"
   adapter_path: "checkpoints/smoke/qwen3vl-local-smoke"
-  processor_id: "D:/Desktop/tzb-2026/Qwen3-VL-2B-Instruct"
+  processor_id: "${MODEL_ROOT}/Qwen3-VL-2B-Instruct"
   local_files_only: true
   torch_dtype: "bfloat16"
   device_map: "auto"
 
 data:
   eval_file: "data/processed/qwen3vl_val.jsonl"
-  image_root: "F:/VIT-data/VRSBench"
+  image_root: "${DATA_ROOT}/VRSBench"
   max_seq_length: 1024
 ```
 
@@ -536,7 +537,7 @@ summary 会报告整体及分任务 `empty_prediction_rate`；正常生成时该
 
 ```powershell
 python scripts/merge_lora.py `
-  --base-model "D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct" `
+  --base-model "$env:LOCAL_MODEL_DIR" `
   --adapter "checkpoints\qwen3vl-2b-vrsbench-lora" `
   --output "checkpoints\qwen3vl-2b-vrsbench-merged"
 ```
@@ -636,9 +637,9 @@ CUDA index 必须根据目标机器选择；项目不在 `pyproject.toml` 中硬
 image_root / JSONL 中的 image 路径
 ```
 
-例如 `image_root=F:\VIT-data\VRSBench`，图片字段为
+例如 `image_root=<data-parent>\VRSBench`，图片字段为
 `Images/Images_train/000001.png`，最终路径就是
-`F:\VIT-data\VRSBench\Images\Images_train\000001.png`。
+`<data-parent>\VRSBench\Images\Images_train\000001.png`。
 
 ### CUDA out of memory
 

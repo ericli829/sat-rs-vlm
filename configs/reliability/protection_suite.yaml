@@ -1,0 +1,11 @@
+protection:
+  strategies:
+    - no_protection
+    - checksum_recovery
+    - output_guard_vote
+  output_guard:
+    fallback: clean_prediction
+  weight_clamp:
+    experimental: true
+    margin: 0.0
+

@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "dataset_name": "sat-rs-vlm-miniature",
+  "dataset_version": "1",
+  "root_format": "embedded",
+  "image_path_type": "relative",
+  "coordinate_format": "xyxy",
+  "coordinate_range": [0, 1],
+  "splits": {
+    "train": "train.jsonl",
+    "validation": "validation.jsonl",
+    "test": "test.jsonl",
+    "smoke": "smoke.jsonl"
+  },
+  "statistics": "statistics.json",
+  "classes": ["airplane", "ship", "building"]
+}

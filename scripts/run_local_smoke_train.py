@@ -1,5 +1,4 @@
 """本地 Qwen3-VL 最小训练测试封装脚本。"""
-# ruff: noqa: E402
 
 from __future__ import annotations
 
@@ -11,9 +10,6 @@ import time
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SRC_DIR = PROJECT_ROOT / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
 
 
 def parse_args() -> argparse.Namespace:

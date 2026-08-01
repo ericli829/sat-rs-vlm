@@ -9,30 +9,39 @@ description = "Multimodal remote-sensing VLM engineering framework for constrain
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "pydantic>=2.0",
-    "pyyaml>=6.0",
+    "pydantic>=2.5,<3",
+    "pyyaml>=6.0,<7",
     "packaging>=23.0",
-    "typer>=0.12",
-    "fastapi>=0.110",
-    "uvicorn>=0.27",
+    "typer>=0.12,<1",
+    "fastapi>=0.110,<1",
+    "uvicorn>=0.27,<1",
+    "pillow>=10,<12",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0",
-    "httpx>=0.27",
-    "ruff>=0.5",
-    "mypy>=1.10",
+    "pytest>=7.4,<10",
+    "httpx>=0.25,<1",
+    "ruff>=0.6",
+    "mypy>=1.8",
 ]
 model = [
     "torch>=2.0",
     "torchvision>=0.15",
     "transformers>=4.57,<6",
-    "accelerate>=0.30",
-    "peft>=0.10",
-    "safetensors>=0.4",
-    "pillow>=10.0",
-    "qwen-vl-utils>=0.0.8",
+    "accelerate>=1.0,<2",
+    "peft>=0.13,<1",
+    "safetensors>=0.4,<1",
+    "qwen-vl-utils>=0.0.8,<1",
+]
+cloud = [
+    "tensorboard>=2.14,<3",
+]
+qlora = [
+    "bitsandbytes>=0.43,<1",
+]
+reliability-plot = [
+    "matplotlib>=3.8,<4",
 ]
 [project.scripts]
 sat-rs-vlm = "sat_rs_vlm.interfaces.cli:app"
@@ -42,13 +51,20 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
+addopts = "--basetemp=.tmp/pytest"
+markers = [
+    "real_model: requires a local real model and RUN_REAL_MODEL_TESTS=1",
+    "gpu: requires a CUDA GPU and RUN_REAL_MODEL_TESTS=1",
+    "slow: long-running validation disabled by default",
+    "cloud: requires a configured cloud host",
+]
 
 [tool.ruff]
 line-length = 100
 target-version = "py310"
 src = ["src", "tests", "scripts"]
-extend-exclude = [".venv"]
+extend-exclude = [".venv", ".local_plugins"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

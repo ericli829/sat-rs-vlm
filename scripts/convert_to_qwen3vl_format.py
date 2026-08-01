@@ -1,21 +1,20 @@
 """将项目内部 rs_*.jsonl 转换为 Qwen3-VL chat message JSONL。"""
-# ruff: noqa: E402
 
 from __future__ import annotations
 
 import argparse
-import sys
+import os
 from pathlib import Path
 from typing import Any
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SRC_DIR = PROJECT_ROOT / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
-
 import yaml
 
+from sat_rs_vlm.configuration.environment import expand_environment
+from sat_rs_vlm.data.prompt_templates import strengthen_answer, strengthen_instruction
+from sat_rs_vlm.data.task_protocol import counting_json
 from sat_rs_vlm.utils.jsonl import read_jsonl, write_jsonl
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 SUPPORTED_TASKS = {
     "detection",
@@ -44,7 +43,8 @@ def load_yaml(path: Path) -> dict[str, Any]:
     """读取 YAML 配置。"""
 
     with path.open("r", encoding="utf-8") as file:
-        return dict(yaml.safe_load(file) or {})
+        loaded = dict(yaml.safe_load(file) or {})
+    return dict(expand_environment(loaded, environ=os.environ, allow_unresolved=True))
 
 
 def convert_sample_to_qwen3vl(sample: dict[str, Any]) -> dict[str, Any]:
@@ -60,18 +60,29 @@ def convert_sample_to_qwen3vl(sample: dict[str, Any]) -> dict[str, Any]:
     task_type = str(sample["task_type"])
     if task_type not in SUPPORTED_TASKS:
         raise ValueError(f"Unsupported task_type: {task_type}")
+    metadata = dict(sample.get("metadata", {}))
+    answer = str(sample["answer"])
+    if task_type == "counting":
+        normalized_count = counting_json(answer)
+        if normalized_count is None:
+            metadata.update({"original_task_type": "counting", "counting_unresolved": True})
+            task_type = "vqa"
+        else:
+            answer = normalized_count
+    instruction = strengthen_instruction(task_type, str(sample["instruction"]))
+    answer = strengthen_answer(task_type, answer)
     content = [
         {"type": "image", "image": str(image_path)} for image_path in list(sample.get("images", []))
     ]
-    content.append({"type": "text", "text": str(sample["instruction"])})
+    content.append({"type": "text", "text": instruction})
     return {
         "id": str(sample["id"]),
         "messages": [
             {"role": "user", "content": content},
-            {"role": "assistant", "content": str(sample["answer"])},
+            {"role": "assistant", "content": answer},
         ],
         "task_type": task_type,
-        "metadata": dict(sample.get("metadata", {})),
+        "metadata": metadata,
     }
 
 

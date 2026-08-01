@@ -1,0 +1,20 @@
+experiment:
+  name: local_reliability_smoke
+  seed: 2026
+  execution_mode: smoke_mock
+
+paths:
+  output_root: ${OUTPUT_ROOT}
+
+fault:
+  bit_flip_counts:
+    - 1
+    - 2
+  repeats: 1
+
+data:
+  dataset_root: ${DATA_ROOT}
+  dataset_manifest: ${DATA_ROOT}/dataset_manifest.json
+  eval_manifest: ${DATA_ROOT}/smoke.jsonl
+  max_eval_samples: 5
+

@@ -8,6 +8,19 @@ from sat_rs_vlm.application.inference_service import InferenceService
 from sat_rs_vlm.models.mock_model import MockVLMEngine
 
 
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """默认跳过需要真实模型、GPU、慢任务或云主机的测试。"""
+
+    if config.getoption("-m"):
+        return
+    if __import__("os").environ.get("RUN_REAL_MODEL_TESTS") == "1":
+        return
+    skip = pytest.mark.skip(reason="Set RUN_REAL_MODEL_TESTS=1 and select the marker explicitly.")
+    for item in items:
+        if any(item.get_closest_marker(name) for name in ("real_model", "gpu", "slow", "cloud")):
+            item.add_marker(skip)
+
+
 @pytest.fixture
 def inference_service() -> InferenceService:
     return InferenceService(engine=MockVLMEngine())

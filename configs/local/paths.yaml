@@ -1,0 +1,18 @@
+environment:
+  name: local
+
+paths:
+  project_root: ${PROJECT_ROOT}
+  dataset_root: ${DATA_ROOT}
+  model_root: ${MODEL_ROOT}
+  output_root: ./outputs
+  cache_root: ./.cache
+  temp_root: ./.tmp
+  tensorboard_root: ./outputs/tensorboard
+  backup_root: ./outputs/backups
+
+runtime:
+  device: auto
+  num_workers: 0
+  pin_memory: false
+  persistent_workers: false

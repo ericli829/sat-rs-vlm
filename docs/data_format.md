@@ -59,13 +59,13 @@
 detection：
 
 ```json
-{"task_type":"detection","instruction":"请检测图像中的飞机。","answer":"检测到疑似飞机目标，位于机场跑道附近。"}
+{"task_type":"detection","instruction":"Locate the aircraft. Return ONLY normalized_0_1 JSON.","answer":"{\"label\":\"aircraft\",\"bbox\":[0.1,0.2,0.3,0.4]}"}
 ```
 
 counting：
 
 ```json
-{"task_type":"counting","instruction":"请统计图像中的建筑物数量。","answer":"图像中大约有 5 个建筑物。"}
+{"task_type":"counting","instruction":"请统计图像中的建筑物数量，只返回 JSON。","answer":"{\"count\":5}"}
 ```
 
 captioning：
@@ -100,10 +100,26 @@ VRSBench 的每张原始图像会展开为 caption、object referring 和 QA 样
 {"label":"building","bbox":[0.0,0.2,1.0,0.8]}
 ```
 
-边界框采用归一化 `[x_min,y_min,x_max,y_max]`，所有坐标裁剪到 `[0,1]`。原始值、
+目标边界框采用 `normalized_0_1` 的 `[x_min,y_min,x_max,y_max]`。来源格式必须在配置中
+显式声明为 `normalized_0_1`、`percent_0_100`、`scaled_0_1000` 或 `pixel_xyxy`，不会根据
+数值范围猜测。坐标转换后裁剪到 `[0,1]`。原始值、
 裁剪值和是否发生裁剪分别保存在 `metadata.bbox_raw`、`metadata.bbox_clipped` 和
 `metadata.coordinate_clipped`。
 
 转换后的 VRSBench 图片路径以数据集根目录为基准，例如
 `Images/Images_train/000001.png`。因此训练或评估配置中的 `image_root` 应设置为
 VRSBench 根目录，而不是其 `Images` 子目录。
+
+计数答案统一为 `{"count":2}`。转换器支持数字、英文数字和 no/none；无法可靠解析时
+记录 `metadata.counting_unresolved=true` 并降级为普通 VQA，不伪造计数。
+
+## Prediction JSONL
+
+普通评测、量化和可靠性实验共享以下基础字段：
+
+```json
+{"id":"sample-id","task_type":"detection","prediction":"...","reference":"...","metadata":{},"inference_latency_ms":12.3}
+```
+
+实验可追加 `variant`、`backend`、`compression`、`fault_case`、`validation` 和 `recovery`，
+但不得改变基础字段语义。

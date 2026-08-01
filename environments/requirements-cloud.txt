@@ -1,0 +1,2 @@
+# Optional observability dependency for cloud training.
+tensorboard>=2.14,<3

@@ -1,0 +1,5 @@
+# Install after requirements-base.txt.
+pytest>=7.4,<10
+httpx>=0.25,<1
+ruff>=0.6
+mypy>=1.8

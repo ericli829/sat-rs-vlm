@@ -1,0 +1,32 @@
+project:
+  name: sat-rs-vlm
+  config_version: 1
+
+environment:
+  name: local
+
+paths:
+  project_root: ${PROJECT_ROOT}
+  dataset_root: ${DATA_ROOT}
+  model_root: ${MODEL_ROOT}
+  output_root: ./outputs
+  cache_root: ./.cache
+  temp_root: ./.tmp
+  tensorboard_root: ./outputs/tensorboard
+  backup_root: ./outputs/backups
+  hf_home: ./.cache/huggingface
+  hf_hub_cache: ./.cache/huggingface/hub
+  torch_home: ./.cache/torch
+  pip_cache_dir: ./.cache/pip
+
+runtime:
+  device: auto
+  num_workers: 0
+  pin_memory: false
+  persistent_workers: false
+  enable_tf32: false
+  precision: auto
+
+output:
+  experiment_group: qwen3_vl_2b_lora
+  create_timestamped_run: true

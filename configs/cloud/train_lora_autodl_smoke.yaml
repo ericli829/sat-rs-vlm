@@ -1,0 +1,19 @@
+experiment:
+  name: autodl_lora_smoke
+  seed: 42
+
+training:
+  max_steps: 5
+  gradient_accumulation_steps: 1
+  logging_steps: 1
+  eval_steps: 2
+  save_steps: 2
+  save_total_limit: 1
+
+data:
+  max_train_samples: 16
+  max_validation_samples: 8
+  max_seq_length: 512
+
+runtime:
+  mock: false

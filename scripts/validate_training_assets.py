@@ -3,21 +3,16 @@
 在真实训练前检查本地模型目录、processor 目录、JSONL 数据和图片路径是否可用，并
 输出 reports/training_asset_check.json。默认会检查模型训练依赖是否已安装。
 """
-# ruff: noqa: E402
 
 from __future__ import annotations
 
 import argparse
 import importlib
 import json
-import sys
 from pathlib import Path
 from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SRC_DIR = PROJECT_ROOT / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
 
 try:
     from sat_rs_vlm.data.qwen3vl_dataset import sample_to_messages

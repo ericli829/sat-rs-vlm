@@ -1,0 +1,13 @@
+paths:
+  project_root: /root/autodl-tmp/sat-rs-vlm
+  dataset_root: /root/autodl-tmp/datasets
+  model_root: /root/autodl-tmp/models
+  output_root: /root/autodl-tmp/outputs
+  cache_root: /root/autodl-tmp/cache
+  temp_root: /root/autodl-tmp/temp
+  tensorboard_root: /root/tf-logs
+  backup_root: /root/autodl-fs/experiments
+  hf_home: /root/autodl-tmp/cache/huggingface
+  hf_hub_cache: /root/autodl-tmp/cache/huggingface/hub
+  torch_home: /root/autodl-tmp/cache/torch
+  pip_cache_dir: /root/autodl-tmp/cache/pip

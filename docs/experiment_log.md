@@ -12,11 +12,11 @@
 
 | 项目 | 记录 |
 | --- | --- |
-| 基座模型 | `D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct` |
-| 原始数据 | `F:\VIT-data\VRSBench` |
+| 基座模型 | `${LOCAL_MODEL_DIR}` |
+| 原始数据 | `${DATA_ROOT}`（VRSBench 根目录） |
 | 训练 JSONL | `data/processed/qwen3vl_train.jsonl`，142390 条 |
 | 验证 JSONL | `data/processed/qwen3vl_val.jsonl`，62918 条 |
-| 图片根目录 | `F:\VIT-data\VRSBench` |
+| 图片根目录 | `${DATA_ROOT}`（VRSBench 根目录） |
 
 ## 训练方法
 

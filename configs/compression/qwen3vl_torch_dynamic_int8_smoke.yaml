@@ -1,0 +1,25 @@
+# 无模型 dry-run：model 路径只是存在性 fixture，不会加载权重。
+model:
+  base_model: "tests/fixtures/miniature_dataset"
+  processor_id: "tests/fixtures/miniature_dataset"
+  adapter_path: null
+  local_files_only: true
+  torch_dtype: "float32"
+quantization:
+  backend: "torch_dynamic_int8"
+  device: "cpu"
+  save_artifact: false
+data:
+  eval_file: "tests/fixtures/miniature_dataset/smoke.jsonl"
+  image_root: "tests/fixtures/miniature_dataset"
+  max_eval_samples: 2
+  max_seq_length: 128
+generation:
+  do_sample: false
+  max_new_tokens: 16
+benchmark:
+  warmup_samples: 0
+  repeats: 1
+  seed: 42
+output:
+  output_dir: ".tmp/quantization-smoke"

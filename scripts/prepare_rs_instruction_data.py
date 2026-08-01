@@ -4,28 +4,25 @@
 rs_*.jsonl 格式。第三阶段第一版保留真实数据集接入接口；当真实目录不存在时，自动
 生成覆盖单图任务和双图变化检测任务的 sample 数据，便于训练 pipeline smoke test。
 """
-# ruff: noqa: E402
 
 from __future__ import annotations
 
 import argparse
+import os
 import struct
-import sys
 import zlib
 from collections import Counter
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SRC_DIR = PROJECT_ROOT / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
-
 import yaml
 
+from sat_rs_vlm.configuration.environment import expand_environment
 from sat_rs_vlm.data.vrsbench import VRSBenchLayout, iter_vrsbench_samples
 from sat_rs_vlm.utils.jsonl import write_jsonl
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 TASK_TEMPLATES: tuple[tuple[str, str, str], ...] = (
     (
@@ -68,7 +65,8 @@ def load_yaml(path: Path) -> dict[str, Any]:
     """读取 YAML 配置。"""
 
     with path.open("r", encoding="utf-8") as file:
-        return dict(yaml.safe_load(file) or {})
+        loaded = dict(yaml.safe_load(file) or {})
+    return dict(expand_environment(loaded, environ=os.environ, allow_unresolved=True))
 
 
 def png_chunk(chunk_type: bytes, data: bytes) -> bytes:
@@ -201,11 +199,22 @@ def prepare_vrsbench_data(
     vrsbench_config = raw_data.get("vrsbench")
     if not isinstance(vrsbench_config, dict):
         raise ValueError("raw_data.vrsbench must be a mapping with root/images/annotations paths.")
+    if "${" in str(vrsbench_config.get("root", "")):
+        raise ValueError("VRSBench source requires DATA_ROOT to resolve raw_data.vrsbench.root.")
     coordinate_policy = str(vrsbench_config.get("coordinate_policy", "clip_0_1"))
     if coordinate_policy != "clip_0_1":
         raise ValueError(
             f"Unsupported VRSBench coordinate_policy: {coordinate_policy}. Use 'clip_0_1'."
         )
+    bbox_config = vrsbench_config.get("bbox")
+    if not isinstance(bbox_config, dict):
+        raise ValueError(
+            "raw_data.vrsbench.bbox must explicitly define source_format and target_format."
+        )
+    if "source_format" not in bbox_config or "target_format" not in bbox_config:
+        raise ValueError("VRSBench bbox config requires source_format and target_format.")
+    bbox_source_format = str(bbox_config["source_format"])
+    bbox_target_format = str(bbox_config["target_format"])
     layout = VRSBenchLayout.from_config(vrsbench_config, root)
     include_caption = bool(vrsbench_config.get("include_caption", True))
     include_detection = bool(vrsbench_config.get("include_detection", True))
@@ -220,6 +229,8 @@ def prepare_vrsbench_data(
             include_caption=include_caption,
             include_detection=include_detection,
             include_qa=include_qa,
+            bbox_source_format=bbox_source_format,
+            bbox_target_format=bbox_target_format,
         )
         write_jsonl(path, count_rows(rows, counts))
         task_counts = {key: value for key, value in counts.items() if key != "total"}

@@ -1,0 +1,6 @@
+# PyTorch is intentionally omitted: install a CUDA-matching build first.
+transformers>=4.57,<6
+accelerate>=1.0,<2
+peft>=0.13,<1
+safetensors>=0.4,<1
+qwen-vl-utils>=0.0.8,<1

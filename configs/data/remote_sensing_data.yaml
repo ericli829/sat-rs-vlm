@@ -2,7 +2,7 @@ source: vrsbench
 
 raw_data:
   vrsbench:
-    root: "F:/VIT-data/VRSBench"
+    root: "${DATA_ROOT}/VRSBench"
     train_images: "Images/Images_train"
     val_images: "Images/Images_val"
     train_annotations: "Annotations/Annotations_train"
@@ -15,6 +15,9 @@ raw_data:
     include_detection: true
     include_qa: true
     coordinate_policy: "clip_0_1"
+    bbox:
+      source_format: "normalized_0_1"
+      target_format: "normalized_0_1"
     ignore_patterns:
       - "__MACOSX"
       - "._*"

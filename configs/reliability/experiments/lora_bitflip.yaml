@@ -1,0 +1,28 @@
+experiment:
+  name: qwen3vl_lora_bitflip
+  seed: 2026
+  execution_mode: real_inference
+
+model:
+  base_model: ${MODEL_ROOT}/Qwen3-VL-2B-Instruct
+  adapter_path: ${OUTPUT_ROOT}/training/lora_baseline/best_adapter
+
+data:
+  dataset_root: ${DATA_ROOT}/VRSBench
+  dataset_manifest: ${DATA_ROOT}/VRSBench/project_metadata/dataset_manifest.json
+  eval_manifest: ${DATA_ROOT}/VRSBench/project_metadata/reliability/eval.jsonl
+  eval_split: validation
+
+fault:
+  bit_flip_counts:
+    - 1
+    - 10
+    - 100
+  repeats: 3
+  bit_scope: all
+
+protection:
+  strategies:
+    - no_protection
+    - checksum_recovery
+    - output_guard_vote

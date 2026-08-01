@@ -7,6 +7,7 @@
 Dataset 只做轻量 JSON 读取和格式归一化，不加载 processor，也不做图像 tensor 编码。
 """
 
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -53,13 +54,22 @@ class Qwen3VLDataset:
         if not self.path.exists():
             raise FileNotFoundError(f"Dataset file does not exist: {self.path}")
         rows: list[dict[str, Any]] = []
+        skipped: list[dict[str, str]] = []
         for row in read_jsonl(self.path):
             try:
                 rows.append(self._normalize_row(row))
-            except Exception:
+            except (KeyError, TypeError, ValueError) as exc:
                 if not skip_bad_samples:
                     raise
+                skipped.append(
+                    {
+                        "id": str(row.get("id", "<unknown>")),
+                        "error_type": type(exc).__name__,
+                        "message": str(exc),
+                    }
+                )
         self._rows = rows[:max_samples] if max_samples is not None else rows
+        self.skipped_samples = skipped
 
     def __len__(self) -> int:
         """返回样本数量。"""
@@ -70,6 +80,11 @@ class Qwen3VLDataset:
         """读取单条归一化样本。"""
 
         return self._rows[index]
+
+    def __iter__(self) -> Iterator[dict[str, Any]]:
+        """按输入顺序迭代归一化样本。"""
+
+        return iter(self._rows)
 
     @staticmethod
     def _normalize_row(row: dict[str, Any]) -> dict[str, Any]:

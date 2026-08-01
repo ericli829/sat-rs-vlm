@@ -79,7 +79,8 @@ def test_clipped_bbox_rejects_invalid_values() -> None:
 
 def test_qa_task_mapping() -> None:
     assert qa_task_type("object quantity") == "counting"
-    assert qa_task_type("scene type") == "scene_classification"
+    assert qa_task_type("scene type", "What type of area is shown?") == "scene_classification"
+    assert qa_task_type("scene type", "Is this an urban scene?") == "vqa"
     assert qa_task_type("object color") == "vqa"
 
 
@@ -92,7 +93,7 @@ def test_iter_vrsbench_samples_expands_tasks_and_clips_bbox(tmp_path: Path) -> N
         "captioning",
         "detection",
         "counting",
-        "scene_classification",
+        "vqa",
         "vqa",
     ]
     detection = rows[1]

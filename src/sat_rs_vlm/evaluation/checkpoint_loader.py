@@ -6,21 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from sat_rs_vlm.models.qwen3vl_loader import compatible_model_class
 from sat_rs_vlm.training.utils import resolve_torch_dtype
-
-
-def _compatible_model_class(transformers: Any) -> Any:
-    """Return a locally available Qwen3-VL-compatible Transformers class."""
-
-    for name in (
-        "Qwen3VLForConditionalGeneration",
-        "AutoModelForImageTextToText",
-        "AutoModelForVision2Seq",
-    ):
-        model_class = getattr(transformers, name, None)
-        if model_class is not None:
-            return model_class
-    raise ImportError("Transformers does not provide a Qwen3-VL compatible model class")
 
 
 def read_strategy_manifest(checkpoint: str | Path) -> dict[str, Any]:
@@ -120,7 +107,7 @@ def load_finetuned_checkpoint(
         local_files_only=local_files_only,
         trust_remote_code=bool(eval_model_config.get("trust_remote_code", True)),
     )
-    model_class = _compatible_model_class(transformers)
+    model_class = compatible_model_class(transformers)
     if bool(manifest["adapter_based"]):
         model_dir = str(manifest.get("model_dir", ""))
         if not model_dir:

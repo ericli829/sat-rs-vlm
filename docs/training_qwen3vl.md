@@ -11,9 +11,9 @@
 ## 当前资产
 
 ```text
-本地模型: D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct
-VRSBench: F:\VIT-data\VRSBench
-项目根目录: D:\Desktop\tzb-2026\sat-rs-vlm
+本地模型: <model-parent>\Qwen3-VL-2B-Instruct
+VRSBench: <data-parent>\VRSBench
+项目根目录: <project-root>\sat-rs-vlm
 ```
 
 转换后的数据位于 `data/processed/`：
@@ -25,7 +25,7 @@ VRSBench: F:\VIT-data\VRSBench
 | `qwen3vl_train.jsonl` | 142390 |
 | `qwen3vl_val.jsonl` | 62918 |
 
-转换器写入的图片路径相对于 VRSBench 根目录，例如 `Images/Images_train/...`；训练和评估必须把 `image_root` 指向 `F:\VIT-data\VRSBench`。
+转换器写入的图片路径相对于 VRSBench 根目录，例如 `Images/Images_train/...`；训练和评估必须把 `image_root` 指向 `<data-parent>\VRSBench`。
 
 ## 训练策略
 
@@ -39,8 +39,8 @@ VRSBench: F:\VIT-data\VRSBench
 在同一个已安装项目依赖的 Python 环境中执行。PowerShell 示例：
 
 ```powershell
-$env:LOCAL_MODEL_DIR="D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct"
-$env:DATA_ROOT="F:\VIT-data\VRSBench"
+$env:LOCAL_MODEL_DIR="<model-parent>\Qwen3-VL-2B-Instruct"
+$env:DATA_ROOT="<data-parent>\VRSBench"
 $env:TRAIN_JSONL="data\processed\qwen3vl_train.jsonl"
 $env:VAL_JSONL="data\processed\qwen3vl_val.jsonl"
 

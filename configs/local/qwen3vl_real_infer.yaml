@@ -1,0 +1,24 @@
+app:
+  name: sat-rs-vlm
+  environment: local
+  log_level: INFO
+
+model:
+  backend: huggingface
+  model_id: ${LOCAL_MODEL_DIR}
+  device: auto
+  dtype: auto
+  max_new_tokens: 256
+  trust_remote_code: true
+  local_files_only: true
+
+runtime:
+  seed: 42
+  log_level: INFO
+  enable_profiler: false
+
+reliability:
+  enable_checksum: false
+  enable_bitflip_simulation: false
+  bitflip_probability: 0.0
+  enable_fault_recovery: false

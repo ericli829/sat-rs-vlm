@@ -1,0 +1,14 @@
+experiment:
+  name: cloud_reliability_smoke
+  seed: 2026
+  execution_mode: smoke_mock
+
+fault:
+  bit_flip_counts:
+    - 1
+    - 2
+  repeats: 1
+
+data:
+  max_eval_samples: 5
+

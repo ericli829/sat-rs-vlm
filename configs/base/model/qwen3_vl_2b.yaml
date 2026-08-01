@@ -1,0 +1,8 @@
+model:
+  model_path: ${MODEL_ROOT}/Qwen3-VL-2B-Instruct
+  processor_path: ${MODEL_ROOT}/Qwen3-VL-2B-Instruct
+  trust_remote_code: true
+  local_files_only: true
+  torch_dtype: auto
+  attn_implementation: sdpa
+  device_map: auto

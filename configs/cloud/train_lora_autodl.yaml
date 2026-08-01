@@ -1,0 +1,19 @@
+experiment:
+  name: autodl_lora_baseline
+  seed: 42
+
+training:
+  num_train_epochs: 2
+  max_steps: null
+  gradient_accumulation_steps: 16
+  logging_steps: 10
+  eval_steps: 200
+  save_steps: 200
+  save_total_limit: 2
+
+data:
+  max_train_samples: null
+  max_validation_samples: null
+
+runtime:
+  mock: false

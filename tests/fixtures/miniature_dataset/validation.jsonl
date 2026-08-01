@@ -1,0 +1,1 @@
+{"id":"validation-vqa-1","task_type":"vqa","images":["images/vqa.ppm"],"messages":[{"role":"user","content":[{"type":"image","image":"images/vqa.ppm"},{"type":"text","text":"图中是否包含建筑？"}]},{"role":"assistant","content":"是"}],"metadata":{"source":"fixture"}}

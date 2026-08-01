@@ -1,0 +1,8 @@
+data:
+  manifest_path: ${DATA_ROOT}/VRSBench/project_metadata/dataset_manifest.json
+  split: train
+  validation_split: validation
+  max_seq_length: 1024
+  max_train_samples: null
+  max_validation_samples: null
+  skip_bad_samples: false

@@ -1,0 +1,9 @@
+{
+  "samples": 7,
+  "images": 3,
+  "tasks": {
+    "detection": 2,
+    "counting": 2,
+    "vqa": 3
+  }
+}

@@ -1,0 +1,26 @@
+model:
+  base_model: "${MODEL_ROOT}/Qwen3-VL-2B-Instruct"
+  processor_id: "${MODEL_ROOT}/Qwen3-VL-2B-Instruct"
+  adapter_path: null
+  local_files_only: true
+  torch_dtype: "float32"
+  device_map: "auto"
+quantization:
+  backend: "baseline"
+  device: "cpu"
+  save_artifact: false
+data:
+  eval_file: "data/processed/qwen3vl_val.jsonl"
+  image_root: "${DATA_ROOT}/VRSBench"
+  max_eval_samples: 20
+  max_seq_length: 1024
+generation:
+  do_sample: false
+  num_beams: 1
+  max_new_tokens: 128
+benchmark:
+  warmup_samples: 2
+  repeats: 2
+  seed: 42
+output:
+  output_dir: "${OUTPUT_ROOT}/quantization/baseline"

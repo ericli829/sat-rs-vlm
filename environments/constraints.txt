@@ -1,0 +1,9 @@
+# Versions from the already successful LoRA environment. Use as a reference,
+# not as an unconditional command to replace AutoDL's CUDA-matched torch.
+torch==2.12.1
+torchvision==0.27.1
+transformers==5.13.0
+peft==0.19.1
+accelerate==1.14.0
+bitsandbytes==0.49.2
+qwen-vl-utils==0.0.14

@@ -1,0 +1,31 @@
+# E1: 配额均衡数据，训练期保持均匀采样。
+model:
+  model_dir: "${MODEL_ROOT}/Qwen3-VL-2B-Instruct"
+  processor_dir: "${MODEL_ROOT}/Qwen3-VL-2B-Instruct"
+  local_files_only: true
+  torch_dtype: "bfloat16"
+  device_map: "auto"
+data:
+  train_file: "data/processed/e1/qwen3vl_train_balanced_8k.jsonl"
+  val_file: "data/processed/e1/qwen3vl_val_balanced_1k.jsonl"
+  image_root: "${DATA_ROOT}/VRSBench"
+  max_seq_length: 1024
+  data_composition: "balanced_quota"
+  sampling_mode: "uniform"
+training:
+  output_dir: "${OUTPUT_ROOT}/training/e1-balanced-r16"
+  method: "lora"
+  num_train_epochs: 2
+  gradient_accumulation_steps: 8
+  learning_rate: 0.0001
+  save_steps: 100
+  eval_steps: 100
+lora:
+  r: 16
+  alpha: 32
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+evaluation:
+  do_eval: true
+  predict_with_generate: false
+logging:
+  experiment_name: "e1-balanced-r16"

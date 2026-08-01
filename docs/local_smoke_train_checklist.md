@@ -3,8 +3,8 @@
 ```text
 [ ] 使用同一个 Python 环境安装了项目：python -m pip install -e ".[model]"
 [ ] python scripts/check_env.py 能正确显示解释器、torch 与 CUDA 状态
-[ ] 本地模型存在：D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct
-[ ] VRSBench 存在：F:\VIT-data\VRSBench
+[ ] 本地模型存在：<model-parent>\Qwen3-VL-2B-Instruct
+[ ] VRSBench 存在：<data-parent>\VRSBench
 [ ] data/processed/qwen3vl_train.jsonl 与 qwen3vl_val.jsonl 已生成
 [ ] validate_training_assets.py 通过
 [ ] dry-run 通过
@@ -17,8 +17,8 @@
 PowerShell 推荐命令：
 
 ```powershell
-$env:LOCAL_MODEL_DIR="D:\Desktop\tzb-2026\Qwen3-VL-2B-Instruct"
-$env:DATA_ROOT="F:\VIT-data\VRSBench"
+$env:LOCAL_MODEL_DIR="<model-parent>\Qwen3-VL-2B-Instruct"
+$env:DATA_ROOT="<data-parent>\VRSBench"
 $env:TRAIN_JSONL="data\processed\qwen3vl_train.jsonl"
 $env:VAL_JSONL="data\processed\qwen3vl_val.jsonl"
 

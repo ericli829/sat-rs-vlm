@@ -1,4 +1,4 @@
-.PHONY: install bootstrap bootstrap-model check-env test lint format run-api infer-demo prepare-data convert-qwen3vl train-smoke train-qwen3vl eval-qwen3vl merge-lora validate-training-assets train-local-smoke train-local train-local-dry-run train-local-forward plugin-list plugin-validate plugin-check plugin-dry-run
+.PHONY: install bootstrap bootstrap-model check-env test lint format run-api infer-demo infer-real-local prepare-data convert-qwen3vl prepare-e1 train-smoke train-qwen3vl train-e1 train-e1b train-e1d-data train-e1d-sampler train-e1d-combined eval-e0 eval-e1 train-local-real-smoke eval-qwen3vl merge-lora validate-training-assets train-local-smoke train-local train-local-dry-run train-local-forward train-unified smoke-unified validate-fixture export-environment plugin-list plugin-validate plugin-check plugin-dry-run quant-dry-cpu quant-cpu quant-bnb reliability-smoke reliability-real reliability-plot
 
 PLUGIN_ROOT ?= .local_plugins/sat-rs-vlm-local-plugins
 PLUGIN_STRATEGY ?= qlora
@@ -7,13 +7,13 @@ install:
 	pip install -e ".[dev]"
 
 bootstrap:
-	python scripts/bootstrap_env.py
+	python scripts/environment/bootstrap_local.py --with-dev
 
 bootstrap-model:
-	python scripts/bootstrap_env.py --with-model
+	python scripts/environment/bootstrap_local.py --with-dev --with-model
 
 check-env:
-	python scripts/check_env.py
+	python scripts/environment/check_environment.py
 
 test:
 	pytest -q
@@ -32,11 +32,38 @@ run-api:
 infer-demo:
 	python -m sat_rs_vlm.interfaces.cli infer --image data/samples/demo_image.png --prompt "请描述这张遥感图像中的主要地物。"
 
+infer-real-local:
+	python -m sat_rs_vlm.interfaces.cli infer --config configs/local/qwen3vl_real_infer.yaml --image $(IMAGE) --prompt "$(PROMPT)"
+
 prepare-data:
 	python scripts/prepare_rs_instruction_data.py --config configs/data/remote_sensing_data.yaml
 
 convert-qwen3vl:
 	python scripts/convert_to_qwen3vl_format.py --config configs/data/remote_sensing_data.yaml
+
+prepare-e1:
+	python scripts/prepare_e1_datasets.py
+
+train-e1:
+	python scripts/train_qwen3vl_lora.py --config configs/train/qwen3vl_local_e1_balanced.yaml
+
+train-e1b:
+	python scripts/train_qwen3vl_lora.py --config configs/train/qwen3vl_local_e1b_r32.yaml
+
+train-e1d-data:
+	python scripts/train_qwen3vl_lora.py --config configs/train/qwen3vl_local_e1d_data.yaml
+
+train-e1d-sampler:
+	python scripts/train_qwen3vl_lora.py --config configs/train/qwen3vl_local_e1d_sampler.yaml
+
+train-e1d-combined:
+	python scripts/train_qwen3vl_lora.py --config configs/train/qwen3vl_local_e1d_combined.yaml
+
+eval-e0:
+	python scripts/evaluate_rs_vlm.py --config configs/eval/qwen3vl_eval_e0_zeroshot.yaml
+
+eval-e1:
+	python scripts/evaluate_rs_vlm.py --config configs/eval/qwen3vl_eval_e1.yaml
 
 train-smoke:
 	python scripts/train_qwen3vl_lora.py --config configs/train/qwen3vl_local_smoke.yaml
@@ -65,6 +92,21 @@ train-local-dry-run:
 train-local-forward:
 	python scripts/train_qwen3vl_lora.py --config configs/train/qwen3vl_local_smoke.yaml --forward-only
 
+train-local-real-smoke:
+	python scripts/train_qwen3vl_lora.py --config configs/train/qwen3vl_local_smoke.yaml --max-steps 2 --output-dir checkpoints/qwen3vl-2b-vrsbench-lora/local-real-smoke
+
+train-unified:
+	python scripts/training/run_train.py --config configs/experiments/lora_baseline.yaml --environment local
+
+smoke-unified:
+	python scripts/training/run_smoke_train.py --config configs/local/train_lora_smoke.yaml
+
+validate-fixture:
+	python scripts/data/validate_dataset.py --dataset-root tests/fixtures/miniature_dataset
+
+export-environment:
+	python scripts/environment/export_environment.py --output reports/environment/local
+
 plugin-list:
 	python scripts/list_external_plugins.py --plugin-root $(PLUGIN_ROOT) --validate
 
@@ -76,3 +118,21 @@ plugin-check:
 
 plugin-dry-run:
 	python scripts/run_external_strategy.py --plugin-root $(PLUGIN_ROOT) --strategy $(PLUGIN_STRATEGY) --dry-run
+
+quant-dry-cpu:
+	python scripts/quantize_rs_vlm.py --config configs/compression/qwen3vl_torch_dynamic_int8.yaml --dry-run
+
+quant-cpu:
+	python scripts/quantize_rs_vlm.py --config configs/compression/qwen3vl_torch_dynamic_int8.yaml
+
+quant-bnb:
+	python scripts/quantize_rs_vlm.py --config configs/compression/qwen3vl_bnb_int8.yaml
+
+reliability-smoke:
+	python scripts/reliability/run_smoke.py --case all
+
+reliability-real:
+	python scripts/reliability/run_experiment.py --config configs/reliability/experiments/lora_bitflip.yaml --mode full --environment autodl
+
+reliability-plot:
+	python scripts/reliability/plot_results.py --input $(METRICS_DIR) --output $(FIGURES_DIR)

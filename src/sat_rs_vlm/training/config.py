@@ -10,7 +10,7 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field, model_validator
@@ -56,7 +56,19 @@ class TrainDataConfig(BaseModel):
     max_train_samples: int | None = None
     max_eval_samples: int | None = None
     skip_bad_samples: bool = False
+    data_composition: Literal["full", "balanced_quota", "detection_quota"] = "full"
+    sampling_mode: Literal["uniform", "weighted"] = "uniform"
     task_sampling_weights: dict[str, float] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_sampling(self) -> TrainDataConfig:
+        """加权采样必须显式启用并提供正权重。"""
+
+        if self.sampling_mode == "weighted" and not self.task_sampling_weights:
+            raise ValueError("sampling_mode='weighted' requires task_sampling_weights")
+        if any(value <= 0 for value in self.task_sampling_weights.values()):
+            raise ValueError("task_sampling_weights must contain only positive values")
+        return self
 
 
 class TrainConfig(BaseModel):
