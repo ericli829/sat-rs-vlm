@@ -1,0 +1,2 @@
+# Optional CUDA-only dependency for QLoRA and bnb_int8 experiments.
+bitsandbytes>=0.43,<1

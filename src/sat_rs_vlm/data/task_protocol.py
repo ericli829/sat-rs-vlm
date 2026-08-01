@@ -248,24 +248,41 @@ def parse_detection(
     value: Any,
     *,
     coordinate_format: str | BBoxFormat = BBoxFormat.NORMALIZED_0_1,
+    image_size: tuple[int, int] | None = None,
 ) -> DetectionParseResult | None:
-    """解析单目标 detection JSON，并分别报告坐标范围是否合法。"""
+    """解析单目标 detection JSON，并分别报告坐标范围是否合法。
+
+    新协议使用 ``label``/``bbox``。为兼容合并前已经生成的单目标 fixture，也接受
+    仅含一个元素的 ``labels``/``boxes``；多目标旧结构不会被静默截断。
+    """
 
     payload = value if isinstance(value, dict) else extract_json_object(str(value))
-    if not isinstance(payload, dict) or "label" not in payload or "bbox" not in payload:
+    if not isinstance(payload, dict):
         return None
-    label = str(payload["label"]).strip().lower()
+    label_value = payload.get("label")
+    bbox_value = payload.get("bbox")
+    if label_value is None or bbox_value is None:
+        labels = payload.get("labels")
+        boxes = payload.get("boxes")
+        if not isinstance(labels, list) or not isinstance(boxes, list):
+            return None
+        if len(labels) != 1 or len(boxes) != 1:
+            return None
+        label_value = labels[0]
+        bbox_value = boxes[0]
+    label = str(label_value).strip().lower()
     try:
-        raw = [float(item) for item in list(payload["bbox"])]
+        raw = [float(item) for item in list(bbox_value)]
     except (TypeError, ValueError):
         return None
     if len(raw) != 4 or not label or not all(math.isfinite(item) for item in raw):
         return None
-    coordinate_valid = all(0.0 <= item <= 1.0 for item in raw)
+    coordinate_valid = True
     try:
         normalized, _ = normalize_bbox(
             raw,
             source_format=coordinate_format,
+            image_size=image_size,
             clip=False,
         )
     except ValueError:

@@ -1,1 +1,1 @@
-{"id":"test-counting-1","task_type":"counting","images":["images/counting.ppm"],"messages":[{"role":"user","content":[{"type":"image","image":"images/counting.ppm"},{"type":"text","text":"请计数图中的目标。"}]},{"role":"assistant","content":"2"}],"metadata":{"source":"fixture","count":2}}
+{"id":"test-counting-1","task_type":"counting","images":["images/counting.ppm"],"messages":[{"role":"user","content":[{"type":"image","image":"images/counting.ppm"},{"type":"text","text":"请计数图中的目标。"}]},{"role":"assistant","content":"{\"count\":2}"}],"metadata":{"source":"fixture","count":2}}

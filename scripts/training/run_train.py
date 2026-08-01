@@ -138,7 +138,7 @@ def _resolve_precision(config: dict[str, Any], *, mock: bool) -> dict[str, Any]:
     runtime = dict(config.get("runtime", {}))
     cuda_available, bf16_supported = (False, False) if mock else _cuda_capabilities()
     decision = select_precision(
-        device=str(runtime.get("device", "auto")),
+        device="cpu" if mock else str(runtime.get("device", "auto")),
         bf16=training.get("bf16"),
         fp16=training.get("fp16"),
         cuda_available=cuda_available,
@@ -222,6 +222,9 @@ def _legacy_config(
             "max_train_samples": data.get("max_train_samples"),
             "max_eval_samples": data.get("max_validation_samples"),
             "skip_bad_samples": bool(data.get("skip_bad_samples", False)),
+            "data_composition": str(data.get("data_composition", "full")),
+            "sampling_mode": str(data.get("sampling_mode", "uniform")),
+            "task_sampling_weights": dict(data.get("task_sampling_weights", {})),
         },
         "training": {
             "output_dir": str(experiment_dir / "checkpoints"),

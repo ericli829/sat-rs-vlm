@@ -5,6 +5,7 @@ ENV_NAME="rs-vlm"
 CLONE_CURRENT=0
 INSTALL_DEV=0
 INSTALL_MODEL=0
+INSTALL_QLORA=0
 PROJECT_ROOT="${PROJECT_ROOT:-/root/autodl-tmp/sat-rs-vlm}"
 
 usage() {
@@ -14,6 +15,7 @@ Usage: setup_autodl.sh [options]
   --clone-current       Clone the currently active Conda environment
   --install-dev         Install development dependencies
   --install-model       Install model libraries without replacing torch
+  --install-qlora       Install optional bitsandbytes support for QLoRA/bnb INT8
   --project-root PATH   Project checkout path
 EOF
 }
@@ -24,6 +26,7 @@ while [[ $# -gt 0 ]]; do
     --clone-current) CLONE_CURRENT=1; shift ;;
     --install-dev) INSTALL_DEV=1; shift ;;
     --install-model) INSTALL_MODEL=1; shift ;;
+    --install-qlora) INSTALL_QLORA=1; INSTALL_MODEL=1; shift ;;
     --project-root) PROJECT_ROOT="$2"; shift 2 ;;
     --help|-h) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
@@ -72,16 +75,19 @@ source /root/autodl_env.sh
 cd "$PROJECT_ROOT"
 python -m pip install -e . --no-deps
 python -m pip install -r environments/requirements-base.txt
+python -m pip install -r environments/requirements-cloud.txt
 if [[ "$INSTALL_DEV" -eq 1 ]]; then
   python -m pip install -r environments/requirements-dev.txt
 fi
 if [[ "$INSTALL_MODEL" -eq 1 ]]; then
   python -m pip install -r environments/requirements-model.txt
 fi
-
-if [[ "$INSTALL_MODEL" -eq 1 ]]; then
-  python scripts/environment/check_environment.py --require-model
-else
-  python scripts/environment/check_environment.py
+if [[ "$INSTALL_QLORA" -eq 1 ]]; then
+  python -m pip install -r environments/requirements-qlora.txt
 fi
+
+CHECK_ARGS=()
+[[ "$INSTALL_MODEL" -eq 1 ]] && CHECK_ARGS+=(--require-model)
+[[ "$INSTALL_QLORA" -eq 1 ]] && CHECK_ARGS+=(--require-bitsandbytes)
+python scripts/environment/check_environment.py "${CHECK_ARGS[@]}"
 echo "AutoDL environment ready: $ENV_NAME"

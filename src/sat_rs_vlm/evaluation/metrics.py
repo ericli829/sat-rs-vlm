@@ -30,9 +30,7 @@ def box_iou(box_a: Sequence[float], box_b: Sequence[float]) -> float:
 
     ax1, ay1, ax2, ay2 = (float(item) for item in box_a)
     bx1, by1, bx2, by2 = (float(item) for item in box_b)
-    intersection = max(0.0, min(ax2, bx2) - max(ax1, bx1)) * max(
-        0.0, min(ay2, by2) - max(ay1, by1)
-    )
+    intersection = max(0.0, min(ax2, bx2) - max(ax1, bx1)) * max(0.0, min(ay2, by2) - max(ay1, by1))
     area_a = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
     area_b = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
     union = area_a + area_b - intersection
@@ -187,13 +185,9 @@ def summarize_predictions(predictions: Sequence[Mapping[str, Any]]) -> dict[str,
         ]
         task_metrics: dict[str, Any] = {
             "num_samples": len(rows),
-            "empty_prediction_rate": sum(
-                not str(row.get("prediction", "")).strip() for row in rows
-            )
+            "empty_prediction_rate": sum(not str(row.get("prediction", "")).strip() for row in rows)
             / len(rows),
-            "average_generation_length": _mean(
-                len(str(row.get("prediction", ""))) for row in rows
-            ),
+            "average_generation_length": _mean(len(str(row.get("prediction", ""))) for row in rows),
         }
         keys = sorted({key for score in scores for key in score})
         metric_names = {

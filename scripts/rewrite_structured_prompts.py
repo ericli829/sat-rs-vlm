@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from sat_rs_vlm.data.prompt_templates import strengthen_answer, strengthen_instruction
-from sat_rs_vlm.data.task_protocol import counting_json
+from sat_rs_vlm.data.task_protocol import counting_json, parse_detection
 from sat_rs_vlm.utils.jsonl import read_jsonl, write_jsonl
 
 
@@ -20,7 +20,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def rewrite_row(row: dict[str, Any]) -> tuple[dict[str, Any], bool]:
-    """重写一行；counting 无法转换时降级为 VQA 并返回 unresolved=True。"""
+    """重写一行；结构化监督无法可靠转换时降级为 VQA。"""
 
     updated = dict(row)
     task = str(updated.get("task_type", "unknown"))
@@ -38,6 +38,15 @@ def rewrite_row(row: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         metadata = dict(updated.get("metadata", {}))
         metadata.update({"original_task_type": "counting", "counting_unresolved": True})
         updated["metadata"] = metadata
+    if task == "detection":
+        detection = parse_detection(answer)
+        if detection is None or not detection.valid_coordinate_range:
+            unresolved = True
+            task = "vqa"
+            updated["task_type"] = task
+            metadata = dict(updated.get("metadata", {}))
+            metadata.update({"original_task_type": "detection", "detection_unresolved": True})
+            updated["metadata"] = metadata
     if "instruction" in updated:
         updated["instruction"] = strengthen_instruction(task, str(updated["instruction"]))
     if "answer" in updated:
@@ -83,7 +92,7 @@ def main() -> int:
     output.parent.mkdir(parents=True, exist_ok=True)
     write_jsonl(output, rows)
     print(
-        f"Wrote {len(rows)} rows to {output}; unresolved_counting={len(unresolved_ids)}; "
+        f"Wrote {len(rows)} rows to {output}; unresolved_structured={len(unresolved_ids)}; "
         f"sample_ids={unresolved_ids[:20]}"
     )
     return 0

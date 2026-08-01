@@ -6,6 +6,7 @@ import argparse
 import json
 import shutil
 import time
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
@@ -277,6 +278,78 @@ def save_report(report: dict[str, Any], output_dir: Path) -> None:
     )
 
 
+def _package_versions(names: tuple[str, ...]) -> dict[str, str | None]:
+    """读取实验关键依赖版本，不额外导入大型模块。"""
+
+    versions: dict[str, str | None] = {}
+    for name in names:
+        try:
+            versions[name] = version(name)
+        except PackageNotFoundError:
+            versions[name] = None
+    return versions
+
+
+def build_strategy_manifest(
+    model: Any,
+    config: Qwen3VLTrainingConfig,
+    paths: ResolvedTrainingPaths,
+    param_stats: tuple[int, int, float],
+    device: dict[str, Any],
+) -> dict[str, Any]:
+    """构造统一 checkpoint 自描述文件，供评估与可靠性流程加载。"""
+
+    parameter = next(iter(model.parameters()), None)
+    actual_dtype = str(getattr(parameter, "dtype", "unknown")).removeprefix("torch.")
+    targets = tuple(config.lora.target_modules)
+    matched_modules = sorted(
+        {
+            name
+            for name, _ in model.named_modules()
+            if any(name == target or name.endswith(f".{target}") for target in targets)
+        }
+    )
+    trainable, total, ratio = param_stats
+    quantization = None
+    if config.training.method == "qlora":
+        quantization = {
+            "load_in_4bit": config.qlora.load_in_4bit,
+            "quant_type": config.qlora.bnb_4bit_quant_type,
+            "use_double_quant": config.qlora.bnb_4bit_use_double_quant,
+            "compute_dtype": config.qlora.bnb_4bit_compute_dtype,
+        }
+    return {
+        "schema_version": "1.0",
+        "strategy": config.training.method,
+        "adapter_based": True,
+        "quantized_base": config.training.method == "qlora",
+        "supports_merge": True,
+        "checkpoint_type": "adapter",
+        "model_dir": paths.model_source,
+        "processor_dir": str(paths.output_dir / "processor"),
+        "trainable_parameters": trainable,
+        "total_parameters": total,
+        "trainable_ratio": ratio,
+        "matched_modules": matched_modules,
+        "target_modules": list(targets),
+        "actual_dtype": actual_dtype,
+        "quantization": quantization,
+        "library_versions": _package_versions(
+            ("torch", "transformers", "peft", "accelerate", "bitsandbytes")
+        ),
+        "device": device,
+    }
+
+
+def save_strategy_manifest(manifest: dict[str, Any], output_dir: Path) -> None:
+    """把统一策略 manifest 写到 adapter 根目录。"""
+
+    (output_dir / "strategy_manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
 def dry_run(config: Qwen3VLTrainingConfig, paths: ResolvedTrainingPaths) -> None:
     """只检查配置、路径、Dataset 和 Collator 初始化。"""
 
@@ -408,6 +481,10 @@ def train(
                 final_loss = float(row["loss"])
                 break
     device = torch_device_summary(torch)
+    save_strategy_manifest(
+        build_strategy_manifest(model, config, paths, param_stats, device),
+        paths.output_dir,
+    )
     peak_memory = 0.0
     if bool(torch.cuda.is_available()):
         peak_memory = float(torch.cuda.max_memory_allocated() / (1024 * 1024))

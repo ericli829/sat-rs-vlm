@@ -19,6 +19,21 @@ conda activate rs-vlm
 
 `--clone-current` 优先保留镜像当前 PyTorch/CUDA 组合。脚本以 `--no-deps` 安装项目，
 再安装不包含 Torch 的模型 requirements；不会盲目升级 PyTorch。
+脚本会安装 `requirements-cloud.txt`。若要运行 QLoRA 或 CUDA `bnb_int8`，使用：
+
+```bash
+bash scripts/environment/setup_autodl.sh \
+  --env-name rs-vlm --clone-current --install-dev --install-model --install-qlora
+python scripts/environment/check_environment.py \
+  --require-model --require-bitsandbytes --require-gpu
+```
+
+`--install-qlora` 只增加独立的 `requirements-qlora.txt`，不会让基础 LoRA 和 CPU 测试强制依赖
+bitsandbytes。
+
+`--require-model` 会同时检查 Torch、与镜像 Torch 匹配的 torchvision、Transformers、PEFT、
+Accelerate、safetensors 和 qwen-vl-utils。脚本不会擅自替换 CUDA 镜像中的 Torch/torchvision；
+若预检报告二者缺失或版本不匹配，应安装云镜像 CUDA 版本对应的官方组合后再继续。
 
 ## 训练前
 
@@ -35,6 +50,10 @@ python scripts/data/validate_dataset.py \
 bash scripts/training/run_autodl_train.sh \
   --config configs/cloud/train_lora_autodl.yaml
 ```
+
+最终 Adapter 位于运行目录的 `checkpoints/` 根层，并包含 `strategy_manifest.json`、
+`adapter_config.json`、Adapter 权重和 `processor/`。统一评估和可靠性命令应指向这一根层，
+而不是其中的 Trainer `checkpoint-*` 子目录。
 
 `--auto-shutdown` 必须与 `--backup-after-train` 同时使用，且只在训练及备份均成功后
 调用关机。首次上云必须人工验证 shell、CUDA、模型路径和恢复流程。

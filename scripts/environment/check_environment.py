@@ -13,8 +13,16 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-BASE_MODULES = ("pydantic", "yaml", "typer", "fastapi", "uvicorn")
-MODEL_MODULES = ("torch", "transformers", "peft", "accelerate")
+BASE_MODULES = ("pydantic", "yaml", "packaging", "typer", "fastapi", "uvicorn", "PIL")
+MODEL_MODULES = (
+    "torch",
+    "torchvision",
+    "transformers",
+    "peft",
+    "accelerate",
+    "safetensors",
+    "qwen_vl_utils",
+)
 PATH_NAMES = (
     "PROJECT_ROOT",
     "DATA_ROOT",
@@ -36,6 +44,7 @@ def parse_args() -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--require-model", action="store_true")
+    parser.add_argument("--require-bitsandbytes", action="store_true")
     parser.add_argument("--require-gpu", action="store_true")
     parser.add_argument("--dataset-root", type=Path)
     parser.add_argument("--model-root", type=Path)
@@ -101,6 +110,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
 
     base = {name: _available(name) for name in BASE_MODULES}
     model = {name: _available(name) for name in MODEL_MODULES}
+    optional = {"bitsandbytes": _available("bitsandbytes")}
     return {
         "ok": all(base.values()),
         "os": platform.platform(),
@@ -110,6 +120,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "conda_environment": os.environ.get("CONDA_DEFAULT_ENV"),
         "base_dependencies": base,
         "model_dependencies": model,
+        "optional_dependencies": optional,
         "gpu": _gpu_report(),
         "paths": _path_report(args.dataset_root, args.model_root, args.output_root),
         "path_environment": {name: os.environ.get(name) for name in PATH_NAMES},
@@ -126,6 +137,8 @@ def main() -> int:
         failures.append("base dependencies are incomplete")
     if args.require_model and not all(report["model_dependencies"].values()):
         failures.append("model dependencies are incomplete")
+    if args.require_bitsandbytes and not report["optional_dependencies"]["bitsandbytes"]:
+        failures.append("bitsandbytes is unavailable")
     if args.require_gpu and not report["gpu"]["available"]:
         failures.append("CUDA GPU is unavailable")
     report["failures"] = failures

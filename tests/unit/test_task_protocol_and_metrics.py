@@ -10,6 +10,7 @@ from sat_rs_vlm.data.task_protocol import (
     counting_json,
     normalize_bbox,
     parse_count,
+    parse_detection,
 )
 from sat_rs_vlm.evaluation.metrics import score_detection, summarize_predictions
 
@@ -52,6 +53,29 @@ def test_bbox_formats_are_explicit() -> None:
     assert percent == pixels == [0.1, 0.2, 0.8, 0.9]
     with pytest.raises(ValueError, match="image_size"):
         normalize_bbox([10, 20, 80, 90], source_format=BBoxFormat.PIXEL_XYXY)
+
+    parsed_percent = parse_detection(
+        '{"label":"ship","bbox":[10,20,80,90]}',
+        coordinate_format=BBoxFormat.PERCENT_0_100,
+    )
+    parsed_pixel = parse_detection(
+        '{"label":"ship","bbox":[10,20,80,90]}',
+        coordinate_format=BBoxFormat.PIXEL_XYXY,
+        image_size=(100, 100),
+    )
+    assert parsed_percent is not None and parsed_percent.valid_coordinate_range
+    assert parsed_pixel is not None and parsed_pixel.bbox == parsed_percent.bbox
+
+
+def test_detection_parser_accepts_only_single_target_legacy_schema() -> None:
+    legacy = parse_detection('{"boxes":[[0.1,0.2,0.4,0.5]],"labels":["ship"]}')
+    assert legacy is not None
+    assert legacy.label == "ship"
+    assert legacy.bbox == (0.1, 0.2, 0.4, 0.5)
+    assert (
+        parse_detection('{"boxes":[[0.1,0.2,0.4,0.5],[0.2,0.3,0.5,0.6]],"labels":["ship","boat"]}')
+        is None
+    )
 
 
 def test_detection_metrics_separate_json_range_label_and_iou() -> None:

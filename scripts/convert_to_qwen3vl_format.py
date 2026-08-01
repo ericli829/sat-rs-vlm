@@ -11,7 +11,7 @@ import yaml
 
 from sat_rs_vlm.configuration.environment import expand_environment
 from sat_rs_vlm.data.prompt_templates import strengthen_answer, strengthen_instruction
-from sat_rs_vlm.data.task_protocol import counting_json
+from sat_rs_vlm.data.task_protocol import counting_json, parse_detection
 from sat_rs_vlm.utils.jsonl import read_jsonl, write_jsonl
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -69,6 +69,11 @@ def convert_sample_to_qwen3vl(sample: dict[str, Any]) -> dict[str, Any]:
             task_type = "vqa"
         else:
             answer = normalized_count
+    if task_type == "detection":
+        detection = parse_detection(answer)
+        if detection is None or not detection.valid_coordinate_range:
+            metadata.update({"original_task_type": "detection", "detection_unresolved": True})
+            task_type = "vqa"
     instruction = strengthen_instruction(task_type, str(sample["instruction"]))
     answer = strengthen_answer(task_type, answer)
     content = [

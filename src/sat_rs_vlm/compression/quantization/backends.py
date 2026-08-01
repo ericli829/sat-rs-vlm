@@ -106,12 +106,15 @@ class BaselineBackend(QuantizationBackend):
         return model.to("cpu") if cpu else model
 
     def compression_metadata(self, model: Any, torch: Any, *, quantized: bool) -> dict[str, Any]:
-        del model, quantized
+        del torch, quantized
+        parameter = next(iter(model.parameters()), None)
+        dtype = str(getattr(parameter, "dtype", "unknown")).removeprefix("torch.")
+        device = str(getattr(parameter, "device", "unknown"))
         return {
             "backend": "none",
-            "device": "cpu" if self.device == "cpu" else "cuda",
-            "weight_dtype": "float32",
-            "compute_dtype": "float32",
+            "device": device,
+            "weight_dtype": dtype,
+            "compute_dtype": dtype,
             "benchmark_only": False,
             "reload_supported": True,
         }

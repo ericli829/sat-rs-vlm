@@ -12,6 +12,9 @@
 CPU dynamic INT8 若只保存 state dict，会同时写量化层与 manifest，并明确标记
 `benchmark_only`、`reload_supported=false`，不能称为部署产物。
 
+AutoDL 上先用 `bash scripts/environment/setup_autodl.sh --install-model --install-qlora`
+安装可选依赖；基础安装不会携带 bitsandbytes。
+
 ## 公平比较
 
 统一入口从 messages JSONL 固定样本 ID，直接解析单图/多图路径。baseline 与 quantized 使用

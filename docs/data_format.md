@@ -113,6 +113,10 @@ VRSBench 根目录，而不是其 `Images` 子目录。
 计数答案统一为 `{"count":2}`。转换器支持数字、英文数字和 no/none；无法可靠解析时
 记录 `metadata.counting_unresolved=true` 并降级为普通 VQA，不伪造计数。
 
+合并前的单目标 `{"boxes":[[...]],"labels":["..."]}` 可向后兼容并转换为上述单目标
+schema；包含多个目标时不会静默取第一个。旧 detection 答案若没有可恢复的 bbox，则记录
+`metadata.detection_unresolved=true` 并降级为 VQA，不会把自然语言答案配到强制 JSON prompt。
+
 ## Prediction JSONL
 
 普通评测、量化和可靠性实验共享以下基础字段：

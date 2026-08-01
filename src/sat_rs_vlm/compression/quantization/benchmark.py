@@ -186,9 +186,7 @@ def _run_variant(
                 torch,
             )
         except (RuntimeError, ValueError, OSError) as exc:
-            raise RuntimeError(
-                f"Warmup failed for sample {dataset[index]['id']}: {exc}"
-            ) from exc
+            raise RuntimeError(f"Warmup failed for sample {dataset[index]['id']}: {exc}") from exc
 
     if bool(torch.cuda.is_available()):
         torch.cuda.reset_peak_memory_stats()
@@ -326,9 +324,7 @@ def run_benchmark(
                 "Quantization dry-run requires torch for backend capability checks"
             ) from exc
     else:
-        modules = safe_import_model_dependencies(
-            require_bitsandbytes=backend.requires_bitsandbytes
-        )
+        modules = safe_import_model_dependencies(require_bitsandbytes=backend.requires_bitsandbytes)
         torch = modules["torch"]
     dataset, sample_manifest, eval_file, image_root = validate_assets(
         config,

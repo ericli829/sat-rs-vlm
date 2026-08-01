@@ -184,3 +184,18 @@ def test_dynamic_adapter_combination_is_unsupported(tmp_path: Path) -> None:
     config.model.adapter_path = str(adapter)
     with pytest.raises(UnsupportedQuantizationError, match="not verified"):
         create_backend("torch_dynamic_int8").validate(config)
+
+
+def test_baseline_metadata_reports_actual_device_and_dtype() -> None:
+    class Parameter:
+        dtype = "torch.float16"
+        device = "cuda:1"
+
+    class Model:
+        def parameters(self):  # type: ignore[no-untyped-def]
+            return iter([Parameter()])
+
+    metadata = create_backend("baseline").compression_metadata(Model(), object(), quantized=False)
+    assert metadata["device"] == "cuda:1"
+    assert metadata["weight_dtype"] == "float16"
+    assert metadata["compute_dtype"] == "float16"

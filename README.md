@@ -48,7 +48,8 @@ python scripts/environment/check_environment.py --require-model --require-gpu
 ```
 
 初始化脚本不会替换镜像中已经匹配 CUDA 的 PyTorch。模型依赖通过
-`environments/requirements-model.txt` 单独安装。
+`environments/requirements-model.txt` 单独安装；云端 TensorBoard 依赖会自动安装。
+需要 QLoRA 或 `bnb_int8` 时追加 `--install-qlora`，bitsandbytes 不会进入基础 LoRA 环境。
 
 ## 配置分层
 
@@ -126,6 +127,10 @@ AutoDL 正式训练：
 bash scripts/training/run_autodl_train.sh \
   --config configs/cloud/train_lora_autodl.yaml
 ```
+
+训练包装入口会把结构化数据组成、均匀/加权采样配置完整传给稳定 LoRA 脚本。真实训练完成后，
+Adapter 根目录包含 `strategy_manifest.json` 和 `processor/`，可直接交给统一评估与可靠性入口；
+不要把 Trainer 的中间 `checkpoint-*` 子目录当作最终 Adapter 根目录。
 
 断点恢复：
 
