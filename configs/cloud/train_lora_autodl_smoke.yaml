@@ -1,10 +1,13 @@
 experiment:
-  name: autodl_lora_smoke
+  name: autodl_lora_4090_smoke
   seed: 42
 
 training:
   max_steps: 5
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 2
   gradient_accumulation_steps: 1
+  gradient_checkpointing: true
   logging_steps: 1
   eval_steps: 2
   save_steps: 2

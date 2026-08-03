@@ -1,15 +1,18 @@
 experiment:
-  name: autodl_lora_baseline
+  name: autodl_lora_4090
   seed: 42
 
 training:
   num_train_epochs: 2
   max_steps: null
-  gradient_accumulation_steps: 16
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 2
+  gradient_accumulation_steps: 4
+  gradient_checkpointing: true
   logging_steps: 20
   eval_steps: 1000
-  save_steps: 1000
-  save_total_limit: 2
+  save_steps: 500
+  save_total_limit: 3
 
 data:
   max_train_samples: null

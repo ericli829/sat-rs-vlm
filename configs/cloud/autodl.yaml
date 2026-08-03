@@ -17,7 +17,7 @@ paths:
 
 runtime:
   device: cuda
-  num_workers: 4
+  num_workers: 8
   pin_memory: true
   persistent_workers: true
   enable_tf32: true
