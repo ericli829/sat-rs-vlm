@@ -310,6 +310,11 @@ def iter_vrsbench_samples(
                 f"VRSBench annotation {annotation_path} missing fields: {sorted(missing)}"
             )
         image_name = str(row["image"])
+        if Path(image_name).stem != annotation_path.stem:
+            raise ValueError(
+                "VRSBench annotation/image name mismatch: "
+                f"annotation={annotation_path.name}, image={image_name}"
+            )
         image_path = image_relative_path(layout, image_dir, image_name)
         image_size = None
         width = row.get("image_width", row.get("width"))

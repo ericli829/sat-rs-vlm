@@ -196,6 +196,8 @@ def validate_dataset(
             report.errors.append(str(exc))
             continue
         report.sample_counts[split] = len(rows)
+        if split in {"train", "validation"} and not rows:
+            report.errors.append(f"Required dataset split is empty: {split}")
         ids: set[str] = set()
         for index, row in enumerate(rows, start=1):
             sample_id = str(row.get("id", "")).strip()
@@ -234,6 +236,8 @@ def validate_dataset(
     split_names = list(split_ids)
     for left_index, left in enumerate(split_names):
         for right in split_names[left_index + 1 :]:
+            if "smoke" in {left, right}:
+                continue
             overlap = split_ids[left].intersection(split_ids[right])
             if overlap:
                 report.errors.append(

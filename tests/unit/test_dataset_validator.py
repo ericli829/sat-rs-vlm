@@ -28,3 +28,25 @@ def test_duplicate_and_invalid_bbox_are_reported(tmp_path: Path) -> None:
     assert not report.valid
     assert any("duplicate id" in error for error in report.errors)
     assert any("xyxy" in error for error in report.errors)
+
+
+def test_smoke_split_may_overlap_train(tmp_path: Path) -> None:
+    root = tmp_path / "dataset"
+    shutil.copytree(FIXTURE, root)
+    first_train_row = (root / "train.jsonl").read_text(encoding="utf-8").splitlines()[0]
+    (root / "smoke.jsonl").write_text(first_train_row + "\n", encoding="utf-8")
+
+    report = validate_dataset(root)
+
+    assert report.valid, report.errors
+
+
+def test_empty_required_split_is_reported(tmp_path: Path) -> None:
+    root = tmp_path / "dataset"
+    shutil.copytree(FIXTURE, root)
+    (root / "train.jsonl").write_text("", encoding="utf-8")
+
+    report = validate_dataset(root)
+
+    assert not report.valid
+    assert "Required dataset split is empty: train" in report.errors

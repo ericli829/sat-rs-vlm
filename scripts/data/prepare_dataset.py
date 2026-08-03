@@ -28,8 +28,17 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _copy_jsonl(source: Path | None, destination: Path) -> list[dict[str, Any]]:
-    rows = list(read_jsonl(source)) if source and source.is_file() else []
+def _copy_jsonl(
+    source: Path | None,
+    destination: Path,
+    *,
+    require_non_empty: bool = False,
+) -> list[dict[str, Any]]:
+    if source is not None and not source.is_file():
+        raise FileNotFoundError(f"Source JSONL does not exist: {source.resolve()}")
+    rows = list(read_jsonl(source)) if source is not None else []
+    if require_non_empty and not rows:
+        raise ValueError(f"Required source JSONL is empty: {source}")
     write_jsonl(destination, rows)
     return rows
 
@@ -47,8 +56,16 @@ def main() -> int:
             f"Metadata directory already exists: {metadata}. Pass --overwrite to replace files."
         )
     metadata.mkdir(parents=True, exist_ok=True)
-    train_rows = _copy_jsonl(args.train_file, metadata / "train.jsonl")
-    validation_rows = _copy_jsonl(args.validation_file, metadata / "validation.jsonl")
+    train_rows = _copy_jsonl(
+        args.train_file,
+        metadata / "train.jsonl",
+        require_non_empty=True,
+    )
+    validation_rows = _copy_jsonl(
+        args.validation_file,
+        metadata / "validation.jsonl",
+        require_non_empty=True,
+    )
     test_rows = _copy_jsonl(args.test_file, metadata / "test.jsonl")
     smoke_rows = (train_rows + validation_rows)[: max(args.smoke_samples, 0)]
     write_jsonl(metadata / "smoke.jsonl", smoke_rows)

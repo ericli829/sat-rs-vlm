@@ -108,3 +108,14 @@ def test_vrsbench_has_no_independent_test_rows(tmp_path: Path) -> None:
     layout = create_vrsbench_fixture(tmp_path / "VRSBench")
 
     assert list(iter_vrsbench_samples(layout, "test")) == []
+
+
+def test_vrsbench_rejects_annotation_image_name_mismatch(tmp_path: Path) -> None:
+    layout = create_vrsbench_fixture(tmp_path / "VRSBench")
+    annotation = layout.train_annotations / "train_001.json"
+    row = json.loads(annotation.read_text(encoding="utf-8"))
+    row["image"] = "different.png"
+    annotation.write_text(json.dumps(row), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="annotation/image name mismatch"):
+        list(iter_vrsbench_samples(layout, "train"))
