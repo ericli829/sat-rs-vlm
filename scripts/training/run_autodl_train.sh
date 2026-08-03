@@ -44,6 +44,7 @@ source /root/autodl_env.sh
 source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate "$ENV_NAME"
 cd "$PROJECT_ROOT"
+export PYTHONPATH="$PROJECT_ROOT/src:$PROJECT_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 
 mkdir -p "$OUTPUT_ROOT/logs"
 LOG_FILE="$OUTPUT_ROOT/logs/train_$(date +%Y%m%d_%H%M%S).log"

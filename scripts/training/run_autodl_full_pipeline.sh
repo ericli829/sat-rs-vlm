@@ -90,6 +90,7 @@ source /root/autodl_env.sh
 source /root/miniconda3/etc/profile.d/conda.sh
 conda activate "$ENV_NAME"
 cd "$PROJECT_ROOT"
+export PYTHONPATH="$PROJECT_ROOT/src:$PROJECT_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 
 export PROJECT_ROOT DATA_ROOT MODEL_ROOT OUTPUT_ROOT BACKUP_ROOT
 export OMP_NUM_THREADS=8

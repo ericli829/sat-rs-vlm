@@ -205,6 +205,12 @@ def run_candidate(
     environment.setdefault("OMP_NUM_THREADS", "8")
     environment.setdefault("TOKENIZERS_PARALLELISM", "false")
     environment.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+    source_path = str(PROJECT_ROOT / "src")
+    project_path = str(PROJECT_ROOT)
+    existing_pythonpath = environment.get("PYTHONPATH")
+    environment["PYTHONPATH"] = os.pathsep.join(
+        path for path in (source_path, project_path, existing_pythonpath) if path
+    )
     gpu_samples: list[dict[str, float]] = []
     started = time.perf_counter()
     with log_path.open("w", encoding="utf-8") as stream:
