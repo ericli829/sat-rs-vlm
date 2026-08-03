@@ -199,6 +199,7 @@ def _legacy_config(
     training = dict(config["training"])
     lora = dict(config["lora"])
     data = dict(config["data"])
+    runtime = dict(config.get("runtime", {}))
     model_path = resolve_path_value(str(model["model_path"]), base_dir=PROJECT_ROOT)
     processor_path = resolve_path_value(
         str(model.get("processor_path", model_path)),
@@ -247,6 +248,18 @@ def _legacy_config(
             "bf16": bool(training["bf16"]),
             "fp16": bool(training["fp16"]),
             "gradient_checkpointing": bool(training.get("gradient_checkpointing", True)),
+            "dataloader_num_workers": int(
+                training.get("dataloader_num_workers", runtime.get("num_workers", 0))
+            ),
+            "dataloader_pin_memory": bool(
+                training.get("dataloader_pin_memory", runtime.get("pin_memory", True))
+            ),
+            "dataloader_persistent_workers": bool(
+                training.get(
+                    "dataloader_persistent_workers",
+                    runtime.get("persistent_workers", False),
+                )
+            ),
             "max_grad_norm": float(training.get("max_grad_norm", 1.0)),
             "seed": int(training.get("seed", config.get("experiment", {}).get("seed", 42))),
             "resume_from_checkpoint": str(resume) if resume else None,

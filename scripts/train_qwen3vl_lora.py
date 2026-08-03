@@ -190,6 +190,9 @@ def build_training_arguments(
         "bf16": bf16,
         "fp16": fp16,
         "gradient_checkpointing": config.training.gradient_checkpointing,
+        "dataloader_num_workers": config.training.dataloader_num_workers,
+        "dataloader_pin_memory": config.training.dataloader_pin_memory,
+        "dataloader_persistent_workers": config.training.dataloader_persistent_workers,
         "max_grad_norm": config.training.max_grad_norm,
         "report_to": config.logging.report_to,
         "remove_unused_columns": False,
@@ -415,6 +418,8 @@ def train(
     modules = safe_import_model_dependencies(require_bitsandbytes=config.training.method == "qlora")
     torch = modules["torch"]
     transformers = modules["transformers"]
+    if bool(torch.cuda.is_available()):
+        torch.cuda.reset_peak_memory_stats()
     set_seed(config.training.seed)
 
     processor = transformers.AutoProcessor.from_pretrained(
@@ -445,7 +450,7 @@ def train(
         processor,
         config.data.max_seq_length,
         paths.image_root,
-        debug_shapes=True,
+        debug_shapes=False,
     )
     train_sampler = None
     if config.data.sampling_mode == "weighted":
@@ -466,7 +471,8 @@ def train(
             "data_collator": collator,
         },
     )
-    trainer.train(resume_from_checkpoint=config.training.resume_from_checkpoint)
+    train_output = trainer.train(resume_from_checkpoint=config.training.resume_from_checkpoint)
+    train_metrics = dict(getattr(train_output, "metrics", {}) or {})
     paths.output_dir.mkdir(parents=True, exist_ok=True)
     trainer.save_model(str(paths.output_dir))
     processor_dir = paths.output_dir / "processor"
@@ -486,8 +492,10 @@ def train(
         paths.output_dir,
     )
     peak_memory = 0.0
+    peak_reserved_memory = 0.0
     if bool(torch.cuda.is_available()):
         peak_memory = float(torch.cuda.max_memory_allocated() / (1024 * 1024))
+        peak_reserved_memory = float(torch.cuda.max_memory_reserved() / (1024 * 1024))
     return {
         "success": True,
         "model_dir": paths.model_source,
@@ -505,6 +513,11 @@ def train(
         "cuda_available": device["cuda_available"],
         "device_name": device.get("device_name"),
         "peak_memory_mb": peak_memory,
+        "peak_reserved_memory_mb": peak_reserved_memory,
+        "global_step": int(getattr(trainer.state, "global_step", 0)),
+        "train_runtime_seconds": train_metrics.get("train_runtime"),
+        "train_samples_per_second": train_metrics.get("train_samples_per_second"),
+        "train_steps_per_second": train_metrics.get("train_steps_per_second"),
     }
 
 

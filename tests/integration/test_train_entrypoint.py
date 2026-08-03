@@ -111,5 +111,8 @@ runtime: {mock: true}
     assert legacy["data"]["data_composition"] == "detection_quota"
     assert legacy["data"]["sampling_mode"] == "weighted"
     assert legacy["data"]["task_sampling_weights"]["detection"] == 3.0
+    assert legacy["training"]["dataloader_num_workers"] == 8
+    assert legacy["training"]["dataloader_pin_memory"] is True
+    assert legacy["training"]["dataloader_persistent_workers"] is True
     preflight = json.loads((output / "preflight.json").read_text(encoding="utf-8"))
     assert preflight["precision"]["mode"] == "fp32"

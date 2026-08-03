@@ -94,6 +94,9 @@ class TrainConfig(BaseModel):
     bf16: bool = True
     fp16: bool = False
     gradient_checkpointing: bool = True
+    dataloader_num_workers: int = Field(default=0, ge=0)
+    dataloader_pin_memory: bool = True
+    dataloader_persistent_workers: bool = False
     max_grad_norm: float = 1.0
     seed: int = 42
     resume_from_checkpoint: str | None = None
