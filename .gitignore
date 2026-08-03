@@ -17,7 +17,8 @@ build/
 .coverage
 htmlcov/
 checkpoints/
-models/
+/models/
+/.models/
 datasets/
 data/raw/
 data/processed/

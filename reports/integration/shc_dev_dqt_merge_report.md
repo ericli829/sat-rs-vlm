@@ -80,6 +80,13 @@
 - AutoDL 安装补齐 cloud requirements、`packaging` 和可选 `--install-qlora`；环境预检覆盖
   torchvision、safetensors、qwen-vl-utils 与 bitsandbytes。
 - `.gitattributes` 强制 shell 和 Makefile 使用 LF，降低 Linux 云端换行风险。
+- 修复 `.gitignore` 中未锚定的 `models/`：该规则曾错误忽略
+  `src/sat_rs_vlm/models/` 下 8 个新增源码文件，导致本地文件存在但未进入提交，云端在
+  pytest 收集阶段出现 12 个级联导入错误。规则现改为仅匹配仓库根目录的 `/models/` 和
+  `/.models/` 模型缓存。
+- 新增 `test_gitignore_integrity.py`，使用 `git check-ignore --no-index --stdin` 一次性检查
+  `src/`、`scripts/` 和 `tests/` 下全部 Python 源码，防止已跟踪或未跟踪源码再次命中过宽
+  的忽略规则。
 
 ## 6. 实际测试结果
 
@@ -119,11 +126,16 @@ quantize_rs_vlm.py --dry-run
 
 reliability/run_smoke.py --case all
 通过，execution_mode=smoke_mock
+
+二次复审后的完整 pytest
+169 passed, 1 skipped, 1 warning in 26.16s
+
+.gitignore 修复后的云端故障相关回归测试
+52 passed（完整性门禁 1 项；可靠性、量化、评估与训练入口 51 项）
 ```
 
 Windows 主机没有可用 Bash，因此 shell 的 `bash -n` 测试在 pytest 中标为 skipped；脚本
-语法仍由 Linux 云端首次启动前复核。二次复审后的完整 `pytest -q` 将按工作区长任务规则在
-后台运行，结果以对应日志为准。
+语法仍由 Linux 云端首次启动前复核。
 
 ## 7. 未完成与边界
 
