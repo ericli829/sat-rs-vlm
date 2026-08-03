@@ -51,6 +51,16 @@ done
 CHECKPOINT_ROOT="$EXPERIMENT_DIR/checkpoints"
 if [[ -d "$CHECKPOINT_ROOT" ]]; then
   mkdir -p "$DESTINATION/checkpoints"
+  for file in \
+    adapter_config.json adapter_model.bin adapter_model.safetensors \
+    strategy_manifest.json trainer_state.json training_config.yaml; do
+    if [[ -f "$CHECKPOINT_ROOT/$file" ]]; then
+      rsync -a "$CHECKPOINT_ROOT/$file" "$DESTINATION/checkpoints/"
+    fi
+  done
+  if [[ -d "$CHECKPOINT_ROOT/processor" ]]; then
+    rsync -a "$CHECKPOINT_ROOT/processor/" "$DESTINATION/checkpoints/processor/"
+  fi
   mapfile -t CHECKPOINTS < <(
     find "$CHECKPOINT_ROOT" -maxdepth 1 -mindepth 1 -type d -name 'checkpoint-*' \
       -printf '%f\n' | sort -t- -k2,2n | tail -n "$KEEP_CHECKPOINTS"
@@ -58,9 +68,6 @@ if [[ -d "$CHECKPOINT_ROOT" ]]; then
   for checkpoint in "${CHECKPOINTS[@]}"; do
     rsync -a "$CHECKPOINT_ROOT/$checkpoint/" "$DESTINATION/checkpoints/$checkpoint/"
   done
-  find "$CHECKPOINT_ROOT" -maxdepth 1 -type f \
-    \( -name 'adapter_*' -o -name '*.safetensors' -o -name 'training_config.yaml' \) \
-    -exec rsync -a {} "$DESTINATION/checkpoints/" \;
 fi
 
 echo "Backup completed: $DESTINATION"

@@ -37,6 +37,7 @@ def test_shell_scripts_exist_and_parse_when_bash_is_available() -> None:
     scripts = [
         PROJECT_ROOT / "scripts/environment/setup_autodl.sh",
         PROJECT_ROOT / "scripts/training/run_autodl_train.sh",
+        PROJECT_ROOT / "scripts/training/run_autodl_full_pipeline.sh",
         PROJECT_ROOT / "scripts/storage/sync_to_local_disk.sh",
         PROJECT_ROOT / "scripts/storage/backup_results.sh",
     ]
