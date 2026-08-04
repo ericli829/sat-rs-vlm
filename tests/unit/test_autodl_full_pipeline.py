@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 ROOT = Path(__file__).parents[2]
 SCRIPT = ROOT / "scripts/training/run_autodl_full_pipeline.sh"
 
@@ -8,7 +7,7 @@ SCRIPT = ROOT / "scripts/training/run_autodl_full_pipeline.sh"
 def test_full_pipeline_orders_evaluation_before_backup_and_shutdown() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
 
-    evaluation = text.index("python scripts/evaluate_rs_vlm.py")
+    evaluation = text.index('"$AUTODL_PYTHON" scripts/evaluate_rs_vlm.py')
     backup = text.rindex("bash scripts/storage/backup_results.sh")
     shutdown = text.rindex("sudo shutdown -h now")
     assert evaluation < backup < shutdown
@@ -34,3 +33,4 @@ def test_full_pipeline_uses_fixed_autodl_paths() -> None:
     assert 'MODEL_ROOT="/root/autodl-tmp/models"' in text
     assert 'OUTPUT_ROOT="/root/autodl-tmp/outputs"' in text
     assert 'BACKUP_ROOT="/root/autodl-fs/experiments"' in text
+    assert 'activate_autodl_python "$ENV_NAME"' in text

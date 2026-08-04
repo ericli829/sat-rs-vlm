@@ -160,6 +160,46 @@ def gpu_snapshot() -> dict[str, float] | None:
     return {"utilization": utilization, "memory_used_mb": used, "memory_total_mb": total}
 
 
+def build_child_environment() -> dict[str, str]:
+    environment = dict(os.environ)
+    environment.setdefault("OMP_NUM_THREADS", "8")
+    environment.setdefault("TOKENIZERS_PARALLELISM", "false")
+    environment.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+    source_path = str(PROJECT_ROOT / "src")
+    project_path = str(PROJECT_ROOT)
+    existing_pythonpath = environment.get("PYTHONPATH")
+    environment["PYTHONPATH"] = os.pathsep.join(
+        path for path in (source_path, project_path, existing_pythonpath) if path
+    )
+    return environment
+
+
+def resolve_child_python() -> str:
+    return os.environ.get("AUTODL_PYTHON") or sys.executable
+
+
+def validate_child_environment(environment: dict[str, str]) -> None:
+    command = [
+        resolve_child_python(),
+        "-c",
+        "import pydantic; import sat_rs_vlm; print(pydantic.__version__)",
+    ]
+    completed = subprocess.run(
+        command,
+        cwd=PROJECT_ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip()
+        raise RuntimeError(
+            "Benchmark environment preflight failed. Install the project and its core "
+            f"dependencies in {resolve_child_python()}. Details: {detail}"
+        )
+
+
 def read_report(output_dir: Path) -> dict[str, Any]:
     for path in (
         output_dir / "checkpoints/train_report.json",
@@ -189,7 +229,7 @@ def run_candidate(
     memory_limit_fraction: float,
 ) -> dict[str, Any]:
     command = [
-        sys.executable,
+        resolve_child_python(),
         str(PROJECT_ROOT / "scripts/training/run_train.py"),
         "--environment",
         "autodl",
@@ -201,16 +241,7 @@ def run_candidate(
         str(output_dir),
         "--skip-eval",
     ]
-    environment = dict(os.environ)
-    environment.setdefault("OMP_NUM_THREADS", "8")
-    environment.setdefault("TOKENIZERS_PARALLELISM", "false")
-    environment.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
-    source_path = str(PROJECT_ROOT / "src")
-    project_path = str(PROJECT_ROOT)
-    existing_pythonpath = environment.get("PYTHONPATH")
-    environment["PYTHONPATH"] = os.pathsep.join(
-        path for path in (source_path, project_path, existing_pythonpath) if path
-    )
+    environment = build_child_environment()
     gpu_samples: list[dict[str, float]] = []
     started = time.perf_counter()
     with log_path.open("w", encoding="utf-8") as stream:
@@ -367,6 +398,7 @@ def main() -> int:
     base_config = load_yaml(args.base_config.resolve())
     smoke_config = load_yaml(args.smoke_config.resolve())
     candidates = parse_candidates(args.candidates)
+    validate_child_environment(build_child_environment())
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     benchmark_root = args.output_root.resolve() / f"benchmark_{timestamp}"
     config_root = benchmark_root / "configs"

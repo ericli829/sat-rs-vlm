@@ -41,23 +41,22 @@ done
   exit 1
 }
 source /root/autodl_env.sh
-source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate "$ENV_NAME"
+source "$PROJECT_ROOT/scripts/environment/activate_autodl_python.sh"
+activate_autodl_python "$ENV_NAME"
 cd "$PROJECT_ROOT"
-export PYTHONPATH="$PROJECT_ROOT/src:$PROJECT_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 
 mkdir -p "$OUTPUT_ROOT/logs"
 LOG_FILE="$OUTPUT_ROOT/logs/train_$(date +%Y%m%d_%H%M%S).log"
 
-python scripts/environment/check_environment.py --require-model --require-gpu \
+"$AUTODL_PYTHON" scripts/environment/check_environment.py --require-model --require-gpu \
   2>&1 | tee -a "$LOG_FILE"
-python scripts/data/validate_dataset.py \
+"$AUTODL_PYTHON" scripts/data/validate_dataset.py \
   --dataset-root "$DATA_ROOT/VRSBench" \
   --manifest-name project_metadata/dataset_manifest.json \
   2>&1 | tee -a "$LOG_FILE"
 
 if [[ "$SKIP_SMOKE" -eq 0 ]]; then
-  python scripts/training/run_train.py \
+  "$AUTODL_PYTHON" scripts/training/run_train.py \
     --environment autodl \
     --env-config configs/cloud/autodl.yaml \
     --config "$SMOKE_CONFIG" \
@@ -65,7 +64,7 @@ if [[ "$SKIP_SMOKE" -eq 0 ]]; then
 fi
 
 TRAIN_ARGS=(
-  python scripts/training/run_train.py
+  "$AUTODL_PYTHON" scripts/training/run_train.py
   --environment autodl
   --env-config configs/cloud/autodl.yaml
   --config "$CONFIG"
@@ -76,7 +75,7 @@ fi
 "${TRAIN_ARGS[@]}" 2>&1 | tee -a "$LOG_FILE"
 
 if [[ "$BACKUP_AFTER_TRAIN" -eq 1 ]]; then
-  EXPERIMENT_DIR="$(python - "$LOG_FILE" <<'PY'
+  EXPERIMENT_DIR="$("$AUTODL_PYTHON" - "$LOG_FILE" <<'PY'
 import json
 import sys
 from pathlib import Path

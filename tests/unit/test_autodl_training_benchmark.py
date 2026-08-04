@@ -1,9 +1,11 @@
 from scripts.training.benchmark_autodl_training import (
     Candidate,
     build_benchmark_config,
+    build_child_environment,
     build_recommended_config,
     build_recommended_smoke_config,
     parse_candidates,
+    resolve_child_python,
     select_best,
 )
 
@@ -79,3 +81,18 @@ def test_recommended_smoke_has_enough_samples_for_selected_batch() -> None:
     assert recommended["training"]["per_device_train_batch_size"] == 16
     assert recommended["training"]["gradient_checkpointing"] is False
     assert recommended["data"]["max_train_samples"] == 80
+
+
+def test_child_environment_includes_source_tree(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("PYTHONPATH", "/existing")
+
+    environment = build_child_environment()
+
+    assert "sat-rs-vlm/src" in environment["PYTHONPATH"].replace("\\", "/")
+    assert "/existing" in environment["PYTHONPATH"]
+
+
+def test_explicit_autodl_python_takes_priority(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("AUTODL_PYTHON", "/opt/rs-vlm/bin/python")
+
+    assert resolve_child_python() == "/opt/rs-vlm/bin/python"

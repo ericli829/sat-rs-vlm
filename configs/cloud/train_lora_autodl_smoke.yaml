@@ -1,10 +1,10 @@
 experiment:
-  name: autodl_lora_4090_smoke
+  name: autodl_lora_4090_bs16_gc_smoke
   seed: 42
 
 training:
   max_steps: 5
-  per_device_train_batch_size: 8
+  per_device_train_batch_size: 16
   per_device_eval_batch_size: 2
   gradient_accumulation_steps: 1
   gradient_checkpointing: true
@@ -14,7 +14,7 @@ training:
   save_total_limit: 1
 
 data:
-  max_train_samples: 16
+  max_train_samples: 80
   max_validation_samples: 8
   max_seq_length: 512
 

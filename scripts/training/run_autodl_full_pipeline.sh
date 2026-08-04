@@ -87,10 +87,9 @@ trap on_error ERR
 }
 
 source /root/autodl_env.sh
-source /root/miniconda3/etc/profile.d/conda.sh
-conda activate "$ENV_NAME"
+source "$PROJECT_ROOT/scripts/environment/activate_autodl_python.sh"
+activate_autodl_python "$ENV_NAME"
 cd "$PROJECT_ROOT"
-export PYTHONPATH="$PROJECT_ROOT/src:$PROJECT_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 
 export PROJECT_ROOT DATA_ROOT MODEL_ROOT OUTPUT_ROOT BACKUP_ROOT
 export OMP_NUM_THREADS=8
@@ -103,8 +102,8 @@ exec > >(tee -a "$PIPELINE_LOG") 2>&1
 
 CURRENT_STAGE="environment and dataset validation"
 echo "[1/8] Checking environment and dataset"
-python scripts/environment/check_environment.py --require-model --require-gpu
-python scripts/data/validate_dataset.py \
+"$AUTODL_PYTHON" scripts/environment/check_environment.py --require-model --require-gpu
+"$AUTODL_PYTHON" scripts/data/validate_dataset.py \
   --dataset-root "$DATA_ROOT/VRSBench" \
   --manifest-name project_metadata/dataset_manifest.json \
   --report "$OUTPUT_ROOT/reports/vrsbench_validation.json"
@@ -113,7 +112,7 @@ CURRENT_STAGE="evaluation JSONL preparation"
 echo "[2/8] Preparing Qwen3-VL evaluation JSONL"
 if [[ ! -s data/processed/qwen3vl_val.jsonl ]] || \
    [[ data/processed/qwen3vl_val.jsonl -ot data/processed/rs_val.jsonl ]]; then
-  python scripts/convert_to_qwen3vl_format.py \
+  "$AUTODL_PYTHON" scripts/convert_to_qwen3vl_format.py \
     --config configs/data/remote_sensing_data.yaml
 fi
 [[ -s data/processed/qwen3vl_val.jsonl ]] || {
@@ -140,7 +139,7 @@ TRAIN_LOG="$(
   echo "Could not locate the training log created by this run." >&2
   exit 1
 }
-EXPERIMENT_DIR="$(python - "$TRAIN_LOG" <<'PY'
+EXPERIMENT_DIR="$("$AUTODL_PYTHON" - "$TRAIN_LOG" <<'PY'
 import sys
 from pathlib import Path
 
@@ -168,7 +167,7 @@ fi
 
 CURRENT_STAGE="full validation-set generation evaluation"
 echo "[5/8] Running full validation-set generation evaluation"
-python scripts/evaluate_rs_vlm.py \
+"$AUTODL_PYTHON" scripts/evaluate_rs_vlm.py \
   --config "$EVAL_CONFIG" \
   --checkpoint "$CHECKPOINT_DIR" \
   --output-dir "$EXPERIMENT_DIR/evaluation"
