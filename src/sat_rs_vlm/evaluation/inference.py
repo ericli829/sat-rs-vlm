@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -87,14 +88,39 @@ def generate_prediction(
 ) -> str:
     """只解码 input_length 之后的新 token。"""
 
-    batch = collator([sample])
+    return generate_predictions(
+        model,
+        processor,
+        collator,
+        [sample],
+        generation_config,
+        torch,
+        task_type=str(sample.get("task_type", "")),
+    )[0]
+
+
+def generate_predictions(
+    model: Any,
+    processor: Any,
+    collator: Qwen3VLDataCollator,
+    samples: Sequence[dict[str, Any]],
+    generation_config: dict[str, Any],
+    torch: Any,
+    *,
+    task_type: str | None = None,
+) -> list[str]:
+    """Generate and decode one homogeneous evaluation batch."""
+
+    if not samples:
+        return []
+    batch = collator(list(samples))
     input_length = int(batch["input_ids"].shape[-1])
     input_device = model_input_device(model, torch)
     batch = move_to_device(batch, input_device, torch)
     with torch.inference_mode():
         output_ids = model.generate(
             **batch,
-            **build_generation_kwargs(generation_config, str(sample.get("task_type", ""))),
+            **build_generation_kwargs(generation_config, task_type),
         )
     generated_ids = output_ids[:, input_length:]
     decoded = processor.batch_decode(
@@ -102,7 +128,11 @@ def generate_prediction(
         skip_special_tokens=True,
         clean_up_tokenization_spaces=False,
     )
-    return str(decoded[0]).strip() if decoded else ""
+    if len(decoded) != len(samples):
+        raise RuntimeError(
+            f"Decoded prediction count mismatch: expected {len(samples)}, got {len(decoded)}"
+        )
+    return [str(value).strip() for value in decoded]
 
 
 def timed_prediction(
@@ -121,3 +151,34 @@ def timed_prediction(
     prediction = generate_prediction(model, processor, collator, sample, generation_config, torch)
     _synchronize(torch, device)
     return prediction, (time.perf_counter() - started) * 1000.0
+
+
+def timed_predictions(
+    model: Any,
+    processor: Any,
+    collator: Qwen3VLDataCollator,
+    samples: Sequence[dict[str, Any]],
+    generation_config: dict[str, Any],
+    torch: Any,
+    *,
+    task_type: str | None = None,
+) -> tuple[list[str], float]:
+    """Return batched predictions and amortized latency per sample."""
+
+    if not samples:
+        return [], 0.0
+    device = model_input_device(model, torch)
+    _synchronize(torch, device)
+    started = time.perf_counter()
+    predictions = generate_predictions(
+        model,
+        processor,
+        collator,
+        samples,
+        generation_config,
+        torch,
+        task_type=task_type,
+    )
+    _synchronize(torch, device)
+    latency_ms = (time.perf_counter() - started) * 1000.0 / len(samples)
+    return predictions, latency_ms

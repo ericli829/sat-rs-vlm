@@ -9,6 +9,7 @@ import pytest
 from scripts.evaluate_rs_vlm import (
     build_generation_kwargs,
     generate_prediction,
+    iter_evaluation_batches,
     summarize,
     validate_local_adapter,
 )
@@ -119,3 +120,23 @@ def test_summary_reports_empty_prediction_rate() -> None:
     assert summary["overall"]["empty_predictions"] == 1
     assert summary["overall"]["empty_prediction_rate"] == 0.5
     assert summary["by_task"]["vqa"]["empty_prediction_rate"] == 0.5
+
+
+def test_evaluation_batches_group_by_task_and_preserve_original_indexes() -> None:
+    dataset = [
+        {"id": "caption-1", "task_type": "captioning"},
+        {"id": "vqa-1", "task_type": "vqa"},
+        {"id": "caption-2", "task_type": "captioning"},
+    ]
+
+    batches = list(iter_evaluation_batches(dataset, 2, group_by_task=True))
+
+    assert batches == [
+        ("captioning", [(0, dataset[0]), (2, dataset[2])]),
+        ("vqa", [(1, dataset[1])]),
+    ]
+
+
+def test_evaluation_batches_reject_non_positive_batch_size() -> None:
+    with pytest.raises(ValueError, match="must be positive"):
+        list(iter_evaluation_batches([], 0, group_by_task=True))

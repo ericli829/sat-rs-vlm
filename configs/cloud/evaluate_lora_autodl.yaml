@@ -12,9 +12,18 @@ data:
   image_root: "/root/autodl-tmp/datasets/VRSBench"
   max_seq_length: 1024
   max_eval_samples: null
+  eval_batch_size: 16
+  group_by_task: true
+  log_every_samples: 100
 
 generation:
-  max_new_tokens: 256
+  max_new_tokens: 128
+  task_max_new_tokens:
+    captioning: 128
+    detection: 64
+    counting: 16
+    scene_classification: 32
+    vqa: 64
   do_sample: false
   temperature: 0.0
   num_beams: 1

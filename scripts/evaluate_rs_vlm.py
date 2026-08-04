@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from collections import defaultdict
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +24,7 @@ from sat_rs_vlm.evaluation.inference import (
 )
 from sat_rs_vlm.evaluation.inference import (
     extract_reference,
-    timed_prediction,
+    timed_predictions,
 )
 from sat_rs_vlm.evaluation.inference import (
     generate_prediction as _generate_prediction,
@@ -87,6 +89,12 @@ def parse_args() -> argparse.Namespace:
         "--output-dir",
         default=None,
         help="Optional output directory; keeps the evaluated checkpoint read-only.",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=None,
+        help="Override data.eval_batch_size from the YAML config.",
     )
     return parser.parse_args()
 
@@ -154,10 +162,34 @@ def summarize(predictions: list[dict[str, Any]]) -> dict[str, Any]:
     return summarize_predictions(predictions)
 
 
+def iter_evaluation_batches(
+    dataset: Sequence[dict[str, Any]],
+    batch_size: int,
+    *,
+    group_by_task: bool,
+) -> Iterator[tuple[str | None, list[tuple[int, dict[str, Any]]]]]:
+    """Yield indexed batches, optionally grouping samples by task type."""
+
+    if batch_size < 1:
+        raise ValueError(f"Evaluation batch size must be positive, got {batch_size}")
+    if group_by_task:
+        groups: dict[str, list[tuple[int, dict[str, Any]]]] = defaultdict(list)
+        for index, sample in enumerate(dataset):
+            groups[str(sample.get("task_type", "unknown"))].append((index, sample))
+        for task_type, indexed_samples in groups.items():
+            for start in range(0, len(indexed_samples), batch_size):
+                yield task_type, indexed_samples[start : start + batch_size]
+        return
+    indexed_samples = list(enumerate(dataset))
+    for start in range(0, len(indexed_samples), batch_size):
+        yield None, indexed_samples[start : start + batch_size]
+
+
 def evaluate(
     config_path: Path,
     checkpoint: Path | None = None,
     output_dir: Path | None = None,
+    batch_size_override: int | None = None,
 ) -> None:
     """执行评测。"""
 
@@ -178,9 +210,18 @@ def evaluate(
             dict(config.get("model", {})),
             modules,
         )
+    model.eval()
     torch = modules["torch"]
     generation_cfg = dict(config.get("generation", {}))
     dataset = Qwen3VLDataset(eval_file, data_cfg.get("max_eval_samples"))
+    batch_size = int(batch_size_override or data_cfg.get("eval_batch_size", 1))
+    group_by_task = bool(data_cfg.get("group_by_task", True))
+    log_every = max(1, int(data_cfg.get("log_every_samples", 100)))
+    if batch_size < 1:
+        raise ValueError(f"Evaluation batch size must be positive, got {batch_size}")
+    tokenizer = getattr(processor, "tokenizer", None)
+    if batch_size > 1 and tokenizer is not None:
+        tokenizer.padding_side = "left"
     collator = Qwen3VLDataCollator(
         processor,
         max_seq_length=int(data_cfg.get("max_seq_length", 4096)),
@@ -188,18 +229,32 @@ def evaluate(
         for_generation=True,
     )
 
-    predictions: list[dict[str, Any]] = []
-    for index, sample in enumerate(dataset, start=1):
-        prediction, latency_ms = timed_prediction(
+    predictions_by_index: list[dict[str, Any] | None] = [None] * len(dataset)
+    evaluated = 0
+    next_log = 1
+    print(
+        f"Evaluating {len(dataset)} samples with batch_size={batch_size}, "
+        f"group_by_task={group_by_task}"
+    )
+    for task_type, indexed_batch in iter_evaluation_batches(
+        dataset,
+        batch_size,
+        group_by_task=group_by_task,
+    ):
+        samples = [sample for _, sample in indexed_batch]
+        batch_predictions, latency_ms = timed_predictions(
             model,
             processor,
             collator,
-            sample,
+            samples,
             generation_cfg,
             torch,
+            task_type=task_type,
         )
-        predictions.append(
-            {
+        for (original_index, sample), prediction in zip(
+            indexed_batch, batch_predictions, strict=True
+        ):
+            predictions_by_index[original_index] = {
                 "id": sample["id"],
                 "task_type": sample["task_type"],
                 "prediction": prediction,
@@ -207,9 +262,14 @@ def evaluate(
                 "metadata": sample.get("metadata", {}),
                 "inference_latency_ms": latency_ms,
             }
-        )
-        if index == 1 or index % 10 == 0 or index == len(dataset):
-            print(f"Evaluated {index}/{len(dataset)} samples")
+        evaluated += len(samples)
+        if evaluated >= next_log or evaluated == len(dataset):
+            print(f"Evaluated {evaluated}/{len(dataset)} samples")
+            next_log = ((evaluated // log_every) + 1) * log_every
+
+    if any(prediction is None for prediction in predictions_by_index):
+        raise RuntimeError("Evaluation finished with missing predictions")
+    predictions = [prediction for prediction in predictions_by_index if prediction is not None]
 
     output_cfg = dict(config["output"])
     if output_dir is not None:
@@ -240,7 +300,7 @@ def main() -> int:
     try:
         checkpoint = Path(args.checkpoint) if args.checkpoint else None
         output_dir = Path(args.output_dir) if args.output_dir else None
-        evaluate(Path(args.config), checkpoint, output_dir)
+        evaluate(Path(args.config), checkpoint, output_dir, args.batch_size)
     except ImportError as exc:
         raise SystemExit(str(exc) or MODEL_DEPS_ERROR) from exc
     return 0
