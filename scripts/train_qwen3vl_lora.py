@@ -10,9 +10,15 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from sat_rs_vlm.data.qwen3vl_collator import Qwen3VLDataCollator
 from sat_rs_vlm.data.qwen3vl_dataset import Qwen3VLDataset
-from sat_rs_vlm.data.task_sampler import build_weighted_sampler, create_trainer
+from sat_rs_vlm.data.task_sampler import (
+    build_alternating_source_sampler,
+    build_weighted_sampler,
+    create_trainer,
+)
 from sat_rs_vlm.models.qwen3vl_loader import compatible_model_class
 from sat_rs_vlm.training.config import (
     Qwen3VLTrainingConfig,
@@ -53,6 +59,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-steps", type=int, default=None)
     parser.add_argument("--max-seq-length", type=int, default=None)
     parser.add_argument("--method", choices=("lora", "qlora"), default=None)
+    parser.add_argument("--initial-adapter", default=None)
+    parser.add_argument("--learning-rate", type=float, default=None)
+    parser.add_argument("--num-train-epochs", type=float, default=None)
     local_group = parser.add_mutually_exclusive_group()
     local_group.add_argument("--local-files-only", dest="local_files_only", action="store_true")
     local_group.add_argument("--no-local-files-only", dest="local_files_only", action="store_false")
@@ -79,6 +88,9 @@ def build_overrides(args: argparse.Namespace) -> TrainingPathOverrides:
         local_files_only=args.local_files_only,
         method=args.method,
         max_seq_length=args.max_seq_length,
+        initial_adapter_dir=args.initial_adapter,
+        learning_rate=args.learning_rate,
+        num_train_epochs=args.num_train_epochs,
     )
 
 
@@ -146,12 +158,29 @@ def load_qwen3vl_model(
     return model_cls.from_pretrained(paths.model_source, **build_model_kwargs(config, modules))
 
 
-def apply_lora(model: Any, config: Qwen3VLTrainingConfig, modules: dict[str, Any]) -> Any:
+def apply_lora(
+    model: Any,
+    config: Qwen3VLTrainingConfig,
+    paths: ResolvedTrainingPaths,
+    modules: dict[str, Any],
+) -> Any:
     """注入 LoRA adapter。"""
 
     if config.training.method not in {"lora", "qlora"}:
         raise ValueError("Only LoRA/QLoRA are supported by default; full fine-tuning is disabled.")
     peft = modules["peft"]
+    if paths.initial_adapter_dir is not None:
+        if not (paths.initial_adapter_dir / "adapter_config.json").is_file():
+            raise FileNotFoundError(
+                f"Initial adapter is missing adapter_config.json: {paths.initial_adapter_dir}"
+            )
+        if paths.initial_adapter_dir.resolve() == paths.output_dir.resolve():
+            raise ValueError("Initial adapter and output directory must be different")
+        return peft.PeftModel.from_pretrained(
+            model,
+            str(paths.initial_adapter_dir),
+            is_trainable=True,
+        )
     lora_config = peft.LoraConfig(
         r=config.lora.r,
         lora_alpha=config.lora.alpha,
@@ -246,6 +275,7 @@ def print_resolved_summary(
     print(f"Val file: {paths.val_file}")
     print(f"Image root: {paths.image_root}")
     print(f"Output directory: {paths.output_dir}")
+    print(f"Initial adapter: {paths.initial_adapter_dir}")
     print(f"Local files only: {config.model.local_files_only}")
     if modules is not None:
         torch = modules["torch"]
@@ -260,6 +290,8 @@ def print_resolved_summary(
     print(f"Training method: {config.training.method}")
     print(f"Data composition: {config.data.data_composition}")
     print(f"Sampling mode: {config.data.sampling_mode}")
+    if config.data.source_batch_pattern:
+        print(f"Source batch pattern: {config.data.source_batch_pattern}")
     print(f"LoRA rank: {config.lora.r}")
     print(f"Train samples: {train_samples}")
     print(f"Eval samples: {eval_samples}")
@@ -335,6 +367,9 @@ def build_strategy_manifest(
         "trainable_ratio": ratio,
         "matched_modules": matched_modules,
         "target_modules": list(targets),
+        "initialized_from_adapter": (
+            str(paths.initial_adapter_dir) if paths.initial_adapter_dir is not None else None
+        ),
         "actual_dtype": actual_dtype,
         "quantization": quantization,
         "library_versions": _package_versions(
@@ -364,6 +399,16 @@ def dry_run(config: Qwen3VLTrainingConfig, paths: ResolvedTrainingPaths) -> None
         raise FileNotFoundError(f"Train file does not exist: {paths.train_file}")
     if not paths.val_file.exists():
         raise FileNotFoundError(f"Val file does not exist: {paths.val_file}")
+    if paths.initial_adapter_dir is not None and not paths.initial_adapter_dir.is_dir():
+        raise FileNotFoundError(
+            f"Initial adapter directory does not exist: {paths.initial_adapter_dir}"
+        )
+    if paths.initial_adapter_dir is not None and not (
+        paths.initial_adapter_dir / "adapter_config.json"
+    ).is_file():
+        raise FileNotFoundError(
+            f"Initial adapter is missing adapter_config.json: {paths.initial_adapter_dir}"
+        )
     train_dataset, eval_dataset = load_datasets(config, paths)
     Qwen3VLDataCollator(None, config.data.max_seq_length, paths.image_root)
     print_resolved_summary(
@@ -388,6 +433,7 @@ def forward_only(config: Qwen3VLTrainingConfig, paths: ResolvedTrainingPaths) ->
         local_files_only=config.model.local_files_only,
     )
     model = load_qwen3vl_model(config, paths, modules)
+    model = apply_lora(model, config, paths, modules)
     train_dataset, _ = load_datasets(config, paths)
     collator = Qwen3VLDataCollator(
         processor,
@@ -434,7 +480,7 @@ def train(
         freeze_projector(model)
     if config.training.gradient_checkpointing and hasattr(model, "gradient_checkpointing_enable"):
         model.gradient_checkpointing_enable()
-    model = apply_lora(model, config, modules)
+    model = apply_lora(model, config, paths, modules)
 
     train_dataset, eval_dataset = load_datasets(config, paths)
     param_stats = count_trainable_parameters(model)
@@ -460,6 +506,18 @@ def train(
             seed=config.training.seed,
         )
         print(f"Task-weighted sampling enabled: {config.data.task_sampling_weights}")
+    elif config.data.sampling_mode == "alternating_source":
+        train_sampler = build_alternating_source_sampler(
+            train_dataset,
+            config.data.source_batch_pattern,
+            batch_size=config.training.per_device_train_batch_size,
+            seed=config.training.seed,
+        )
+        print(
+            "Alternating source batches enabled: "
+            f"pattern={config.data.source_batch_pattern}, "
+            f"samples_per_epoch={len(train_sampler)}"
+        )
     trainer = create_trainer(
         transformers,
         train_sampler=train_sampler,
@@ -478,7 +536,15 @@ def train(
     processor_dir = paths.output_dir / "processor"
     processor.save_pretrained(processor_dir)
     trainer.save_state()
-    shutil.copyfile(config_path, paths.output_dir / "training_config.yaml")
+    shutil.copyfile(config_path, paths.output_dir / "training_config_source.yaml")
+    (paths.output_dir / "training_config.yaml").write_text(
+        yaml.safe_dump(
+            config.model_dump(mode="json"),
+            allow_unicode=True,
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
 
     final_loss = None
     if trainer.state.log_history:
@@ -506,6 +572,10 @@ def train(
         "data_composition": config.data.data_composition,
         "sampling_mode": config.data.sampling_mode,
         "task_sampling_weights": config.data.task_sampling_weights,
+        "source_batch_pattern": config.data.source_batch_pattern,
+        "initial_adapter_dir": (
+            str(paths.initial_adapter_dir) if paths.initial_adapter_dir is not None else None
+        ),
         "train_samples": len(train_dataset),
         "eval_samples": len(eval_dataset) if eval_dataset is not None else 0,
         "final_loss": final_loss,

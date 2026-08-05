@@ -1,0 +1,83 @@
+model:
+  model_dir: "/root/autodl-tmp/models/Qwen3-VL-2B-Instruct"
+  processor_dir: "/root/autodl-tmp/models/Qwen3-VL-2B-Instruct"
+  local_files_only: true
+  trust_remote_code: true
+  torch_dtype: "bfloat16"
+  device_map: "auto"
+  attn_implementation: "sdpa"
+
+data:
+  train_file: "/root/autodl-tmp/sat-rs-vlm/data/processed/multisource/vrsbench_levircc_train.jsonl"
+  val_file: "/root/autodl-tmp/sat-rs-vlm/data/processed/multisource/vrsbench_levircc_val.jsonl"
+  image_root: "/root/autodl-tmp/datasets"
+  max_seq_length: 1024
+  max_train_samples: null
+  max_eval_samples: null
+  skip_bad_samples: false
+  data_composition: "full"
+  sampling_mode: "alternating_source"
+  task_sampling_weights: {}
+  source_batch_pattern:
+    - "VRSBench"
+    - "VRSBench"
+    - "VRSBench"
+    - "LEVIR-CC"
+
+training:
+  output_dir: "/root/autodl-tmp/outputs/vrsbench_levircc_lora/checkpoints"
+  method: "lora"
+  freeze_vision_encoder: true
+  freeze_projector: false
+  num_train_epochs: 1
+  max_steps: null
+  per_device_train_batch_size: 8
+  per_device_eval_batch_size: 8
+  gradient_accumulation_steps: 2
+  learning_rate: 0.00002
+  weight_decay: 0.01
+  warmup_ratio: 0.03
+  lr_scheduler_type: "cosine"
+  logging_steps: 20
+  save_steps: 500
+  eval_steps: 1000
+  save_total_limit: 3
+  bf16: true
+  fp16: false
+  gradient_checkpointing: true
+  dataloader_num_workers: 8
+  dataloader_pin_memory: true
+  dataloader_persistent_workers: true
+  max_grad_norm: 1.0
+  seed: 42
+  resume_from_checkpoint: null
+
+lora:
+  initial_adapter_dir: null
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+qlora:
+  load_in_4bit: false
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_compute_dtype: "bfloat16"
+  bnb_4bit_use_double_quant: true
+
+evaluation:
+  do_eval: true
+  predict_with_generate: true
+  max_new_tokens: 128
+  num_beams: 1
+
+logging:
+  report_to: "none"
+  experiment_name: "qwen3vl-vrsbench-levircc-lora"

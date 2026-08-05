@@ -43,6 +43,7 @@ def test_lora_manifest_is_compatible_with_checkpoint_loader_contract(tmp_path: P
         val_file=tmp_path / "val.jsonl",
         image_root=tmp_path,
         output_dir=tmp_path / "adapter",
+        initial_adapter_dir=None,
     )
     manifest = build_strategy_manifest(
         _Model(), config, paths, (10, 100, 0.1), {"cuda_available": True}

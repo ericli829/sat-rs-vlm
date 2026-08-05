@@ -145,7 +145,7 @@ def score_sample(task_type: str, prediction: str, reference: str) -> dict[str, A
         return score_detection(prediction, reference)
     if task == "counting":
         return score_counting(prediction, reference)
-    if task == "captioning":
+    if task in {"captioning", "change_detection"}:
         return score_caption(prediction, reference)
     return score_text_task(prediction, reference)
 

@@ -57,8 +57,9 @@ class TrainDataConfig(BaseModel):
     max_eval_samples: int | None = None
     skip_bad_samples: bool = False
     data_composition: Literal["full", "balanced_quota", "detection_quota"] = "full"
-    sampling_mode: Literal["uniform", "weighted"] = "uniform"
+    sampling_mode: Literal["uniform", "weighted", "alternating_source"] = "uniform"
     task_sampling_weights: dict[str, float] = Field(default_factory=dict)
+    source_batch_pattern: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_sampling(self) -> TrainDataConfig:
@@ -66,6 +67,10 @@ class TrainDataConfig(BaseModel):
 
         if self.sampling_mode == "weighted" and not self.task_sampling_weights:
             raise ValueError("sampling_mode='weighted' requires task_sampling_weights")
+        if self.sampling_mode == "alternating_source" and not self.source_batch_pattern:
+            raise ValueError(
+                "sampling_mode='alternating_source' requires source_batch_pattern"
+            )
         if any(value <= 0 for value in self.task_sampling_weights.values()):
             raise ValueError("task_sampling_weights must contain only positive values")
         return self
@@ -78,7 +83,7 @@ class TrainConfig(BaseModel):
     method: str = "qlora"
     freeze_vision_encoder: bool = True
     freeze_projector: bool = False
-    num_train_epochs: int = 3
+    num_train_epochs: float = 3
     max_steps: int | None = None
     per_device_train_batch_size: int = 1
     per_device_eval_batch_size: int = 1
@@ -109,6 +114,7 @@ class LoRAConfig(BaseModel):
     alpha: int = 32
     dropout: float = 0.05
     target_modules: list[str] = Field(default_factory=list)
+    initial_adapter_dir: str | None = None
 
 
 class QLoRAConfig(BaseModel):
@@ -164,6 +170,9 @@ class TrainingPathOverrides:
     local_files_only: bool | None = None
     method: str | None = None
     max_seq_length: int | None = None
+    initial_adapter_dir: str | None = None
+    learning_rate: float | None = None
+    num_train_epochs: float | None = None
 
 
 @dataclass(frozen=True)
@@ -178,6 +187,7 @@ class ResolvedTrainingPaths:
     val_file: Path
     image_root: Path
     output_dir: Path
+    initial_adapter_dir: Path | None
 
 
 def expand_env_vars(value: Any, *, allow_unresolved: bool = False) -> Any:
@@ -251,6 +261,7 @@ def apply_training_overrides(
     model_updates: dict[str, Any] = {}
     data_updates: dict[str, Any] = {}
     train_updates: dict[str, Any] = {}
+    lora_updates: dict[str, Any] = {}
     if overrides.model_dir is not None:
         model_updates["model_dir"] = overrides.model_dir
         if overrides.processor_dir is None:
@@ -277,12 +288,19 @@ def apply_training_overrides(
         train_updates["max_steps"] = overrides.max_steps
     if overrides.method is not None:
         train_updates["method"] = overrides.method
+    if overrides.learning_rate is not None:
+        train_updates["learning_rate"] = overrides.learning_rate
+    if overrides.num_train_epochs is not None:
+        train_updates["num_train_epochs"] = overrides.num_train_epochs
+    if overrides.initial_adapter_dir is not None:
+        lora_updates["initial_adapter_dir"] = overrides.initial_adapter_dir
 
     return config.model_copy(
         update={
             "model": config.model.model_copy(update=model_updates),
             "data": config.data.model_copy(update=data_updates),
             "training": config.training.model_copy(update=train_updates),
+            "lora": config.lora.model_copy(update=lora_updates),
         }
     )
 
@@ -301,6 +319,11 @@ def resolve_training_paths(
     processor_source = (
         str(processor_dir) if processor_dir is not None else str(config.model.processor_id or "")
     )
+    initial_adapter_dir = (
+        resolve_path(config.lora.initial_adapter_dir, base_dir)
+        if config.lora.initial_adapter_dir
+        else None
+    )
     if not model_source:
         raise ValueError("Model source is empty. Set model_dir or model_id.")
     if not processor_source:
@@ -314,4 +337,5 @@ def resolve_training_paths(
         val_file=resolve_path(config.data.val_file, base_dir),
         image_root=resolve_path(config.data.image_root, base_dir),
         output_dir=resolve_path(config.training.output_dir, base_dir),
+        initial_adapter_dir=initial_adapter_dir,
     )

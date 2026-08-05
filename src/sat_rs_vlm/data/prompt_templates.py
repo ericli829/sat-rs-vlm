@@ -24,6 +24,10 @@ CAPTION_INSTRUCTION = (
     "Focus on the main land-cover types, objects, and spatial layout."
 )
 SCENE_FORMAT_SUFFIX = "Answer with the scene type only. Do not include any other text."
+CHANGE_DESCRIPTION_INSTRUCTION = (
+    "The first image is before the change and the second image is after the change. "
+    "Describe all visible changes concisely. If there is no change, state that clearly."
+)
 
 
 def detection_instruction(referring: str) -> str:
@@ -68,6 +72,12 @@ def strengthen_instruction(task_type: str, instruction: str) -> str:
         return text if "1-3 concise sentences" in text else CAPTION_INSTRUCTION
     if task == "scene_classification":
         return scene_instruction(text)
+    if task == "change_detection":
+        return (
+            text
+            if "first image is before the change" in text.lower()
+            else f"{text} {CHANGE_DESCRIPTION_INSTRUCTION}".strip()
+        )
     return text
 
 

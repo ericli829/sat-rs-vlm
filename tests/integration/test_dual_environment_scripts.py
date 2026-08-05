@@ -20,6 +20,7 @@ PROJECT_ROOT = Path(__file__).parents[2]
         "scripts/training/run_train.py",
         "scripts/training/run_smoke_train.py",
         "scripts/training/resume_train.py",
+        "scripts/data/prepare_multisource_training_data.py",
     ],
 )
 def test_python_entrypoint_help(relative: str) -> None:
@@ -39,6 +40,9 @@ def test_shell_scripts_exist_and_parse_when_bash_is_available() -> None:
         PROJECT_ROOT / "scripts/environment/activate_autodl_python.sh",
         PROJECT_ROOT / "scripts/training/run_autodl_train.sh",
         PROJECT_ROOT / "scripts/training/run_autodl_full_pipeline.sh",
+        PROJECT_ROOT / "scripts/training/run_autodl_levircc_train.sh",
+        PROJECT_ROOT / "scripts/training/run_autodl_levircc_replay.sh",
+        PROJECT_ROOT / "scripts/evaluation/run_autodl_replay_eval.sh",
         PROJECT_ROOT / "scripts/storage/sync_to_local_disk.sh",
         PROJECT_ROOT / "scripts/storage/backup_results.sh",
     ]

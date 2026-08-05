@@ -12,7 +12,7 @@ from sat_rs_vlm.data.task_protocol import (
     parse_count,
     parse_detection,
 )
-from sat_rs_vlm.evaluation.metrics import score_detection, summarize_predictions
+from sat_rs_vlm.evaluation.metrics import score_detection, score_sample, summarize_predictions
 
 
 @pytest.mark.parametrize(
@@ -100,3 +100,15 @@ def test_detection_metrics_separate_json_range_label_and_iou() -> None:
     assert metrics["valid_coordinate_range"] == 1.0
     assert metrics["mean_iou"] == 1.0
     assert metrics["detection_exact_at_0_5"] == 1.0
+
+
+def test_change_detection_uses_caption_metrics() -> None:
+    score = score_sample(
+        "change_detection",
+        "two buildings were added",
+        "two buildings were added near the road",
+    )
+
+    assert score["bleu_1"] > 0
+    assert score["rouge_l"] > 0
+    assert "exact_match" not in score

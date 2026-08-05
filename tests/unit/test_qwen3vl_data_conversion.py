@@ -31,7 +31,9 @@ def test_convert_two_image_change_sample() -> None:
     content = converted["messages"][0]["content"]
     assert content[0]["type"] == "image"
     assert content[1]["type"] == "image"
-    assert content[2] == {"type": "text", "text": "第一张为变化前，第二张为变化后。请描述变化。"}
+    assert content[2]["type"] == "text"
+    assert content[2]["text"].startswith("第一张为变化前，第二张为变化后。请描述变化。")
+    assert "If there is no change, state that clearly." in content[2]["text"]
     assert converted["task_type"] == "change_detection"
 
 

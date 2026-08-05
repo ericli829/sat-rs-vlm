@@ -49,11 +49,17 @@ def test_cli_override_replaces_unresolved_env(tmp_path: Path) -> None:
             train_file=str(tmp_path / "train.jsonl"),
             val_file=str(tmp_path / "val.jsonl"),
             image_root=str(tmp_path),
+            initial_adapter_dir=str(tmp_path / "adapter"),
+            learning_rate=2e-5,
+            num_train_epochs=1,
         ),
     )
     paths = resolve_training_paths(config)
     assert paths.model_dir == tmp_path / "model"
     assert paths.train_file == tmp_path / "train.jsonl"
+    assert paths.initial_adapter_dir == tmp_path / "adapter"
+    assert config.training.learning_rate == 2e-5
+    assert config.training.num_train_epochs == 1
 
 
 def test_relative_path_resolution(tmp_path: Path) -> None:

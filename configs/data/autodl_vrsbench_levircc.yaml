@@ -1,0 +1,34 @@
+common_image_root: "/root/autodl-tmp/datasets"
+seed: 42
+
+output:
+  train_file: "/root/autodl-tmp/sat-rs-vlm/data/processed/multisource/vrsbench_levircc_train.jsonl"
+  validation_file: "/root/autodl-tmp/sat-rs-vlm/data/processed/multisource/vrsbench_levircc_val.jsonl"
+  report_file: "/root/autodl-tmp/sat-rs-vlm/data/processed/multisource/vrsbench_levircc_report.json"
+
+sources:
+  - name: "VRSBench"
+    image_root: "/root/autodl-tmp/datasets/VRSBench"
+    train_file: "/root/autodl-tmp/sat-rs-vlm/data/processed/qwen3vl_train.jsonl"
+    validation_file: "/root/autodl-tmp/sat-rs-vlm/data/processed/qwen3vl_val.jsonl"
+    validation_samples: 1024
+    validation_group_by_images: false
+    training_group_by_images: true
+    training_task_quotas:
+      detection: 12000
+      counting: 8000
+      captioning: 6000
+      vqa: 13720
+      scene_classification: 1200
+
+  - name: "LEVIR-CC"
+    image_root: "/root/autodl-tmp/datasets/LEVIR-CC"
+    train_file: "/root/autodl-tmp/datasets/LEVIR-CC/annotations/levircc_train.jsonl"
+    validation_file: "/root/autodl-tmp/datasets/LEVIR-CC/annotations/levircc_val.jsonl"
+    validation_samples: 1333
+    validation_group_by_images: true
+    training_samples_per_image_group: 2
+    instruction_override: >-
+      The first image is before the change and the second image is after the
+      change. Describe all visible changes concisely. If there is no change,
+      state that clearly.

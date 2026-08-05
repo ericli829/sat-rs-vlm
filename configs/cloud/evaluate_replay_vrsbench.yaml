@@ -1,0 +1,33 @@
+model:
+  base_model: "/root/autodl-tmp/models/Qwen3-VL-2B-Instruct"
+  processor_id: "/root/autodl-tmp/models/Qwen3-VL-2B-Instruct"
+  local_files_only: true
+  trust_remote_code: true
+  torch_dtype: "bfloat16"
+  device_map: "auto"
+  attn_implementation: "sdpa"
+
+data:
+  eval_file: "/root/autodl-tmp/sat-rs-vlm/data/processed/qwen3vl_val.jsonl"
+  image_root: "/root/autodl-tmp/datasets/VRSBench"
+  max_seq_length: 1024
+  max_eval_samples: null
+  eval_batch_size: 16
+  group_by_task: true
+  log_every_samples: 100
+
+generation:
+  max_new_tokens: 128
+  task_max_new_tokens:
+    captioning: 128
+    detection: 64
+    counting: 16
+    scene_classification: 32
+    vqa: 64
+  do_sample: false
+  temperature: 0.0
+  num_beams: 1
+
+output:
+  summary_file: "/root/autodl-tmp/eval/replay/vrsbench/summary.json"
+  predictions_file: "/root/autodl-tmp/eval/replay/vrsbench/predictions.jsonl"
