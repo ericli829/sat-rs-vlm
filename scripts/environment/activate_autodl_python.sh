@@ -13,7 +13,12 @@ activate_autodl_python() {
       echo "Could not activate Conda environment: $env_name" >&2
       return 1
     }
-    selected_python="$(command -v python)"
+    hash -r
+    selected_python="${CONDA_PREFIX:-}/bin/python"
+    if [[ ! -x "$selected_python" ]]; then
+      echo "Activated Conda environment has no executable Python: $selected_python" >&2
+      return 1
+    fi
     if [[ -n "$configured_python" && "$configured_python" != "$selected_python" ]]; then
       echo "Ignoring stale AUTODL_PYTHON from the environment file: $configured_python" >&2
     fi
