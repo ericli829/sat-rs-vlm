@@ -4,16 +4,30 @@
 activate_autodl_python() {
   local env_name="${1:-rs-vlm}"
   local project_root="${PROJECT_ROOT:-/root/autodl-tmp/sat-rs-vlm}"
-  local selected_python="${AUTODL_PYTHON:-}"
+  local configured_python="${AUTODL_PYTHON:-}"
+  local selected_python=""
 
-  if [[ -z "$selected_python" ]]; then
-    command -v conda >/dev/null 2>&1 || {
-      echo "conda is required when AUTODL_PYTHON is not configured." >&2
+  if command -v conda >/dev/null 2>&1; then
+    source "$(conda info --base)/etc/profile.d/conda.sh"
+    conda activate "$env_name" || {
+      echo "Could not activate Conda environment: $env_name" >&2
       return 1
     }
-    source "$(conda info --base)/etc/profile.d/conda.sh"
-    conda activate "$env_name"
     selected_python="$(command -v python)"
+    if [[ -n "$configured_python" && "$configured_python" != "$selected_python" ]]; then
+      echo "Ignoring stale AUTODL_PYTHON from the environment file: $configured_python" >&2
+    fi
+  elif [[ -n "$configured_python" ]]; then
+    selected_python="$configured_python"
+  else
+    echo "conda is required when AUTODL_PYTHON is not configured." >&2
+    return 1
+  fi
+
+  if [[ -n "${CONDA_PREFIX:-}" && "$selected_python" != "$CONDA_PREFIX/bin/python" ]]; then
+    echo "Conda activation selected an unexpected Python: $selected_python" >&2
+    echo "Expected: $CONDA_PREFIX/bin/python" >&2
+    return 1
   fi
 
   if [[ "$selected_python" != /* ]]; then
