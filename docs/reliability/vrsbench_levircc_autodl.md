@@ -27,6 +27,7 @@ test -d /root/autodl-tmp/datasets/LEVIR-CC/images/val/B
 "$AUTODL_PYTHON" scripts/data/build_reliability_eval_manifest.py \
   --config configs/reliability/experiments/lora_bitflip.yaml \
   --environment autodl \
+  --output /root/autodl-tmp/datasets/project_metadata/reliability/vrsbench_levircc_eval.jsonl \
   --overwrite
 
 cat /root/autodl-tmp/datasets/project_metadata/reliability/vrsbench_levircc_eval.stats.json

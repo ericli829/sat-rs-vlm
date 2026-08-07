@@ -70,6 +70,26 @@ def _load(args: argparse.Namespace) -> tuple[dict[str, Any], PathConfig]:
     return config, paths
 
 
+def _output_path(data: dict[str, Any], dataset_root: Path, *, multisource: bool) -> str:
+    configured = data.get("reliability_eval_manifest")
+    if configured:
+        return str(configured)
+    if multisource:
+        return str(
+            dataset_root
+            / "project_metadata"
+            / "reliability"
+            / "vrsbench_levircc_eval.jsonl"
+        )
+    legacy = data.get("eval_manifest")
+    if legacy:
+        return str(legacy)
+    raise ValueError(
+        "Reliability output path is not configured; set "
+        "data.reliability_eval_manifest or data.eval_manifest"
+    )
+
+
 def main() -> int:
     args = parse_args()
     config, paths = _load(args)
@@ -79,6 +99,7 @@ def main() -> int:
     if dataset_root is None:
         raise ValueError("Dataset root is not configured")
     raw_sources = data.get("reliability_sources")
+    output_path = _output_path(data, Path(dataset_root), multisource=bool(raw_sources))
     if raw_sources:
         sources = [dict(source) for source in list(raw_sources)]
         if args.manifest:
@@ -98,7 +119,7 @@ def main() -> int:
         statistics = build_multisource_reliability_eval_manifest(
             dataset_root,
             sources,
-            output_path=data["reliability_eval_manifest"],
+            output_path=output_path,
             samples_per_task=int(data.get("samples_per_task", 20)),
             seed=int(experiment.get("seed", 2026)),
             overwrite=args.overwrite,
@@ -108,7 +129,7 @@ def main() -> int:
             dataset_root,
             data["dataset_manifest"],
             source_split=str(data.get("eval_split", "validation")),
-            output_path=data["reliability_eval_manifest"],
+            output_path=output_path,
             samples_per_task=int(data.get("samples_per_task", 20)),
             seed=int(experiment.get("seed", 2026)),
             overwrite=args.overwrite,

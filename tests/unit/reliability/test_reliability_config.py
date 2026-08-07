@@ -1,8 +1,18 @@
+import importlib.util
 from pathlib import Path
 
 from sat_rs_vlm.configuration.layered import LayeredConfigRequest, load_layered_config
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _load_manifest_builder():
+    script = PROJECT_ROOT / "scripts/data/build_reliability_eval_manifest.py"
+    spec = importlib.util.spec_from_file_location("build_reliability_eval_manifest", script)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_local_smoke_config_expands_environment() -> None:
@@ -82,3 +92,16 @@ def test_formal_bitflip_config_includes_vrsbench_and_levircc() -> None:
     assert config["data"]["eval_batch_size"] == 8
     assert [source["name"] for source in sources] == ["VRSBench", "LEVIR-CC"]
     assert sources[1]["task_samples"] == {"change_detection": 20}
+
+
+def test_manifest_builder_derives_multisource_output_when_field_is_missing() -> None:
+    builder = _load_manifest_builder()
+    output = builder._output_path(
+        {"eval_manifest": "/old/vrsbench/eval.jsonl", "reliability_sources": []},
+        Path("/mnt/data"),
+        multisource=True,
+    )
+
+    assert Path(output) == Path(
+        "/mnt/data/project_metadata/reliability/vrsbench_levircc_eval.jsonl"
+    )
