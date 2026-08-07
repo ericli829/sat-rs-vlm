@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 from sat_rs_vlm.domain.tasks import TaskType
-from sat_rs_vlm.evaluation.metrics import score_counting, score_detection
+from sat_rs_vlm.evaluation.metrics import score_caption, score_counting, score_detection
 from sat_rs_vlm.models.reliability.output_validator import (
     validate_prediction,
 )
@@ -89,6 +89,11 @@ def _rate(rows: list[dict[str, Any]], field: str) -> float | None:
     return sum(bool(row.get(field)) for row in rows) / len(rows) if rows else None
 
 
+def _mean(values: Iterable[float]) -> float | None:
+    numbers = list(values)
+    return sum(numbers) / len(numbers) if numbers else None
+
+
 def _task_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     empty_rate = (
         sum(not str(row.get("fault_prediction", "")).strip() for row in rows) / len(rows)
@@ -122,7 +127,8 @@ def _task_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
             else None
         ),
     }
-    task = str(rows[0].get("task_type", "")) if rows else ""
+    tasks = {str(row.get("task_type", "")) for row in rows}
+    task = next(iter(tasks)) if len(tasks) == 1 else ""
     if task == TaskType.COUNTING.value:
         errors: list[float] = []
         correct = 0
@@ -151,7 +157,44 @@ def _task_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         metrics["detection_acc_at_0_5"] = (
             sum(iou >= 0.5 for iou in ious) / len(ious) if ious else None
         )
+    if task in {TaskType.CAPTIONING.value, TaskType.CHANGE_DETECTION.value}:
+        clean_scores = [
+            score_caption(
+                str(row.get("clean_prediction", "")),
+                str(row.get("reference", "")),
+            )
+            for row in rows
+        ]
+        fault_scores = [
+            score_caption(
+                str(row.get("fault_prediction", "")),
+                str(row.get("reference", "")),
+            )
+            for row in rows
+        ]
+        for metric_name in ("bleu_1", "bleu_4", "rouge_l"):
+            clean_value = _mean(float(score[metric_name]) for score in clean_scores)
+            fault_value = _mean(float(score[metric_name]) for score in fault_scores)
+            metrics[f"clean_{metric_name}"] = clean_value
+            metrics[f"fault_{metric_name}"] = fault_value
+            metrics[f"{metric_name}_drop"] = (
+                clean_value - fault_value
+                if clean_value is not None and fault_value is not None
+                else None
+            )
     return metrics
+
+
+def _dataset_name(row: Mapping[str, Any]) -> str:
+    metadata = row.get("metadata", {})
+    if not isinstance(metadata, Mapping):
+        return "unknown"
+    return str(
+        metadata.get("reliability_source")
+        or metadata.get("dataset")
+        or metadata.get("training_source")
+        or "unknown"
+    )
 
 
 def summarize_reliability(
@@ -165,11 +208,17 @@ def summarize_reliability(
 
     rows = list(pairs)
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    grouped_by_dataset: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
         grouped[str(row.get("task_type", TaskType.UNKNOWN.value))].append(row)
+        grouped_by_dataset[_dataset_name(row)].append(row)
     overall = _task_metrics(rows)
     by_task = {task: _task_metrics(task_rows) for task, task_rows in sorted(grouped.items())}
-    for section in (overall, *by_task.values()):
+    by_dataset = {
+        dataset: _task_metrics(dataset_rows)
+        for dataset, dataset_rows in sorted(grouped_by_dataset.items())
+    }
+    for section in (overall, *by_task.values(), *by_dataset.values()):
         for key, value in section.items():
             if isinstance(value, float) and not math.isfinite(value):
                 section[key] = None
@@ -180,4 +229,5 @@ def summarize_reliability(
         "run_id": run_id,
         "overall": overall,
         "by_task": by_task,
+        "by_dataset": by_dataset,
     }

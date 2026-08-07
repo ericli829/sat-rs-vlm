@@ -53,3 +53,32 @@ def test_cloud_config_loads_without_accessing_cloud_paths() -> None:
     assert config["experiment"]["execution_mode"] == "smoke_mock"
     assert config["model"]["base_model"] == "/mnt/models/Qwen3-VL-2B-Instruct"
     assert config["data"]["dataset_root"] == "/mnt/data/VRSBench"
+
+
+def test_formal_bitflip_config_includes_vrsbench_and_levircc() -> None:
+    environment = {
+        "PROJECT_ROOT": "/workspace/sat-rs-vlm",
+        "DATA_ROOT": "/mnt/data",
+        "MODEL_ROOT": "/mnt/models",
+        "OUTPUT_ROOT": "/mnt/outputs",
+    }
+    config = load_layered_config(
+        LayeredConfigRequest(
+            base_configs=(
+                PROJECT_ROOT / "configs/base/default.yaml",
+                PROJECT_ROOT / "configs/reliability/base.yaml",
+            ),
+            environment_config=PROJECT_ROOT / "configs/cloud/autodl.yaml",
+            experiment_config=(
+                PROJECT_ROOT / "configs/reliability/experiments/lora_bitflip.yaml"
+            ),
+            project_root=PROJECT_ROOT,
+        ),
+        environ=environment,
+    )
+
+    sources = config["data"]["reliability_sources"]
+    assert config["data"]["dataset_root"] == "/mnt/data"
+    assert config["data"]["eval_batch_size"] == 8
+    assert [source["name"] for source in sources] == ["VRSBench", "LEVIR-CC"]
+    assert sources[1]["task_samples"] == {"change_detection": 20}

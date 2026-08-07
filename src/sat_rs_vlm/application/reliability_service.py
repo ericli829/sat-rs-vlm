@@ -472,6 +472,9 @@ class ReliabilityExperimentService:
                 "image_root": str(dataset_root),
                 "max_eval_samples": data.get("max_eval_samples"),
                 "max_seq_length": int(data.get("max_seq_length", 1024)),
+                "eval_batch_size": int(data.get("eval_batch_size", 1)),
+                "group_by_task": bool(data.get("group_by_task", True)),
+                "log_every_samples": int(data.get("log_every_samples", 100)),
             },
             "generation": _as_dict(self.config.get("generation")),
             "output": {

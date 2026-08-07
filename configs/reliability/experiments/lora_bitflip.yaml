@@ -8,10 +8,44 @@ model:
   adapter_path: ${OUTPUT_ROOT}/training/lora_baseline/best_adapter
 
 data:
-  dataset_root: ${DATA_ROOT}/VRSBench
-  dataset_manifest: ${DATA_ROOT}/VRSBench/project_metadata/dataset_manifest.json
-  eval_manifest: ${DATA_ROOT}/VRSBench/project_metadata/reliability/eval.jsonl
+  dataset_root: ${DATA_ROOT}
+  eval_manifest: ${DATA_ROOT}/project_metadata/reliability/vrsbench_levircc_eval.jsonl
+  reliability_eval_manifest: ${DATA_ROOT}/project_metadata/reliability/vrsbench_levircc_eval.jsonl
   eval_split: validation
+  samples_per_task: 20
+  eval_batch_size: 8
+  group_by_task: true
+  log_every_samples: 20
+  reliability_sources:
+    - name: VRSBench
+      dataset_root: ${DATA_ROOT}/VRSBench
+      dataset_manifest: ${DATA_ROOT}/VRSBench/project_metadata/dataset_manifest.json
+      source_split: validation
+      task_samples:
+        captioning: 20
+        vqa: 20
+        counting: 20
+        detection: 20
+        scene_classification: 20
+    - name: LEVIR-CC
+      dataset_root: ${DATA_ROOT}/LEVIR-CC
+      eval_file: ${DATA_ROOT}/LEVIR-CC/annotations/levircc_val.jsonl
+      source_split: validation
+      group_by_images: true
+      task_samples:
+        change_detection: 20
+
+generation:
+  max_new_tokens: 128
+  task_max_new_tokens:
+    captioning: 128
+    change_detection: 128
+    detection: 64
+    counting: 16
+    scene_classification: 32
+    vqa: 64
+  do_sample: false
+  num_beams: 1
 
 fault:
   bit_flip_counts:

@@ -10,7 +10,10 @@ from typing import Any
 
 from sat_rs_vlm.configuration.layered import LayeredConfigRequest, load_layered_config
 from sat_rs_vlm.configuration.paths import PathConfig
-from sat_rs_vlm.data.reliability_manifest import build_reliability_eval_manifest
+from sat_rs_vlm.data.reliability_manifest import (
+    build_multisource_reliability_eval_manifest,
+    build_reliability_eval_manifest,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -75,15 +78,41 @@ def main() -> int:
     dataset_root = args.dataset_root or paths.dataset_root
     if dataset_root is None:
         raise ValueError("Dataset root is not configured")
-    statistics = build_reliability_eval_manifest(
-        dataset_root,
-        data["dataset_manifest"],
-        source_split=str(data.get("eval_split", "validation")),
-        output_path=data["reliability_eval_manifest"],
-        samples_per_task=int(data.get("samples_per_task", 20)),
-        seed=int(experiment.get("seed", 2026)),
-        overwrite=args.overwrite,
-    )
+    raw_sources = data.get("reliability_sources")
+    if raw_sources:
+        sources = [dict(source) for source in list(raw_sources)]
+        if args.manifest:
+            sources[0]["dataset_manifest"] = str(args.manifest.resolve())
+        if args.source_split:
+            for source in sources:
+                source["source_split"] = args.source_split
+        if args.samples_per_task is not None:
+            for source in sources:
+                configured_tasks = source.get("task_samples")
+                if isinstance(configured_tasks, dict):
+                    source["task_samples"] = {
+                        str(task): args.samples_per_task for task in configured_tasks
+                    }
+                else:
+                    source["samples_per_task"] = args.samples_per_task
+        statistics = build_multisource_reliability_eval_manifest(
+            dataset_root,
+            sources,
+            output_path=data["reliability_eval_manifest"],
+            samples_per_task=int(data.get("samples_per_task", 20)),
+            seed=int(experiment.get("seed", 2026)),
+            overwrite=args.overwrite,
+        )
+    else:
+        statistics = build_reliability_eval_manifest(
+            dataset_root,
+            data["dataset_manifest"],
+            source_split=str(data.get("eval_split", "validation")),
+            output_path=data["reliability_eval_manifest"],
+            samples_per_task=int(data.get("samples_per_task", 20)),
+            seed=int(experiment.get("seed", 2026)),
+            overwrite=args.overwrite,
+        )
     print(json.dumps(statistics, ensure_ascii=False, indent=2))
     return 0
 
