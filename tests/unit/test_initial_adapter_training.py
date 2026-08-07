@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from scripts.train_qwen3vl_lora import apply_lora
+from scripts.train_qwen3vl_lora import apply_lora, prune_training_checkpoints
 
 from sat_rs_vlm.training.config import ResolvedTrainingPaths
 
@@ -46,3 +46,20 @@ def test_apply_lora_loads_existing_adapter_as_trainable(tmp_path: Path) -> None:
         "path": str(adapter),
         "is_trainable": True,
     }
+
+
+def test_prune_training_checkpoints_keeps_newest_resume_points(tmp_path: Path) -> None:
+    output = tmp_path / "output"
+    for step in (500, 1000, 1500, 2000):
+        checkpoint = output / f"checkpoint-{step}"
+        checkpoint.mkdir(parents=True)
+        (checkpoint / "trainer_state.json").write_text("{}", encoding="utf-8")
+    unrelated = output / "processor"
+    unrelated.mkdir()
+
+    removed = prune_training_checkpoints(output, keep=2)
+
+    assert {path.name for path in removed} == {"checkpoint-500", "checkpoint-1000"}
+    assert (output / "checkpoint-1500").is_dir()
+    assert (output / "checkpoint-2000").is_dir()
+    assert unrelated.is_dir()

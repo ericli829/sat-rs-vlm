@@ -85,6 +85,14 @@ def test_safetensors_adapter_injection_preserves_source_and_reloads(tmp_path: Pa
     tensor_state = {name: value for name, value in state.items() if hasattr(value, "dtype")}
     save_safetensors_state(tensor_state, source / "adapter_model.safetensors", {"owner": "test"})
     (source / "adapter_config.json").write_text(json.dumps({"peft_type": "LORA"}), encoding="utf-8")
+    (source / "strategy_manifest.json").write_text("{}", encoding="utf-8")
+    processor = source / "processor"
+    processor.mkdir()
+    (processor / "processor_config.json").write_text("{}", encoding="utf-8")
+    historical = source / "checkpoint-500"
+    historical.mkdir()
+    (historical / "adapter_model.safetensors").write_bytes(b"historical checkpoint")
+    (source / "optimizer.pt").write_bytes(b"optimizer state")
     source_hash = file_sha256(source / "adapter_model.safetensors")
 
     report = inject_safetensors_adapter(
@@ -102,3 +110,7 @@ def test_safetensors_adapter_injection_preserves_source_and_reloads(tmp_path: Pa
     assert reloaded
     assert (tmp_path / "fault" / "adapter_config.json").is_file()
     assert (tmp_path / "fault" / "fault_records.jsonl").is_file()
+    assert (tmp_path / "fault" / "strategy_manifest.json").is_file()
+    assert (tmp_path / "fault" / "processor/processor_config.json").is_file()
+    assert not (tmp_path / "fault" / "checkpoint-500").exists()
+    assert not (tmp_path / "fault" / "optimizer.pt").exists()

@@ -258,6 +258,23 @@ def save_safetensors_state(
     save_file(tensors, str(Path(path)), metadata=metadata)
 
 
+def _copy_deployable_adapter(source: Path, destination: Path) -> None:
+    """Copy only files required to load and audit a deployed LoRA adapter."""
+
+    destination.mkdir(parents=True, exist_ok=False)
+    weight_suffixes = {".safetensors", ".bin", ".pt", ".pth"}
+    for entry in source.iterdir():
+        if entry.is_file():
+            if (
+                entry.suffix.lower() in weight_suffixes
+                and entry.name != "adapter_model.safetensors"
+            ):
+                continue
+            shutil.copy2(entry, destination / entry.name)
+        elif entry.is_dir() and entry.name == "processor":
+            shutil.copytree(entry, destination / entry.name)
+
+
 def inject_safetensors_adapter(
     source_dir: str | Path,
     output_dir: str | Path,
@@ -301,7 +318,7 @@ def inject_safetensors_adapter(
     source_hash_before = file_sha256(source_weights)
     rule = selector or ParameterSelector(lora_scope="all")
     try:
-        shutil.copytree(source, temporary)
+        _copy_deployable_adapter(source, temporary)
         clean_state, metadata = load_safetensors_state(source_weights)
         fault_state, records = inject_state_dict_bitflips(
             clean_state,

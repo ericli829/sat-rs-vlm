@@ -25,6 +25,7 @@ data:
 fault:
   target: lora_adapter
   injection_mode: random
+  retain_temporary_adapters: false
   bit_flip_counts:
     - 1
     - 10

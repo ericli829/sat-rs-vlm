@@ -582,12 +582,16 @@ class ReliabilityExperimentService:
         recovered_rows_by_condition: dict[str, list[dict[str, Any]]] = {}
         recovery_reports: list[dict[str, Any]] = []
         adapter_reports: list[dict[str, Any]] = []
+        cleanup_temporary_adapters = mode == "full" and not bool(
+            fault_config.get("retain_temporary_adapters", False)
+        )
         for count in counts:
             for repeat in range(repeats):
                 condition = f"bits_{count}_repeat_{repeat}"
                 fault_adapter = layout.fault_adapters / condition
                 report_path = fault_adapter / "fault_record.json"
-                if resume and report_path.is_file():
+                fault_weights = fault_adapter / "adapter_model.safetensors"
+                if resume and report_path.is_file() and fault_weights.is_file():
                     report = AdapterInjectionReport.model_validate_json(
                         report_path.read_text(encoding="utf-8")
                     )
@@ -600,11 +604,21 @@ class ReliabilityExperimentService:
                         selector=selector,
                         overwrite=resume,
                     )
+                condition_dir = layout.faults / condition
+                condition_dir.mkdir(parents=True, exist_ok=True)
+                write_json(
+                    condition_dir / "fault_record.json",
+                    report.model_dump(mode="json"),
+                )
+                write_jsonl(
+                    condition_dir / "fault_records.jsonl",
+                    (record.model_dump(mode="json") for record in report.records),
+                )
                 adapter_reports.append({"condition": condition, **report.model_dump(mode="json")})
                 all_records.extend(report.records)
                 if mode == "full":
                     assert eval_config is not None
-                    evaluation_dir = layout.faults / condition / "evaluation"
+                    evaluation_dir = condition_dir / "evaluation"
                     predictions = evaluation_dir / "predictions.jsonl"
                     if not (resume and predictions.is_file()):
                         predictions = runner.run(
@@ -661,6 +675,16 @@ class ReliabilityExperimentService:
                         metadata,
                     )
                     adapter_reports[-1]["weight_clamp"] = clamp_report.model_dump(mode="json")
+
+                if cleanup_temporary_adapters:
+                    temporary_adapters = [fault_adapter]
+                    if mode in {"recover", "full"} and "checksum_recovery" in strategies:
+                        temporary_adapters.append(layout.faults / "recovered" / condition)
+                    if mode == "full" and "weight_clamp" in strategies:
+                        temporary_adapters.append(layout.faults / "weight_clamp" / condition)
+                    for temporary_adapter in temporary_adapters:
+                        if temporary_adapter.exists():
+                            shutil.rmtree(temporary_adapter)
 
         write_jsonl(
             layout.faults / "injection_records.jsonl",

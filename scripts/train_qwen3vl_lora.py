@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import time
 from importlib.metadata import PackageNotFoundError, version
@@ -41,6 +42,31 @@ from sat_rs_vlm.training.utils import (
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+CHECKPOINT_DIRECTORY_PATTERN = re.compile(r"^checkpoint-(\d+)$")
+
+
+def prune_training_checkpoints(output_dir: str | Path, keep: int) -> list[Path]:
+    """Remove stale Trainer checkpoints while retaining the newest resume points."""
+
+    root = Path(output_dir)
+    checkpoints: list[tuple[int, Path]] = []
+    if not root.is_dir():
+        return []
+    for child in root.iterdir():
+        match = CHECKPOINT_DIRECTORY_PATTERN.fullmatch(child.name)
+        if child.is_dir() and match:
+            checkpoints.append((int(match.group(1)), child))
+    checkpoints.sort(key=lambda item: item[0], reverse=True)
+    removed: list[Path] = []
+    for _, checkpoint in checkpoints[max(1, keep) :]:
+        shutil.rmtree(checkpoint)
+        removed.append(checkpoint)
+    if removed:
+        print(
+            "Pruned stale training checkpoints: "
+            + ", ".join(path.name for path in removed)
+        )
+    return removed
 
 
 def parse_args() -> argparse.Namespace:
@@ -536,6 +562,7 @@ def train(
     processor_dir = paths.output_dir / "processor"
     processor.save_pretrained(processor_dir)
     trainer.save_state()
+    prune_training_checkpoints(paths.output_dir, config.training.save_total_limit)
     shutil.copyfile(config_path, paths.output_dir / "training_config_source.yaml")
     (paths.output_dir / "training_config.yaml").write_text(
         yaml.safe_dump(
