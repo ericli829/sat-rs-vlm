@@ -62,6 +62,45 @@ python scripts/evaluation/compare_evaluations.py `
 
 比较前会强制核验ID集合、任务类型和参考答案，随后输出逐样本改善/退化结果和配对Bootstrap 95%置信区间。
 
+## 统一绘图
+
+绘图工具读取一个或多个完整评测目录；每个目录必须包含 `summary.json`，存在
+`evaluated_predictions.jsonl` 时会额外绘制Grounding IoU CDF和Counting误差分布。配对比较目录必须包含
+`comparison_summary.json`。
+
+安装仓库已有的可选绘图依赖：
+
+```powershell
+python -m pip install -e ".[reliability-plot]"
+```
+
+运行示例：
+
+```powershell
+python scripts/evaluation/plot_evaluation_results.py `
+  --evaluation baseline=outputs/evaluation/baseline/v1.5 `
+  --evaluation candidate=outputs/evaluation/candidate/v1.5 `
+  --evaluation levir=outputs/evaluation/levir/v1.5 `
+  --comparison vrsbench=outputs/evaluation/comparisons/baseline-vs-candidate `
+  --output-dir outputs/evaluation/figures/v1.5 `
+  --formats png svg
+```
+
+`--evaluation`与`--comparison`均使用 `LABEL=DIR` 格式。默认拒绝写入非空输出目录；只有显式指定
+`--overwrite`时才允许替换同名生成文件，不会删除目录中的其他文件。
+
+输出包括：
+
+- 任务样本分布、VRSBench核心指标和任务短板图；
+- Grounding IoU CDF、Counting误差方向和VQA QA-Type准确率；
+- Caption质量/长度与参考文本语义诊断；
+- 配对改善置信区间和Win/Tie/Loss；
+- LEVIR-CC混淆矩阵、二分类指标和变化描述指标；
+- 测量口径一致时的Mean/P50/P95延迟图；
+- 记录输入哈希、契约版本、生成文件和跳过原因的 `plot_manifest.json`。
+
+图中文字使用英文以避免跨平台字体差异。所有高级语义图均明确标为参考文本内部诊断，不表示图像级事实正确率。
+
 ## 指标边界
 
 - Grounding、Counting、VQA、Caption和LEVIR-CC当前自动指标均为内部指标。
@@ -74,5 +113,6 @@ python scripts/evaluation/compare_evaluations.py `
 
 ```powershell
 pytest tests/unit/evaluation
+pytest tests/integration/evaluation/test_plot_evaluation_cli.py
 ruff check src/sat_rs_vlm/evaluation scripts/evaluation tests/unit/evaluation
 ```
