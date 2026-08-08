@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PredictionRecord(BaseModel):
     """单条预测记录；扩展字段不能改变六个基础字段的语义。"""
+
+    model_config = ConfigDict(extra="allow")
 
     id: str
     task_type: str
