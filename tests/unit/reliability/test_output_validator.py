@@ -45,3 +45,23 @@ def test_vqa_type_constraints() -> None:
         in validate_prediction("vqa", "maybe", vqa_question_type="yes_no").errors
     )
     assert validate_prediction("vqa", "north", vqa_question_type="direction").valid
+
+
+def test_degenerate_symbol_output_is_invalid() -> None:
+    result = validate_prediction("captioning", "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+
+    assert not result.valid
+    assert "degenerate_repeated_character" in result.errors
+    assert "degenerate_symbol_only" in result.errors
+
+
+def test_degenerate_repeated_token_output_is_invalid() -> None:
+    result = validate_prediction("captioning", "airport airport airport airport airport airport airport")
+
+    assert not result.valid
+    assert "degenerate_repeated_token" in result.errors
+
+
+def test_short_normal_answers_are_not_degenerate() -> None:
+    assert validate_prediction("vqa", "yes").valid
+    assert validate_prediction("counting", "3").valid

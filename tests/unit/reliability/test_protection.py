@@ -42,3 +42,23 @@ def test_weight_clamp_returns_new_state_and_statistics() -> None:
     assert protected["weight"].tolist() == [-1.0, 0.0, 1.0]
     assert report.experimental
     assert report.clipped_elements == 3
+
+
+def test_output_guard_rejects_degenerate_generation() -> None:
+    valid = "A remote sensing image shows an airport apron."
+    degenerate = "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+
+    guarded = output_guard_vote("captioning", [degenerate, valid, valid], fallback="fallback")
+
+    assert guarded.selected == valid
+    assert guarded.num_valid_inputs == 2
+    assert guarded.rejected == [
+        {
+            "index": 0,
+            "errors": [
+                "degenerate_repeated_character",
+                "degenerate_symbol_only",
+                "degenerate_low_diversity",
+            ],
+        }
+    ]
