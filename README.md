@@ -262,3 +262,5 @@ pytest -q
 - [Bit Flip 可靠性](docs/reliability/README.md)
 - [可靠性命令](docs/reliability/commands.md)
 - [Bit Flip 迁移映射](docs/reliability/bitflip_migration_plan.md)
+- [多任务离线评测 v1.5](docs/evaluation/README.md)
+- [模型评测第一阶段结果](docs/evaluation/phase1_results.md)
