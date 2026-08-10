@@ -1,0 +1,72 @@
+# 量化模型评测配置
+
+# 模型配置
+model:
+  name: "Qwen3-VL-2B-Instruct"
+  # 本地路径 (Windows)
+  local_dir: "D:/Models/Qwen3-VL-2B-Instruct"
+  # 云端路径 (AutoDL)
+  autodl_dir: "/root/autodl-tmp/models/Qwen3-VL-2B-Instruct"
+  dtype: "float32"
+  device_map: "cpu"
+  trust_remote_code: true
+
+# 量化模型配置
+quantized_model:
+  name: "Qwen3-VL-2B-Instruct-LoRA-INT8"
+  # 本地路径 (Windows)
+  local_dir: "D:/models/Qwen3-VL-2B-Instruct-LoRA-INT8"
+  # 云端路径 (AutoDL)
+  autodl_dir: "/root/autodl-tmp/outputs/quantization_int8"
+  is_quantized: true
+
+# 合并模型配置 (量化前基线)
+merged_model:
+  name: "Qwen3-VL-2B-Instruct-LoRA-Merged"
+  # 本地路径 (Windows)
+  local_dir: "D:/models/Qwen3-VL-2B-Instruct-LoRA-Merged"
+  # 云端路径 (AutoDL)
+  autodl_dir: "/root/autodl-tmp/outputs/autodl_lora_4090_bs16_gc_20260804_095914/checkpoints"
+
+# 数据集配置
+data:
+  name: "VRSBench"
+  # 本地路径 (Windows)
+  local_metadata_dir: "D:/project/database/VRSBench/metadata"
+  local_image_dir: "D:/project/database/VRSBench/Images/Images_val"
+  # 云端路径 (AutoDL)
+  autodl_metadata_dir: "/root/autodl-tmp/datasets/VRSBench/metadata"
+  autodl_image_dir: "/root/autodl-tmp/datasets/VRSBench/Images/Images_val"
+  # 评测任务
+  task_type: "vqa"
+
+# 评测配置
+evaluation:
+  # 评测样本数 (null 表示使用全部数据集)
+  # VQA 数据集共有 37409 条样本
+  # 云端完整测试建议使用 null 或较大数值 (如 1000)
+  # 本地快速测试可使用较小数值 (如 20-50)
+  num_samples: null
+  # 最大生成 token 数
+  max_new_tokens: 128
+  # 模型标签 (用于输出文件命名)
+  labels:
+    merged: "merged_baseline"
+    quantized: "quantized_int8"
+
+# 输出配置
+output:
+  # 本地路径 (Windows)
+  local_dir: "reports/eval"
+  # 云端路径 (AutoDL)
+  autodl_dir: "/root/autodl-tmp/outputs/quantization_sensitivity/eval"
+  # 保存格式
+  save_summary: true
+  save_predictions: true
+
+# 环境配置
+environment:
+  # 当前环境: local | autodl
+  current: "local"
+  # 自动检测
+  auto_detect: true

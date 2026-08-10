@@ -1,0 +1,69 @@
+# 量化敏感度测试配置
+
+# 模型配置
+model:
+  name: "Qwen3-VL-2B-Instruct"
+  # 本地路径 (Windows)
+  local_dir: "D:/Models/Qwen3-VL-2B-Instruct"
+  # 云端路径 (AutoDL)
+  autodl_dir: "/root/autodl-tmp/models/Qwen3-VL-2B-Instruct"
+  dtype: "float32"
+  device_map: "cpu"
+  trust_remote_code: true
+
+# 数据集配置
+data:
+  name: "VRSBench"
+  # 本地路径 (Windows)
+  local_metadata_dir: "D:/project/database/VRSBench/metadata"
+  local_image_dir: "D:/project/database/VRSBench/Images/Images_val"
+  # 云端路径 (AutoDL)
+  autodl_metadata_dir: "/root/autodl-tmp/datasets/VRSBench/metadata"
+  autodl_image_dir: "/root/autodl-tmp/datasets/VRSBench/Images/Images_val"
+  # 评测任务
+  task_type: "vqa"
+
+# 测试配置
+test:
+  # 测试方法: component_wise | layer_wise
+  method: "component_wise"
+  # 评测样本数 (null 表示使用全部数据集)
+  # VQA 数据集共有 37409 条样本
+  # 云端完整测试建议使用 null 或较大数值 (如 1000)
+  # 本地快速测试可使用较小数值 (如 20-50)
+  num_samples: null
+  # 层组大小 (仅 layer_wise 方法使用)
+  layer_group_size: 6
+  # 最大生成 token 数
+  max_new_tokens: 128
+
+# 量化配置
+quantization:
+  # 量化方法
+  method: "pytorch_dynamic_int8"
+  # 量化层类型
+  target_modules:
+    - "Linear"
+  # 量化数据类型
+  dtype: "qint8"
+  # 跳过的模块 (视觉编码器对量化敏感)
+  skip_modules:
+    - "visual"
+
+# 输出配置
+output:
+  # 本地路径 (Windows)
+  local_dir: "reports/quantization_sensitivity"
+  # 云端路径 (AutoDL)
+  autodl_dir: "/root/autodl-tmp/outputs/quantization_sensitivity"
+  # 保存格式
+  save_json: true
+  save_markdown: true
+  save_figures: true
+
+# 环境配置
+environment:
+  # 当前环境: local | autodl
+  current: "local"
+  # 自动检测
+  auto_detect: true

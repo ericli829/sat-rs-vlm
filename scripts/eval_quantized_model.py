@@ -85,12 +85,18 @@ def load_quantized_model(model_path: str):
 
 
 def evaluate_model(model, processor, val_data: list, image_dir: str,
-                   num_samples: int = 20, task_type: str = "vqa") -> dict:
+                   num_samples: int = None, task_type: str = "vqa") -> dict:
     """评估模型"""
     from PIL import Image
 
+    # 如果 num_samples 为 None 或 0，使用全部数据
+    if num_samples is None or num_samples <= 0:
+        eval_data = val_data
+    else:
+        eval_data = val_data[:num_samples]
+
     predictions = []
-    for item in val_data[:num_samples]:
+    for item in eval_data:
         try:
             image_id = item.get("image_id")
             if not image_id:

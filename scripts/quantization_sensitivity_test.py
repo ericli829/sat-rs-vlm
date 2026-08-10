@@ -87,12 +87,18 @@ def load_vrsbench_data(data_dir: str, task_type: str = "vqa") -> list:
 
 
 def evaluate_model(model, processor, val_data: list, image_dir: str,
-                   num_samples: int = 20) -> dict:
+                   num_samples: int = None) -> dict:
     """评估模型"""
     from PIL import Image
 
+    # 如果 num_samples 为 None 或 0，使用全部数据
+    if num_samples is None or num_samples <= 0:
+        eval_data = val_data
+    else:
+        eval_data = val_data[:num_samples]
+
     predictions = []
-    for item in val_data[:num_samples]:
+    for item in eval_data:
         try:
             image_id = item.get("image_id")
             if not image_id:
