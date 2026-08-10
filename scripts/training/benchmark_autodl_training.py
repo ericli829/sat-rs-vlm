@@ -288,9 +288,7 @@ def run_candidate(
     )
     memory_safe = memory_fraction is None or memory_fraction <= memory_limit_fraction
     average_utilization = (
-        statistics.fmean(sample["utilization"] for sample in gpu_samples)
-        if gpu_samples
-        else None
+        statistics.fmean(sample["utilization"] for sample in gpu_samples) if gpu_samples else None
     )
     return {
         **asdict(candidate),

@@ -8,7 +8,7 @@ def test_autodl_activation_prefers_named_conda_environment_over_stale_python() -
 
     assert 'conda activate "$env_name"' in text
     assert 'configured_python="${AUTODL_PYTHON:-}"' in text
-    assert 'Ignoring stale AUTODL_PYTHON' in text
+    assert "Ignoring stale AUTODL_PYTHON" in text
     assert "hash -r" in text
     assert 'selected_python="${CONDA_PREFIX:-}/bin/python"' in text
     assert '"$selected_python" != "$CONDA_PREFIX/bin/python"' in text

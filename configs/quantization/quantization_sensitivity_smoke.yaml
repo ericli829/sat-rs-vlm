@@ -1,0 +1,41 @@
+# 无真实模型的配置/资产 dry-run；正式敏感度实验请使用 quantization_eval.yaml。
+model:
+  base_model: "tests/fixtures/miniature_dataset"
+  merged_model: null
+  processor_id: "tests/fixtures/miniature_dataset"
+  local_files_only: true
+  torch_dtype: "float32"
+
+quantization:
+  method: "dynamic_int8"
+  device: "cpu"
+  save_artifact: false
+
+data:
+  eval_file: "tests/fixtures/miniature_dataset/smoke.jsonl"
+  image_root: "tests/fixtures/miniature_dataset"
+  max_eval_samples: 2
+  max_seq_length: 128
+
+generation:
+  do_sample: false
+  max_new_tokens: 16
+
+benchmark:
+  warmup_samples: 0
+  repeats: 1
+  seed: 42
+
+evaluation:
+  contract: "configs/eval/evaluation_contract_v1.5.yaml"
+  semantic: false
+  sample_num: 2
+
+sensitivity:
+  method: "component_wise"
+  layer_group_size: 2
+  skip_modules: []
+  max_groups: 2
+
+output:
+  output_dir: ".tmp/quantization-sensitivity-smoke"

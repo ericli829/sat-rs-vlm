@@ -4,7 +4,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 ROOT = Path(__file__).parents[2]
 SCRIPT = ROOT / "scripts/data/prepare_dataset.py"
 

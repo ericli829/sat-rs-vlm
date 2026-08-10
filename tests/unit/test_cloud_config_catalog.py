@@ -2,8 +2,8 @@ from pathlib import Path
 
 import yaml
 
-from sat_rs_vlm.compression.quantization.config import load_quantization_config
 from sat_rs_vlm.configuration.environment import expand_environment
+from sat_rs_vlm.quantization.config import load_quantization_config
 from sat_rs_vlm.training.config import load_training_config
 
 PROJECT_ROOT = Path(__file__).parents[2]
@@ -34,5 +34,5 @@ def test_training_and_quantization_configs_validate_with_cloud_paths(
         monkeypatch.setenv(name, value)
     for path in sorted((PROJECT_ROOT / "configs/train").glob("*.yaml")):
         load_training_config(path)
-    for path in sorted((PROJECT_ROOT / "configs/compression").glob("*.yaml")):
+    for path in sorted((PROJECT_ROOT / "configs/quantization").glob("*.yaml")):
         load_quantization_config(path, environ=CLOUD_ENV)

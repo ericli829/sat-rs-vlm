@@ -290,3 +290,18 @@ bash scripts/training/run_autodl_train.sh \
 ```
 
 只有 smoke、正式训练和备份全部成功才调用关机；`--auto-shutdown` 不允许脱离备份单独使用。
+
+## 28. AutoDL RTX 4090 LoRA 参数配置
+
+`dev-dqt` 的完整 4090 参数已整理为无绝对路径配置，继续使用现有稳定 LoRA 脚本：
+
+```bash
+source environments/autodl.env
+python scripts/train_qwen3vl_lora.py \
+  --config configs/train/qwen3vl_autodl_4090.yaml
+```
+
+配置默认 batch size 为 16、bf16、gradient checkpointing、cosine scheduler，并把输出写入
+`${OUTPUT_ROOT}/checkpoints/lora/autodl_4090_full`。运行前应先执行环境和资产检查；显存不足时
+优先降低 `per_device_train_batch_size` 并提高 `gradient_accumulation_steps`，保持有效 batch
+size，而不是修改已验证的数据格式或 LoRA target modules。

@@ -1,52 +1,120 @@
-# Qwen3-VL INT8 量化实验
+# Qwen3-VL 量化与统一评估
 
-## 后端边界
+## 架构边界
 
-| 后端 | 设备 | 方法 | Adapter | 产物状态 |
-| --- | --- | --- | --- | --- |
-| `baseline` | CPU/CUDA | 无量化 | 支持 | 原模型/adapter |
-| `torch_dynamic_int8` | CPU | PyTorch Linear 动态 qint8 | 未合并 LoRA 不支持 | 默认 benchmark-only |
-| `bnb_int8` | CUDA | bitsandbytes `load_in_8bit` | 可配置，需真实环境验证 | 保存后仍须 reload smoke |
+量化实现位于 `src/sat_rs_vlm/quantization/`：
 
-`bnb_int8` 不是动态量化。缺少 bitsandbytes 或 CUDA 时会明确失败，不回退到 baseline。
-CPU dynamic INT8 若只保存 state dict，会同时写量化层与 manifest，并明确标记
-`benchmark_only`、`reload_supported=false`，不能称为部署产物。
+| 模块 | 职责 |
+|---|---|
+| `quantizer.py` | 后端注册、dynamic INT8、bnb INT8、未来 GPTQ/AWQ 接口 |
+| `benchmark.py` | 固定样本生成、延迟/内存/大小统计、Evaluation v1.5 编排 |
+| `sensitivity.py` | Linear 扫描、层/组件分组、局部量化、主指标退化和绘图 |
+| `config.py` | YAML、环境变量和 Pydantic 校验 |
+| `artifacts.py` | JSON 安全序列化、目录大小和量化 manifest |
 
-AutoDL 上先用 `bash scripts/environment/setup_autodl.sh --install-model --install-qlora`
-安装可选依赖；基础安装不会携带 bitsandbytes。
+`sat_rs_vlm.compression.quantization` 只保留旧导入兼容层，所有业务实现都在顶层包中。
 
-## 公平比较
+## 后端
 
-统一入口从 messages JSONL 固定样本 ID，直接解析单图/多图路径。baseline 与 quantized 使用
-相同 Processor、adapter、prompt、reference、seed、warmup 和 generation 配置；生成只解码
-输入长度之后的新 token。报告延迟为单样本端到端延迟，包含 mean、median、p50、p95、
-min、max 和样本数。
+| 后端 | 设备 | 方法 | LoRA 约束 | 产物状态 |
+|---|---|---|---|---|
+| `baseline` | CPU/CUDA | 无量化 | 支持 | 原模型或 Adapter |
+| `torch_dynamic_int8` | CPU | PyTorch Linear dynamic qint8 | 必须先 merge | 默认 benchmark-only |
+| `bnb_int8` | CUDA | bitsandbytes 8-bit 加载 | 可配置，需真实环境验证 | 保存后仍需 reload smoke |
 
-任务表现复用普通评测指标：detection 分开报告 JSON、坐标范围、label 和 IoU；counting
-报告 parsable、MAE、exact 和 ±1；caption 报告 BLEU/ROUGE-L；VQA/场景报告 exact match。
-关键词命中只用于诊断。参数量、序列化字节、CPU/CUDA 内存分别记录，不用参数量冒充文件压缩率。
+`method: dynamic_int8` 会映射到 `torch_dynamic_int8`。未知的 INT4、GPTQ、AWQ、QAT 或
+mixed precision 方法会清晰失败，不会回退到 baseline。
+
+## 配置
+
+主配置为 `configs/quantization/quantization_eval.yaml`：
+
+```yaml
+model:
+  base_model: "${LOCAL_MODEL_DIR}"
+  merged_model: null
+
+quantization:
+  method: "dynamic_int8"
+  device: "cpu"
+
+evaluation:
+  contract: "configs/eval/evaluation_contract_v1.5.yaml"
+  dataset: "VRSBench"
+  tasks: [detection, counting, captioning, vqa, scene_classification]
+  sample_num: 20
+
+output:
+  output_dir: "reports/evaluation/quantization"
+```
+
+将 `model.merged_model` 设置为 `scripts/merge_lora.py` 的输出目录。路径使用 YAML 或环境变量，
+脚本中没有本机绝对路径。
+
+## 公平对比流程
+
+1. 加载 merge 后 FP32 模型并在固定 messages 样本上生成 predictions。
+2. 使用相同 Processor、样本顺序、prompt、reference、seed、warmup 和生成参数加载 INT8。
+3. 两组 predictions 分别进入同一个 Evaluation v1.5 contract。
+4. `evaluation.comparison` 依据样本 ID 做配对比较和 bootstrap 置信区间。
+5. 延迟、Python/CUDA 峰值内存、参数量和序列化大小单独记录，不冒充任务准确率。
+
+Keyword Hit 只存在于旧仓库指标兼容诊断中，量化比较与敏感度评分均不把它作为主指标。
 
 ## 命令
 
-只验证配置、依赖、路径、messages 和图片，不加载模型：
+配置与资产 dry-run，不加载真实 Qwen3-VL：
 
 ```bash
 python scripts/quantize_rs_vlm.py \
-  --config configs/compression/qwen3vl_torch_dynamic_int8.yaml --dry-run
+  --config configs/quantization/qwen3vl_torch_dynamic_int8_smoke.yaml \
+  --dry-run
 ```
 
-CPU 与 CUDA 实验：
+FP32 与 CPU dynamic INT8 完整比较：
 
 ```bash
-python scripts/quantize_rs_vlm.py --config configs/compression/qwen3vl_torch_dynamic_int8.yaml
-python scripts/quantize_rs_vlm.py --config configs/compression/qwen3vl_bnb_int8.yaml
+python scripts/quantize_rs_vlm.py \
+  --config configs/quantization/quantization_eval.yaml
 ```
 
-服务器沿用 `MODEL_ROOT`、`DATA_ROOT`、`OUTPUT_ROOT`。可用 `--skip-baseline` 单独运行量化变体，
-此时 speedup 和 accuracy retention 保持 `null`。旧 `quantize_int8*.py` 仅为弃用 wrapper。
+CUDA bitsandbytes INT8：
 
-## 可靠性关系
+```bash
+python scripts/quantize_rs_vlm.py \
+  --config configs/quantization/qwen3vl_bnb_int8.yaml
+```
 
-量化和 bit flip 共享 prediction schema、样本 manifest、task parser、task metrics、checksum 与
-环境路径，但评测指标、输出合法性验证和压缩 benchmark 保持独立职责。量化 base + fault adapter、
-量化恢复及 bnb 保存重载尚未在真实 Qwen3-VL 环境验证，不做成功声明。
+旧命令 `quantize_int8.py`、`quantize_int8_cpu.py`、`quantize_lora_int8_cpu.py` 和
+`quantize_merged_model.py` 是薄兼容入口，均要求 `--config`。未 merge LoRA 与 CPU dynamic
+INT8 的组合会明确失败。
+
+## 输出
+
+```text
+reports/evaluation/quantization/
+├── raw_predictions/
+│   ├── baseline.jsonl
+│   └── quantized.jsonl
+├── baseline/
+│   ├── metrics.json
+│   ├── summary.json
+│   ├── evaluated_predictions.jsonl
+│   └── evaluation_manifest.json
+├── quantized/
+├── comparison/
+│   ├── comparison.json
+│   ├── paired_comparison.jsonl
+│   └── comparison_manifest.json
+└── benchmark_report.json
+```
+
+CPU dynamic INT8 state dict 仍标记 `benchmark_only=true` 和 `reload_supported=false`，不能称为
+可部署模型。真实部署前必须实现模型结构重建与 reload smoke。
+
+## 当前验证状态
+
+- 默认 pytest：配置、toy Linear、统一评估和配对比较，不需要 GPU 或本地模型。
+- 本地/AutoDL：需要显式运行真实 Qwen3-VL benchmark。
+- bnb INT8：需要 CUDA 与可用 bitsandbytes；缺失时不会影响 LoRA 或 CPU 测试。
+- INT4、GPTQ、AWQ、QAT、mixed precision：仅保留注册扩展边界，尚未实现。

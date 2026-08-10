@@ -162,9 +162,7 @@ def test_multisource_manifest_adds_levircc_with_portable_message_images(
     rows = list(read_jsonl(output))
     levir_row = next(row for row in rows if row["task_type"] == "change_detection")
     message_images = [
-        item["image"]
-        for item in levir_row["messages"][0]["content"]
-        if item["type"] == "image"
+        item["image"] for item in levir_row["messages"][0]["content"] if item["type"] == "image"
     ]
 
     assert statistics["num_samples"] == 6

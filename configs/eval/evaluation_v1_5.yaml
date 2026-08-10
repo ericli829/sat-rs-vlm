@@ -1,0 +1,42 @@
+# Evaluation v1.5 离线评估、配对比较和绘图的统一配置。
+input:
+  predictions: "reports/evaluation/raw/predictions.jsonl"
+  baseline_dir: "reports/evaluation/quantization/baseline"
+  candidate_dir: "reports/evaluation/quantization/quantized"
+
+evaluation:
+  contract: "configs/eval/evaluation_contract_v1.5.yaml"
+  manifest: null
+  strict: true
+  semantic: true
+  semantic_contract: "configs/eval/semantic/semantic_contract.json"
+  semantic_ontology: "configs/eval/semantic/remote_sensing_ontology.json"
+  latency_semantics: "single_sample"
+  eval_batch_size: 1
+  group_by_task: true
+  dataset: "VRSBench"
+  tasks:
+    - detection
+    - counting
+    - captioning
+    - vqa
+  sample_num: null
+
+comparison:
+  bootstrap_resamples: 1000
+  seed: 20260806
+
+plotting:
+  evaluations:
+    - "FP32=reports/evaluation/quantization/baseline"
+    - "INT8=reports/evaluation/quantization/quantized"
+  comparisons:
+    - "FP32_vs_INT8=reports/evaluation/quantization/comparison"
+  formats:
+    - png
+    - svg
+  overwrite: false
+
+output:
+  output_dir: "reports/evaluation/quantization/comparison"
+  figures_dir: "reports/evaluation/quantization/figures"

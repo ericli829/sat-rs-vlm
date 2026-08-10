@@ -107,9 +107,7 @@ def _portable_source_image_path(
     try:
         return image.relative_to(common_image_root).as_posix()
     except ValueError as exc:
-        raise ValueError(
-            f"Reliability sample image is outside common image root: {image}"
-        ) from exc
+        raise ValueError(f"Reliability sample image is outside common image root: {image}") from exc
 
 
 def _normalized_messages(
@@ -186,9 +184,7 @@ def _source_rows(
 
     eval_value = source.get("eval_file")
     if not eval_value:
-        raise ValueError(
-            f"Reliability source {name} requires dataset_manifest or eval_file"
-        )
+        raise ValueError(f"Reliability source {name} requires dataset_manifest or eval_file")
     eval_file = Path(str(eval_value)).expanduser().resolve()
     if not eval_file.is_file():
         raise FileNotFoundError(f"Reliability source JSONL does not exist: {eval_file}")

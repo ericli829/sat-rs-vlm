@@ -1,0 +1,112 @@
+{
+  "schema_version": "1.0",
+  "implementation_version": "sat-rs-vlm-evaluation-plotting-v1.5",
+  "contract_version": "1.5",
+  "run_time_utc": "2026-08-08T15:03:03.932256+00:00",
+  "python_version": "3.13.5",
+  "matplotlib_version": "3.11.1",
+  "formats": [
+    "png",
+    "svg"
+  ],
+  "evaluations": [
+    {
+      "label": "baseline",
+      "source_directory_name": "baseline-vrsbench-20260804",
+      "contract_version": "1.5",
+      "hashes": {
+        "summary.json": "50fac3987d5189635a6357f589c9b98a3ff4276c4dfbac16646f6e2e8a83dace",
+        "evaluated_predictions.jsonl": "ef8b19a00fe402b451df8705548ed0c6f6285d874386653bcb586eb1ff4c2449"
+      }
+    },
+    {
+      "label": "replay",
+      "source_directory_name": "replay-round2-vrsbench-20260806",
+      "contract_version": "1.5",
+      "hashes": {
+        "summary.json": "91a8a1f8618d68b314e8f590dd7250230eb51b327ffd8bf23d434ee63f15ffde",
+        "evaluated_predictions.jsonl": "62be22047231b8628c86e3d771c5d76a39ccf6257c593933ed6a0d27cfdad709"
+      }
+    },
+    {
+      "label": "levir",
+      "source_directory_name": "replay-round2-levircc-20260806",
+      "contract_version": "1.5",
+      "hashes": {
+        "summary.json": "afd21b9762c60bf6cd8be868c98728ebfb16b1664354a35c65ea8520be140ab4",
+        "evaluated_predictions.jsonl": "1afc7ba49d3c5b8f8ad35f6c1963cdc087a9aec7d6ce8c0d19e785a57f0c82a9"
+      }
+    }
+  ],
+  "comparisons": [
+    {
+      "label": "vrsbench",
+      "source_directory_name": "baseline-vs-replay-round2-vrsbench-20260806",
+      "required_contract_version": "1.5",
+      "hashes": {
+        "comparison_summary.json": "128799e2671cf8e5ac129b4e61701459bc1fd5d6f9528ca636bc6e83be53e447"
+      }
+    }
+  ],
+  "generated": {
+    "task_sample_distribution": [
+      "task_sample_distribution.png",
+      "task_sample_distribution.svg"
+    ],
+    "vrsbench_core_metrics": [
+      "vrsbench_core_metrics.png",
+      "vrsbench_core_metrics.svg"
+    ],
+    "grounding_iou_cdf": [
+      "grounding_iou_cdf.png",
+      "grounding_iou_cdf.svg"
+    ],
+    "counting_error_distribution": [
+      "counting_error_distribution.png",
+      "counting_error_distribution.svg"
+    ],
+    "vqa_accuracy_by_type": [
+      "vqa_accuracy_by_type.png",
+      "vqa_accuracy_by_type.svg"
+    ],
+    "caption_quality_and_length": [
+      "caption_quality_and_length.png",
+      "caption_quality_and_length.svg"
+    ],
+    "semantic_reference_text_diagnostics": [
+      "semantic_reference_text_diagnostics.png",
+      "semantic_reference_text_diagnostics.svg"
+    ],
+    "paired_improvement_ci_vrsbench": [
+      "paired_improvement_ci_vrsbench.png",
+      "paired_improvement_ci_vrsbench.svg"
+    ],
+    "win_tie_loss_vrsbench": [
+      "win_tie_loss_vrsbench.png",
+      "win_tie_loss_vrsbench.svg"
+    ],
+    "levir_cc_confusion_matrix": [
+      "levir_cc_confusion_matrix.png",
+      "levir_cc_confusion_matrix.svg"
+    ],
+    "levir_cc_binary_metrics": [
+      "levir_cc_binary_metrics.png",
+      "levir_cc_binary_metrics.svg"
+    ],
+    "levir_cc_caption_metrics": [
+      "levir_cc_caption_metrics.png",
+      "levir_cc_caption_metrics.svg"
+    ],
+    "inference_latency": [
+      "inference_latency.png",
+      "inference_latency.svg"
+    ]
+  },
+  "skipped": [
+    {
+      "figure": "inference_latency_partial_input",
+      "reason": "Latency chart omitted 1 evaluation(s) with incompatible contexts."
+    }
+  ],
+  "remote_write_performed": false
+}

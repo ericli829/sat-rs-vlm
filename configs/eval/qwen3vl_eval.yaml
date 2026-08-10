@@ -20,6 +20,13 @@ generation:
   temperature: 0.0
   num_beams: 1
 
+evaluation:
+  contract: "configs/eval/evaluation_contract_v1.5.yaml"
+  strict: true
+  semantic: true
+  latency_semantics: "batch_amortized_per_sample"
+
 output:
   summary_file: "reports/eval/qwen3vl_eval_summary.json"
   predictions_file: "reports/eval/qwen3vl_predictions.jsonl"
+  evaluation_dir: "reports/evaluation/qwen3vl_eval"

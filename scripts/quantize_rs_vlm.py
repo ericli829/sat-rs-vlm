@@ -7,9 +7,9 @@ import json
 from collections.abc import Sequence
 from pathlib import Path
 
-from sat_rs_vlm.compression.quantization.backends import create_backend
-from sat_rs_vlm.compression.quantization.benchmark import run_benchmark
-from sat_rs_vlm.compression.quantization.config import load_quantization_config
+from sat_rs_vlm.quantization.benchmark import run_benchmark
+from sat_rs_vlm.quantization.config import load_quantization_config
+from sat_rs_vlm.quantization.quantizer import create_backend
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 

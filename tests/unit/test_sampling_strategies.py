@@ -41,11 +41,9 @@ def test_task_weighted_sampler_values_and_validation() -> None:
 
 def test_alternating_source_sampler_builds_fixed_homogeneous_batches() -> None:
     dataset = [
-        {"id": f"vrs-{index}", "metadata": {"training_source": "VRSBench"}}
-        for index in range(24)
+        {"id": f"vrs-{index}", "metadata": {"training_source": "VRSBench"}} for index in range(24)
     ] + [
-        {"id": f"levir-{index}", "metadata": {"training_source": "LEVIR-CC"}}
-        for index in range(8)
+        {"id": f"levir-{index}", "metadata": {"training_source": "LEVIR-CC"}} for index in range(8)
     ]
     sampler = build_alternating_source_sampler(
         dataset,

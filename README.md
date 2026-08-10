@@ -163,17 +163,65 @@ python scripts/evaluate_rs_vlm.py --config configs/eval/qwen3vl_eval_e0_zeroshot
 data、sampler 和 combined 三种配置，避免把配额倾斜和加权采样混为同一变量。详见
 [结构化微调实验](docs/finetune_playbook.md) 和 [数据协议](docs/data_format.md)。
 
+AutoDL RTX 4090 正式 LoRA 配置使用环境变量路径：
+
+```bash
+python scripts/train_qwen3vl_lora.py \
+  --config configs/train/qwen3vl_autodl_4090.yaml
+```
+
+## Evaluation v1.5
+
+`src/sat_rs_vlm/evaluation/` 是唯一正式评估内核，统一负责协议解析、任务指标、语义诊断、
+配对比较和绘图。`evaluate_rs_vlm.py` 只负责真实模型生成，生成的 predictions 会自动进入
+v1.5 runner；Keyword Hit 仅保留在 repository compatibility 诊断中，不作为主要指标。
+
+```bash
+# 真实模型生成 + 统一评估
+python scripts/evaluate_rs_vlm.py --config configs/eval/qwen3vl_eval.yaml
+
+# 对已有 predictions 做离线评估、比较和绘图
+python scripts/evaluation/evaluate_predictions.py \
+  --config configs/eval/evaluation_v1_5.yaml
+python scripts/evaluation/compare_evaluations.py \
+  --config configs/eval/evaluation_v1_5.yaml
+python scripts/evaluation/plot_evaluation_results.py \
+  --config configs/eval/evaluation_v1_5.yaml
+```
+
+标准评估目录包含 `metrics.json`、`evaluated_predictions.jsonl` 和
+`evaluation_manifest.json`；`summary.json` 是兼容别名。详见
+[Evaluation Framework](docs/evaluation/README.md)。
+
 ## INT8 量化
 
 ```bash
 python scripts/quantize_rs_vlm.py \
-  --config configs/compression/qwen3vl_torch_dynamic_int8.yaml --dry-run
+  --config configs/quantization/qwen3vl_torch_dynamic_int8.yaml --dry-run
 ```
 
 `torch_dynamic_int8` 是 CPU Linear 动态量化；`bnb_int8` 是 CUDA bitsandbytes 8-bit 加载，
-二者不会混称。统一 benchmark 固定 messages 样本、Processor、生成参数和任务指标，并记录
-失败样本、延迟分位数、内存、参数量和产物大小。当前只验证无模型 dry-run 与 toy Linear，
-真实 Qwen3-VL CPU/CUDA 结果等待本地或 AutoDL 实验。详见 [量化说明](docs/quantization.md)。
+二者不会混称。统一 benchmark 固定 messages 样本、Processor 和生成参数，baseline 与
+quantized predictions 分别进入 Evaluation v1.5，再生成配对 `comparison.json`。顶层实现位于
+`src/sat_rs_vlm/quantization/`，旧 `compression.quantization` 仅为导入兼容层。
+
+```bash
+# FP32 merged LoRA -> dynamic INT8 -> 统一评估 -> 配对比较
+python scripts/quantize_rs_vlm.py \
+  --config configs/quantization/quantization_eval.yaml
+
+# 配置/资产 smoke，不加载真实模型
+python scripts/quantization_sensitivity_test.py \
+  --config configs/quantization/quantization_sensitivity_smoke.yaml --dry-run
+
+# 真实组件敏感度实验并绘图
+python scripts/quantization_sensitivity_test.py \
+  --config configs/quantization/quantization_eval.yaml --plot
+```
+
+当前默认测试验证 dry-run、toy Linear 和 fake module tree；真实 Qwen3-VL CPU/CUDA 结果仍需
+在本地或 AutoDL 显式运行。详见 [量化说明](docs/quantization.md) 和
+[敏感度分析](docs/quantization_sensitivity.md)。
 
 ## 实验输出
 
@@ -189,6 +237,22 @@ outputs/<group>/<timestamp>_<experiment>_seed<seed>/
 ├── predictions/
 ├── metrics/
 └── artifacts/
+```
+
+统一评估与量化对比默认写入：
+
+```text
+reports/evaluation/<experiment>/
+├── baseline/
+│   ├── metrics.json
+│   └── evaluated_predictions.jsonl
+├── quantized/
+│   ├── metrics.json
+│   └── evaluated_predictions.jsonl
+├── comparison/
+│   └── comparison.json
+├── figures/
+└── benchmark_report.json
 ```
 
 备份只复制关键文件和最新若干 checkpoint：
@@ -252,7 +316,10 @@ pytest -q
 - [AutoDL 环境](docs/autodl_setup.md)
 - [数据布局](docs/dataset_layout.md)
 - [结构化微调](docs/finetune_playbook.md)
+- [Evaluation Framework](docs/evaluation/README.md)
 - [INT8 量化](docs/quantization.md)
+- [量化敏感度分析](docs/quantization_sensitivity.md)
+- [三分支架构合并说明](docs/architecture_merge_v1_5.md)
 - [完整命令清单](docs/training_commands.md)
 - [环境版本](docs/environment_versions.md)
 - [实验工作流](docs/experiment_workflow.md)

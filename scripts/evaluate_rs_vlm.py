@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
@@ -30,6 +29,7 @@ from sat_rs_vlm.evaluation.inference import (
     generate_prediction as _generate_prediction,
 )
 from sat_rs_vlm.evaluation.metrics import summarize_predictions
+from sat_rs_vlm.evaluation.runner import run_evaluation, validate_output_directory
 from sat_rs_vlm.models.qwen3vl_loader import (
     load_qwen3vl,
 )
@@ -44,6 +44,7 @@ from sat_rs_vlm.training.utils import (
 from sat_rs_vlm.utils.jsonl import write_jsonl
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_EVALUATION_CONTRACT = PROJECT_ROOT / "configs/eval/evaluation_contract_v1.5.yaml"
 
 
 def build_generation_kwargs(generation_cfg: dict[str, Any]) -> dict[str, Any]:
@@ -124,6 +125,32 @@ def resolve_model_source(value: str) -> str:
     return str(project_path) if project_path.exists() else value
 
 
+def resolve_evaluation_outputs(
+    config_path: Path,
+    config: dict[str, Any],
+    checkpoint: Path | None,
+    output_dir: Path | None,
+) -> tuple[Path, Path, Path]:
+    """统一解析兼容 summary、原始 predictions 和 v1.5 评估目录。"""
+
+    output_cfg = dict(config["output"])
+    if output_dir is not None:
+        root = output_dir.resolve()
+        return root / "summary.json", root / "predictions.jsonl", root / "evaluation_v1_5"
+    if checkpoint is not None:
+        root = checkpoint.resolve() / "evaluation"
+        return root / "summary.json", root / "predictions.jsonl", root / "evaluation_v1_5"
+    summary_file = resolve_project_path(str(output_cfg["summary_file"]))
+    predictions_file = resolve_project_path(str(output_cfg["predictions_file"]))
+    configured_dir = output_cfg.get("evaluation_dir")
+    evaluation_dir = (
+        resolve_project_path(str(configured_dir))
+        if configured_dir
+        else PROJECT_ROOT / "reports" / "evaluation" / config_path.stem
+    )
+    return summary_file, predictions_file, evaluation_dir
+
+
 def load_model(config: dict[str, Any], modules: dict[str, Any]) -> tuple[Any, Any]:
     """加载 base model、LoRA adapter 和 processor。"""
 
@@ -157,7 +184,7 @@ def load_model(config: dict[str, Any], modules: dict[str, Any]) -> tuple[Any, An
 
 
 def summarize(predictions: list[dict[str, Any]]) -> dict[str, Any]:
-    """兼容旧调用，内部使用统一任务指标。"""
+    """兼容旧调用的诊断摘要；正式评估产物由 Evaluation v1.5 runner 生成。"""
 
     return summarize_predictions(predictions)
 
@@ -194,6 +221,13 @@ def evaluate(
     """执行评测。"""
 
     config = load_yaml(config_path)
+    summary_file, predictions_file, evaluation_dir = resolve_evaluation_outputs(
+        config_path,
+        config,
+        checkpoint,
+        output_dir,
+    )
+    validate_output_directory(evaluation_dir)
     data_cfg = dict(config["data"])
     eval_file = resolve_project_path(str(data_cfg["eval_file"]))
     if not eval_file.is_file():
@@ -271,26 +305,48 @@ def evaluate(
         raise RuntimeError("Evaluation finished with missing predictions")
     predictions = [prediction for prediction in predictions_by_index if prediction is not None]
 
-    output_cfg = dict(config["output"])
-    if output_dir is not None:
-        summary_file = output_dir.resolve() / "summary.json"
-        predictions_file = output_dir.resolve() / "predictions.jsonl"
-    elif checkpoint is None:
-        summary_file = resolve_project_path(str(output_cfg["summary_file"]))
-        predictions_file = resolve_project_path(str(output_cfg["predictions_file"]))
-    else:
-        eval_output = checkpoint.resolve() / "evaluation"
-        summary_file = eval_output / "summary.json"
-        predictions_file = eval_output / "predictions.jsonl"
-    summary_file.parent.mkdir(parents=True, exist_ok=True)
     predictions_file.parent.mkdir(parents=True, exist_ok=True)
-    summary_file.write_text(
-        json.dumps(summarize(predictions), ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
     write_jsonl(predictions_file, predictions)
-    print(f"Saved summary to {summary_file}")
     print(f"Saved predictions to {predictions_file}")
+
+    evaluation_cfg = dict(config.get("evaluation", {}))
+    contract_path = resolve_project_path(
+        str(evaluation_cfg.get("contract", DEFAULT_EVALUATION_CONTRACT))
+    )
+    manifest_value = evaluation_cfg.get("manifest") or data_cfg.get("manifest")
+    evaluation_outputs = run_evaluation(
+        predictions_file,
+        evaluation_dir,
+        contract_path=contract_path,
+        manifest_path=(resolve_project_path(str(manifest_value)) if manifest_value else None),
+        strict=bool(evaluation_cfg.get("strict", True)),
+        semantic_enabled=bool(evaluation_cfg.get("semantic", True)),
+        semantic_contract_path=resolve_project_path(
+            str(
+                evaluation_cfg.get(
+                    "semantic_contract",
+                    "configs/eval/semantic/semantic_contract.json",
+                )
+            )
+        ),
+        semantic_ontology_path=resolve_project_path(
+            str(
+                evaluation_cfg.get(
+                    "semantic_ontology",
+                    "configs/eval/semantic/remote_sensing_ontology.json",
+                )
+            )
+        ),
+        latency_semantics=str(
+            evaluation_cfg.get("latency_semantics", "batch_amortized_per_sample")
+        ),
+        eval_batch_size=batch_size,
+        group_by_task=group_by_task,
+    )
+    summary_file.parent.mkdir(parents=True, exist_ok=True)
+    summary_file.write_bytes(evaluation_outputs["metrics"].read_bytes())
+    print(f"Saved Evaluation v1.5 metrics to {evaluation_outputs['metrics']}")
+    print(f"Saved compatibility summary to {summary_file}")
 
 
 def main() -> int:

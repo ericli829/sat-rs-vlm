@@ -43,6 +43,9 @@ qlora = [
 reliability-plot = [
     "matplotlib>=3.8,<4",
 ]
+plot = [
+    "matplotlib>=3.8,<4",
+]
 [project.scripts]
 sat-rs-vlm = "sat_rs_vlm.interfaces.cli:app"
 

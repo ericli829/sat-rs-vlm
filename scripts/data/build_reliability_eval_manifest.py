@@ -76,10 +76,7 @@ def _output_path(data: dict[str, Any], dataset_root: Path, *, multisource: bool)
         return str(configured)
     if multisource:
         return str(
-            dataset_root
-            / "project_metadata"
-            / "reliability"
-            / "vrsbench_levircc_eval.jsonl"
+            dataset_root / "project_metadata" / "reliability" / "vrsbench_levircc_eval.jsonl"
         )
     legacy = data.get("eval_manifest")
     if legacy:

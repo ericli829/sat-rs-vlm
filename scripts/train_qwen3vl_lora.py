@@ -62,10 +62,7 @@ def prune_training_checkpoints(output_dir: str | Path, keep: int) -> list[Path]:
         shutil.rmtree(checkpoint)
         removed.append(checkpoint)
     if removed:
-        print(
-            "Pruned stale training checkpoints: "
-            + ", ".join(path.name for path in removed)
-        )
+        print("Pruned stale training checkpoints: " + ", ".join(path.name for path in removed))
     return removed
 
 
@@ -429,9 +426,10 @@ def dry_run(config: Qwen3VLTrainingConfig, paths: ResolvedTrainingPaths) -> None
         raise FileNotFoundError(
             f"Initial adapter directory does not exist: {paths.initial_adapter_dir}"
         )
-    if paths.initial_adapter_dir is not None and not (
-        paths.initial_adapter_dir / "adapter_config.json"
-    ).is_file():
+    if (
+        paths.initial_adapter_dir is not None
+        and not (paths.initial_adapter_dir / "adapter_config.json").is_file()
+    ):
         raise FileNotFoundError(
             f"Initial adapter is missing adapter_config.json: {paths.initial_adapter_dir}"
         )

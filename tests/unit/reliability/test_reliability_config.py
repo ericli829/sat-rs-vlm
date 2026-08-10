@@ -79,9 +79,7 @@ def test_formal_bitflip_config_includes_vrsbench_and_levircc() -> None:
                 PROJECT_ROOT / "configs/reliability/base.yaml",
             ),
             environment_config=PROJECT_ROOT / "configs/cloud/autodl.yaml",
-            experiment_config=(
-                PROJECT_ROOT / "configs/reliability/experiments/lora_bitflip.yaml"
-            ),
+            experiment_config=(PROJECT_ROOT / "configs/reliability/experiments/lora_bitflip.yaml"),
             project_root=PROJECT_ROOT,
         ),
         environ=environment,

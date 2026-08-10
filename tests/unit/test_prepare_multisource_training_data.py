@@ -48,12 +48,10 @@ def test_preparer_repairs_stale_windows_paths_and_groups_validation(tmp_path: Pa
             (directory / f"{split}_000001.png").write_bytes(b"png")
 
     stale_train = [
-        rf"D:\old\Levir-CC-dataset\images\train\{period}\train_000001.png"
-        for period in ("A", "B")
+        rf"D:\old\Levir-CC-dataset\images\train\{period}\train_000001.png" for period in ("A", "B")
     ]
     stale_val = [
-        rf"D:\old\Levir-CC-dataset\images\val\{period}\val_000001.png"
-        for period in ("A", "B")
+        rf"D:\old\Levir-CC-dataset\images\val\{period}\val_000001.png" for period in ("A", "B")
     ]
     train_file = source_root / "train.jsonl"
     val_file = source_root / "val.jsonl"
@@ -91,9 +89,7 @@ def test_preparer_repairs_stale_windows_paths_and_groups_validation(tmp_path: Pa
     report = module.prepare_multisource_data(config)
     train_row = next(read_jsonl(train_output))
     image_paths = [
-        item["image"]
-        for item in train_row["messages"][0]["content"]
-        if item["type"] == "image"
+        item["image"] for item in train_row["messages"][0]["content"] if item["type"] == "image"
     ]
 
     assert image_paths == [
@@ -202,9 +198,7 @@ def test_task_quotas_are_group_balanced() -> None:
                     "messages": [
                         {
                             "role": "user",
-                            "content": [
-                                {"type": "image", "image": f"image-{image_index}.png"}
-                            ],
+                            "content": [{"type": "image", "image": f"image-{image_index}.png"}],
                         }
                     ],
                 }

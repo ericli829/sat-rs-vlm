@@ -1,4 +1,4 @@
-.PHONY: install bootstrap bootstrap-model check-env test lint format run-api infer-demo infer-real-local prepare-data convert-qwen3vl prepare-e1 train-smoke train-qwen3vl train-e1 train-e1b train-e1d-data train-e1d-sampler train-e1d-combined eval-e0 eval-e1 train-local-real-smoke eval-qwen3vl merge-lora validate-training-assets train-local-smoke train-local train-local-dry-run train-local-forward train-unified smoke-unified validate-fixture export-environment plugin-list plugin-validate plugin-check plugin-dry-run quant-dry-cpu quant-cpu quant-bnb reliability-smoke reliability-real reliability-plot
+.PHONY: install bootstrap bootstrap-model check-env test lint format run-api infer-demo infer-real-local prepare-data convert-qwen3vl prepare-e1 train-smoke train-qwen3vl train-autodl-4090 train-e1 train-e1b train-e1d-data train-e1d-sampler train-e1d-combined eval-e0 eval-e1 eval-offline compare-eval plot-eval train-local-real-smoke eval-qwen3vl merge-lora validate-training-assets train-local-smoke train-local train-local-dry-run train-local-forward train-unified smoke-unified validate-fixture export-environment plugin-list plugin-validate plugin-check plugin-dry-run quant-dry-cpu quant-cpu quant-bnb quant-eval quant-sensitivity-dry quant-sensitivity reliability-smoke reliability-real reliability-plot
 
 PLUGIN_ROOT ?= .local_plugins/sat-rs-vlm-local-plugins
 PLUGIN_STRATEGY ?= qlora
@@ -71,8 +71,20 @@ train-smoke:
 train-qwen3vl:
 	python scripts/train_qwen3vl_lora.py --config configs/train/qwen3vl_lora.yaml
 
+train-autodl-4090:
+	python scripts/train_qwen3vl_lora.py --config configs/train/qwen3vl_autodl_4090.yaml
+
 eval-qwen3vl:
 	python scripts/evaluate_rs_vlm.py --config configs/eval/qwen3vl_eval.yaml
+
+eval-offline:
+	python scripts/evaluation/evaluate_predictions.py --config configs/eval/evaluation_v1_5.yaml
+
+compare-eval:
+	python scripts/evaluation/compare_evaluations.py --config configs/eval/evaluation_v1_5.yaml
+
+plot-eval:
+	python scripts/evaluation/plot_evaluation_results.py --config configs/eval/evaluation_v1_5.yaml
 
 merge-lora:
 	python scripts/merge_lora.py --base-model $(MODEL_DIR) --adapter $(ADAPTER_DIR) --output $(MERGED_DIR)
@@ -120,13 +132,22 @@ plugin-dry-run:
 	python scripts/run_external_strategy.py --plugin-root $(PLUGIN_ROOT) --strategy $(PLUGIN_STRATEGY) --dry-run
 
 quant-dry-cpu:
-	python scripts/quantize_rs_vlm.py --config configs/compression/qwen3vl_torch_dynamic_int8.yaml --dry-run
+	python scripts/quantize_rs_vlm.py --config configs/quantization/qwen3vl_torch_dynamic_int8.yaml --dry-run
 
 quant-cpu:
-	python scripts/quantize_rs_vlm.py --config configs/compression/qwen3vl_torch_dynamic_int8.yaml
+	python scripts/quantize_rs_vlm.py --config configs/quantization/qwen3vl_torch_dynamic_int8.yaml
 
 quant-bnb:
-	python scripts/quantize_rs_vlm.py --config configs/compression/qwen3vl_bnb_int8.yaml
+	python scripts/quantize_rs_vlm.py --config configs/quantization/qwen3vl_bnb_int8.yaml
+
+quant-eval:
+	python scripts/quantize_rs_vlm.py --config configs/quantization/quantization_eval.yaml
+
+quant-sensitivity-dry:
+	python scripts/quantization_sensitivity_test.py --config configs/quantization/quantization_sensitivity_smoke.yaml --dry-run
+
+quant-sensitivity:
+	python scripts/quantization_sensitivity_test.py --config configs/quantization/quantization_eval.yaml --plot
 
 reliability-smoke:
 	python scripts/reliability/run_smoke.py --case all

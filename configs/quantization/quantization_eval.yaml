@@ -1,0 +1,68 @@
+# FP32 merged LoRA 与 CPU dynamic INT8 使用同一数据和 Evaluation v1.5 契约。
+model:
+  base_model: "${LOCAL_MODEL_DIR}"
+  # 设为 LoRA merge 后目录；null 时直接使用 base_model。
+  merged_model: null
+  processor_id: "${LOCAL_MODEL_DIR}"
+  adapter_path: null
+  local_files_only: true
+  trust_remote_code: true
+  torch_dtype: "float32"
+  device_map: "auto"
+  attn_implementation: "sdpa"
+
+quantization:
+  method: "dynamic_int8"
+  device: "cpu"
+  save_artifact: false
+
+data:
+  eval_file: "${VAL_JSONL}"
+  image_root: "${DATA_ROOT}"
+  max_eval_samples: 20
+  max_seq_length: 1024
+
+generation:
+  do_sample: false
+  num_beams: 1
+  max_new_tokens: 128
+  task_max_new_tokens:
+    detection: 64
+    counting: 16
+    scene_classification: 32
+    vqa: 64
+    captioning: 128
+
+benchmark:
+  warmup_samples: 2
+  repeats: 2
+  seed: 42
+  latency_scope: "single_sample_end_to_end"
+
+evaluation:
+  contract: "configs/eval/evaluation_contract_v1.5.yaml"
+  manifest: null
+  strict: true
+  semantic: true
+  semantic_contract: "configs/eval/semantic/semantic_contract.json"
+  semantic_ontology: "configs/eval/semantic/remote_sensing_ontology.json"
+  dataset: "VRSBench"
+  tasks:
+    - detection
+    - counting
+    - captioning
+    - vqa
+    - scene_classification
+  sample_num: 20
+  bootstrap_resamples: 1000
+
+sensitivity:
+  method: "component_wise"
+  layer_group_size: 6
+  skip_modules:
+    - vision_encoder
+  max_groups: null
+
+output:
+  output_dir: "reports/evaluation/quantization"
+  figures_dir: "reports/evaluation/quantization/figures"

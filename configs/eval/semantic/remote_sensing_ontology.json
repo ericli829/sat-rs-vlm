@@ -1,0 +1,44 @@
+{
+  "ontology_version": "0.1",
+  "language": "en_zh",
+  "objects": {
+    "aircraft": ["aircraft", "airplane", "airplanes", "aeroplane", "aeroplanes", "plane", "planes", "飞机", "航空器"],
+    "airport": ["airport", "airports", "airfield", "airfields", "机场"],
+    "bridge": ["bridge", "bridges", "桥", "桥梁"],
+    "building": ["building", "buildings", "structure", "structures", "建筑", "建筑物"],
+    "farmland": ["farmland", "farmlands", "cropland", "croplands", "farm field", "farm fields", "农田", "耕地"],
+    "forest": ["forest", "forests", "woodland", "woodlands", "林地", "森林"],
+    "harbor": ["harbor", "harbors", "harbour", "harbours", "port", "ports", "港口", "港湾"],
+    "parking_lot": ["parking lot", "parking lots", "car park", "car parks", "停车场"],
+    "residential_area": ["residential area", "residential areas", "residential district", "residential districts", "居民区", "住宅区"],
+    "river": ["river", "rivers", "waterway", "waterways", "河", "河流"],
+    "road": ["road", "roads", "street", "streets", "highway", "highways", "道路", "公路"],
+    "runway": ["runway", "runways", "airstrip", "airstrips", "跑道"],
+    "ship": ["ship", "ships", "vessel", "vessels", "boat", "boats", "船", "船只", "舰船"],
+    "storage_tank": ["storage tank", "storage tanks", "oil tank", "oil tanks", "tank", "tanks", "储罐", "油罐"],
+    "vehicle": ["vehicle", "vehicles", "car", "cars", "truck", "trucks", "automobile", "automobiles", "车辆", "汽车", "卡车"],
+    "water": ["water", "water body", "water bodies", "水体", "水域"]
+  },
+  "relations": {
+    "north_of": {"aliases": ["north of", "to the north of", "北侧", "北边", "以北"], "symmetric": false},
+    "south_of": {"aliases": ["south of", "to the south of", "南侧", "南边", "以南"], "symmetric": false},
+    "east_of": {"aliases": ["east of", "to the east of", "东侧", "东边", "以东"], "symmetric": false},
+    "west_of": {"aliases": ["west of", "to the west of", "西侧", "西边", "以西"], "symmetric": false},
+    "near": {"aliases": ["near", "close to", "next to", "beside", "nearby", "靠近", "临近", "附近", "旁边"], "symmetric": true},
+    "adjacent_to": {"aliases": ["adjacent to", "adjoining", "相邻", "毗邻"], "symmetric": true},
+    "inside": {"aliases": ["inside", "within", "位于", "内部"], "symmetric": false},
+    "across": {"aliases": ["across", "crossing", "横跨", "跨越"], "symmetric": false},
+    "parallel_to": {"aliases": ["parallel to", "平行于", "平行"], "symmetric": true}
+  },
+  "changes": {
+    "appearance": ["appeared", "appears", "newly appeared", "new", "emerged", "新增", "出现", "新建"],
+    "disappearance": ["disappeared", "removed", "vanished", "no longer present", "消失", "移除"],
+    "increase": ["increased", "increase", "more", "grew in number", "增加", "增多"],
+    "decrease": ["decreased", "decrease", "fewer", "reduced in number", "减少", "变少"],
+    "construction": ["constructed", "construction", "built", "under construction", "建设", "建成", "施工"],
+    "demolition": ["demolished", "demolition", "torn down", "拆除", "拆毁"],
+    "expansion": ["expanded", "expansion", "enlarged", "扩张", "扩大"],
+    "shrinkage": ["shrunk", "shrinkage", "contracted", "收缩", "缩小"],
+    "no_change": ["no change", "unchanged", "remained the same", "没有变化", "无变化", "未发生变化"]
+  }
+}

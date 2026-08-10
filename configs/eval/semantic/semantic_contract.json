@@ -1,0 +1,31 @@
+{
+  "contract_version": "0.1",
+  "profile": "semantic_reference_text_v1",
+  "status": "implemented_internal_only",
+  "metric_label": "internal",
+  "reference_basis": "reference_text_rule_based",
+  "applicable_task_types": ["captioning", "change_detection"],
+  "metrics": [
+    "object_precision",
+    "object_recall",
+    "object_f1",
+    "reference_unsupported_object_rate",
+    "object_omission_rate",
+    "count_consistency_accuracy",
+    "spatial_relation_precision",
+    "spatial_relation_recall",
+    "spatial_relation_f1",
+    "spatial_relation_accuracy",
+    "change_event_precision",
+    "change_event_recall",
+    "change_event_f1"
+  ],
+  "registered_not_implemented": [
+    "bertscore",
+    "nli_entailment",
+    "clipscore",
+    "refclipscore",
+    "image_grounded_hallucination",
+    "llm_judge"
+  ]
+}

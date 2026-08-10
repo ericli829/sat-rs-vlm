@@ -137,15 +137,25 @@ def score_text_task(prediction: str, reference: str) -> dict[str, float]:
     }
 
 
-def score_sample(task_type: str, prediction: str, reference: str) -> dict[str, Any]:
-    """按任务类型分发单条指标。"""
+def score_sample(
+    task_type: str,
+    prediction: str,
+    reference: str,
+    *,
+    change_detection_as_text: bool = False,
+) -> dict[str, Any]:
+    """按任务类型分发单条指标。
+
+    ``change_detection_as_text`` 仅用于重现 Evaluation v1.5 的历史 repository compatibility
+    profile；默认仍将变化检测描述按 caption 指标处理。
+    """
 
     task = task_type.strip().lower()
     if task == "detection":
         return score_detection(prediction, reference)
     if task == "counting":
         return score_counting(prediction, reference)
-    if task in {"captioning", "change_detection"}:
+    if task == "captioning" or (task == "change_detection" and not change_detection_as_text):
         return score_caption(prediction, reference)
     return score_text_task(prediction, reference)
 

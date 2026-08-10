@@ -5,23 +5,25 @@ from pathlib import Path
 
 import pytest
 
-from sat_rs_vlm.compression.quantization.backends import (
-    UnsupportedQuantizationError,
-    create_backend,
-    quantize_dynamic_linear,
-)
-from sat_rs_vlm.compression.quantization.benchmark import (
+from sat_rs_vlm.quantization.artifacts import to_json_safe, write_json_report
+from sat_rs_vlm.quantization.benchmark import (
     assert_comparable_sample_ids,
     planned_variants,
     run_benchmark,
     validate_assets,
 )
-from sat_rs_vlm.compression.quantization.config import (
+from sat_rs_vlm.quantization.config import (
     QuantizationExperimentConfig,
     load_quantization_config,
 )
-from sat_rs_vlm.compression.quantization.manifest import to_json_safe, write_json_report
-from sat_rs_vlm.compression.quantization.report import comparison_summary
+from sat_rs_vlm.quantization.quantizer import (
+    QuantizationBackend,
+    UnsupportedQuantizationError,
+    create_backend,
+    quantize_dynamic_linear,
+    register_backend,
+)
+from sat_rs_vlm.quantization.report import comparison_summary
 from sat_rs_vlm.utils.jsonl import write_jsonl
 
 
@@ -79,6 +81,52 @@ def test_backend_config_and_unknown_backend(tmp_path: Path) -> None:
                 "quantization": {"backend": "torch_dynamic_int8", "device": "cuda"},
             }
         )
+
+
+def test_new_method_alias_and_merged_model_source(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    payload = config.model_dump(mode="python")
+    payload["model"]["merged_model"] = "merged"
+    payload["quantization"] = {"method": "dynamic_int8", "device": "cpu"}
+
+    normalized = QuantizationExperimentConfig.model_validate(payload)
+
+    assert normalized.quantization.backend == "torch_dynamic_int8"
+    assert normalized.quantization.method == "dynamic_int8"
+    assert normalized.model.model_source == "merged"
+
+    payload["quantization"] = {
+        "method": "dynamic_int8",
+        "backend": "bnb_int8",
+        "device": "cuda",
+    }
+    with pytest.raises(ValueError, match="conflicts with backend"):
+        QuantizationExperimentConfig.model_validate(payload)
+
+
+def test_legacy_quantization_import_path_remains_available() -> None:
+    from sat_rs_vlm.compression.quantization import create_backend as legacy_create_backend
+
+    assert legacy_create_backend("baseline").name == "baseline"
+
+
+def test_future_backend_registration_rejects_accidental_overwrite() -> None:
+    class FutureBackend(QuantizationBackend):
+        name = "future_int4_test"
+        device = "cpu"
+
+        def load_model(self, config, modules, *, quantized):  # type: ignore[no-untyped-def]
+            return object()
+
+        def compression_metadata(  # type: ignore[no-untyped-def]
+            self, model, torch, *, quantized
+        ):
+            return {"backend": self.name}
+
+    register_backend("future_int4_test", FutureBackend, replace=True)
+    assert create_backend("FUTURE_INT4_TEST").name == "future_int4_test"
+    with pytest.raises(ValueError, match="already registered"):
+        register_backend("future_int4_test", FutureBackend)
 
 
 def test_load_config_expands_existing_environment(tmp_path: Path) -> None:

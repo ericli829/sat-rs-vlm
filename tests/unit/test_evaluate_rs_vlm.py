@@ -10,6 +10,7 @@ from scripts.evaluate_rs_vlm import (
     build_generation_kwargs,
     generate_prediction,
     iter_evaluation_batches,
+    resolve_evaluation_outputs,
     summarize,
     validate_local_adapter,
 )
@@ -140,3 +141,21 @@ def test_evaluation_batches_group_by_task_and_preserve_original_indexes() -> Non
 def test_evaluation_batches_reject_non_positive_batch_size() -> None:
     with pytest.raises(ValueError, match="must be positive"):
         list(iter_evaluation_batches([], 0, group_by_task=True))
+
+
+def test_evaluation_outputs_keep_legacy_files_and_isolate_v15(tmp_path: Path) -> None:
+    summary, predictions, evaluation_dir = resolve_evaluation_outputs(
+        tmp_path / "eval.yaml",
+        {
+            "output": {
+                "summary_file": "unused-summary.json",
+                "predictions_file": "unused-predictions.jsonl",
+            }
+        },
+        checkpoint=None,
+        output_dir=tmp_path / "run",
+    )
+
+    assert summary == tmp_path / "run" / "summary.json"
+    assert predictions == tmp_path / "run" / "predictions.jsonl"
+    assert evaluation_dir == tmp_path / "run" / "evaluation_v1_5"

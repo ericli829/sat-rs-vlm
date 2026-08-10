@@ -1,13 +1,14 @@
-"""Qwen3-VL baseline、CPU dynamic INT8 与 bitsandbytes INT8 后端。"""
+"""兼容旧导入路径；新代码应使用 :mod:`sat_rs_vlm.quantization`。"""
 
-from sat_rs_vlm.compression.quantization.backends import (
+from sat_rs_vlm.quantization.config import (
+    QuantizationExperimentConfig,
+    load_quantization_config,
+)
+from sat_rs_vlm.quantization.quantizer import (
     create_backend,
     list_backends,
     quantize_dynamic_linear,
-)
-from sat_rs_vlm.compression.quantization.config import (
-    QuantizationExperimentConfig,
-    load_quantization_config,
+    register_backend,
 )
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "list_backends",
     "load_quantization_config",
     "quantize_dynamic_linear",
+    "register_backend",
 ]

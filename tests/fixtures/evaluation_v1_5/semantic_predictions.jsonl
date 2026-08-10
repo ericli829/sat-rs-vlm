@@ -1,0 +1,4 @@
+{"id":"semantic_synonyms","task_type":"captioning","prediction":"Two vessels are near the port.","reference":"There are two ships near the harbor.","metadata":{"dataset":"VRSBench","source_task":"caption"}}
+{"id":"semantic_object_error","task_type":"captioning","prediction":"An aircraft is near the harbor.","reference":"A ship is near the harbor.","metadata":{"dataset":"VRSBench","source_task":"caption"}}
+{"id":"semantic_change_correct","task_type":"change_detection","prediction":"A building appeared north of the road.","reference":"A building appeared north of the road.","metadata":{"dataset":"sample_change"}}
+{"id":"semantic_change_wrong","task_type":"change_detection","prediction":"The building disappeared.","reference":"A new building appeared.","metadata":{"dataset":"sample_change"}}

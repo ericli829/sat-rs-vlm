@@ -82,8 +82,7 @@ def _to_qwen_row(
             raise ValueError(f"Sample {sample_id} is missing fields: {missing}")
         instruction = instruction_override or str(row["instruction"])
         content = [
-            {"type": "image", "image": str(image_path)}
-            for image_path in list(row["images"])
+            {"type": "image", "image": str(image_path)} for image_path in list(row["images"])
         ]
         content.append(
             {
@@ -336,8 +335,7 @@ def _rotate_group_variants(
             )
         offset = (round_index * variants_per_group) % len(group_rows)
         selected.extend(
-            group_rows[(offset + index) % len(group_rows)]
-            for index in range(variants_per_group)
+            group_rows[(offset + index) % len(group_rows)] for index in range(variants_per_group)
         )
     return selected
 
@@ -419,9 +417,7 @@ def prepare_multisource_data(
             seed=seed + source_index,
             round_index=round_index,
         )
-        source_validation_all = _load_source_split(
-            source, "validation_file", common_image_root
-        )
+        source_validation_all = _load_source_split(source, "validation_file", common_image_root)
         validation_limit = source.get("validation_samples")
         source_validation = _sample_validation_rows(
             source_validation_all,
@@ -464,14 +460,10 @@ def prepare_multisource_data(
         "validation_file": str(validation_path),
         "train_samples": len(train_rows),
         "validation_samples": len(validation_rows),
-        "task_distribution": dict(
-            sorted(Counter(row["task_type"] for row in train_rows).items())
-        ),
+        "task_distribution": dict(sorted(Counter(row["task_type"] for row in train_rows).items())),
         "sources": source_report,
     }
-    report_path.write_text(
-        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     return report
 
 

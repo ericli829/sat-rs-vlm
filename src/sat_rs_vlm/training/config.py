@@ -68,9 +68,7 @@ class TrainDataConfig(BaseModel):
         if self.sampling_mode == "weighted" and not self.task_sampling_weights:
             raise ValueError("sampling_mode='weighted' requires task_sampling_weights")
         if self.sampling_mode == "alternating_source" and not self.source_batch_pattern:
-            raise ValueError(
-                "sampling_mode='alternating_source' requires source_batch_pattern"
-            )
+            raise ValueError("sampling_mode='alternating_source' requires source_batch_pattern")
         if any(value <= 0 for value in self.task_sampling_weights.values()):
             raise ValueError("task_sampling_weights must contain only positive values")
         return self
