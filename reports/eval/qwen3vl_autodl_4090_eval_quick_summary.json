@@ -1,0 +1,48 @@
+{
+  "overall": {
+    "num_samples": 20,
+    "empty_predictions": 0,
+    "empty_prediction_rate": 0.0,
+    "inference_latency_ms": 8110.3814550093375
+  },
+  "by_task": {
+    "captioning": {
+      "num_samples": 3,
+      "exact_match": 0.0,
+      "keyword_hit_rate": 1.0,
+      "average_generation_length": 236.33333333333334,
+      "empty_prediction_rate": 0.0
+    },
+    "detection": {
+      "num_samples": 6,
+      "exact_match": 0.0,
+      "keyword_hit_rate": 1.0,
+      "average_generation_length": 9.833333333333334,
+      "empty_prediction_rate": 0.0,
+      "valid_json_rate": 0.0
+    },
+    "vqa": {
+      "num_samples": 9,
+      "exact_match": 0.3333333333333333,
+      "keyword_hit_rate": 0.6666666666666666,
+      "average_generation_length": 5.333333333333333,
+      "empty_prediction_rate": 0.0
+    },
+    "scene_classification": {
+      "num_samples": 1,
+      "exact_match": 1.0,
+      "keyword_hit_rate": 1.0,
+      "average_generation_length": 6.0,
+      "empty_prediction_rate": 0.0
+    },
+    "counting": {
+      "num_samples": 1,
+      "exact_match": 0.0,
+      "keyword_hit_rate": 0.0,
+      "average_generation_length": 3.0,
+      "empty_prediction_rate": 0.0,
+      "mae": null
+    }
+  },
+  "todo": "TODO: add mAP, CIDEr, BLEU/ROUGE and task-specific RS metrics."
+}

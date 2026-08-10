@@ -1,0 +1,51 @@
+{
+  "model_name": "D:/Models/Qwen3-VL-2B-Instruct",
+  "test_date": "2026-08-10 14:44:40",
+  "num_samples": 5,
+  "method": "component_wise",
+  "baseline_keyword_hit": 0.4,
+  "baseline_exact_match": 0.0,
+  "baseline_latency_ms": 12629.583959999582,
+  "full_quantized_keyword_hit": 0.0,
+  "full_quantized_exact_match": 0.0,
+  "full_quantized_latency_ms": 0.0,
+  "layer_results": [
+    {
+      "layer_name": "language_model_only",
+      "layer_type": "Component",
+      "num_params": 1720574976,
+      "baseline_keyword_hit": 0.4,
+      "baseline_exact_match": 0.0,
+      "baseline_latency_ms": 12629.583959999582,
+      "quantized_keyword_hit": 0.4,
+      "quantized_exact_match": 0.0,
+      "quantized_latency_ms": 13589.782660000492,
+      "keyword_hit_delta": 0.0,
+      "exact_match_delta": 0.0,
+      "latency_change_ratio": 0.0760277379715794,
+      "sensitivity_score": 0.022808321391473818
+    },
+    {
+      "layer_name": "full_model",
+      "layer_type": "Component",
+      "num_params": 2031739904,
+      "baseline_keyword_hit": 0.4,
+      "baseline_exact_match": 0.0,
+      "baseline_latency_ms": 12629.583959999582,
+      "quantized_keyword_hit": 0.2,
+      "quantized_exact_match": 0.0,
+      "quantized_latency_ms": 12449.374580000585,
+      "keyword_hit_delta": -0.2,
+      "exact_match_delta": 0.0,
+      "latency_change_ratio": -0.014268829485575717,
+      "sensitivity_score": 0.13999999999999999
+    }
+  ],
+  "sensitive_layers": [
+    "full_model",
+    "language_model_only"
+  ],
+  "recommendations": [
+    "发现 1 个高敏感层，建议保持 FP32 精度"
+  ]
+}

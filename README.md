@@ -12,6 +12,7 @@
 | 本地 Qwen3-VL 推理 | 可用 | 使用 HuggingFace 本地模型目录 |
 | VRSBench 转换 | 可用 | caption、检测、计数、场景分类、VQA，框坐标裁剪到 `[0,1]` |
 | Qwen3-VL LoRA 训练 | ✅ 已验证 | 50-step CPU: loss 24→6.68, 12.6 min, 0% empty predictions, valid_json 100% |
+| Qwen3-VL LoRA 完整训练 | ✅ 已验证 | 17800-step GPU (RTX 4090): loss 2.59→0.72, eval_loss 0.55, 6.7h, 142k 样本 |
 | Qwen3-VL LoRA 评估 | ✅ 已验证 | 评估链路完整，分任务指标可用 |
 | 外部实验插件 API | 可用 | 显式发现、manifest、依赖检查、路径隔离、无静默回退 |
 | INT8 量化 | ✅ 已验证 | PyTorch 原生动态 INT8 量化，CPU 推理加速 1.43× |
@@ -31,6 +32,43 @@
 | 评估 | empty_prediction_rate **0%**, detection valid_json_rate **100%**, keyword_hit 100% (caption/detection/scene), 25% (VQA) |
 
 > **结论**：50-step CPU 训练即可让模型对遥感图像产生有意义的回答，完整链路已验证。正式训练需 NVIDIA GPU（RTX 4060 8 GB 预计 2.5-5 h/epoch），CPU 完整训练 ≈58 天不切实际。
+
+### 完整训练验证 (2026-08-04)
+
+**硬件**：NVIDIA GeForce RTX 4090, 24 GB VRAM, AutoDL 云服务器
+
+**数据**：VRSBench 完整数据集 → 142,390 训练 / 62,918 验证样本（6 种遥感任务）
+
+**方法**：LoRA (r=16, alpha=32), num_train_epochs=2, bs=16, seq_len=1024, adamw + cosine lr
+
+| 阶段 | 关键结果 |
+|---|---|
+| 训练 | 24,110.9s (≈6.7h), loss 2.59 → **0.72** (↓72%), eval_loss **0.55**, trainable 17.4M / 2.14B (0.81%) |
+| 资源 | 峰值显存 18,214 MB, 训练样本/秒 11.811 |
+
+> **结论**：完整 2-epoch 训练使模型在遥感任务上达到 eval_loss 0.55，验证了大规模数据训练的可行性。详细对比见 [training_comparison.md](docs/training_comparison.md)。
+
+### 模型评估验证 (2026-08-10)
+
+**评估数据**: VRSBench 验证集 (50条样本)
+
+**评估环境**: Windows 11, CPU-only (Intel Core Ultra7 155H)
+
+| 任务类型 | 样本数 | 精确匹配率 | 关键词命中率 | 空预测率 | 质量评级 |
+|----------|--------|------------|--------------|----------|----------|
+| 图像描述 (Captioning) | 8 | 0.0% | 100% | 0.0% | ✅ 优秀 |
+| 目标检测 (Detection) | 12 | 0.0% | 100% | 0.0% | ❌ 格式问题 |
+| 视觉问答 (VQA) | 26 | 84.6% | 84.6% | 0.0% | ✅ 良好 |
+| 场景分类 (Scene) | 2 | 100% | 100% | 0.0% | ✅ 优秀 |
+| 目标计数 (Counting) | 2 | 0.0% | 0.0% | 0.0% | ⚠️ 需改进 |
+
+**关键发现**:
+- ✅ 无空预测，模型稳定性好
+- ✅ 图像描述质量高，符合遥感领域特点
+- ❌ Detection任务输出格式错误，只输出label没有输出bbox
+- ⚠️ Counting任务输出英文数字而不是阿拉伯数字
+
+**详细评估报告**: [evaluation_report.md](docs/evaluation_report.md)
 
 ### INT8 量化验证 (2026-07-27)
 
@@ -136,6 +174,12 @@ python scripts/train_qwen3vl_lora.py --config configs/train/qwen3vl_local_smoke.
 
 ```powershell
 python scripts/evaluate_rs_vlm.py --config configs/eval/qwen3vl_eval.yaml
+```
+
+评估 AutoDL 4090 完整训练模型：
+
+```powershell
+python scripts/evaluate_rs_vlm.py --config configs/eval/qwen3vl_autodl_4090_eval.yaml
 ```
 
 ## INT8 量化

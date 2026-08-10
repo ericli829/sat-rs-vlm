@@ -1,0 +1,16 @@
+{
+  "overall": {
+    "num_samples": 50,
+    "empty_predictions": 0,
+    "inference_latency_ms": 4892.360062000012
+  },
+  "by_task": {
+    "vqa": {
+      "num_samples": 50,
+      "keyword_hit_rate": 0.66,
+      "average_generation_length": 17.32,
+      "empty_prediction_rate": 0.0,
+      "exact_match_rate": 0.0
+    }
+  }
+}

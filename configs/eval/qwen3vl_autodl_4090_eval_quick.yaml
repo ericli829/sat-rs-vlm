@@ -1,0 +1,25 @@
+model:
+  base_model: "D:/Models/Qwen3-VL-2B-Instruct"
+  adapter_path: "checkpoints/lora/autodl_4090_full"
+  processor_id: "D:/Models/Qwen3-VL-2B-Instruct"
+  local_files_only: true
+  trust_remote_code: true
+  torch_dtype: "bfloat16"
+  device_map: "auto"
+  attn_implementation: "sdpa"
+
+data:
+  eval_file: "data/processed/qwen3vl_val.jsonl"
+  image_root: "d:/project/database/VRSBench"
+  max_seq_length: 1024
+  max_eval_samples: 20
+
+generation:
+  max_new_tokens: 128
+  do_sample: false
+  temperature: 0.0
+  num_beams: 1
+
+output:
+  summary_file: "reports/eval/qwen3vl_autodl_4090_eval_quick_summary.json"
+  predictions_file: "reports/eval/qwen3vl_autodl_4090_eval_quick_predictions.jsonl"

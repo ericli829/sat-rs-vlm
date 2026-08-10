@@ -1,0 +1,50 @@
+{"task_type": "vqa", "prediction": "assistant\nyellow", "reference": "Yellow", "latency_ms": 11219.2821000001}
+{"task_type": "vqa", "prediction": "assistant\nMultiple", "reference": "2", "latency_ms": 4509.8906000000625}
+{"task_type": "vqa", "prediction": "assistant\nYes", "reference": "Yes", "latency_ms": 4552.559400000064}
+{"task_type": "vqa", "prediction": "assistant\nCurving", "reference": "North-South", "latency_ms": 4765.218600000026}
+{"task_type": "vqa", "prediction": "assistant\nMultiple", "reference": "3", "latency_ms": 4976.549299999988}
+{"task_type": "vqa", "prediction": "assistant\nMiddle-left", "reference": "middle-left", "latency_ms": 4870.870599999989}
+{"task_type": "vqa", "prediction": "assistant\nYes", "reference": "Yes", "latency_ms": 4699.068699999998}
+{"task_type": "vqa", "prediction": "assistant\nsmall-vehicle", "reference": "small-vehicle", "latency_ms": 5160.818000000063}
+{"task_type": "vqa", "prediction": "assistant\nsmall-vehicle", "reference": "small-vehicle", "latency_ms": 4945.113400000082}
+{"task_type": "vqa", "prediction": "assistant\nMultiple", "reference": "1", "latency_ms": 4788.05239999997}
+{"task_type": "vqa", "prediction": "assistant\nwhite", "reference": "white", "latency_ms": 4699.849999999969}
+{"task_type": "vqa", "prediction": "assistant\nVertically", "reference": "in rows", "latency_ms": 5080.404300000055}
+{"task_type": "vqa", "prediction": "assistant\nYes", "reference": "yes", "latency_ms": 4741.011399999934}
+{"task_type": "vqa", "prediction": "assistant\nVertical", "reference": "north-south", "latency_ms": 4705.622900000208}
+{"task_type": "vqa", "prediction": "assistant\nMultiple", "reference": "4", "latency_ms": 4659.885900000063}
+{"task_type": "vqa", "prediction": "assistant\nYes", "reference": "Yes", "latency_ms": 4661.811800000123}
+{"task_type": "vqa", "prediction": "assistant\nTop-right", "reference": "Top-right", "latency_ms": 4854.246900000135}
+{"task_type": "vqa", "prediction": "assistant\ngray", "reference": "Gray", "latency_ms": 4706.000200000062}
+{"task_type": "vqa", "prediction": "assistant\nSeveral", "reference": "5", "latency_ms": 4731.826400000045}
+{"task_type": "vqa", "prediction": "assistant\nYes", "reference": "Yes", "latency_ms": 4654.530100000102}
+{"task_type": "vqa", "prediction": "assistant\nMiddle-left", "reference": "middle-left", "latency_ms": 4847.256199999947}
+{"task_type": "vqa", "prediction": "assistant\nLarge vehicle", "reference": "large-vehicle", "latency_ms": 4866.150699999935}
+{"task_type": "vqa", "prediction": "assistant\ntop-right vehicle", "reference": "large-vehicle", "latency_ms": 4944.123499999932}
+{"task_type": "vqa", "prediction": "assistant\nlarge-vehicles", "reference": "large-vehicle", "latency_ms": 4976.7885999999635}
+{"task_type": "vqa", "prediction": "assistant\nWhite", "reference": "white", "latency_ms": 4730.204199999889}
+{"task_type": "vqa", "prediction": "assistant\nYes", "reference": "yes", "latency_ms": 4680.861899999854}
+{"task_type": "vqa", "prediction": "assistant\nMultiple", "reference": "6", "latency_ms": 4724.615399999948}
+{"task_type": "vqa", "prediction": "assistant\nYes", "reference": "yes", "latency_ms": 4673.785800000132}
+{"task_type": "vqa", "prediction": "assistant\nResidential", "reference": "residential", "latency_ms": 4858.87270000012}
+{"task_type": "vqa", "prediction": "assistant\nYes", "reference": "yes", "latency_ms": 4688.7627000000975}
+{"task_type": "vqa", "prediction": "assistant\nMultiple", "reference": "1", "latency_ms": 4668.812899999921}
+{"task_type": "vqa", "prediction": "assistant\nBottom-middle", "reference": "bottom-middle", "latency_ms": 4833.213600000136}
+{"task_type": "vqa", "prediction": "assistant\nYes", "reference": "Yes", "latency_ms": 4702.990799999952}
+{"task_type": "vqa", "prediction": "assistant\nsmall-vehicle", "reference": "Large vehicle", "latency_ms": 5004.220300000043}
+{"task_type": "vqa", "prediction": "assistant\nComplex", "reference": "Complex", "latency_ms": 4653.786899999886}
+{"task_type": "vqa", "prediction": "assistant\nResidential", "reference": "Residential", "latency_ms": 4811.445299999832}
+{"task_type": "vqa", "prediction": "assistant\nmultiple", "reference": "3", "latency_ms": 4599.576900000102}
+{"task_type": "vqa", "prediction": "assistant\nYes", "reference": "Yes", "latency_ms": 4701.7472}
+{"task_type": "vqa", "prediction": "assistant\nharbor", "reference": "harbor", "latency_ms": 4809.618700000101}
+{"task_type": "vqa", "prediction": "assistant\nWater", "reference": "Body of water", "latency_ms": 4686.41609999986}
+{"task_type": "vqa", "prediction": "assistant\nTwo", "reference": "2", "latency_ms": 4662.309499999992}
+{"task_type": "vqa", "prediction": "assistant\nTop", "reference": "Top", "latency_ms": 4670.672299999978}
+{"task_type": "vqa", "prediction": "assistant\nTop", "reference": "Left side", "latency_ms": 4693.260900000041}
+{"task_type": "vqa", "prediction": "assistant\nMultiple", "reference": "2", "latency_ms": 4656.304399999954}
+{"task_type": "vqa", "prediction": "assistant\ntop-right", "reference": "top-right", "latency_ms": 4838.086299999986}
+{"task_type": "vqa", "prediction": "assistant\nYes", "reference": "Yes", "latency_ms": 4696.361799999977}
+{"task_type": "vqa", "prediction": "assistant\nMultiple", "reference": "2", "latency_ms": 4809.557000000041}
+{"task_type": "vqa", "prediction": "assistant\ntrees", "reference": "Trees", "latency_ms": 4726.213099999995}
+{"task_type": "vqa", "prediction": "assistant\nMiddle-right", "reference": "Under", "latency_ms": 4818.773700000065}
+{"task_type": "vqa", "prediction": "assistant\nSeveral", "reference": "4", "latency_ms": 4600.600699999859}

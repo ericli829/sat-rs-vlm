@@ -1,0 +1,50 @@
+{"task_type": "vqa", "prediction": "assistant\nYellow and green", "reference": "Yellow", "latency_ms": 2907.48839999992}
+{"task_type": "vqa", "prediction": "assistant\nMultiple", "reference": "2", "latency_ms": 1902.5860000001558}
+{"task_type": "vqa", "prediction": "assistant\nYes", "reference": "Yes", "latency_ms": 1813.7288000000353}
+{"task_type": "vqa", "prediction": "assistant\ndiagonal", "reference": "North-South", "latency_ms": 2014.2439999999624}
+{"task_type": "vqa", "prediction": "assistant\nMultiple", "reference": "3", "latency_ms": 1979.763999999932}
+{"task_type": "vqa", "prediction": "assistant\nmiddle-left", "reference": "middle-left", "latency_ms": 1952.132200000051}
+{"task_type": "vqa", "prediction": "assistant\nYes", "reference": "Yes", "latency_ms": 1870.300000000043}
+{"task_type": "vqa", "prediction": "assistant\nsmall-vehicle", "reference": "small-vehicle", "latency_ms": 2120.562700000164}
+{"task_type": "vqa", "prediction": "assistant\nSmall-vehicle", "reference": "small-vehicle", "latency_ms": 2146.269200000006}
+{"task_type": "vqa", "prediction": "assistant\nMultiple", "reference": "1", "latency_ms": 1887.66180000016}
+{"task_type": "vqa", "prediction": "assistant\nGreen", "reference": "white", "latency_ms": 1904.1105000001153}
+{"task_type": "vqa", "prediction": "assistant\ndiagonally", "reference": "in rows", "latency_ms": 2105.4291999998895}
+{"task_type": "vqa", "prediction": "assistant\nYes", "reference": "yes", "latency_ms": 1888.413200000059}
+{"task_type": "vqa", "prediction": "assistant\nhorizontal", "reference": "north-south", "latency_ms": 1964.231400000017}
+{"task_type": "vqa", "prediction": "assistant\nMultiple", "reference": "4", "latency_ms": 2219.471800000065}
+{"task_type": "vqa", "prediction": "assistant\nYes", "reference": "Yes", "latency_ms": 2075.330200000053}
+{"task_type": "vqa", "prediction": "assistant\nBottom-left", "reference": "Top-right", "latency_ms": 2093.8234000000193}
+{"task_type": "vqa", "prediction": "assistant\nGray", "reference": "Gray", "latency_ms": 1976.3138999999228}
+{"task_type": "vqa", "prediction": "assistant\nMultiple large vehicles", "reference": "5", "latency_ms": 2232.676500000025}
+{"task_type": "vqa", "prediction": "assistant\nYes", "reference": "Yes", "latency_ms": 1981.1601000001247}
+{"task_type": "vqa", "prediction": "assistant\nbottom-left", "reference": "middle-left", "latency_ms": 2100.7075999998506}
+{"task_type": "vqa", "prediction": "assistant\nThe top-most vehicle", "reference": "large-vehicle", "latency_ms": 2323.6698000000615}
+{"task_type": "vqa", "prediction": "assistant\nTop-most", "reference": "large-vehicle", "latency_ms": 2134.402899999941}
+{"task_type": "vqa", "prediction": "assistant\nsmall-vehicles", "reference": "large-vehicle", "latency_ms": 2196.598100000074}
+{"task_type": "vqa", "prediction": "assistant\nGreen", "reference": "white", "latency_ms": 1960.6410999999753}
+{"task_type": "vqa", "prediction": "assistant\nYes", "reference": "yes", "latency_ms": 1984.9775999998656}
+{"task_type": "vqa", "prediction": "assistant\n5", "reference": "6", "latency_ms": 1938.9180000000579}
+{"task_type": "vqa", "prediction": "assistant\nNo", "reference": "yes", "latency_ms": 1919.1298000000643}
+{"task_type": "vqa", "prediction": "assistant\nCoastal", "reference": "residential", "latency_ms": 2211.3009000001966}
+{"task_type": "vqa", "prediction": "assistant\nYes", "reference": "yes", "latency_ms": 1955.3614999999809}
+{"task_type": "vqa", "prediction": "assistant\nA small vehicle is visible in the top-right part of the image.", "reference": "1", "latency_ms": 3435.686899999837}
+{"task_type": "vqa", "prediction": "assistant\nbottom-middle", "reference": "bottom-middle", "latency_ms": 2142.8966999999375}
+{"task_type": "vqa", "prediction": "assistant\nYes", "reference": "Yes", "latency_ms": 2022.608099999843}
+{"task_type": "vqa", "prediction": "assistant\nShip", "reference": "Large vehicle", "latency_ms": 2061.0895000002074}
+{"task_type": "vqa", "prediction": "assistant\nComplex", "reference": "Complex", "latency_ms": 1986.0038999997869}
+{"task_type": "vqa", "prediction": "assistant\nforest", "reference": "Residential", "latency_ms": 2020.1825999999983}
+{"task_type": "vqa", "prediction": "assistant\nMultiple", "reference": "3", "latency_ms": 1971.3321000001542}
+{"task_type": "vqa", "prediction": "assistant\nYes", "reference": "Yes", "latency_ms": 2007.9427999999098}
+{"task_type": "vqa", "prediction": "assistant\nBridge", "reference": "harbor", "latency_ms": 2020.7975999999235}
+{"task_type": "vqa", "prediction": "assistant\nVegetation", "reference": "Body of water", "latency_ms": 2235.799199999974}
+{"task_type": "vqa", "prediction": "assistant\nMultiple", "reference": "2", "latency_ms": 1960.1267000000462}
+{"task_type": "vqa", "prediction": "assistant\ntop", "reference": "Top", "latency_ms": 1999.4905999999446}
+{"task_type": "vqa", "prediction": "assistant\nLeft", "reference": "Left side", "latency_ms": 1987.6884000000246}
+{"task_type": "vqa", "prediction": "assistant\nMultiple", "reference": "2", "latency_ms": 2320.1136999998653}
+{"task_type": "vqa", "prediction": "assistant\nbottom-right", "reference": "top-right", "latency_ms": 5431.24570000009}
+{"task_type": "vqa", "prediction": "assistant\nNo", "reference": "Yes", "latency_ms": 3859.096099999988}
+{"task_type": "vqa", "prediction": "assistant\nMultiple", "reference": "2", "latency_ms": 4280.802100000074}
+{"task_type": "vqa", "prediction": "assistant\nTrees", "reference": "Trees", "latency_ms": 4370.675899999924}
+{"task_type": "vqa", "prediction": "assistant\nBottom-most", "reference": "Under", "latency_ms": 2498.8146000000597}
+{"task_type": "vqa", "prediction": "assistant\n3", "reference": "4", "latency_ms": 2354.2508000000453}
