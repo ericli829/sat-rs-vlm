@@ -180,16 +180,25 @@ class BitsAndBytesInt8Backend(QuantizationBackend):
     ) -> Any:
         kwargs = self._common_kwargs(config, modules, cpu=False)
         if quantized:
+            skip_modules = list(config.quantization.llm_int8_skip_modules)
             kwargs["quantization_config"] = modules["transformers"].BitsAndBytesConfig(
                 load_in_8bit=True,
                 llm_int8_threshold=config.quantization.llm_int8_threshold,
+                llm_int8_skip_modules=skip_modules or None,
             )
-        return load_qwen3vl_model(
+        model = load_qwen3vl_model(
             modules=modules,
             base_model=config.model.model_source,
             model_kwargs=kwargs,
             adapter_path=config.model.adapter_path,
         )
+        if quantized and skip_modules:
+            verify_selective_bnb_int8_modules(
+                model,
+                target_module_names=(),
+                skipped_module_names=tuple(skip_modules),
+            )
+        return model
 
     def load_selective_model(
         self,

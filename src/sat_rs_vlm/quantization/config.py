@@ -45,6 +45,7 @@ class QuantBackendConfig(BaseModel):
     device: Literal["cpu", "cuda"] = "cpu"
     save_artifact: bool = False
     llm_int8_threshold: float = Field(default=6.0, ge=0.0)
+    llm_int8_skip_modules: list[str] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod
@@ -91,6 +92,8 @@ class QuantBackendConfig(BaseModel):
             raise ValueError("torch_dynamic_int8 requires device='cpu'")
         if self.backend == "bnb_int8" and self.device != "cuda":
             raise ValueError("bnb_int8 requires device='cuda'")
+        if any(not name.strip() for name in self.llm_int8_skip_modules):
+            raise ValueError("llm_int8_skip_modules must not contain empty names")
         return self
 
 

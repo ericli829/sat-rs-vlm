@@ -1,4 +1,4 @@
-# Optional GPU deployment check: BF16 versus bitsandbytes INT8 on the same 4090 samples.
+# GPU deployment check: FP16 versus bitsandbytes INT8 on the same 4090 samples.
 model:
   base_model: "/root/autodl-tmp/models/Qwen3-VL-2B-Instruct"
   merged_model: "${MERGED_MODEL_DIR}"
@@ -6,7 +6,7 @@ model:
   adapter_path: null
   local_files_only: true
   trust_remote_code: true
-  torch_dtype: "bfloat16"
+  torch_dtype: "float16"
   device_map: "auto"
   attn_implementation: "sdpa"
 

@@ -117,6 +117,26 @@ python scripts/quantize_rs_vlm.py \
   --config configs/quantization/full_bnb_int8_multidataset_autodl.yaml
 ```
 
+## 混合 INT8 对照
+
+层敏感度完成后，使用报告中的 `sensitive_groups` 自动生成 mixed INT8 配置。高敏感层和共享
+权重层保持 FP16，其余 Linear 层使用 bitsandbytes INT8：
+
+```bash
+python scripts/build_mixed_precision_quant_config.py \
+  --base-config configs/quantization/full_bnb_int8_multidataset_autodl.yaml \
+  --sensitivity-report /root/autodl-tmp/outputs/quantization/layer_gpu_<时间戳>/sensitivity_report.json \
+  --keep-top-groups 2 \
+  --output-config /root/autodl-tmp/outputs/quantization/mixed_bnb.yaml
+
+python scripts/quantize_rs_vlm.py \
+  --config /root/autodl-tmp/outputs/quantization/mixed_bnb.yaml \
+  --output-dir /root/autodl-tmp/outputs/quantization/mixed_bnb_run
+```
+
+`--keep-top-groups 2` 会额外保留退化最高的两个层组，确保阈值下没有高敏感组时仍可进行混合
+模型对照。生成器会记录实际保留的组；组名不匹配或缺少模块名时会立即失败。
+
 ## 输出
 
 ```text
