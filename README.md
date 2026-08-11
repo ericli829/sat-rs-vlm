@@ -170,6 +170,33 @@ python scripts/train_qwen3vl_lora.py \
   --config configs/train/qwen3vl_autodl_4090.yaml
 ```
 
+### H1 困难样本视觉适配
+
+H1 从已经完成 Stage A/Stage B 的 LoRA adapter 继续训练，不从 base model 重启。它使用
+Evaluation v1.5 在训练 mining split 上产生的逐样本指标构造 70% hard examples + 30%
+regular replay，并只额外解冻 Qwen3-VL 最后 2 个视觉 block 和主 visual merger。bbox 仍为
+`{"label":"class","bbox":[x1,y1,x2,y2]}` 与 `normalized_0_1`。
+
+```bash
+python scripts/training/analyze_training_data.py \
+  --config configs/train/qwen3vl_hard_visual_adaptation.yaml
+
+python scripts/training/build_hard_example_dataset.py \
+  --config configs/train/qwen3vl_hard_visual_adaptation.yaml
+
+python scripts/train_qwen3vl_lora.py \
+  --config configs/train/qwen3vl_hard_visual_adaptation.yaml \
+  --dry-run
+```
+
+正式训练前先用 `scripts/training/estimate_h1_steps.py` 根据 Stage-B global step 比较
+10%/15%/20%/25% 预算，再把选定值写入配置。H1 使用 LoRA、merger、ViT 三组独立学习率；
+训练前会生成完整参数审计。最终 checkpoint 保留标准 PEFT adapter，并增加
+`h1_visual_weights.safetensors`，Evaluation v1.5 会依据 manifest 自动加载两部分。
+
+完整流程、泄漏保护和 AutoDL 命令见
+[H1 Hard Example Visual Adaptation](docs/training/hard_example_visual_adaptation.md)。
+
 ## Evaluation v1.5
 
 `src/sat_rs_vlm/evaluation/` 是唯一正式评估内核，统一负责协议解析、任务指标、语义诊断、

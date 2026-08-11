@@ -303,9 +303,7 @@ def test_bnb_metadata_reports_mixed_weights_and_actual_int8_count() -> None:
         class version:
             cuda = "13.0"
 
-    metadata = create_backend("bnb_int8").compression_metadata(
-        FakeModel(), Torch(), quantized=True
-    )
+    metadata = create_backend("bnb_int8").compression_metadata(FakeModel(), Torch(), quantized=True)
     assert metadata["weight_dtype"] == "mixed_int8_bfloat16"
     assert metadata["int8_linear_count"] == 1
 

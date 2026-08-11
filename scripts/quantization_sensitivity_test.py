@@ -105,9 +105,7 @@ def run_sensitivity(args: argparse.Namespace) -> dict[str, Any]:
     if backend.name != "bnb_int8" or config.quantization.device != "cuda":
         raise ValueError("Sensitivity analysis requires backend=bnb_int8 and device=cuda")
 
-    modules = safe_import_model_dependencies(
-        require_bitsandbytes=backend.requires_bitsandbytes
-    )
+    modules = safe_import_model_dependencies(require_bitsandbytes=backend.requires_bitsandbytes)
     torch = modules["torch"]
     dataset, _, _, image_root = validate_assets(
         config,
@@ -243,9 +241,7 @@ def run_sensitivity(args: argparse.Namespace) -> dict[str, Any]:
                 variant_latency, (int, float)
             ):
                 speedup = (
-                    float(baseline_latency) / float(variant_latency)
-                    if variant_latency
-                    else None
+                    float(baseline_latency) / float(variant_latency) if variant_latency else None
                 )
             results.append(
                 SensitivityResult(

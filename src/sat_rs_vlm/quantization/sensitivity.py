@@ -371,15 +371,17 @@ def calculate_sensitivity_breakdown(
     if not deltas:
         raise ValueError("No comparable Evaluation v1.5 primary metrics were found")
     task_scores = {
-        task: sum(value * weight for value, weight in values)
-        / sum(weight for _, weight in values)
+        task: sum(value * weight for value, weight in values) / sum(weight for _, weight in values)
         for task, values in by_task.items()
     }
     total_weight = sum(float(configured_task_weights.get(task, 1.0)) for task in task_scores)
-    score = sum(
-        value * float(configured_task_weights.get(task, 1.0))
-        for task, value in task_scores.items()
-    ) / total_weight
+    score = (
+        sum(
+            value * float(configured_task_weights.get(task, 1.0))
+            for task, value in task_scores.items()
+        )
+        / total_weight
+    )
     return score, deltas, task_scores
 
 
@@ -441,12 +443,8 @@ def build_sensitivity_report(
     """生成稳定 JSON 报告，并按敏感度从高到低给出混合精度建议。"""
 
     ranked = sorted(results, key=lambda item: item.sensitivity_score, reverse=True)
-    sensitive = [
-        item.name for item in ranked if item.sensitivity_score >= sensitive_threshold
-    ]
-    insensitive = [
-        item.name for item in ranked if item.sensitivity_score < insensitive_threshold
-    ]
+    sensitive = [item.name for item in ranked if item.sensitivity_score >= sensitive_threshold]
+    insensitive = [item.name for item in ranked if item.sensitivity_score < insensitive_threshold]
     recommendations: list[str] = []
     if sensitive:
         recommendations.append(f"Keep high-sensitivity groups in FP16/FP32: {sensitive}")

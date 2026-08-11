@@ -297,9 +297,9 @@ def run_variant_evaluation(
                     torch,
                     task_type=task_type,
                 )
-                for index, prediction in enumerate(generated):
+                for index, generated_prediction in enumerate(generated):
                     if predictions[index] is None:
-                        predictions[index] = prediction
+                        predictions[index] = generated_prediction
                     sample_latencies[index].append(latency)
             except (RuntimeError, ValueError, OSError) as exc:
                 for _, sample in indexed_batch:
@@ -311,16 +311,16 @@ def run_variant_evaluation(
                             "message": str(exc),
                         }
                     )
-        for (original_index, sample), prediction, latencies in zip(
+        for (original_index, sample), result_prediction, latencies in zip(
             indexed_batch, predictions, sample_latencies, strict=True
         ):
-            if prediction is None:
+            if result_prediction is None:
                 continue
             latency_values.extend(latencies)
             rows_by_index[original_index] = {
                 "id": sample["id"],
                 "task_type": sample["task_type"],
-                "prediction": prediction,
+                "prediction": result_prediction,
                 "reference": extract_reference(sample["messages"]),
                 "metadata": sample.get("metadata", {}),
                 "inference_latency_ms": sum(latencies) / len(latencies),
@@ -328,9 +328,8 @@ def run_variant_evaluation(
                 "backend": backend.name if quantized else "none",
             }
         processed_samples += len(batch_samples)
-        if (
-            processed_samples % config.benchmark.log_every_samples == 0
-            or processed_samples == len(dataset)
+        if processed_samples % config.benchmark.log_every_samples == 0 or processed_samples == len(
+            dataset
         ):
             print(
                 f"[quantization] {variant}: {processed_samples}/{len(dataset)} samples, "
@@ -370,9 +369,7 @@ def run_variant_evaluation(
             project_root,
         ),
         latency_semantics=(
-            "batch_amortized_per_sample"
-            if inference_batch_size > 1
-            else "single_sample"
+            "batch_amortized_per_sample" if inference_batch_size > 1 else "single_sample"
         ),
         eval_batch_size=inference_batch_size,
         group_by_task=True,

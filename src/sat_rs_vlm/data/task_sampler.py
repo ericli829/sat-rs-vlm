@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 from collections import Counter
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import Any
 
 
@@ -111,6 +111,7 @@ def create_trainer(
     *,
     train_sampler: Any | None,
     trainer_kwargs: dict[str, Any],
+    checkpoint_artifact_saver: Callable[[Any, str], None] | None = None,
 ) -> Any:
     """创建标准 Trainer 或显式覆写采样扩展点的加权 Trainer。
 
@@ -118,12 +119,20 @@ def create_trainer(
     避免在训练脚本运行时 monkey patch 私有方法。
     """
 
-    if train_sampler is None:
+    if train_sampler is None and checkpoint_artifact_saver is None:
         return transformers.Trainer(**trainer_kwargs)
 
     class TaskWeightedTrainer(transformers.Trainer):  # type: ignore[misc]
         def _get_train_sampler(self, train_dataset: Any | None = None) -> Any:
             del train_dataset
-            return train_sampler
+            if train_sampler is not None:
+                return train_sampler
+            return super()._get_train_sampler()
+
+        def _save(self, output_dir: str | None = None, state_dict: Any | None = None) -> None:
+            super()._save(output_dir=output_dir, state_dict=state_dict)
+            if checkpoint_artifact_saver is not None:
+                destination = output_dir or str(self.args.output_dir)
+                checkpoint_artifact_saver(self.model, destination)
 
     return TaskWeightedTrainer(**trainer_kwargs)

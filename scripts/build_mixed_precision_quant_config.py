@@ -21,7 +21,10 @@ def parse_args() -> argparse.Namespace:
         "--keep-top-groups",
         type=int,
         default=0,
-        help="Also preserve this many highest-scoring groups; useful when no group crosses threshold.",
+        help=(
+            "Also preserve this many highest-scoring groups; useful when no group "
+            "crosses threshold."
+        ),
     )
     return parser.parse_args()
 

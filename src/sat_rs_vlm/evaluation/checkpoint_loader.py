@@ -8,6 +8,7 @@ from typing import Any
 
 from sat_rs_vlm.models.qwen3vl_loader import compatible_model_class
 from sat_rs_vlm.training.utils import resolve_torch_dtype
+from sat_rs_vlm.training.vision_tuning import load_visual_sidecar
 
 
 def read_strategy_manifest(checkpoint: str | Path) -> dict[str, Any]:
@@ -40,6 +41,14 @@ def validate_checkpoint_files(checkpoint: str | Path, manifest: dict[str, Any]) 
         )
         if not any(path.is_file() for path in adapter_weight_files):
             raise FileNotFoundError(f"Adapter weights are missing: {checkpoint_path}")
+        if manifest.get("checkpoint_type") == "adapter_with_visual_sidecar":
+            sidecar_name = str(manifest.get("visual_sidecar", ""))
+            if not sidecar_name:
+                raise ValueError("H1 checkpoint manifest does not declare visual_sidecar")
+            if not (checkpoint_path / sidecar_name).is_file():
+                raise FileNotFoundError(
+                    f"H1 visual sidecar is missing: {checkpoint_path / sidecar_name}"
+                )
     else:
         if not (checkpoint_path / "config.json").is_file():
             raise FileNotFoundError(f"Full-model config.json is missing: {checkpoint_path}")
@@ -121,6 +130,8 @@ def load_finetuned_checkpoint(
             str(checkpoint_path),
             local_files_only=local_files_only,
         )
+        if manifest.get("checkpoint_type") == "adapter_with_visual_sidecar":
+            load_visual_sidecar(model, checkpoint_path / str(manifest["visual_sidecar"]))
     else:
         model = model_class.from_pretrained(
             str(checkpoint_path),

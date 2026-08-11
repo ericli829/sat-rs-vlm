@@ -81,7 +81,7 @@ class TrainConfig(BaseModel):
     method: str = "qlora"
     freeze_vision_encoder: bool = True
     freeze_projector: bool = False
-    num_train_epochs: float = 3
+    num_train_epochs: float | None = 3
     max_steps: int | None = None
     per_device_train_batch_size: int = 1
     per_device_eval_batch_size: int = 1
@@ -103,6 +103,18 @@ class TrainConfig(BaseModel):
     max_grad_norm: float = 1.0
     seed: int = 42
     resume_from_checkpoint: str | None = None
+
+    @model_validator(mode="after")
+    def validate_training_length(self) -> TrainConfig:
+        """Require either an epoch budget or an explicit positive step budget."""
+
+        if self.max_steps is not None and self.max_steps <= 0:
+            raise ValueError("training.max_steps must be positive when configured")
+        if self.num_train_epochs is None and self.max_steps is None:
+            raise ValueError("Set training.max_steps when training.num_train_epochs is null")
+        if self.num_train_epochs is not None and self.num_train_epochs <= 0:
+            raise ValueError("training.num_train_epochs must be positive when configured")
+        return self
 
 
 class LoRAConfig(BaseModel):
@@ -140,6 +152,116 @@ class LoggingConfig(BaseModel):
     experiment_name: str = "qwen3vl-rs-lora-baseline"
 
 
+class BBoxAreaThresholdConfig(BaseModel):
+    """Normalized bbox-area boundaries shared by statistics, mining, and evaluation."""
+
+    small_max: float = Field(default=0.01, gt=0.0, lt=1.0)
+    medium_max: float = Field(default=0.10, gt=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def validate_order(self) -> BBoxAreaThresholdConfig:
+        if self.small_max >= self.medium_max:
+            raise ValueError("bbox_area_thresholds.small_max must be less than medium_max")
+        return self
+
+
+class TrainingStatisticsConfig(BaseModel):
+    """Controls the lightweight pre-training dataset and supervision audit."""
+
+    enabled: bool = False
+    output_dir: str = "reports/training_statistics"
+    inspect_images: bool = True
+    max_samples: int | None = Field(default=None, ge=1)
+    bbox_area_thresholds: BBoxAreaThresholdConfig = Field(default_factory=BBoxAreaThresholdConfig)
+
+
+class VisionTuningConfig(BaseModel):
+    """Explicit partial Qwen3-VL visual-tower adaptation settings."""
+
+    enabled: bool = False
+    unfreeze_last_n_blocks: int = Field(default=2, ge=1)
+    train_main_merger: bool = True
+    train_deepstack_mergers: bool = False
+    train_patch_embed: bool = False
+
+
+class OptimizationGroupConfig(BaseModel):
+    """Learning rates for the non-overlapping H1 trainable parameter groups."""
+
+    lora_lr: float = Field(default=1.0e-5, gt=0.0)
+    visual_merger_lr: float = Field(default=5.0e-6, gt=0.0)
+    vision_lr: float = Field(default=1.0e-6, gt=0.0)
+
+    @model_validator(mode="after")
+    def validate_learning_rate_order(self) -> OptimizationGroupConfig:
+        if not self.vision_lr < self.visual_merger_lr < self.lora_lr:
+            raise ValueError(
+                "H1 learning rates must satisfy vision_lr < visual_merger_lr < lora_lr"
+            )
+        return self
+
+
+class TrainableAuditConfig(BaseModel):
+    """Controls validation of the model's final trainable parameter surface."""
+
+    fail_on_unexpected_trainable: bool = True
+    report_dir: str = "reports/training"
+
+
+class HardScoreWeightsConfig(BaseModel):
+    """Configurable weights used to preserve hard-example severity."""
+
+    detection_iou: float = Field(default=0.45, ge=0.0)
+    detection_label_error: float = Field(default=0.20, ge=0.0)
+    detection_parse_failure: float = Field(default=0.25, ge=0.0)
+    detection_center_distance: float = Field(default=0.10, ge=0.0)
+    detection_small_object_bonus: float = Field(default=0.05, ge=0.0)
+    counting_absolute_error: float = Field(default=0.60, ge=0.0)
+    counting_parse_failure: float = Field(default=0.40, ge=0.0)
+    text_error: float = Field(default=1.0, ge=0.0)
+    caption_rouge_l: float = Field(default=0.45, ge=0.0)
+    caption_chrf: float = Field(default=0.30, ge=0.0)
+    caption_cider: float = Field(default=0.25, ge=0.0)
+
+
+class HardAdaptationConfig(BaseModel):
+    """Hard mining, replay composition, and leakage-protection configuration."""
+
+    enabled: bool = False
+    source_checkpoint: str | None = None
+    prediction_source: str | None = None
+    source_train_file: str | None = None
+    evaluation_ids_file: str | None = None
+    output_dir: str = "data/processed/hard_examples"
+    evaluation_contract_version: str = "1.5"
+    hard_ratio: float = Field(default=0.70, gt=0.0, lt=1.0)
+    replay_ratio: float = Field(default=0.30, gt=0.0, lt=1.0)
+    hard_score_threshold: float = Field(default=0.35, ge=0.0)
+    max_hard_samples: int | None = Field(default=None, ge=1)
+    fixed_evaluation_sample_count: int = Field(default=593, ge=1)
+    require_evaluation_exclusions: bool = True
+    enforce_replay_coverage: bool = True
+    required_replay_sources: list[str] = Field(default_factory=lambda: ["VRSBench", "LEVIR-CC"])
+    required_replay_tasks: list[str] = Field(
+        default_factory=lambda: [
+            "detection",
+            "counting",
+            "vqa",
+            "captioning",
+            "scene_classification",
+            "change_detection",
+        ]
+    )
+    score_weights: HardScoreWeightsConfig = Field(default_factory=HardScoreWeightsConfig)
+    bbox_area_thresholds: BBoxAreaThresholdConfig = Field(default_factory=BBoxAreaThresholdConfig)
+
+    @model_validator(mode="after")
+    def validate_mix(self) -> HardAdaptationConfig:
+        if abs(self.hard_ratio + self.replay_ratio - 1.0) > 1.0e-9:
+            raise ValueError("hard_ratio and replay_ratio must sum to 1.0")
+        return self
+
+
 class Qwen3VLTrainingConfig(BaseModel):
     """完整 Qwen3-VL 微调配置。"""
 
@@ -150,6 +272,11 @@ class Qwen3VLTrainingConfig(BaseModel):
     qlora: QLoRAConfig = Field(default_factory=QLoRAConfig)
     evaluation: EvalConfig = Field(default_factory=EvalConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    statistics: TrainingStatisticsConfig = Field(default_factory=TrainingStatisticsConfig)
+    vision_tuning: VisionTuningConfig = Field(default_factory=VisionTuningConfig)
+    optimization: OptimizationGroupConfig = Field(default_factory=OptimizationGroupConfig)
+    trainable_audit: TrainableAuditConfig = Field(default_factory=TrainableAuditConfig)
+    hard_adaptation: HardAdaptationConfig = Field(default_factory=HardAdaptationConfig)
 
 
 @dataclass(frozen=True)

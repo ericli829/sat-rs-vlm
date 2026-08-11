@@ -303,9 +303,7 @@ def verify_selective_bnb_int8_modules(
 
     named_modules = dict(model.named_modules())
     missing = sorted(
-        name
-        for name in (*target_module_names, *skipped_module_names)
-        if name not in named_modules
+        name for name in (*target_module_names, *skipped_module_names) if name not in named_modules
     )
     if missing:
         raise RuntimeError(f"Selective INT8 modules disappeared after model load: {missing[:20]}")

@@ -30,6 +30,10 @@ from sat_rs_vlm.training.config import (
     resolve_training_paths,
 )
 from sat_rs_vlm.training.freeze import freeze_projector, freeze_vision_encoder
+from sat_rs_vlm.training.optimizer import (
+    build_h1_parameter_groups,
+    optimizer_group_report,
+)
 from sat_rs_vlm.training.utils import (
     MODEL_DEPS_ERROR,
     count_trainable_parameters,
@@ -39,6 +43,11 @@ from sat_rs_vlm.training.utils import (
     safe_import_model_dependencies,
     set_seed,
     torch_device_summary,
+)
+from sat_rs_vlm.training.vision_tuning import (
+    configure_h1_trainable_parameters,
+    save_visual_sidecar,
+    write_trainable_audit,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -225,7 +234,11 @@ def build_training_arguments(
     bf16, fp16 = precision_flags(torch, config)
     kwargs: dict[str, Any] = {
         "output_dir": str(paths.output_dir),
-        "num_train_epochs": config.training.num_train_epochs,
+        "num_train_epochs": (
+            config.training.num_train_epochs
+            if config.training.num_train_epochs is not None
+            else 1.0
+        ),
         "max_steps": config.training.max_steps if config.training.max_steps is not None else -1,
         "per_device_train_batch_size": config.training.per_device_train_batch_size,
         "per_device_eval_batch_size": config.training.per_device_eval_batch_size,
@@ -258,6 +271,26 @@ def build_training_arguments(
     except TypeError:
         kwargs["evaluation_strategy"] = kwargs.pop("eval_strategy")
         return transformers.TrainingArguments(**kwargs)
+
+
+def validate_h1_configuration(
+    config: Qwen3VLTrainingConfig,
+    paths: ResolvedTrainingPaths,
+) -> None:
+    """Reject H1 configurations that would silently start from a fresh adapter."""
+
+    if not config.vision_tuning.enabled:
+        return
+    if config.training.method != "lora":
+        raise ValueError("H1 partial visual adaptation requires training.method='lora'")
+    if paths.initial_adapter_dir is None:
+        raise ValueError("H1 partial visual adaptation must start from lora.initial_adapter_dir")
+    if config.training.max_steps is None:
+        raise ValueError("H1 partial visual adaptation requires an explicit training.max_steps")
+    if config.training.num_train_epochs is not None:
+        raise ValueError(
+            "H1 is step-budgeted; set training.num_train_epochs=null when vision_tuning is enabled"
+        )
 
 
 def load_datasets(
@@ -316,6 +349,16 @@ def print_resolved_summary(
     if config.data.source_batch_pattern:
         print(f"Source batch pattern: {config.data.source_batch_pattern}")
     print(f"LoRA rank: {config.lora.r}")
+    print(f"Vision tuning enabled: {config.vision_tuning.enabled}")
+    if config.vision_tuning.enabled:
+        print(f"Vision last N blocks: {config.vision_tuning.unfreeze_last_n_blocks}")
+        print(f"Train main visual merger: {config.vision_tuning.train_main_merger}")
+        print(
+            "Grouped learning rates: "
+            f"LoRA={config.optimization.lora_lr}, "
+            f"merger={config.optimization.visual_merger_lr}, "
+            f"ViT={config.optimization.vision_lr}"
+        )
     print(f"Train samples: {train_samples}")
     print(f"Eval samples: {eval_samples}")
     print(f"Max steps: {config.training.max_steps}")
@@ -354,6 +397,9 @@ def build_strategy_manifest(
     paths: ResolvedTrainingPaths,
     param_stats: tuple[int, int, float],
     device: dict[str, Any],
+    *,
+    trainable_audit: dict[str, Any] | None = None,
+    optimizer_groups: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """构造统一 checkpoint 自描述文件，供评估与可靠性流程加载。"""
 
@@ -376,7 +422,7 @@ def build_strategy_manifest(
             "use_double_quant": config.qlora.bnb_4bit_use_double_quant,
             "compute_dtype": config.qlora.bnb_4bit_compute_dtype,
         }
-    return {
+    manifest = {
         "schema_version": "1.0",
         "strategy": config.training.method,
         "adapter_based": True,
@@ -400,6 +446,22 @@ def build_strategy_manifest(
         ),
         "device": device,
     }
+    if config.vision_tuning.enabled:
+        manifest.update(
+            {
+                "training_stage": "h1_hard_example_visual_adaptation",
+                "checkpoint_type": "adapter_with_visual_sidecar",
+                "visual_sidecar": "h1_visual_weights.safetensors",
+                "vision_tuning": config.vision_tuning.model_dump(mode="json"),
+                "optimizer_groups": optimizer_groups or [],
+                "trainable_parameter_audit": trainable_audit,
+                "bbox_protocol": {
+                    "schema": "label+bbox",
+                    "coordinate_format": "normalized_0_1",
+                },
+            }
+        )
+    return manifest
 
 
 def save_strategy_manifest(manifest: dict[str, Any], output_dir: Path) -> None:
@@ -414,6 +476,7 @@ def save_strategy_manifest(manifest: dict[str, Any], output_dir: Path) -> None:
 def dry_run(config: Qwen3VLTrainingConfig, paths: ResolvedTrainingPaths) -> None:
     """只检查配置、路径、Dataset 和 Collator 初始化。"""
 
+    validate_h1_configuration(config, paths)
     if paths.model_dir is not None and not paths.model_dir.exists():
         raise FileNotFoundError(f"Model directory does not exist: {paths.model_dir}")
     if paths.processor_dir is not None and not paths.processor_dir.exists():
@@ -448,6 +511,7 @@ def dry_run(config: Qwen3VLTrainingConfig, paths: ResolvedTrainingPaths) -> None
 def forward_only(config: Qwen3VLTrainingConfig, paths: ResolvedTrainingPaths) -> None:
     """执行单 batch 前向传播并打印 loss。"""
 
+    validate_h1_configuration(config, paths)
     modules = safe_import_model_dependencies(require_bitsandbytes=config.training.method == "qlora")
     torch = modules["torch"]
     transformers = modules["transformers"]
@@ -458,6 +522,12 @@ def forward_only(config: Qwen3VLTrainingConfig, paths: ResolvedTrainingPaths) ->
     )
     model = load_qwen3vl_model(config, paths, modules)
     model = apply_lora(model, config, paths, modules)
+    if config.vision_tuning.enabled:
+        configure_h1_trainable_parameters(
+            model,
+            config.vision_tuning,
+            config.trainable_audit,
+        )
     train_dataset, _ = load_datasets(config, paths)
     collator = Qwen3VLDataCollator(
         processor,
@@ -484,6 +554,7 @@ def train(
 ) -> dict[str, Any]:
     """执行 LoRA/QLoRA 训练。"""
 
+    validate_h1_configuration(config, paths)
     started = time.perf_counter()
     modules = safe_import_model_dependencies(require_bitsandbytes=config.training.method == "qlora")
     torch = modules["torch"]
@@ -498,13 +569,46 @@ def train(
         local_files_only=config.model.local_files_only,
     )
     model = load_qwen3vl_model(config, paths, modules)
-    if config.training.freeze_vision_encoder:
+    if config.training.freeze_vision_encoder and not config.vision_tuning.enabled:
         freeze_vision_encoder(model)
-    if config.training.freeze_projector:
+    if config.training.freeze_projector and not config.vision_tuning.enabled:
         freeze_projector(model)
     if config.training.gradient_checkpointing and hasattr(model, "gradient_checkpointing_enable"):
         model.gradient_checkpointing_enable()
     model = apply_lora(model, config, paths, modules)
+
+    trainable_audit: dict[str, Any] | None = None
+    optimizer_groups: list[dict[str, Any]] | None = None
+    grouped_optimizer = None
+    checkpoint_artifact_saver = None
+    if config.vision_tuning.enabled:
+        trainable_audit = configure_h1_trainable_parameters(
+            model,
+            config.vision_tuning,
+            config.trainable_audit,
+        )
+        paths.output_dir.mkdir(parents=True, exist_ok=True)
+        run_audit_path = (
+            Path(config.trainable_audit.report_dir)
+            / config.logging.experiment_name
+            / "trainable_parameters.json"
+        )
+        write_trainable_audit(trainable_audit, run_audit_path)
+        write_trainable_audit(trainable_audit, paths.output_dir / "trainable_parameters.json")
+        raw_groups = build_h1_parameter_groups(
+            model,
+            trainable_audit,
+            config.optimization,
+            weight_decay=config.training.weight_decay,
+        )
+        optimizer_groups = optimizer_group_report(raw_groups)
+        grouped_optimizer = torch.optim.AdamW(raw_groups)
+
+        def save_h1_checkpoint_artifacts(checkpoint_model: Any, output_dir: str) -> None:
+            assert trainable_audit is not None
+            save_visual_sidecar(checkpoint_model, trainable_audit, output_dir)
+
+        checkpoint_artifact_saver = save_h1_checkpoint_artifacts
 
     train_dataset, eval_dataset = load_datasets(config, paths)
     param_stats = count_trainable_parameters(model)
@@ -542,16 +646,20 @@ def train(
             f"pattern={config.data.source_batch_pattern}, "
             f"samples_per_epoch={len(train_sampler)}"
         )
+    trainer_kwargs: dict[str, Any] = {
+        "model": model,
+        "args": build_training_arguments(config, paths, transformers, torch),
+        "train_dataset": train_dataset,
+        "eval_dataset": eval_dataset,
+        "data_collator": collator,
+    }
+    if grouped_optimizer is not None:
+        trainer_kwargs["optimizers"] = (grouped_optimizer, None)
     trainer = create_trainer(
         transformers,
         train_sampler=train_sampler,
-        trainer_kwargs={
-            "model": model,
-            "args": build_training_arguments(config, paths, transformers, torch),
-            "train_dataset": train_dataset,
-            "eval_dataset": eval_dataset,
-            "data_collator": collator,
-        },
+        trainer_kwargs=trainer_kwargs,
+        checkpoint_artifact_saver=checkpoint_artifact_saver,
     )
     train_output = trainer.train(resume_from_checkpoint=config.training.resume_from_checkpoint)
     train_metrics = dict(getattr(train_output, "metrics", {}) or {})
@@ -579,7 +687,15 @@ def train(
                 break
     device = torch_device_summary(torch)
     save_strategy_manifest(
-        build_strategy_manifest(model, config, paths, param_stats, device),
+        build_strategy_manifest(
+            model,
+            config,
+            paths,
+            param_stats,
+            device,
+            trainable_audit=trainable_audit,
+            optimizer_groups=optimizer_groups,
+        ),
         paths.output_dir,
     )
     peak_memory = 0.0
@@ -613,6 +729,11 @@ def train(
         "train_runtime_seconds": train_metrics.get("train_runtime"),
         "train_samples_per_second": train_metrics.get("train_samples_per_second"),
         "train_steps_per_second": train_metrics.get("train_steps_per_second"),
+        "training_stage": (
+            "h1_hard_example_visual_adaptation" if config.vision_tuning.enabled else None
+        ),
+        "trainable_parameter_audit": trainable_audit,
+        "optimizer_groups": optimizer_groups,
     }
 
 

@@ -120,7 +120,7 @@ def run(config_path: Path, output_override: Path | None = None) -> dict[str, Any
             raise ValueError("Evaluation names must not be empty")
 
     first_model_config = loaded[0][2].get("model", {})
-    for entry, child_path, child_config in loaded[1:]:
+    for _entry, child_path, child_config in loaded[1:]:
         if child_config.get("model", {}) != first_model_config:
             raise ValueError(
                 f"All evaluations must use the same base model configuration: {child_path}"

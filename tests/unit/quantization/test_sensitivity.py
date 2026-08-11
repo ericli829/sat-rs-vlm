@@ -142,9 +142,7 @@ def test_sensitivity_balances_tasks_and_supports_levir_metrics() -> None:
             "vqa": {"metrics": {"normalized_accuracy": {"value": 0.8}}},
         },
         "by_protocol": {
-            "levir_cc_change_caption": {
-                "metrics": {"balanced_accuracy": {"value": 0.9}}
-            }
+            "levir_cc_change_caption": {"metrics": {"balanced_accuracy": {"value": 0.9}}}
         },
     }
     quantized = {
@@ -152,9 +150,7 @@ def test_sensitivity_balances_tasks_and_supports_levir_metrics() -> None:
             "vqa": {"metrics": {"normalized_accuracy": {"value": 0.7}}},
         },
         "by_protocol": {
-            "levir_cc_change_caption": {
-                "metrics": {"balanced_accuracy": {"value": 0.7}}
-            }
+            "levir_cc_change_caption": {"metrics": {"balanced_accuracy": {"value": 0.7}}}
         },
     }
 

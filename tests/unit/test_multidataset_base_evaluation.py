@@ -45,8 +45,6 @@ def test_multidataset_summary_extracts_vrsbench_and_levir_metrics(tmp_path: Path
     }
     _write_summary(report, tmp_path)
 
-    written = json.loads(
-        (tmp_path / "base_multidataset_summary.json").read_text(encoding="utf-8")
-    )
+    written = json.loads((tmp_path / "base_multidataset_summary.json").read_text(encoding="utf-8"))
     assert written["model_source"] == "base-model"
     assert (tmp_path / "base_multidataset_summary.md").is_file()

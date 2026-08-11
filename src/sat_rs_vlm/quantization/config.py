@@ -183,9 +183,7 @@ class QuantSensitivityConfig(BaseModel):
     @model_validator(mode="after")
     def validate_weights(self) -> QuantSensitivityConfig:
         invalid_tasks = {name: value for name, value in self.task_weights.items() if value <= 0}
-        invalid_metrics = {
-            name: value for name, value in self.metric_weights.items() if value <= 0
-        }
+        invalid_metrics = {name: value for name, value in self.metric_weights.items() if value <= 0}
         if invalid_tasks:
             raise ValueError(f"task_weights values must be positive: {invalid_tasks}")
         if invalid_metrics:

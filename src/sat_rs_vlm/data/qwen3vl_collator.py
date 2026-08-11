@@ -98,20 +98,102 @@ class Qwen3VLDataCollator:
         texts: list[str],
         image_inputs: Any,
         video_inputs: Any,
+        *,
+        truncation: bool = True,
+        padding: bool = True,
     ) -> dict[str, Any]:
         """调用 processor 编码文本和视觉输入。"""
 
-        return dict(
-            self.processor(
-                text=texts,
-                images=image_inputs,
-                videos=video_inputs,
-                padding=True,
-                truncation=True,
-                max_length=self.max_seq_length,
-                return_tensors="pt",
+        kwargs: dict[str, Any] = {
+            "text": texts,
+            "images": image_inputs,
+            "videos": video_inputs,
+            "padding": padding,
+            "truncation": truncation,
+            "return_tensors": "pt",
+        }
+        if truncation:
+            kwargs["max_length"] = self.max_seq_length
+        return dict(self.processor(**kwargs))
+
+    def tokenization_diagnostics(self, sample: dict[str, Any]) -> dict[str, Any]:
+        """Return exact training-mask and uncapped-length diagnostics for one sample.
+
+        Capped labels are built by the same assistant-only masking function used by
+        training. Truncation is determined from an uncapped processor encoding, not
+        from text length or another heuristic.
+        """
+
+        if self.processor is None:
+            raise ValueError("processor is required for tokenization diagnostics")
+        normalized = self._messages_with_resolved_images(sample)
+        prompt_messages = [message for message in normalized if message.get("role") != "assistant"]
+        full_text = str(
+            self.processor.apply_chat_template(
+                normalized,
+                tokenize=False,
+                add_generation_prompt=False,
             )
         )
+        prompt_text = str(
+            self.processor.apply_chat_template(
+                prompt_messages,
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+        )
+        image_inputs, video_inputs = self._process_vision_info([normalized])
+        capped = self._encode([full_text], image_inputs, video_inputs)
+        capped_prompt = self._encode([prompt_text], image_inputs, video_inputs)
+        labels = self._build_assistant_labels(
+            capped,
+            capped_prompt,
+            [str(sample.get("id", "<unknown>"))],
+        )
+        uncapped = self._encode(
+            [full_text],
+            image_inputs,
+            video_inputs,
+            truncation=False,
+            padding=False,
+        )
+        uncapped_prompt = self._encode(
+            [prompt_text],
+            image_inputs,
+            video_inputs,
+            truncation=False,
+            padding=False,
+        )
+        capped_total = self._active_length(capped)
+        uncapped_total = self._active_length(uncapped)
+        uncapped_prompt_length = self._active_length(uncapped_prompt)
+        uncapped_assistant = max(0, uncapped_total - uncapped_prompt_length)
+        supervised = int((labels[0] != -100).sum().item())
+        encoded = dict(capped)
+        encoded["labels"] = labels
+        return {
+            "encoded": encoded,
+            "prompt_tokens": capped_total - supervised,
+            "assistant_tokens": supervised,
+            "total_tokens": capped_total,
+            "uncapped_prompt_tokens": uncapped_prompt_length,
+            "uncapped_assistant_tokens": uncapped_assistant,
+            "uncapped_total_tokens": uncapped_total,
+            "truncated": uncapped_total > capped_total,
+            "assistant_truncated": uncapped_assistant > supervised,
+        }
+
+    @staticmethod
+    def _active_length(encoded: dict[str, Any]) -> int:
+        """Count non-padding tokens in a single-sample processor result."""
+
+        attention_mask = encoded.get("attention_mask")
+        if attention_mask is not None:
+            return int(attention_mask[0].sum().item())
+        input_ids = encoded.get("input_ids")
+        if input_ids is None:
+            raise ValueError("processor output must contain input_ids or attention_mask")
+        return int(input_ids.shape[-1])
 
     def _build_assistant_labels(
         self,

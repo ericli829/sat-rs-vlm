@@ -1,0 +1,148 @@
+# H1 continues from the final Stage-B LoRA adapter; it never starts a fresh adapter.
+model:
+  model_dir: "${LOCAL_MODEL_DIR}"
+  processor_dir: "${LOCAL_MODEL_DIR}"
+  local_files_only: true
+  trust_remote_code: true
+  torch_dtype: "bfloat16"
+  attn_implementation: "sdpa"
+  device_map: "auto"
+
+data:
+  train_file: "data/processed/hard_examples/h1_train.jsonl"
+  val_file: "${VAL_JSONL}"
+  image_root: "${DATA_ROOT}"
+  max_seq_length: 1024
+  max_train_samples: null
+  max_eval_samples: 593
+  skip_bad_samples: false
+  data_composition: "full"
+  sampling_mode: "uniform"
+  task_sampling_weights: {}
+  source_batch_pattern: []
+
+training:
+  output_dir: "${OUTPUT_ROOT}/checkpoints/lora/h1_hard_visual_adaptation"
+  method: "lora"
+  freeze_vision_encoder: true
+  freeze_projector: true
+  num_train_epochs: null
+  # Replace after running estimate_h1_steps.py; this conservative placeholder is
+  # intentionally controlled by steps rather than a full-data epoch.
+  max_steps: 1000
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 8
+  learning_rate: 0.00001
+  weight_decay: 0.01
+  warmup_ratio: 0.03
+  lr_scheduler_type: "cosine"
+  logging_steps: 20
+  save_steps: 250
+  eval_steps: 250
+  save_total_limit: 5
+  bf16: true
+  fp16: false
+  gradient_checkpointing: true
+  dataloader_num_workers: 8
+  dataloader_pin_memory: true
+  dataloader_persistent_workers: true
+  max_grad_norm: 1.0
+  seed: 42
+  resume_from_checkpoint: null
+
+lora:
+  initial_adapter_dir: "${FINAL_LORA_CHECKPOINT}"
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+qlora:
+  load_in_4bit: false
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_compute_dtype: "bfloat16"
+  bnb_4bit_use_double_quant: true
+
+vision_tuning:
+  enabled: true
+  unfreeze_last_n_blocks: 2
+  train_main_merger: true
+  train_deepstack_mergers: false
+  train_patch_embed: false
+
+optimization:
+  lora_lr: 0.00001
+  visual_merger_lr: 0.000005
+  vision_lr: 0.000001
+
+trainable_audit:
+  fail_on_unexpected_trainable: true
+  report_dir: "reports/training"
+
+statistics:
+  enabled: true
+  output_dir: "reports/training_statistics"
+  inspect_images: true
+  max_samples: null
+  bbox_area_thresholds:
+    small_max: 0.01
+    medium_max: 0.10
+
+hard_adaptation:
+  enabled: true
+  source_checkpoint: "${FINAL_LORA_CHECKPOINT}"
+  prediction_source: "${H1_MINING_EVALUATION_DIR}"
+  source_train_file: "${H1_MINING_TRAIN_JSONL}"
+  evaluation_ids_file: "${FIXED_EVAL_IDS}"
+  output_dir: "data/processed/hard_examples"
+  evaluation_contract_version: "1.5"
+  hard_ratio: 0.70
+  replay_ratio: 0.30
+  hard_score_threshold: 0.35
+  max_hard_samples: null
+  fixed_evaluation_sample_count: 593
+  require_evaluation_exclusions: true
+  enforce_replay_coverage: true
+  required_replay_sources:
+    - "VRSBench"
+    - "LEVIR-CC"
+  required_replay_tasks:
+    - detection
+    - counting
+    - vqa
+    - captioning
+    - scene_classification
+    - change_detection
+  bbox_area_thresholds:
+    small_max: 0.01
+    medium_max: 0.10
+  score_weights:
+    detection_iou: 0.45
+    detection_label_error: 0.20
+    detection_parse_failure: 0.25
+    detection_center_distance: 0.10
+    detection_small_object_bonus: 0.05
+    counting_absolute_error: 0.60
+    counting_parse_failure: 0.40
+    text_error: 1.0
+    caption_rouge_l: 0.45
+    caption_chrf: 0.30
+    caption_cider: 0.25
+
+evaluation:
+  do_eval: true
+  predict_with_generate: true
+  max_new_tokens: 256
+  num_beams: 1
+
+logging:
+  report_to: "none"
+  experiment_name: "h1_hard_visual_adaptation"
