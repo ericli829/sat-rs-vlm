@@ -99,12 +99,14 @@ _NO_CHANGE_EXPRESSIONS = {
 # phrase matching therefore rejects harmless tense, number and wording changes.
 # These patterns deliberately use fullmatch: a partial statement such as
 # "no building changed, but a road appeared" must remain a positive change.
-CHANGE_PARSER_VERSION = "levir_relaxed_no_change_v2"
+CHANGE_PARSER_VERSION = "levir_contextual_no_change_v3"
 _NO_CHANGE_QUALIFIER = (
-    r"(?:(?:significant|visible|noticeable|obvious|major|meaningful|apparent) )?"
+    r"(?:(?:significant|visible|discernible|detectable|observable|noticeable|"
+    r"obvious|major|meaningful|notable|substantial|apparent) )?"
 )
 _GLOBAL_SCOPE = (
-    r"(?: (?:between|across|in) (?:the )?(?:(?:two|both) )?"
+    r"(?: (?:between|across|in) (?:the )?"
+    r"(?:(?:two|both|first and second|second and first) )?"
     r"(?:images?|scenes?|pictures?|views?|area|region))?"
 )
 _NO_CHANGE_PREDICATE = (
@@ -118,7 +120,8 @@ _NO_CHANGE_PREDICATE = (
     r")?"
 )
 _GLOBAL_IMAGE_SUBJECT = (
-    r"(?:the )?(?:(?:two|both) )?(?:images?|scenes?|pictures?|views?)"
+    r"(?:the )?(?:(?:two|both|first and second|second and first) )?"
+    r"(?:images?|scenes?|pictures?|views?)"
 )
 _NO_CHANGE_PATTERNS = tuple(
     re.compile(pattern)
@@ -133,6 +136,12 @@ _NO_CHANGE_PATTERNS = tuple(
             rf"(?:is|are|was|were|remain|remains|remained|appear|appears|appeared|"
             rf"seem|seems|seemed|look|looks|looked) "
             rf"(?:identical|unchanged|the same(?: as before)?)"
+        ),
+        (
+            r"the (?:first|second) (?:image|scene|picture|view) "
+            r"(?:is|was|appears|appeared|seems|seemed|looks|looked) "
+            r"(?:identical to|the same as) the "
+            r"(?:first|second) (?:image|scene|picture|view)"
         ),
         (
             r"(?:the )?(?:scene|area|region|landscape) "
@@ -151,6 +160,53 @@ _NO_CHANGE_PATTERNS = tuple(
 )
 _ANSWER_PREFIX_PATTERN = re.compile(
     r"^(?:(?:the )?answer|prediction|result)(?: is)? "
+)
+_CLAUSE_SEPARATOR_PATTERN = re.compile(r"[.!?;\n]+")
+_CONTEXTUAL_NO_CHANGE_PATTERNS = tuple(
+    re.compile(pattern)
+    for pattern in (
+        rf"\bno {_NO_CHANGE_QUALIFIER}(?:changes?|differences?)\b",
+        (
+            r"\b(?:the )?(?:(?:two|both|first and second|second and first) )?"
+            r"(?:images|scenes|pictures|views) "
+            r"(?:are|were|remain|remained|appear|appeared|seem|seemed|look|looked) "
+            r"(?:identical|unchanged|the same)\b"
+        ),
+        (
+            r"\bthe (?:first|second) (?:image|scene|picture|view) "
+            r"(?:is|was|appears|appeared|seems|seemed|looks|looked) "
+            r"(?:identical to|the same as) the "
+            r"(?:first|second) (?:image|scene|picture|view)\b"
+        ),
+        r"\b(?:the )?(?:overall )?(?:scene|landscape|area) remains? (?:unchanged|the same)\b",
+        r"\b(?:almost )?nothing (?:has |had )?changed\b",
+    )
+)
+_POSITIVE_CHANGE_EVIDENCE_PATTERNS = tuple(
+    re.compile(pattern)
+    for pattern in (
+        (
+            r"\b(?:shows?|showed|indicates?|indicated|describes?|described) "
+            r"(?:a |an |the )?(?:(?:significant|noticeable|visible|clear|major) )?"
+            r"change\b"
+        ),
+        r"\b(?:main|primary|most noticeable|significant|noticeable|major) change\b",
+        (
+            r"\b(?:appeared|disappeared|removed|added|replaced|demolished|constructed|"
+            r"built|altered|destroyed|expanded|reduced)\b"
+        ),
+        (
+            r"\b(?:is|are|was|were|has been|have been|had been) "
+            r"(?:changed|altered|removed|added|replaced|demolished|constructed|built)\b"
+        ),
+        (
+            r"\b(?:new|additional) (?:building|house|road|street|vehicle|car|truck|"
+            r"structure|path|pond|pool|field|facility|construction|development)\b"
+        ),
+        r"\b(?:not present|no longer present|no longer visible|now absent)\b",
+        r"\bdifferent (?:bend|color|layout|position|appearance|shape|roof|surface|texture)\b",
+        r"\bnot (?:directly )?related\b",
+    )
 )
 _STRUCTURED_CHANGE_KEYS = ("changeflag", "change_flag", "changed", "has_change")
 
@@ -401,6 +457,25 @@ def _binary_change_value(value: Any) -> int | None:
     return None
 
 
+def _is_complete_no_change_clause(text: str) -> bool:
+    candidate = _ANSWER_PREFIX_PATTERN.sub("", normalize_text(text), count=1)
+    return bool(candidate) and (
+        candidate in _NO_CHANGE_EXPRESSIONS
+        or any(pattern.fullmatch(candidate) for pattern in _NO_CHANGE_PATTERNS)
+    )
+
+
+def _has_contextual_no_change_decision(text: str) -> bool:
+    normalized = normalize_text(text)
+    has_no_change_cue = any(
+        pattern.search(normalized) for pattern in _CONTEXTUAL_NO_CHANGE_PATTERNS
+    )
+    has_positive_evidence = any(
+        pattern.search(normalized) for pattern in _POSITIVE_CHANGE_EVIDENCE_PATTERNS
+    )
+    return has_no_change_cue and not has_positive_evidence
+
+
 def parse_change_prediction(text: str) -> ChangePredictionResult:
     """把 LEVIR-CC 自然语言输出解析为 0=无变化、1=发生变化。
 
@@ -435,6 +510,16 @@ def parse_change_prediction(text: str) -> ChangePredictionResult:
         return ChangePredictionResult(0, normalized, None, "exact_no_change")
     if any(pattern.fullmatch(candidate) for pattern in _NO_CHANGE_PATTERNS):
         return ChangePredictionResult(0, normalized, None, "pattern_no_change")
+
+    clauses = [
+        clause
+        for clause in _CLAUSE_SEPARATOR_PATTERN.split(text)
+        if normalize_text(clause)
+    ]
+    if len(clauses) > 1 and all(_is_complete_no_change_clause(clause) for clause in clauses):
+        return ChangePredictionResult(0, normalized, None, "composite_no_change")
+    if _has_contextual_no_change_decision(text):
+        return ChangePredictionResult(0, normalized, None, "contextual_no_change")
     return ChangePredictionResult(1, normalized, None, "default_change")
 
 

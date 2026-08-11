@@ -747,6 +747,22 @@ def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
                     num_samples=total,
                     note=f"Parser profile: {CHANGE_PARSER_VERSION}.",
                 ),
+                "composite_no_change_match_rate": metric_value(
+                    ratio(parse_modes["composite_no_change"], total),
+                    num_samples=total,
+                    note=(
+                        "All punctuation-separated clauses independently express global "
+                        f"no change under {CHANGE_PARSER_VERSION}."
+                    ),
+                ),
+                "contextual_no_change_match_rate": metric_value(
+                    ratio(parse_modes["contextual_no_change"], total),
+                    num_samples=total,
+                    note=(
+                        "A global no-change decision is present in explanatory text and no "
+                        f"explicit positive change evidence is found by {CHANGE_PARSER_VERSION}."
+                    ),
+                ),
                 "default_change_fallback_rate": metric_value(
                     ratio(parse_modes["default_change"], total),
                     num_samples=total,

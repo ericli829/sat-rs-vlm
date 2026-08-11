@@ -32,13 +32,17 @@
 
 ### LEVIR-CC变化判定
 
-变化二分类使用可追溯的 `levir_relaxed_no_change_v2` 解析器，不再要求模型输出与少量固定句子完全一致：
+变化二分类使用可追溯的 `levir_contextual_no_change_v3` 解析器，不再要求模型输出与少量固定句子完全一致：
 
 - 直接接受 `0`（无变化）和 `1`（有变化）；
 - 接受 `changeflag`、`change_flag`、`changed`、`has_change` JSON字段中的二分类值；
 - 接受完整、全局性的常见无变化表达及其时态、单复数和轻微措辞变化，例如
   `No changes were observed between the two images`、`There were no significant changes`、
   `Both images appear unchanged`；
+- 对多个句子的回答逐句判定；只有每个分句都表达全局无变化时才判为无变化，例如
+  `The second image is identical to the first image. There are no visible changes between the two images.`；
+- 允许在场景说明之后给出全局无变化结论，例如先描述两幅图的视角，再说明
+  `There are no discernible changes in the environment`；只有未发现新增、移除、替换、建造等明确变化证据时才接受该结论；
 - 不使用简单关键词包含规则。`No building changed, but a road appeared`、
   `No change in buildings; however vegetation was removed`等复合变化描述仍判为有变化；
 - 空回答解析失败；其他非空且不满足完整无变化模式的变化描述判为有变化。

@@ -82,6 +82,21 @@ class LevirParserAndRoutingTests(unittest.TestCase):
             with self.subTest(expression=expression):
                 self.assertEqual(parse_change_prediction(expression).value, expected)
 
+        composite = parse_change_prediction(
+            "The second image is identical to the first image. "
+            "There are no visible changes between the two images."
+        )
+        self.assertEqual(composite.value, 0)
+        self.assertEqual(composite.match_type, "composite_no_change")
+
+        contextual = parse_change_prediction(
+            "The images depict a dense forest with varying shades of green. "
+            "The second image is a zoomed-in view of the same area. "
+            "There are no visible changes in the forest's appearance between the two images."
+        )
+        self.assertEqual(contextual.value, 0)
+        self.assertEqual(contextual.match_type, "contextual_no_change")
+
     def test_partial_no_change_statements_remain_positive(self) -> None:
         expressions = (
             "No building changed, but a road appeared.",
@@ -89,6 +104,10 @@ class LevirParserAndRoutingTests(unittest.TestCase):
             "No major change except that a new house was built.",
             "The images are not identical.",
             "There is no building change while a road is newly constructed.",
+            (
+                "The second image shows a change in the landscape. A new road appeared. "
+                "The surrounding forest remains unchanged."
+            ),
         )
         for expression in expressions:
             with self.subTest(expression=expression):
@@ -181,13 +200,16 @@ class LevirEndToEndTests(unittest.TestCase):
             ]
             self.assertEqual(evaluated[0]["reference_changeflag"], 0)
             self.assertEqual(evaluated[0]["predicted_changeflag"], 0)
-            self.assertEqual(evaluated[0]["change_parser_version"], "levir_relaxed_no_change_v2")
+            self.assertEqual(
+                evaluated[0]["change_parser_version"],
+                "levir_contextual_no_change_v3",
+            )
             self.assertEqual(evaluated[0]["change_parse_mode"], "pattern_no_change")
             self.assertTrue(evaluated[0]["binary_correct"])
             self.assertEqual(metrics["pattern_no_change_match_rate"]["value"], 0.25)
             self.assertEqual(
                 summary["change_parser_version"],
-                "levir_relaxed_no_change_v2",
+                "levir_contextual_no_change_v3",
             )
 
     def test_invalid_changeflag_fails_in_strict_mode(self) -> None:
