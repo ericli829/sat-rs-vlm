@@ -18,13 +18,13 @@ quantization:
 data:
   eval_file: "/root/autodl-tmp/sat-rs-vlm/data/processed/multisource/vrsbench_levircc_val.jsonl"
   image_root: "/root/autodl-tmp/datasets"
-  max_eval_samples: 610
+  max_eval_samples: 593
   max_seq_length: 1024
   sampling_strategy: "stratified"
   sampling_seed: 20260811
   samples_per_task:
     detection: 100
-    counting: 100
+    counting: 83
     captioning: 100
     vqa: 100
     scene_classification: 10
