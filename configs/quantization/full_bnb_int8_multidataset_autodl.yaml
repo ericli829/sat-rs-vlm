@@ -46,7 +46,8 @@ benchmark:
   warmup_samples: 2
   repeats: 1
   seed: 20260811
-  latency_scope: "single_sample_end_to_end"
+  inference_batch_size: 16
+  latency_scope: "batch_amortized_per_sample"
   log_every_samples: 20
 
 evaluation:

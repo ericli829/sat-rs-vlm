@@ -12,7 +12,7 @@ data:
   image_root: "/root/autodl-tmp/datasets/VRSBench"
   max_seq_length: 1024
   max_eval_samples: null
-  eval_batch_size: 16
+  eval_batch_size: 32
   group_by_task: true
   log_every_samples: 100
 

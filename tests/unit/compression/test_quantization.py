@@ -7,6 +7,7 @@ import pytest
 
 from sat_rs_vlm.quantization.artifacts import to_json_safe, write_json_report
 from sat_rs_vlm.quantization.benchmark import (
+    _iter_task_batches,
     assert_comparable_sample_ids,
     planned_variants,
     run_benchmark,
@@ -104,6 +105,36 @@ def test_new_method_alias_and_merged_model_source(tmp_path: Path) -> None:
     }
     with pytest.raises(ValueError, match="conflicts with backend"):
         QuantizationExperimentConfig.model_validate(payload)
+
+
+def test_batched_benchmark_requires_explicit_batch_latency_semantics(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    payload = config.model_dump(mode="python")
+    payload["benchmark"] = {
+        "inference_batch_size": 4,
+        "latency_scope": "batch_amortized_per_sample",
+    }
+    resolved = QuantizationExperimentConfig.model_validate(payload)
+    assert resolved.benchmark.inference_batch_size == 4
+
+    payload["benchmark"]["latency_scope"] = "single_sample_end_to_end"
+    with pytest.raises(ValueError, match="requires inference_batch_size=1"):
+        QuantizationExperimentConfig.model_validate(payload)
+
+
+def test_task_batches_keep_same_task_samples_together() -> None:
+    dataset = [
+        {"id": "vqa-1", "task_type": "vqa"},
+        {"id": "caption-1", "task_type": "captioning"},
+        {"id": "vqa-2", "task_type": "vqa"},
+    ]
+
+    batches = _iter_task_batches(dataset, batch_size=2)
+
+    assert [(task, [sample["id"] for _, sample in rows]) for task, rows in batches] == [
+        ("vqa", ["vqa-1", "vqa-2"]),
+        ("captioning", ["caption-1"]),
+    ]
 
 
 def test_legacy_quantization_import_path_remains_available() -> None:

@@ -133,8 +133,17 @@ class QuantBenchmarkConfig(BaseModel):
     warmup_samples: int = Field(default=2, ge=0)
     repeats: int = Field(default=2, gt=0)
     seed: int = 42
-    latency_scope: Literal["single_sample_end_to_end"] = "single_sample_end_to_end"
+    inference_batch_size: int = Field(default=1, gt=0)
+    latency_scope: Literal["single_sample_end_to_end", "batch_amortized_per_sample"] = (
+        "single_sample_end_to_end"
+    )
     log_every_samples: int = Field(default=10, gt=0)
+
+    @model_validator(mode="after")
+    def validate_latency_scope(self) -> QuantBenchmarkConfig:
+        if self.latency_scope == "single_sample_end_to_end" and self.inference_batch_size != 1:
+            raise ValueError("single_sample_end_to_end requires inference_batch_size=1")
+        return self
 
 
 class QuantEvaluationConfig(BaseModel):

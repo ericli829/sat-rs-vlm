@@ -21,6 +21,7 @@ from sat_rs_vlm.evaluation.inference import (
     extract_message_inputs,
     extract_reference,
     timed_prediction,
+    timed_predictions,
 )
 from sat_rs_vlm.evaluation.runner import run_evaluation
 from sat_rs_vlm.models.qwen3vl_loader import (
@@ -254,6 +255,10 @@ def run_variant_evaluation(
         image_root,
         for_generation=True,
     )
+    inference_batch_size = config.benchmark.inference_batch_size
+    tokenizer = getattr(processor, "tokenizer", None)
+    if inference_batch_size > 1 and tokenizer is not None:
+        tokenizer.padding_side = "left"
     warmup_count = min(config.benchmark.warmup_samples, len(dataset))
     for index in range(warmup_count):
         try:
@@ -272,53 +277,67 @@ def run_variant_evaluation(
         torch.cuda.reset_peak_memory_stats()
     tracemalloc.start()
     started = time.perf_counter()
-    rows: list[dict[str, Any]] = []
+    rows_by_index: list[dict[str, Any] | None] = [None] * len(dataset)
     failures: list[dict[str, str]] = []
     latency_values: list[float] = []
-    for sample_index, sample in enumerate(dataset, start=1):
-        prediction: str | None = None
-        sample_latencies: list[float] = []
+    processed_samples = 0
+    generation_config = config.generation.model_dump(mode="python")
+    for task_type, indexed_batch in _iter_task_batches(dataset, inference_batch_size):
+        batch_samples = [sample for _, sample in indexed_batch]
+        predictions: list[str | None] = [None] * len(batch_samples)
+        sample_latencies: list[list[float]] = [[] for _ in batch_samples]
         for repeat in range(config.benchmark.repeats):
             try:
-                generated, latency = timed_prediction(
+                generated, latency = timed_predictions(
                     model,
                     processor,
                     collator,
-                    sample,
-                    config.generation.model_dump(mode="python"),
+                    batch_samples,
+                    generation_config,
                     torch,
+                    task_type=task_type,
                 )
-                prediction = generated if prediction is None else prediction
-                sample_latencies.append(latency)
+                for index, prediction in enumerate(generated):
+                    if predictions[index] is None:
+                        predictions[index] = prediction
+                    sample_latencies[index].append(latency)
             except (RuntimeError, ValueError, OSError) as exc:
-                failures.append(
-                    {
-                        "id": str(sample["id"]),
-                        "repeat": str(repeat),
-                        "error_type": type(exc).__name__,
-                        "message": str(exc),
-                    }
-                )
-        if prediction is not None:
-            latency_values.extend(sample_latencies)
-            rows.append(
-                {
-                    "id": sample["id"],
-                    "task_type": sample["task_type"],
-                    "prediction": prediction,
-                    "reference": extract_reference(sample["messages"]),
-                    "metadata": sample.get("metadata", {}),
-                    "inference_latency_ms": sum(sample_latencies) / len(sample_latencies),
-                    "variant": variant,
-                    "backend": backend.name if quantized else "none",
-                }
-            )
-        if sample_index % config.benchmark.log_every_samples == 0 or sample_index == len(dataset):
+                for _, sample in indexed_batch:
+                    failures.append(
+                        {
+                            "id": str(sample["id"]),
+                            "repeat": str(repeat),
+                            "error_type": type(exc).__name__,
+                            "message": str(exc),
+                        }
+                    )
+        for (original_index, sample), prediction, latencies in zip(
+            indexed_batch, predictions, sample_latencies, strict=True
+        ):
+            if prediction is None:
+                continue
+            latency_values.extend(latencies)
+            rows_by_index[original_index] = {
+                "id": sample["id"],
+                "task_type": sample["task_type"],
+                "prediction": prediction,
+                "reference": extract_reference(sample["messages"]),
+                "metadata": sample.get("metadata", {}),
+                "inference_latency_ms": sum(latencies) / len(latencies),
+                "variant": variant,
+                "backend": backend.name if quantized else "none",
+            }
+        processed_samples += len(batch_samples)
+        if (
+            processed_samples % config.benchmark.log_every_samples == 0
+            or processed_samples == len(dataset)
+        ):
             print(
-                f"[quantization] {variant}: {sample_index}/{len(dataset)} samples, "
+                f"[quantization] {variant}: {processed_samples}/{len(dataset)} samples, "
                 f"failures={len({failure['id'] for failure in failures})}",
                 flush=True,
             )
+    rows = [row for row in rows_by_index if row is not None]
     _, peak_python_bytes = tracemalloc.get_traced_memory()
     tracemalloc.stop()
     duration = time.perf_counter() - started
@@ -350,9 +369,13 @@ def run_variant_evaluation(
             config.evaluation.semantic_ontology,
             project_root,
         ),
-        latency_semantics="single_sample",
-        eval_batch_size=1,
-        group_by_task=False,
+        latency_semantics=(
+            "batch_amortized_per_sample"
+            if inference_batch_size > 1
+            else "single_sample"
+        ),
+        eval_batch_size=inference_batch_size,
+        group_by_task=True,
     )
     metrics = json.loads(evaluation_outputs["metrics"].read_text(encoding="utf-8"))
     report: dict[str, Any] = {
@@ -364,6 +387,7 @@ def run_variant_evaluation(
         "failed_samples": len({failure["id"] for failure in failures}),
         "failures": failures,
         "latency_scope": config.benchmark.latency_scope,
+        "inference_batch_size": inference_batch_size,
         "latency_ms": latency_statistics(latency_values),
         "duration_seconds": duration,
         "logical_parameter_count": _logical_parameters(model),
@@ -392,6 +416,22 @@ def _release(model: Any, torch: Any) -> None:
     gc.collect()
     if bool(torch.cuda.is_available()):
         torch.cuda.empty_cache()
+
+
+def _iter_task_batches(
+    dataset: list[dict[str, Any]], batch_size: int
+) -> list[tuple[str, list[tuple[int, dict[str, Any]]]]]:
+    """按任务分桶，避免把不同生成 token 上限的样本混在同一批中。"""
+
+    grouped: dict[str, list[tuple[int, dict[str, Any]]]] = {}
+    for index, sample in enumerate(dataset):
+        task_type = str(sample.get("task_type", "unknown"))
+        grouped.setdefault(task_type, []).append((index, sample))
+    batches: list[tuple[str, list[tuple[int, dict[str, Any]]]]] = []
+    for task_type, indexed_samples in grouped.items():
+        for start in range(0, len(indexed_samples), batch_size):
+            batches.append((task_type, indexed_samples[start : start + batch_size]))
+    return batches
 
 
 def planned_variants(backend_name: str, *, skip_baseline: bool) -> tuple[str, ...]:

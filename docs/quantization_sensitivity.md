@@ -90,6 +90,10 @@ python scripts/quantization_sensitivity_test.py \
 GPU 模式需要 `bitsandbytes`，并且仍会为每个层组重新加载一次模型。报告中的局部量化速度主要
 用于判断某个层组是否引入明显开销；最终部署速度仍应使用完整 bnb INT8 配置确认。
 
+GPU 配置将 `benchmark.inference_batch_size` 设为 16。评测按任务类型分桶后再批量生成，避免
+不同 `max_new_tokens` 的任务混在同一批；报告中的延迟改为 `batch_amortized_per_sample`，即总
+批处理时间除以批内样本数，并不表示单请求时延。
+
 组件初筛：
 
 ```bash
