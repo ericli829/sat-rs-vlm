@@ -214,13 +214,13 @@ python scripts/quantize_rs_vlm.py \
 python scripts/quantization_sensitivity_test.py \
   --config configs/quantization/quantization_sensitivity_smoke.yaml --dry-run
 
-# 真实组件敏感度实验并绘图
+# 真实 GPU 层敏感度实验并绘图
 python scripts/quantization_sensitivity_test.py \
-  --config configs/quantization/quantization_eval.yaml --plot
+  --config configs/quantization/sensitivity_layer_autodl.yaml --plot
 ```
 
-当前默认测试验证 dry-run、toy Linear 和 fake module tree；真实 Qwen3-VL CPU/CUDA 结果仍需
-在本地或 AutoDL 显式运行。详见 [量化说明](docs/quantization.md) 和
+当前默认测试验证 dry-run、toy Linear 和 fake module tree；真实 Qwen3-VL GPU 结果仍需在
+AutoDL 显式运行。详见 [量化说明](docs/quantization.md) 和
 [敏感度分析](docs/quantization_sensitivity.md)。
 
 ## 实验输出

@@ -1,4 +1,4 @@
-"""使用统一 Evaluation v1.5 指标运行 dynamic INT8 层/组件敏感度实验。"""
+"""使用统一 Evaluation v1.5 指标运行 GPU INT8 层或组件敏感度实验。"""
 
 from __future__ import annotations
 
@@ -23,8 +23,8 @@ from sat_rs_vlm.quantization.sensitivity import (
     build_sensitivity_groups,
     build_sensitivity_report,
     calculate_sensitivity_breakdown,
+    discover_linear_modules,
     plot_sensitivity_report,
-    quantize_named_linear_modules,
     validate_variant_comparison,
     write_sensitivity_report,
 )
@@ -91,8 +91,6 @@ def run_sensitivity(args: argparse.Namespace) -> dict[str, Any]:
 
     overrides = {"sensitivity.method": args.method}
     config = load_quantization_config(args.config, overrides=overrides)
-    if config.quantization.backend != "torch_dynamic_int8":
-        raise ValueError("Sensitivity analysis currently requires method=dynamic_int8")
     backend = create_backend(config.quantization.backend)
     destination = _project_path(args.output_dir or (Path(config.output.output_dir) / "sensitivity"))
     if args.dry_run:
@@ -103,8 +101,12 @@ def run_sensitivity(args: argparse.Namespace) -> dict[str, Any]:
             project_root=PROJECT_ROOT,
             dry_run=True,
         )
+    if backend.name != "bnb_int8" or config.quantization.device != "cuda":
+        raise ValueError("Sensitivity analysis requires backend=bnb_int8 and device=cuda")
 
-    modules = safe_import_model_dependencies(require_bitsandbytes=False)
+    modules = safe_import_model_dependencies(
+        require_bitsandbytes=backend.requires_bitsandbytes
+    )
     torch = modules["torch"]
     dataset, _, _, image_root = validate_assets(
         config,
@@ -134,6 +136,7 @@ def run_sensitivity(args: argparse.Namespace) -> dict[str, Any]:
         skip_modules=tuple(config.sensitivity.skip_modules),
         max_groups=config.sensitivity.max_groups,
     )
+    all_linear_module_names = tuple(sorted(discover_linear_modules(baseline_model, torch)))
     print(
         f"[sensitivity] discovered {len(groups)} groups with "
         f"method={config.sensitivity.method}, grouping={config.sensitivity.layer_grouping}",
@@ -187,12 +190,15 @@ def run_sensitivity(args: argparse.Namespace) -> dict[str, Any]:
                 current_group=group.name,
                 results=results,
             )
-            model = backend.load_model(config, modules, quantized=False)
-            quantized_model = quantize_named_linear_modules(
-                model,
-                torch,
-                group.module_names,
-                inplace=True,
+            target_names = set(group.module_names)
+            skipped_names = tuple(
+                name for name in all_linear_module_names if name not in target_names
+            )
+            quantized_model = backend.load_selective_model(
+                config,
+                modules,
+                target_module_names=group.module_names,
+                skipped_module_names=skipped_names,
             )
             variant_report = run_variant_evaluation(
                 variant=_safe_group_name(group.name),
@@ -253,7 +259,7 @@ def run_sensitivity(args: argparse.Namespace) -> dict[str, Any]:
                     speedup_vs_baseline=speedup,
                 )
             )
-            del quantized_model, model
+            del quantized_model
             _clear_allocator(torch)
             _write_progress(
                 destination,
@@ -301,6 +307,12 @@ def run_sensitivity(args: argparse.Namespace) -> dict[str, Any]:
         "layer_group_size": config.sensitivity.layer_group_size,
         "include_modules": list(config.sensitivity.include_modules),
         "skip_modules": list(config.sensitivity.skip_modules),
+    }
+    report["quantization"] = {
+        "backend": backend.name,
+        "device": config.quantization.device,
+        "llm_int8_threshold": config.quantization.llm_int8_threshold,
+        "selective_gpu_quantization": backend.name == "bnb_int8",
     }
     outputs = write_sensitivity_report(report, destination)
     report["outputs"] = {name: str(path) for name, path in outputs.items()}

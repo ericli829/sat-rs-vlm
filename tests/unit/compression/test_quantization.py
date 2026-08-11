@@ -23,6 +23,7 @@ from sat_rs_vlm.quantization.quantizer import (
     create_backend,
     quantize_dynamic_linear,
     register_backend,
+    verify_selective_bnb_int8_modules,
 )
 from sat_rs_vlm.quantization.report import comparison_summary
 from sat_rs_vlm.utils.jsonl import write_jsonl
@@ -217,6 +218,65 @@ def test_dynamic_int8_quantizes_toy_linear_model() -> None:
     model = torch.nn.Sequential(torch.nn.Linear(4, 3), torch.nn.ReLU())
     quantized = quantize_dynamic_linear(model, torch)
     assert "quantized.dynamic" in quantized[0].__class__.__module__
+
+
+def test_selective_bnb_verification_rejects_missed_or_unexpected_modules() -> None:
+    Linear8bitLt = type("Linear8bitLt", (), {"__module__": "bitsandbytes.nn.modules"})
+
+    class FloatLinear:
+        pass
+
+    class FakeModel:
+        def __init__(self, target: object, skipped: object) -> None:
+            self.target = target
+            self.skipped = skipped
+
+        def named_modules(self) -> list[tuple[str, object]]:
+            return [("", self), ("target", self.target), ("skipped", self.skipped)]
+
+    verify_selective_bnb_int8_modules(
+        FakeModel(Linear8bitLt(), FloatLinear()),
+        target_module_names=("target",),
+        skipped_module_names=("skipped",),
+    )
+
+    with pytest.raises(RuntimeError, match="not converted"):
+        verify_selective_bnb_int8_modules(
+            FakeModel(FloatLinear(), FloatLinear()),
+            target_module_names=("target",),
+            skipped_module_names=("skipped",),
+        )
+
+    with pytest.raises(RuntimeError, match="unexpectedly converted"):
+        verify_selective_bnb_int8_modules(
+            FakeModel(Linear8bitLt(), Linear8bitLt()),
+            target_module_names=("target",),
+            skipped_module_names=("skipped",),
+        )
+
+
+def test_bnb_metadata_reports_mixed_weights_and_actual_int8_count() -> None:
+    Linear8bitLt = type("Linear8bitLt", (), {"__module__": "bitsandbytes.nn.modules"})
+
+    class Parameter:
+        dtype = "torch.bfloat16"
+
+    class FakeModel:
+        def parameters(self):  # type: ignore[no-untyped-def]
+            return iter([Parameter()])
+
+        def named_modules(self) -> list[tuple[str, object]]:
+            return [("", self), ("quantized", Linear8bitLt()), ("float", object())]
+
+    class Torch:
+        class version:
+            cuda = "13.0"
+
+    metadata = create_backend("bnb_int8").compression_metadata(
+        FakeModel(), Torch(), quantized=True
+    )
+    assert metadata["weight_dtype"] == "mixed_int8_bfloat16"
+    assert metadata["int8_linear_count"] == 1
 
 
 def test_json_report_is_safe_and_report_file_is_persisted(tmp_path: Path) -> None:

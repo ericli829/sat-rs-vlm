@@ -79,6 +79,21 @@ class QuantizationBackend(ABC):
     ) -> Any:
         """加载 baseline 或量化模型。"""
 
+    def load_selective_model(
+        self,
+        config: QuantizationExperimentConfig,
+        modules: dict[str, Any],
+        *,
+        target_module_names: tuple[str, ...],
+        skipped_module_names: tuple[str, ...],
+    ) -> Any:
+        """Load a model with only selected Linear modules quantized when supported."""
+
+        del config, modules, target_module_names, skipped_module_names
+        raise UnsupportedQuantizationError(
+            f"Backend {self.name!r} does not support selective GPU quantization"
+        )
+
     @abstractmethod
     def compression_metadata(self, model: Any, torch: Any, *, quantized: bool) -> dict[str, Any]:
         """返回实际后端和 dtype 信息。"""
@@ -166,7 +181,8 @@ class BitsAndBytesInt8Backend(QuantizationBackend):
         kwargs = self._common_kwargs(config, modules, cpu=False)
         if quantized:
             kwargs["quantization_config"] = modules["transformers"].BitsAndBytesConfig(
-                load_in_8bit=True
+                load_in_8bit=True,
+                llm_int8_threshold=config.quantization.llm_int8_threshold,
             )
         return load_qwen3vl_model(
             modules=modules,
@@ -175,14 +191,50 @@ class BitsAndBytesInt8Backend(QuantizationBackend):
             adapter_path=config.model.adapter_path,
         )
 
+    def load_selective_model(
+        self,
+        config: QuantizationExperimentConfig,
+        modules: dict[str, Any],
+        *,
+        target_module_names: tuple[str, ...],
+        skipped_module_names: tuple[str, ...],
+    ) -> Any:
+        if not target_module_names:
+            raise ValueError("target_module_names must not be empty")
+        kwargs = self._common_kwargs(config, modules, cpu=False)
+        kwargs["quantization_config"] = modules["transformers"].BitsAndBytesConfig(
+            load_in_8bit=True,
+            llm_int8_threshold=config.quantization.llm_int8_threshold,
+            llm_int8_skip_modules=list(skipped_module_names),
+        )
+        model = load_qwen3vl_model(
+            modules=modules,
+            base_model=config.model.model_source,
+            model_kwargs=kwargs,
+            adapter_path=config.model.adapter_path,
+        )
+        verify_selective_bnb_int8_modules(
+            model,
+            target_module_names=target_module_names,
+            skipped_module_names=skipped_module_names,
+        )
+        return model
+
     def compression_metadata(self, model: Any, torch: Any, *, quantized: bool) -> dict[str, Any]:
         parameter = next(iter(model.parameters()), None)
         dtype = str(getattr(parameter, "dtype", "unknown")).removeprefix("torch.")
+        int8_linear_count = (
+            sum(1 for _, module in model.named_modules() if _is_bnb_int8_linear(module))
+            if quantized
+            else 0
+        )
+        weight_dtype = "mixed_int8_" + dtype if quantized else dtype
         return {
             "backend": self.name if quantized else "none",
             "device": "cuda",
-            "weight_dtype": "int8" if quantized else dtype,
+            "weight_dtype": weight_dtype,
             "compute_dtype": dtype,
+            "int8_linear_count": int8_linear_count,
             "benchmark_only": False,
             "reload_supported": None if quantized else True,
             "reload_verified": False if quantized else True,
@@ -224,3 +276,42 @@ def create_backend(name: str) -> QuantizationBackend:
     if backend is None:
         raise ValueError(f"Unknown quantization backend '{name}'; available={list_backends()}")
     return backend()
+
+
+def _is_bnb_int8_linear(module: Any) -> bool:
+    module_path = module.__class__.__module__.lower()
+    class_name = module.__class__.__name__.lower()
+    return "bitsandbytes" in module_path and class_name == "linear8bitlt"
+
+
+def verify_selective_bnb_int8_modules(
+    model: Any,
+    *,
+    target_module_names: tuple[str, ...],
+    skipped_module_names: tuple[str, ...],
+) -> None:
+    """Fail if selective bitsandbytes conversion missed targets or touched skipped layers."""
+
+    named_modules = dict(model.named_modules())
+    missing = sorted(
+        name
+        for name in (*target_module_names, *skipped_module_names)
+        if name not in named_modules
+    )
+    if missing:
+        raise RuntimeError(f"Selective INT8 modules disappeared after model load: {missing[:20]}")
+    not_quantized = sorted(
+        name for name in target_module_names if not _is_bnb_int8_linear(named_modules[name])
+    )
+    unexpectedly_quantized = sorted(
+        name for name in skipped_module_names if _is_bnb_int8_linear(named_modules[name])
+    )
+    if not_quantized:
+        raise RuntimeError(
+            f"Requested modules were not converted to bitsandbytes Linear8bitLt: "
+            f"{not_quantized[:20]}"
+        )
+    if unexpectedly_quantized:
+        raise RuntimeError(
+            f"Skipped modules were unexpectedly converted to INT8: {unexpectedly_quantized[:20]}"
+        )

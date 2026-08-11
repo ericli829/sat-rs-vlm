@@ -1,4 +1,4 @@
-# Stage 1: coarse component scan on a deterministic VRSBench + LEVIR-CC sample.
+# Stage 1: GPU INT8 component scan on a deterministic VRSBench + LEVIR-CC sample.
 model:
   base_model: "/root/autodl-tmp/models/Qwen3-VL-2B-Instruct"
   merged_model: "${MERGED_MODEL_DIR}"
@@ -6,14 +6,15 @@ model:
   adapter_path: null
   local_files_only: true
   trust_remote_code: true
-  torch_dtype: "float32"
+  torch_dtype: "bfloat16"
   device_map: "auto"
   attn_implementation: "sdpa"
 
 quantization:
-  method: "dynamic_int8"
-  device: "cpu"
+  backend: "bnb_int8"
+  device: "cuda"
   save_artifact: false
+  llm_int8_threshold: 6.0
 
 data:
   eval_file: "/root/autodl-tmp/sat-rs-vlm/data/processed/multisource/vrsbench_levircc_val.jsonl"

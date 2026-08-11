@@ -147,7 +147,7 @@ quant-sensitivity-dry:
 	python scripts/quantization_sensitivity_test.py --config configs/quantization/quantization_sensitivity_smoke.yaml --dry-run
 
 quant-sensitivity:
-	python scripts/quantization_sensitivity_test.py --config configs/quantization/quantization_eval.yaml --plot
+	python scripts/quantization_sensitivity_test.py --config configs/quantization/sensitivity_layer_autodl.yaml --plot
 
 reliability-smoke:
 	python scripts/reliability/run_smoke.py --case all

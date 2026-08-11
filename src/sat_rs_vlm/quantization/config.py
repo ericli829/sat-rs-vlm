@@ -44,6 +44,7 @@ class QuantBackendConfig(BaseModel):
     method: str | None = None
     device: Literal["cpu", "cuda"] = "cpu"
     save_artifact: bool = False
+    llm_int8_threshold: float = Field(default=6.0, ge=0.0)
 
     @model_validator(mode="before")
     @classmethod
