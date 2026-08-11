@@ -38,6 +38,7 @@ class ChangePredictionResult:
     value: int | None
     normalized_text: str
     reason: str | None = None
+    match_type: str | None = None
 
 
 _INTEGER_PATTERN = re.compile(r"(?<![\w.])-?\d+(?![\w.])")
@@ -77,6 +78,7 @@ _TENS = {
 }
 
 _NO_CHANGE_EXPRESSIONS = {
+    "no change",
     "no change has occurred",
     "no change occurred",
     "no changes have occurred",
@@ -92,6 +94,65 @@ _NO_CHANGE_EXPRESSIONS = {
     "nothing has changed",
     "unchanged",
 }
+
+# The LEVIR-CC model is trained to produce a caption, not a binary token.  Exact
+# phrase matching therefore rejects harmless tense, number and wording changes.
+# These patterns deliberately use fullmatch: a partial statement such as
+# "no building changed, but a road appeared" must remain a positive change.
+CHANGE_PARSER_VERSION = "levir_relaxed_no_change_v2"
+_NO_CHANGE_QUALIFIER = (
+    r"(?:(?:significant|visible|noticeable|obvious|major|meaningful|apparent) )?"
+)
+_GLOBAL_SCOPE = (
+    r"(?: (?:between|across|in) (?:the )?(?:(?:two|both) )?"
+    r"(?:images?|scenes?|pictures?|views?|area|region))?"
+)
+_NO_CHANGE_PREDICATE = (
+    r"(?:"
+    r" (?:has|have) occurred"
+    r"| occurred"
+    r"| (?:observed|detected|seen|found|noticed)"
+    r"| (?:has|have) been (?:observed|detected|seen|found|noticed)"
+    r"| (?:is|are|was|were|can be|could be) "
+    r"(?:observed|detected|seen|found|noticed|visible|apparent)"
+    r")?"
+)
+_GLOBAL_IMAGE_SUBJECT = (
+    r"(?:the )?(?:(?:two|both) )?(?:images?|scenes?|pictures?|views?)"
+)
+_NO_CHANGE_PATTERNS = tuple(
+    re.compile(pattern)
+    for pattern in (
+        (
+            rf"(?:there (?:is|are|was|were|has been|have been) )?no "
+            rf"{_NO_CHANGE_QUALIFIER}(?:changes?|differences?)"
+            rf"{_NO_CHANGE_PREDICATE}{_GLOBAL_SCOPE}"
+        ),
+        (
+            rf"{_GLOBAL_IMAGE_SUBJECT} "
+            rf"(?:is|are|was|were|remain|remains|remained|appear|appears|appeared|"
+            rf"seem|seems|seemed|look|looks|looked) "
+            rf"(?:identical|unchanged|the same(?: as before)?)"
+        ),
+        (
+            r"(?:the )?(?:scene|area|region|landscape) "
+            r"(?:is|was|remains|remained|appears|appeared|seems|seemed) "
+            r"(?:unchanged|the same(?: as before)?)"
+        ),
+        rf"{_GLOBAL_IMAGE_SUBJECT} (?:has|have|had) not changed",
+        r"(?:the )?(?:scene|area|region|landscape) (?:has|had) not changed",
+        r"(?:almost )?nothing (?:has |had )?changed",
+        (
+            rf"{_GLOBAL_IMAGE_SUBJECT} "
+            rf"(?:show|shows|showed|indicate|indicates|indicated) no "
+            rf"{_NO_CHANGE_QUALIFIER}(?:changes?|differences?)"
+        ),
+    )
+)
+_ANSWER_PREFIX_PATTERN = re.compile(
+    r"^(?:(?:the )?answer|prediction|result)(?: is)? "
+)
+_STRUCTURED_CHANGE_KEYS = ("changeflag", "change_flag", "changed", "has_change")
 
 
 def extract_json_object(text: str) -> JsonObjectResult:
@@ -324,20 +385,57 @@ def normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
+def _binary_change_value(value: Any) -> int | None:
+    """Parse an explicitly binary change value without guessing from captions."""
+
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float)) and value in {0, 1}:
+        return int(value)
+    if isinstance(value, str):
+        normalized = normalize_text(value).replace("_", " ")
+        if normalized in {"0", "no", "false", "no change", "unchanged"}:
+            return 0
+        if normalized in {"1", "yes", "true", "change", "changed", "has change"}:
+            return 1
+    return None
+
+
 def parse_change_prediction(text: str) -> ChangePredictionResult:
     """把 LEVIR-CC 自然语言输出解析为 0=无变化、1=发生变化。
 
-    无变化只接受完整标准化表达，避免把包含否定词的复合变化描述误判为无变化。
+    接受显式二分类结果和完整、全局性的无变化表达。模式匹配锚定整个回答，
+    避免把“没有建筑变化，但道路出现”等复合变化描述误判为无变化。
     """
 
     normalized = normalize_text(text)
     if not normalized:
-        return ChangePredictionResult(None, normalized, "empty_prediction")
-    return ChangePredictionResult(
-        0 if normalized in _NO_CHANGE_EXPRESSIONS else 1,
-        normalized,
-        None,
-    )
+        return ChangePredictionResult(
+            None,
+            normalized,
+            "empty_prediction",
+            "unresolved",
+        )
+
+    binary = _binary_change_value(normalized)
+    if binary is not None:
+        return ChangePredictionResult(binary, normalized, None, "binary_literal")
+
+    payload = extract_json_object(text).payload
+    if payload is not None:
+        for key in _STRUCTURED_CHANGE_KEYS:
+            if key not in payload:
+                continue
+            binary = _binary_change_value(payload[key])
+            if binary is not None:
+                return ChangePredictionResult(binary, normalized, None, "structured_binary")
+
+    candidate = _ANSWER_PREFIX_PATTERN.sub("", normalized, count=1)
+    if candidate in _NO_CHANGE_EXPRESSIONS:
+        return ChangePredictionResult(0, normalized, None, "exact_no_change")
+    if any(pattern.fullmatch(candidate) for pattern in _NO_CHANGE_PATTERNS):
+        return ChangePredictionResult(0, normalized, None, "pattern_no_change")
+    return ChangePredictionResult(1, normalized, None, "default_change")
 
 
 def text_tokens(text: str) -> list[str]:

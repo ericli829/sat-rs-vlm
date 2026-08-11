@@ -24,7 +24,12 @@ from sat_rs_vlm.evaluation.extended_metrics import (
     normalized_center_distance,
     text_task_scores,
 )
-from sat_rs_vlm.evaluation.parsers import parse_change_prediction, parse_count, parse_grounding
+from sat_rs_vlm.evaluation.parsers import (
+    CHANGE_PARSER_VERSION,
+    parse_change_prediction,
+    parse_count,
+    parse_grounding,
+)
 from sat_rs_vlm.evaluation.protocols import (
     ProtocolResolution,
     coordinate_format_for_record,
@@ -362,6 +367,8 @@ def _evaluate_change_caption(
             "parse_error": parsed.reason,
             "reference_changeflag": reference_changeflag,
             "predicted_changeflag": parsed.value,
+            "change_parser_version": CHANGE_PARSER_VERSION,
+            "change_parse_mode": parsed.match_type,
             "binary_correct": binary_correct,
             "sample_metrics": scores,
         }
@@ -666,6 +673,7 @@ def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
         total = len(samples)
         valid_flags = sum(bool(sample.get("changeflag_valid")) for sample in samples)
         parsed = sum(bool(sample.get("binary_parse_success")) for sample in samples)
+        parse_modes = Counter(str(row.output.get("change_parse_mode", "unknown")) for row in rows)
         tp = tn = fp = fn = 0
         comparable = 0
         positive_samples: list[dict[str, Any]] = []
@@ -719,6 +727,34 @@ def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
             {
                 "changeflag_valid_rate": metric_value(ratio(valid_flags, total), num_samples=total),
                 "binary_parse_success_rate": metric_value(ratio(parsed, total), num_samples=total),
+                "binary_literal_output_rate": metric_value(
+                    ratio(parse_modes["binary_literal"], total),
+                    num_samples=total,
+                    note=f"Parser profile: {CHANGE_PARSER_VERSION}.",
+                ),
+                "structured_binary_output_rate": metric_value(
+                    ratio(parse_modes["structured_binary"], total),
+                    num_samples=total,
+                    note=f"Parser profile: {CHANGE_PARSER_VERSION}.",
+                ),
+                "exact_no_change_match_rate": metric_value(
+                    ratio(parse_modes["exact_no_change"], total),
+                    num_samples=total,
+                    note=f"Parser profile: {CHANGE_PARSER_VERSION}.",
+                ),
+                "pattern_no_change_match_rate": metric_value(
+                    ratio(parse_modes["pattern_no_change"], total),
+                    num_samples=total,
+                    note=f"Parser profile: {CHANGE_PARSER_VERSION}.",
+                ),
+                "default_change_fallback_rate": metric_value(
+                    ratio(parse_modes["default_change"], total),
+                    num_samples=total,
+                    note=(
+                        "Non-empty answers that are not explicit binary or complete global "
+                        f"no-change statements under {CHANGE_PARSER_VERSION}."
+                    ),
+                ),
                 "binary_accuracy": metric_value(
                     accuracy,
                     num_samples=comparable,
@@ -1005,6 +1041,7 @@ def _build_summary(
         "implementation_version": str(contract["implementation_version"]),
         "contract_version": str(contract["contract_version"]),
         "contract_status": str(contract.get("contract_status", "unknown")),
+        "change_parser_version": CHANGE_PARSER_VERSION,
         "overall": {
             "metrics": overall_metrics,
             "latency_context": latency_context.to_dict(),
@@ -1231,6 +1268,7 @@ def run_evaluation(
         "schema_version": "1.5",
         "implementation_version": str(contract["implementation_version"]),
         "contract_version": str(contract["contract_version"]),
+        "change_parser_version": CHANGE_PARSER_VERSION,
         "upstream_repository": dict(contract.get("upstream_repository", {})),
         "run_time_utc": datetime.now(timezone.utc).isoformat(),
         "python_version": platform.python_version(),

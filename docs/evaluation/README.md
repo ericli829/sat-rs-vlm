@@ -30,6 +30,23 @@
 
 坐标格式按 `metadata.bbox_target_format`、Dataset Manifest `coordinate_range` 的顺序确定，不根据框数值猜测。
 
+### LEVIR-CC变化判定
+
+变化二分类使用可追溯的 `levir_relaxed_no_change_v2` 解析器，不再要求模型输出与少量固定句子完全一致：
+
+- 直接接受 `0`（无变化）和 `1`（有变化）；
+- 接受 `changeflag`、`change_flag`、`changed`、`has_change` JSON字段中的二分类值；
+- 接受完整、全局性的常见无变化表达及其时态、单复数和轻微措辞变化，例如
+  `No changes were observed between the two images`、`There were no significant changes`、
+  `Both images appear unchanged`；
+- 不使用简单关键词包含规则。`No building changed, but a road appeared`、
+  `No change in buildings; however vegetation was removed`等复合变化描述仍判为有变化；
+- 空回答解析失败；其他非空且不满足完整无变化模式的变化描述判为有变化。
+
+逐样本结果记录 `change_parser_version` 和 `change_parse_mode`，汇总结果同时给出各解析模式的使用率，
+便于定位“全部被判为有变化”是模型输出问题还是解析规则问题。调整模型提示词使其直接输出0/1可以减少歧义，
+但使用本解析器不要求重新训练模型。
+
 ## 运行评测
 
 ```powershell

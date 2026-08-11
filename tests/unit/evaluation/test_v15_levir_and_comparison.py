@@ -53,6 +53,49 @@ class LevirParserAndRoutingTests(unittest.TestCase):
         )
         self.assertIsNone(parse_change_prediction("  ").value)
 
+    def test_relaxed_no_change_variants_and_binary_outputs(self) -> None:
+        expressions = (
+            "No changes were observed between the two images.",
+            "No visible differences can be seen between the images.",
+            "There were no significant changes.",
+            "No changes detected.",
+            "Both images appear unchanged.",
+            "The two images look the same.",
+            "The scene has not changed.",
+            "Answer: no obvious change was detected.",
+        )
+        for expression in expressions:
+            with self.subTest(expression=expression):
+                result = parse_change_prediction(expression)
+                self.assertEqual(result.value, 0)
+                self.assertIn(result.match_type, {"exact_no_change", "pattern_no_change"})
+
+        binary_cases = {
+            "0": 0,
+            "1": 1,
+            '{"changeflag": 0}': 0,
+            '{"change_flag": "1"}': 1,
+            '{"changed": false}': 0,
+            '{"has_change": true}': 1,
+        }
+        for expression, expected in binary_cases.items():
+            with self.subTest(expression=expression):
+                self.assertEqual(parse_change_prediction(expression).value, expected)
+
+    def test_partial_no_change_statements_remain_positive(self) -> None:
+        expressions = (
+            "No building changed, but a road appeared.",
+            "No change in buildings; however vegetation was removed.",
+            "No major change except that a new house was built.",
+            "The images are not identical.",
+            "There is no building change while a road is newly constructed.",
+        )
+        for expression in expressions:
+            with self.subTest(expression=expression):
+                result = parse_change_prediction(expression)
+                self.assertEqual(result.value, 1)
+                self.assertEqual(result.match_type, "default_change")
+
     def test_levir_dataset_spelling_routes_to_change_protocol(self) -> None:
         for dataset in ("LEVIR-CC", "levir-cc", "LEVIR_CC", "levircc"):
             with self.subTest(dataset=dataset):
@@ -75,7 +118,7 @@ class LevirEndToEndTests(unittest.TestCase):
             {
                 "id": "tn",
                 "task_type": "change_detection",
-                "prediction": "no change has occurred .",
+                "prediction": "No changes were observed between the two images.",
                 "reference": "no change has occurred .",
                 "metadata": {"dataset": "LEVIR-CC", "changeflag": 0},
             },
@@ -138,7 +181,14 @@ class LevirEndToEndTests(unittest.TestCase):
             ]
             self.assertEqual(evaluated[0]["reference_changeflag"], 0)
             self.assertEqual(evaluated[0]["predicted_changeflag"], 0)
+            self.assertEqual(evaluated[0]["change_parser_version"], "levir_relaxed_no_change_v2")
+            self.assertEqual(evaluated[0]["change_parse_mode"], "pattern_no_change")
             self.assertTrue(evaluated[0]["binary_correct"])
+            self.assertEqual(metrics["pattern_no_change_match_rate"]["value"], 0.25)
+            self.assertEqual(
+                summary["change_parser_version"],
+                "levir_relaxed_no_change_v2",
+            )
 
     def test_invalid_changeflag_fails_in_strict_mode(self) -> None:
         invalid_values = (None, True, -1, 2, "1")
