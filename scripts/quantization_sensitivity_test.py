@@ -24,6 +24,7 @@ from sat_rs_vlm.quantization.sensitivity import (
     build_sensitivity_report,
     calculate_sensitivity_breakdown,
     discover_linear_modules,
+    discover_tied_linear_modules,
     plot_sensitivity_report,
     validate_variant_comparison,
     write_sensitivity_report,
@@ -126,6 +127,16 @@ def run_sensitivity(args: argparse.Namespace) -> dict[str, Any]:
     config.quantization.save_artifact = False
 
     baseline_model = backend.load_model(config, modules, quantized=False)
+    tied_linear_modules = discover_tied_linear_modules(baseline_model, torch)
+    configured_skip_modules = tuple(
+        dict.fromkeys((*config.sensitivity.skip_modules, *tied_linear_modules))
+    )
+    if tied_linear_modules:
+        print(
+            "[sensitivity] keeping tied Linear modules in original precision: "
+            + ", ".join(tied_linear_modules),
+            flush=True,
+        )
     groups = build_sensitivity_groups(
         baseline_model,
         torch,
@@ -133,7 +144,7 @@ def run_sensitivity(args: argparse.Namespace) -> dict[str, Any]:
         layer_group_size=config.sensitivity.layer_group_size,
         layer_grouping=config.sensitivity.layer_grouping,
         include_modules=tuple(config.sensitivity.include_modules),
-        skip_modules=tuple(config.sensitivity.skip_modules),
+        skip_modules=configured_skip_modules,
         max_groups=config.sensitivity.max_groups,
     )
     all_linear_module_names = tuple(sorted(discover_linear_modules(baseline_model, torch)))
@@ -306,7 +317,8 @@ def run_sensitivity(args: argparse.Namespace) -> dict[str, Any]:
         "layer_grouping": config.sensitivity.layer_grouping,
         "layer_group_size": config.sensitivity.layer_group_size,
         "include_modules": list(config.sensitivity.include_modules),
-        "skip_modules": list(config.sensitivity.skip_modules),
+        "skip_modules": list(configured_skip_modules),
+        "automatically_skipped_tied_linear_modules": list(tied_linear_modules),
     }
     report["quantization"] = {
         "backend": backend.name,

@@ -10,8 +10,8 @@ Keyword Hit Rate 作为精度代理，也不把延迟改善混入准确率分数
 1. 扫描实际模型中的 `torch.nn.Linear` 完整模块名。
 2. 根据多个命名候选分为视觉编码器、multimodal projector、语言模型和其他组件，或按
    Transformer block 形成可解释的层组。
-3. 在 GPU 上加载 BF16 baseline；对每个组重新加载模型，只将该组转换为 bitsandbytes
-   `Linear8bitLt`，其余层保持 BF16。
+3. 在 GPU 上加载 FP16 baseline；对每个组重新加载模型，只将该组转换为 bitsandbytes
+   `Linear8bitLt`，其余层保持 FP16。
 4. 使用与 baseline 相同的样本和生成参数得到 predictions。
 5. predictions 进入 Evaluation v1.5，提取 IoU、计数准确率、VQA 归一化准确率、token F1、
    ROUGE-L/chrF 和变化事件 F1 等可用主指标。
@@ -70,9 +70,14 @@ python scripts/quantization_sensitivity_test.py \
 ## GPU 层敏感度
 
 GPU 模式使用 bitsandbytes LLM.int8。每次加载模型时，脚本通过
-`llm_int8_skip_modules` 保持非目标层为 BF16，只把当前层组转换为 `Linear8bitLt`。加载后会
-验证目标层和跳过层的实际类型；若 Transformers 没有按配置转换，实验立即失败，避免把 BF16
+`llm_int8_skip_modules` 保持非目标层为 FP16，只把当前层组转换为 `Linear8bitLt`。加载后会
+验证目标层和跳过层的实际类型；若 Transformers 没有按配置转换，实验立即失败，避免把 FP16
 误报成 INT8。
+
+脚本还会自动排除与其他参数共享权重的 Linear 层，例如 Qwen3-VL 通常与词嵌入绑定的
+`lm_head`。bitsandbytes 不能安全量化该类层；它们会在报告的
+`automatically_skipped_tied_linear_modules` 字段中列出。当前 GPU 配置统一使用 FP16，避免
+LLM.int8 内核在每次 MatMul 时将 BF16 激活值临时转换为 FP16。
 
 该模式同时记录精度、CUDA 峰值显存和单样本延迟：
 

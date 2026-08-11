@@ -109,6 +109,36 @@ def discover_linear_modules(model: Any, torch: Any) -> dict[str, Any]:
     }
 
 
+def discover_tied_linear_modules(model: Any, torch: Any) -> tuple[str, ...]:
+    """返回权重与其他参数共享存储的 Linear 层。
+
+    bitsandbytes 的 ``Linear8bitLt`` 不能安全地替换这类层。Qwen3-VL 的 ``lm_head``
+    通常与词嵌入共享权重，因此 GPU INT8 敏感度实验应始终保留它的原始精度。
+    """
+
+    try:
+        named_parameters = model.named_parameters(remove_duplicate=False)
+    except TypeError:
+        named_parameters = model.named_parameters()
+
+    parameter_names: dict[tuple[str, int, int], list[str]] = {}
+    for name, parameter in named_parameters:
+        if not isinstance(parameter, torch.Tensor):
+            continue
+        identity = (str(parameter.device), int(parameter.data_ptr()), int(parameter.numel()))
+        parameter_names.setdefault(identity, []).append(name)
+
+    tied: list[str] = []
+    for name, module in discover_linear_modules(model, torch).items():
+        weight = getattr(module, "weight", None)
+        if not isinstance(weight, torch.Tensor):
+            continue
+        identity = (str(weight.device), int(weight.data_ptr()), int(weight.numel()))
+        if len(parameter_names.get(identity, ())) > 1:
+            tied.append(name)
+    return tuple(sorted(tied))
+
+
 def _natural_key(value: str) -> tuple[Any, ...]:
     return tuple(int(part) if part.isdigit() else part for part in re.split(r"(\d+)", value))
 
@@ -311,9 +341,12 @@ def calculate_sensitivity_breakdown(
     deltas: dict[str, dict[str, Any]] = {}
     by_task: dict[str, list[tuple[float, float]]] = {}
     comparable_paths = set(baseline_values).intersection(quantized_values)
-    has_task_metrics = any("by_task" in path.split(".") for path in comparable_paths)
+    tasks_with_by_task_metrics = {
+        _metric_task(path) for path in comparable_paths if "by_task" in path.split(".")
+    }
     for path in sorted(comparable_paths):
-        if has_task_metrics and "by_protocol" in path.split("."):
+        task = _metric_task(path)
+        if "by_protocol" in path.split(".") and task in tasks_with_by_task_metrics:
             continue
         metric_name = path.rsplit(".", 1)[-1]
         if metric_name not in directions:
@@ -324,7 +357,6 @@ def calculate_sensitivity_breakdown(
         raw_delta = candidate - baseline
         harmful_delta = -raw_delta if higher_is_better else raw_delta
         normalized_degradation = max(0.0, harmful_delta) / max(abs(baseline), 1.0)
-        task = _metric_task(path)
         metric_weight = float(configured_metric_weights.get(metric_name, 1.0))
         by_task.setdefault(task, []).append((normalized_degradation, metric_weight))
         deltas[path] = {

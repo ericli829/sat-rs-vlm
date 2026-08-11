@@ -12,6 +12,7 @@ from sat_rs_vlm.quantization.sensitivity import (
     calculate_sensitivity,
     calculate_sensitivity_breakdown,
     classify_component,
+    discover_tied_linear_modules,
     quantize_named_linear_modules,
     validate_variant_comparison,
     write_sensitivity_report,
@@ -23,6 +24,19 @@ def test_component_classifier_uses_multiple_qwen_naming_candidates() -> None:
     assert classify_component("model.visual.merger.mlp") == "multimodal_projector"
     assert classify_component("model.mm_projector.linear") == "multimodal_projector"
     assert classify_component("model.language_model.layers.0.self_attn") == "language_model"
+
+
+def test_discover_tied_linear_modules_excludes_shared_output_head() -> None:
+    torch = pytest.importorskip("torch")
+
+    class TiedModel(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.embedding = torch.nn.Embedding(8, 4)
+            self.lm_head = torch.nn.Linear(4, 8, bias=False)
+            self.lm_head.weight = self.embedding.weight
+
+    assert discover_tied_linear_modules(TiedModel(), torch) == ("lm_head",)
 
 
 def test_group_scan_and_selected_dynamic_quantization() -> None:
