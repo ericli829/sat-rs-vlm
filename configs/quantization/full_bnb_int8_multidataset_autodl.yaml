@@ -1,0 +1,63 @@
+# Optional GPU deployment check: BF16 versus bitsandbytes INT8 on the same 4090 samples.
+model:
+  base_model: "/root/autodl-tmp/models/Qwen3-VL-2B-Instruct"
+  merged_model: "${MERGED_MODEL_DIR}"
+  processor_id: "/root/autodl-tmp/models/Qwen3-VL-2B-Instruct"
+  adapter_path: null
+  local_files_only: true
+  trust_remote_code: true
+  torch_dtype: "bfloat16"
+  device_map: "auto"
+  attn_implementation: "sdpa"
+
+quantization:
+  backend: "bnb_int8"
+  device: "cuda"
+  save_artifact: false
+
+data:
+  eval_file: "/root/autodl-tmp/sat-rs-vlm/data/processed/multisource/vrsbench_levircc_val.jsonl"
+  image_root: "/root/autodl-tmp/datasets"
+  max_eval_samples: 610
+  max_seq_length: 1024
+  sampling_strategy: "stratified"
+  sampling_seed: 20260811
+  samples_per_task:
+    detection: 100
+    counting: 100
+    captioning: 100
+    vqa: 100
+    scene_classification: 10
+    change_detection: 200
+
+generation:
+  do_sample: false
+  num_beams: 1
+  max_new_tokens: 128
+  task_max_new_tokens:
+    detection: 64
+    counting: 16
+    captioning: 128
+    vqa: 64
+    scene_classification: 32
+    change_detection: 128
+
+benchmark:
+  warmup_samples: 2
+  repeats: 1
+  seed: 20260811
+  latency_scope: "single_sample_end_to_end"
+  log_every_samples: 20
+
+evaluation:
+  contract: "configs/eval/evaluation_contract_v1.5.yaml"
+  strict: true
+  semantic: true
+  semantic_contract: "configs/eval/semantic/semantic_contract.json"
+  semantic_ontology: "configs/eval/semantic/remote_sensing_ontology.json"
+  dataset: "VRSBench+LEVIR-CC"
+  tasks: [detection, counting, captioning, vqa, scene_classification, change_detection]
+  bootstrap_resamples: 2000
+
+output:
+  output_dir: "/root/autodl-tmp/outputs/quantization/full_bnb_int8_confirmation"

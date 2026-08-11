@@ -1,0 +1,11 @@
+evaluations:
+  - name: "vrsbench"
+    config: "configs/cloud/evaluate_replay_vrsbench.yaml"
+    batch_size: 8
+    max_eval_samples: 32
+  - name: "levircc"
+    config: "configs/cloud/evaluate_replay_levircc.yaml"
+    batch_size: 4
+    max_eval_samples: 32
+
+output_dir: "/root/autodl-tmp/eval/base_multidataset_smoke"

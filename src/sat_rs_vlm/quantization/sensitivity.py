@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import copy
 import json
-from dataclasses import asdict, dataclass
+import re
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
@@ -33,8 +34,14 @@ class SensitivityResult:
     module_names: tuple[str, ...]
     parameter_count: int
     sensitivity_score: float
-    metric_deltas: dict[str, dict[str, float | bool]]
+    metric_deltas: dict[str, dict[str, Any]]
     evaluation_dir: str
+    task_scores: dict[str, float] = field(default_factory=dict)
+    completed_samples: int = 0
+    failed_samples: int = 0
+    parameter_fraction: float | None = None
+    latency_mean_ms: float | None = None
+    speedup_vs_baseline: float | None = None
 
 
 PREFERRED_METRICS: dict[str, bool] = {
@@ -46,6 +53,31 @@ PREFERRED_METRICS: dict[str, bool] = {
     "rouge_l_f1_approx": True,
     "chrf_approx": True,
     "change_event_f1": True,
+    "changeflag_valid_rate": True,
+    "binary_parse_success_rate": True,
+    "binary_accuracy": True,
+    "balanced_accuracy": True,
+    "change_precision": True,
+    "change_recall": True,
+    "change_f1": True,
+    "matthews_correlation_coefficient": True,
+    "cohen_kappa": True,
+    "false_positive_rate": False,
+    "false_negative_rate": False,
+}
+
+
+PROTOCOL_TASKS = {
+    "vrsbench_visual_grounding": "detection",
+    "generic_single_target_grounding_internal": "detection",
+    "vrsbench_counting": "counting",
+    "generic_counting_internal": "counting",
+    "vrsbench_open_vqa": "vqa",
+    "generic_text_internal": "vqa",
+    "vrsbench_detailed_caption": "captioning",
+    "generic_captioning_internal": "captioning",
+    "levir_cc_change_caption": "change_detection",
+    "generic_change_captioning_internal": "change_detection",
 }
 
 
@@ -77,12 +109,25 @@ def discover_linear_modules(model: Any, torch: Any) -> dict[str, Any]:
     }
 
 
+def _natural_key(value: str) -> tuple[Any, ...]:
+    return tuple(int(part) if part.isdigit() else part for part in re.split(r"(\d+)", value))
+
+
+def _transformer_block_key(module_name: str) -> str:
+    match = re.match(r"^(.*?(?:layers|blocks)\.\d+)(?:\.|$)", module_name)
+    if match:
+        return match.group(1)
+    return module_name.rsplit(".", 1)[0] if "." in module_name else module_name
+
+
 def build_sensitivity_groups(
     model: Any,
     torch: Any,
     *,
     method: Literal["component_wise", "layer_wise"],
     layer_group_size: int = 6,
+    layer_grouping: Literal["fixed_linear", "transformer_block"] = "fixed_linear",
+    include_modules: tuple[str, ...] = (),
     skip_modules: tuple[str, ...] = ("visual",),
     max_groups: int | None = None,
 ) -> list[SensitivityGroup]:
@@ -95,11 +140,19 @@ def build_sensitivity_groups(
     if layer_group_size < 1:
         raise ValueError("layer_group_size must be positive")
     modules = discover_linear_modules(model, torch)
+    include_tokens = tuple(token.lower() for token in include_modules)
     skip_tokens = tuple(token.lower() for token in skip_modules)
     selected = {
         name: module
         for name, module in modules.items()
-        if not any(
+        if (
+            not include_tokens
+            or any(
+                token == classify_component(name) or token in name.lower()
+                for token in include_tokens
+            )
+        )
+        and not any(
             token == classify_component(name) or token in name.lower() for token in skip_tokens
         )
     }
@@ -114,8 +167,8 @@ def build_sensitivity_groups(
         raw_groups = [
             (component, "component", names) for component, names in sorted(grouped.items()) if names
         ]
-    elif method == "layer_wise":
-        names = sorted(selected)
+    elif method == "layer_wise" and layer_grouping == "fixed_linear":
+        names = sorted(selected, key=_natural_key)
         raw_groups = [
             (
                 f"linear_group_{index // layer_group_size + 1:03d}",
@@ -124,8 +177,33 @@ def build_sensitivity_groups(
             )
             for index in range(0, len(names), layer_group_size)
         ]
+    elif method == "layer_wise" and layer_grouping == "transformer_block":
+        component_blocks: dict[str, dict[str, list[str]]] = {}
+        for name in selected:
+            component = classify_component(name)
+            block = _transformer_block_key(name)
+            component_blocks.setdefault(component, {}).setdefault(block, []).append(name)
+        for component in sorted(component_blocks):
+            blocks = component_blocks[component]
+            block_names = sorted(blocks, key=_natural_key)
+            for index in range(0, len(block_names), layer_group_size):
+                chunk = block_names[index : index + layer_group_size]
+                names = [
+                    module_name
+                    for block_name in chunk
+                    for module_name in sorted(blocks[block_name], key=_natural_key)
+                ]
+                raw_groups.append(
+                    (
+                        f"{component}_blocks_{index // layer_group_size + 1:03d}",
+                        "layer_group",
+                        names,
+                    )
+                )
     else:
-        raise ValueError(f"Unsupported sensitivity method: {method}")
+        raise ValueError(
+            f"Unsupported sensitivity grouping: method={method}, layer_grouping={layer_grouping}"
+        )
 
     if max_groups is not None:
         raw_groups = raw_groups[:max_groups]
@@ -200,24 +278,43 @@ def _metric_values(payload: Any, prefix: tuple[str, ...] = ()) -> dict[str, floa
     return values
 
 
-def calculate_sensitivity(
+def _metric_task(path: str) -> str:
+    parts = path.split(".")
+    if "by_task" in parts:
+        index = parts.index("by_task")
+        if index + 1 < len(parts):
+            return parts[index + 1]
+    if "by_protocol" in parts:
+        index = parts.index("by_protocol")
+        if index + 1 < len(parts):
+            return PROTOCOL_TASKS.get(parts[index + 1], parts[index + 1])
+    if "semantic" in parts:
+        return "semantic"
+    return "overall"
+
+
+def calculate_sensitivity_breakdown(
     baseline_metrics: dict[str, Any],
     quantized_metrics: dict[str, Any],
     *,
     preferred_metrics: dict[str, bool] | None = None,
-) -> tuple[float, dict[str, dict[str, float | bool]]]:
-    """从同一 Evaluation v1.5 契约结果计算平均归一化退化分数。
-
-    ``preferred_metrics`` 的布尔值表示指标是否越大越好。分数只使用任务主指标，
-    不使用 Keyword Hit Rate；缺失值保持缺失并从分母中排除。
-    """
+    task_weights: dict[str, float] | None = None,
+    metric_weights: dict[str, float] | None = None,
+) -> tuple[float, dict[str, dict[str, Any]], dict[str, float]]:
+    """Calculate metric deltas, equalized per-task scores, and their weighted total."""
 
     directions = preferred_metrics or PREFERRED_METRICS
+    configured_task_weights = task_weights or {}
+    configured_metric_weights = metric_weights or {}
     baseline_values = _metric_values(baseline_metrics)
     quantized_values = _metric_values(quantized_metrics)
-    deltas: dict[str, dict[str, float | bool]] = {}
-    degradations: list[float] = []
-    for path in sorted(set(baseline_values).intersection(quantized_values)):
+    deltas: dict[str, dict[str, Any]] = {}
+    by_task: dict[str, list[tuple[float, float]]] = {}
+    comparable_paths = set(baseline_values).intersection(quantized_values)
+    has_task_metrics = any("by_task" in path.split(".") for path in comparable_paths)
+    for path in sorted(comparable_paths):
+        if has_task_metrics and "by_protocol" in path.split("."):
+            continue
         metric_name = path.rsplit(".", 1)[-1]
         if metric_name not in directions:
             continue
@@ -227,17 +324,76 @@ def calculate_sensitivity(
         raw_delta = candidate - baseline
         harmful_delta = -raw_delta if higher_is_better else raw_delta
         normalized_degradation = max(0.0, harmful_delta) / max(abs(baseline), 1.0)
-        degradations.append(normalized_degradation)
+        task = _metric_task(path)
+        metric_weight = float(configured_metric_weights.get(metric_name, 1.0))
+        by_task.setdefault(task, []).append((normalized_degradation, metric_weight))
         deltas[path] = {
             "baseline": baseline,
             "quantized": candidate,
             "delta": raw_delta,
             "higher_is_better": higher_is_better,
             "normalized_degradation": normalized_degradation,
+            "task": task,
+            "metric_weight": metric_weight,
         }
     if not deltas:
         raise ValueError("No comparable Evaluation v1.5 primary metrics were found")
-    return sum(degradations) / len(degradations), deltas
+    task_scores = {
+        task: sum(value * weight for value, weight in values)
+        / sum(weight for _, weight in values)
+        for task, values in by_task.items()
+    }
+    total_weight = sum(float(configured_task_weights.get(task, 1.0)) for task in task_scores)
+    score = sum(
+        value * float(configured_task_weights.get(task, 1.0))
+        for task, value in task_scores.items()
+    ) / total_weight
+    return score, deltas, task_scores
+
+
+def calculate_sensitivity(
+    baseline_metrics: dict[str, Any],
+    quantized_metrics: dict[str, Any],
+    *,
+    preferred_metrics: dict[str, bool] | None = None,
+    task_weights: dict[str, float] | None = None,
+    metric_weights: dict[str, float] | None = None,
+) -> tuple[float, dict[str, dict[str, Any]]]:
+    """从同一 Evaluation v1.5 契约结果计算平均归一化退化分数。
+
+    ``preferred_metrics`` 的布尔值表示指标是否越大越好。分数只使用任务主指标，
+    不使用 Keyword Hit Rate；缺失值保持缺失并从分母中排除。
+    """
+
+    score, deltas, _ = calculate_sensitivity_breakdown(
+        baseline_metrics,
+        quantized_metrics,
+        preferred_metrics=preferred_metrics,
+        task_weights=task_weights,
+        metric_weights=metric_weights,
+    )
+    return score, deltas
+
+
+def validate_variant_comparison(
+    baseline: dict[str, Any],
+    candidate: dict[str, Any],
+    *,
+    require_same_samples: bool,
+    max_failure_rate: float,
+) -> None:
+    """Reject partial or mismatched evaluations before attributing damage to a layer group."""
+
+    for label, report in (("baseline", baseline), ("candidate", candidate)):
+        requested = int(report.get("requested_samples", 0))
+        failed = int(report.get("failed_samples", 0))
+        failure_rate = failed / requested if requested else 1.0
+        if failure_rate > max_failure_rate:
+            raise RuntimeError(
+                f"{label} failure rate {failure_rate:.4f} exceeds {max_failure_rate:.4f}"
+            )
+    if require_same_samples and baseline.get("sample_ids") != candidate.get("sample_ids"):
+        raise RuntimeError("Baseline and sensitivity variant completed different sample IDs")
 
 
 def build_sensitivity_report(
@@ -246,12 +402,19 @@ def build_sensitivity_report(
     method: str,
     baseline_evaluation_dir: str,
     results: list[SensitivityResult],
+    sensitive_threshold: float = 0.05,
+    insensitive_threshold: float = 0.01,
+    baseline_performance: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """生成稳定 JSON 报告，并按敏感度从高到低给出混合精度建议。"""
 
     ranked = sorted(results, key=lambda item: item.sensitivity_score, reverse=True)
-    sensitive = [item.name for item in ranked if item.sensitivity_score >= 0.05]
-    insensitive = [item.name for item in ranked if item.sensitivity_score < 0.01]
+    sensitive = [
+        item.name for item in ranked if item.sensitivity_score >= sensitive_threshold
+    ]
+    insensitive = [
+        item.name for item in ranked if item.sensitivity_score < insensitive_threshold
+    ]
     recommendations: list[str] = []
     if sensitive:
         recommendations.append(f"Keep high-sensitivity groups in FP16/FP32: {sensitive}")
@@ -265,6 +428,11 @@ def build_sensitivity_report(
         "model_source": model_source,
         "method": method,
         "baseline_evaluation_dir": baseline_evaluation_dir,
+        "baseline_performance": baseline_performance or {},
+        "thresholds": {
+            "sensitive": sensitive_threshold,
+            "insensitive": insensitive_threshold,
+        },
         "results": [asdict(item) for item in ranked],
         "sensitive_groups": sensitive,
         "recommendations": recommendations,
@@ -289,13 +457,17 @@ def write_sensitivity_report(report: dict[str, Any], output_dir: str | Path) -> 
         f"- Method: `{report['method']}`",
         f"- Metric contract: `{report['metric_contract']}`",
         "",
-        "| Group | Kind | Parameters | Sensitivity |",
-        "|---|---:|---:|---:|",
+        "| Group | Kind | Parameters | Fraction | Sensitivity | Latency ms | Speedup | Failures |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for result in report["results"]:
         lines.append(
             f"| {result['name']} | {result['kind']} | {result['parameter_count']} | "
-            f"{result['sensitivity_score']:.6f} |"
+            f"{float(result.get('parameter_fraction') or 0.0):.4f} | "
+            f"{result['sensitivity_score']:.6f} | "
+            f"{float(result.get('latency_mean_ms') or 0.0):.2f} | "
+            f"{float(result.get('speedup_vs_baseline') or 0.0):.3f} | "
+            f"{result.get('failed_samples', 0)} |"
         )
     lines.extend(["", "## Recommendations", ""])
     lines.extend(f"- {item}" for item in report["recommendations"])

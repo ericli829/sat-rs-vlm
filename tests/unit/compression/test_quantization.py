@@ -10,6 +10,7 @@ from sat_rs_vlm.quantization.benchmark import (
     assert_comparable_sample_ids,
     planned_variants,
     run_benchmark,
+    select_evaluation_samples,
     validate_assets,
 )
 from sat_rs_vlm.quantization.config import (
@@ -188,6 +189,27 @@ def test_skip_baseline_and_sample_fairness() -> None:
     assert_comparable_sample_ids({"sample_ids": ["a"]}, {"sample_ids": ["a"]})
     with pytest.raises(RuntimeError, match="different sample IDs"):
         assert_comparable_sample_ids({"sample_ids": ["a"]}, {"sample_ids": ["b"]})
+
+
+def test_quantization_sampling_filters_before_limiting_and_balances_tasks() -> None:
+    rows = [
+        {"id": "caption-1", "task_type": "captioning"},
+        {"id": "caption-2", "task_type": "captioning"},
+        {"id": "vqa-1", "task_type": "vqa"},
+        {"id": "vqa-2", "task_type": "vqa"},
+        {"id": "change-1", "task_type": "change_detection"},
+    ]
+
+    selected = select_evaluation_samples(
+        rows,
+        allowed_tasks={"vqa", "change_detection"},
+        max_samples=2,
+        strategy="stratified",
+        seed=42,
+        samples_per_task={"vqa": 1, "change_detection": 1},
+    )
+
+    assert {row["task_type"] for row in selected} == {"vqa", "change_detection"}
 
 
 def test_dynamic_int8_quantizes_toy_linear_model() -> None:

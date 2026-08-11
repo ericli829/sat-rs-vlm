@@ -217,10 +217,15 @@ def evaluate(
     checkpoint: Path | None = None,
     output_dir: Path | None = None,
     batch_size_override: int | None = None,
-) -> None:
+    *,
+    loaded_model: Any | None = None,
+    loaded_processor: Any | None = None,
+    loaded_modules: dict[str, Any] | None = None,
+    config_override: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """执行评测。"""
 
-    config = load_yaml(config_path)
+    config = config_override if config_override is not None else load_yaml(config_path)
     summary_file, predictions_file, evaluation_dir = resolve_evaluation_outputs(
         config_path,
         config,
@@ -232,18 +237,34 @@ def evaluate(
     eval_file = resolve_project_path(str(data_cfg["eval_file"]))
     if not eval_file.is_file():
         raise FileNotFoundError(f"Evaluation JSONL file does not exist: {eval_file}")
-    require_bitsandbytes = False
-    if checkpoint is not None:
-        require_bitsandbytes = bool(read_strategy_manifest(checkpoint).get("quantized_base", False))
-    modules = safe_import_model_dependencies(require_bitsandbytes=require_bitsandbytes)
-    if checkpoint is None:
-        model, processor = load_model(config, modules)
-    else:
-        model, processor, _ = load_finetuned_checkpoint(
-            checkpoint,
-            dict(config.get("model", {})),
-            modules,
+    supplied = (loaded_model, loaded_processor, loaded_modules)
+    if any(value is not None for value in supplied) and not all(
+        value is not None for value in supplied
+    ):
+        raise ValueError(
+            "loaded_model, loaded_processor, and loaded_modules must be supplied together"
         )
+    if loaded_modules is None:
+        require_bitsandbytes = False
+        if checkpoint is not None:
+            require_bitsandbytes = bool(
+                read_strategy_manifest(checkpoint).get("quantized_base", False)
+            )
+        modules = safe_import_model_dependencies(require_bitsandbytes=require_bitsandbytes)
+        if checkpoint is None:
+            model, processor = load_model(config, modules)
+        else:
+            model, processor, _ = load_finetuned_checkpoint(
+                checkpoint,
+                dict(config.get("model", {})),
+                modules,
+            )
+    else:
+        if checkpoint is not None:
+            raise ValueError("A checkpoint cannot be combined with a preloaded model")
+        modules = loaded_modules
+        model = loaded_model
+        processor = loaded_processor
     model.eval()
     torch = modules["torch"]
     generation_cfg = dict(config.get("generation", {}))
@@ -347,6 +368,15 @@ def evaluate(
     summary_file.write_bytes(evaluation_outputs["metrics"].read_bytes())
     print(f"Saved Evaluation v1.5 metrics to {evaluation_outputs['metrics']}")
     print(f"Saved compatibility summary to {summary_file}")
+    return {
+        "config": str(config_path),
+        "summary_file": str(summary_file),
+        "predictions_file": str(predictions_file),
+        "evaluation_dir": str(evaluation_dir),
+        "evaluation_outputs": {name: str(path) for name, path in evaluation_outputs.items()},
+        "sample_count": len(predictions),
+        "batch_size": batch_size,
+    }
 
 
 def main() -> int:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import gc
 import importlib
 import json
+import random
 import shutil
 import time
 import tracemalloc
@@ -47,6 +48,69 @@ def _project_path(value: str | Path, project_root: Path) -> Path:
     return path if path.is_absolute() else project_root / path
 
 
+def select_evaluation_samples(
+    samples: list[dict[str, Any]],
+    *,
+    allowed_tasks: set[str],
+    max_samples: int,
+    strategy: str,
+    seed: int,
+    samples_per_task: dict[str, int],
+) -> list[dict[str, Any]]:
+    """Filter tasks before limiting rows and optionally select a deterministic task balance."""
+
+    indexed = [
+        (index, sample)
+        for index, sample in enumerate(samples)
+        if not allowed_tasks or str(sample.get("task_type")) in allowed_tasks
+    ]
+    if strategy == "head":
+        return [sample for _, sample in indexed[:max_samples]]
+    if strategy != "stratified":
+        raise ValueError(f"Unsupported evaluation sampling strategy: {strategy}")
+
+    grouped: dict[str, list[tuple[int, dict[str, Any]]]] = {}
+    for item in indexed:
+        grouped.setdefault(str(item[1].get("task_type", "unknown")), []).append(item)
+    if not grouped:
+        return []
+
+    rng = random.Random(seed)
+    for task_samples in grouped.values():
+        rng.shuffle(task_samples)
+
+    selected: list[tuple[int, dict[str, Any]]] = []
+    if samples_per_task:
+        missing_tasks = sorted(set(samples_per_task).difference(grouped))
+        if missing_tasks:
+            raise ValueError(
+                f"Configured sampling tasks are absent from the dataset: {missing_tasks}"
+            )
+        for task in sorted(samples_per_task):
+            requested = samples_per_task[task]
+            available = grouped[task]
+            if len(available) < requested:
+                raise ValueError(
+                    f"Task {task!r} requests {requested} samples, but only {len(available)} exist"
+                )
+            selected.extend(available[:requested])
+    else:
+        task_names = sorted(grouped)
+        cursors = {task: 0 for task in task_names}
+        while len(selected) < max_samples:
+            made_progress = False
+            for task in task_names:
+                cursor = cursors[task]
+                if cursor >= len(grouped[task]) or len(selected) >= max_samples:
+                    continue
+                selected.append(grouped[task][cursor])
+                cursors[task] += 1
+                made_progress = True
+            if not made_progress:
+                break
+    return [sample for _, sample in sorted(selected[:max_samples], key=lambda item: item[0])]
+
+
 def validate_assets(
     config: QuantizationExperimentConfig,
     backend: QuantizationBackend,
@@ -82,13 +146,16 @@ def validate_assets(
         raise FileNotFoundError(f"Evaluation JSONL does not exist: {eval_file}")
     if not image_root.is_dir():
         raise FileNotFoundError(f"Image root does not exist: {image_root}")
-    loaded_dataset = Qwen3VLDataset(eval_file, config.data.max_eval_samples)
+    loaded_dataset = Qwen3VLDataset(eval_file)
     allowed_tasks = set(config.evaluation.tasks)
-    dataset = [
-        sample
-        for sample in loaded_dataset
-        if not allowed_tasks or str(sample.get("task_type")) in allowed_tasks
-    ]
+    dataset = select_evaluation_samples(
+        list(loaded_dataset),
+        allowed_tasks=allowed_tasks,
+        max_samples=config.data.max_eval_samples,
+        strategy=config.data.sampling_strategy,
+        seed=config.data.sampling_seed,
+        samples_per_task=dict(config.data.samples_per_task),
+    )
     if len(dataset) == 0:
         raise ValueError(f"Evaluation dataset contains no samples: {eval_file}")
     manifest: list[dict[str, Any]] = []
@@ -208,7 +275,7 @@ def run_variant_evaluation(
     rows: list[dict[str, Any]] = []
     failures: list[dict[str, str]] = []
     latency_values: list[float] = []
-    for sample in dataset:
+    for sample_index, sample in enumerate(dataset, start=1):
         prediction: str | None = None
         sample_latencies: list[float] = []
         for repeat in range(config.benchmark.repeats):
@@ -232,21 +299,26 @@ def run_variant_evaluation(
                         "message": str(exc),
                     }
                 )
-        if prediction is None:
-            continue
-        latency_values.extend(sample_latencies)
-        rows.append(
-            {
-                "id": sample["id"],
-                "task_type": sample["task_type"],
-                "prediction": prediction,
-                "reference": extract_reference(sample["messages"]),
-                "metadata": sample.get("metadata", {}),
-                "inference_latency_ms": sum(sample_latencies) / len(sample_latencies),
-                "variant": variant,
-                "backend": backend.name if quantized else "none",
-            }
-        )
+        if prediction is not None:
+            latency_values.extend(sample_latencies)
+            rows.append(
+                {
+                    "id": sample["id"],
+                    "task_type": sample["task_type"],
+                    "prediction": prediction,
+                    "reference": extract_reference(sample["messages"]),
+                    "metadata": sample.get("metadata", {}),
+                    "inference_latency_ms": sum(sample_latencies) / len(sample_latencies),
+                    "variant": variant,
+                    "backend": backend.name if quantized else "none",
+                }
+            )
+        if sample_index % config.benchmark.log_every_samples == 0 or sample_index == len(dataset):
+            print(
+                f"[quantization] {variant}: {sample_index}/{len(dataset)} samples, "
+                f"failures={len({failure['id'] for failure in failures})}",
+                flush=True,
+            )
     _, peak_python_bytes = tracemalloc.get_traced_memory()
     tracemalloc.stop()
     duration = time.perf_counter() - started

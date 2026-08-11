@@ -1,0 +1,79 @@
+# Stage 1: coarse component scan on a deterministic VRSBench + LEVIR-CC sample.
+model:
+  base_model: "/root/autodl-tmp/models/Qwen3-VL-2B-Instruct"
+  merged_model: "${MERGED_MODEL_DIR}"
+  processor_id: "/root/autodl-tmp/models/Qwen3-VL-2B-Instruct"
+  adapter_path: null
+  local_files_only: true
+  trust_remote_code: true
+  torch_dtype: "float32"
+  device_map: "auto"
+  attn_implementation: "sdpa"
+
+quantization:
+  method: "dynamic_int8"
+  device: "cpu"
+  save_artifact: false
+
+data:
+  eval_file: "/root/autodl-tmp/sat-rs-vlm/data/processed/multisource/vrsbench_levircc_val.jsonl"
+  image_root: "/root/autodl-tmp/datasets"
+  max_eval_samples: 180
+  max_seq_length: 1024
+  sampling_strategy: "stratified"
+  sampling_seed: 20260811
+  samples_per_task:
+    detection: 30
+    counting: 30
+    captioning: 30
+    vqa: 30
+    scene_classification: 10
+    change_detection: 50
+
+generation:
+  do_sample: false
+  num_beams: 1
+  max_new_tokens: 128
+  task_max_new_tokens:
+    detection: 64
+    counting: 16
+    captioning: 128
+    vqa: 64
+    scene_classification: 32
+    change_detection: 128
+
+benchmark:
+  warmup_samples: 1
+  repeats: 1
+  seed: 20260811
+  latency_scope: "single_sample_end_to_end"
+  log_every_samples: 10
+
+evaluation:
+  contract: "configs/eval/evaluation_contract_v1.5.yaml"
+  strict: true
+  semantic: false
+  dataset: "VRSBench+LEVIR-CC"
+  tasks: [detection, counting, captioning, vqa, scene_classification, change_detection]
+
+sensitivity:
+  method: "component_wise"
+  layer_group_size: 1
+  layer_grouping: "transformer_block"
+  include_modules: []
+  skip_modules: []
+  max_groups: null
+  require_same_samples: true
+  max_failure_rate: 0.0
+  task_weights:
+    detection: 1.0
+    counting: 1.0
+    captioning: 1.0
+    vqa: 1.0
+    scene_classification: 1.0
+    change_detection: 1.0
+  sensitive_threshold: 0.05
+  insensitive_threshold: 0.01
+
+output:
+  output_dir: "/root/autodl-tmp/outputs/quantization/component_screen"

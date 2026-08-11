@@ -1,0 +1,12 @@
+# Base Qwen3-VL is loaded once, then VRSBench and LEVIR-CC are evaluated sequentially.
+evaluations:
+  - name: "vrsbench"
+    config: "configs/cloud/evaluate_replay_vrsbench.yaml"
+    batch_size: 16
+    max_eval_samples: null
+  - name: "levircc"
+    config: "configs/cloud/evaluate_replay_levircc.yaml"
+    batch_size: 8
+    max_eval_samples: null
+
+output_dir: "/root/autodl-tmp/eval/base_multidataset"

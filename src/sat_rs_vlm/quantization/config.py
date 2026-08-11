@@ -98,6 +98,24 @@ class QuantDataConfig(BaseModel):
     image_root: str
     max_eval_samples: int = Field(default=20, gt=0)
     max_seq_length: int = Field(default=1024, gt=0)
+    sampling_strategy: Literal["head", "stratified"] = "head"
+    sampling_seed: int = 42
+    samples_per_task: dict[str, int] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_sampling(self) -> QuantDataConfig:
+        invalid = {name: count for name, count in self.samples_per_task.items() if count < 1}
+        if invalid:
+            raise ValueError(f"samples_per_task values must be positive: {invalid}")
+        requested = sum(self.samples_per_task.values())
+        if requested and requested > self.max_eval_samples:
+            raise ValueError(
+                "sum(samples_per_task) must not exceed data.max_eval_samples: "
+                f"{requested} > {self.max_eval_samples}"
+            )
+        if self.samples_per_task and self.sampling_strategy != "stratified":
+            raise ValueError("samples_per_task requires sampling_strategy='stratified'")
+        return self
 
 
 class QuantGenerationConfig(BaseModel):
@@ -115,6 +133,7 @@ class QuantBenchmarkConfig(BaseModel):
     repeats: int = Field(default=2, gt=0)
     seed: int = 42
     latency_scope: Literal["single_sample_end_to_end"] = "single_sample_end_to_end"
+    log_every_samples: int = Field(default=10, gt=0)
 
 
 class QuantEvaluationConfig(BaseModel):
@@ -137,8 +156,30 @@ class QuantSensitivityConfig(BaseModel):
 
     method: Literal["component_wise", "layer_wise"] = "component_wise"
     layer_group_size: int = Field(default=6, gt=0)
+    layer_grouping: Literal["fixed_linear", "transformer_block"] = "fixed_linear"
+    include_modules: list[str] = Field(default_factory=list)
     skip_modules: list[str] = Field(default_factory=lambda: ["vision_encoder"])
     max_groups: int | None = Field(default=None, gt=0)
+    require_same_samples: bool = True
+    max_failure_rate: float = Field(default=0.0, ge=0.0, le=1.0)
+    task_weights: dict[str, float] = Field(default_factory=dict)
+    metric_weights: dict[str, float] = Field(default_factory=dict)
+    sensitive_threshold: float = Field(default=0.05, ge=0.0)
+    insensitive_threshold: float = Field(default=0.01, ge=0.0)
+
+    @model_validator(mode="after")
+    def validate_weights(self) -> QuantSensitivityConfig:
+        invalid_tasks = {name: value for name, value in self.task_weights.items() if value <= 0}
+        invalid_metrics = {
+            name: value for name, value in self.metric_weights.items() if value <= 0
+        }
+        if invalid_tasks:
+            raise ValueError(f"task_weights values must be positive: {invalid_tasks}")
+        if invalid_metrics:
+            raise ValueError(f"metric_weights values must be positive: {invalid_metrics}")
+        if self.insensitive_threshold > self.sensitive_threshold:
+            raise ValueError("insensitive_threshold must not exceed sensitive_threshold")
+        return self
 
 
 class QuantOutputConfig(BaseModel):

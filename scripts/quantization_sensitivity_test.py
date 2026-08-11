@@ -22,9 +22,10 @@ from sat_rs_vlm.quantization.sensitivity import (
     SensitivityResult,
     build_sensitivity_groups,
     build_sensitivity_report,
-    calculate_sensitivity,
+    calculate_sensitivity_breakdown,
     plot_sensitivity_report,
     quantize_named_linear_modules,
+    validate_variant_comparison,
     write_sensitivity_report,
 )
 from sat_rs_vlm.training.utils import safe_import_model_dependencies, set_seed
@@ -59,6 +60,30 @@ def _clear_allocator(torch: Any) -> None:
 
 def _safe_group_name(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("_") or "group"
+
+
+def _write_progress(
+    destination: Path,
+    *,
+    status: str,
+    completed: int,
+    total: int,
+    current_group: str | None,
+    results: list[SensitivityResult],
+    error: str | None = None,
+) -> None:
+    destination.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "status": status,
+        "completed_groups": completed,
+        "total_groups": total,
+        "current_group": current_group,
+        "completed_group_names": [result.name for result in results],
+        "error": error,
+    }
+    temporary = destination / "sensitivity_progress.json.tmp"
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(destination / "sensitivity_progress.json")
 
 
 def run_sensitivity(args: argparse.Namespace) -> dict[str, Any]:
@@ -104,8 +129,15 @@ def run_sensitivity(args: argparse.Namespace) -> dict[str, Any]:
         torch,
         method=config.sensitivity.method,
         layer_group_size=config.sensitivity.layer_group_size,
+        layer_grouping=config.sensitivity.layer_grouping,
+        include_modules=tuple(config.sensitivity.include_modules),
         skip_modules=tuple(config.sensitivity.skip_modules),
         max_groups=config.sensitivity.max_groups,
+    )
+    print(
+        f"[sensitivity] discovered {len(groups)} groups with "
+        f"method={config.sensitivity.method}, grouping={config.sensitivity.layer_grouping}",
+        flush=True,
     )
     baseline_report = run_variant_evaluation(
         variant="baseline",
@@ -120,49 +152,128 @@ def run_sensitivity(args: argparse.Namespace) -> dict[str, Any]:
         output_dir=destination,
         project_root=PROJECT_ROOT,
     )
+    validate_variant_comparison(
+        baseline_report,
+        baseline_report,
+        require_same_samples=config.sensitivity.require_same_samples,
+        max_failure_rate=config.sensitivity.max_failure_rate,
+    )
     del baseline_model
     _clear_allocator(torch)
 
     results: list[SensitivityResult] = []
-    for group in groups:
-        model = backend.load_model(config, modules, quantized=False)
-        quantized_model = quantize_named_linear_modules(
-            model,
-            torch,
-            group.module_names,
-            inplace=True,
-        )
-        variant_report = run_variant_evaluation(
-            variant=_safe_group_name(group.name),
-            quantized=True,
-            model=quantized_model,
-            processor=processor,
-            dataset=dataset,
-            image_root=image_root,
-            config=config,
-            backend=backend,
-            torch=torch,
-            output_dir=destination / "groups",
-            project_root=PROJECT_ROOT,
-        )
-        score, deltas = calculate_sensitivity(
-            baseline_report["metrics"],
-            variant_report["metrics"],
-        )
-        metrics_path = Path(variant_report["evaluation_outputs"]["metrics"])
-        results.append(
-            SensitivityResult(
-                name=group.name,
-                kind=group.kind,
-                module_names=group.module_names,
-                parameter_count=group.parameter_count,
-                sensitivity_score=score,
-                metric_deltas=deltas,
-                evaluation_dir=str(metrics_path.parent),
+    _write_progress(
+        destination,
+        status="running",
+        completed=0,
+        total=len(groups),
+        current_group=None,
+        results=results,
+    )
+    baseline_latency = baseline_report.get("latency_ms", {}).get("mean")
+    baseline_parameters = int(baseline_report.get("logical_parameter_count", 0))
+    try:
+        for group_index, group in enumerate(groups, start=1):
+            print(
+                f"[sensitivity] group {group_index}/{len(groups)}: {group.name} "
+                f"({len(group.module_names)} Linear modules)",
+                flush=True,
             )
+            _write_progress(
+                destination,
+                status="running",
+                completed=len(results),
+                total=len(groups),
+                current_group=group.name,
+                results=results,
+            )
+            model = backend.load_model(config, modules, quantized=False)
+            quantized_model = quantize_named_linear_modules(
+                model,
+                torch,
+                group.module_names,
+                inplace=True,
+            )
+            variant_report = run_variant_evaluation(
+                variant=_safe_group_name(group.name),
+                quantized=True,
+                model=quantized_model,
+                processor=processor,
+                dataset=dataset,
+                image_root=image_root,
+                config=config,
+                backend=backend,
+                torch=torch,
+                output_dir=destination / "groups",
+                project_root=PROJECT_ROOT,
+            )
+            validate_variant_comparison(
+                baseline_report,
+                variant_report,
+                require_same_samples=config.sensitivity.require_same_samples,
+                max_failure_rate=config.sensitivity.max_failure_rate,
+            )
+            score, deltas, task_scores = calculate_sensitivity_breakdown(
+                baseline_report["metrics"],
+                variant_report["metrics"],
+                task_weights=dict(config.sensitivity.task_weights),
+                metric_weights=dict(config.sensitivity.metric_weights),
+            )
+            metrics_path = Path(variant_report["evaluation_outputs"]["metrics"])
+            variant_latency = variant_report.get("latency_ms", {}).get("mean")
+            speedup = None
+            if isinstance(baseline_latency, (int, float)) and isinstance(
+                variant_latency, (int, float)
+            ):
+                speedup = (
+                    float(baseline_latency) / float(variant_latency)
+                    if variant_latency
+                    else None
+                )
+            results.append(
+                SensitivityResult(
+                    name=group.name,
+                    kind=group.kind,
+                    module_names=group.module_names,
+                    parameter_count=group.parameter_count,
+                    sensitivity_score=score,
+                    metric_deltas=deltas,
+                    evaluation_dir=str(metrics_path.parent),
+                    task_scores=task_scores,
+                    completed_samples=int(variant_report.get("completed_samples", 0)),
+                    failed_samples=int(variant_report.get("failed_samples", 0)),
+                    parameter_fraction=(
+                        group.parameter_count / baseline_parameters if baseline_parameters else None
+                    ),
+                    latency_mean_ms=(
+                        float(variant_latency)
+                        if isinstance(variant_latency, (int, float))
+                        else None
+                    ),
+                    speedup_vs_baseline=speedup,
+                )
+            )
+            del quantized_model, model
+            _clear_allocator(torch)
+            _write_progress(
+                destination,
+                status="running",
+                completed=len(results),
+                total=len(groups),
+                current_group=None,
+                results=results,
+            )
+    except Exception as exc:
+        _write_progress(
+            destination,
+            status="failed",
+            completed=len(results),
+            total=len(groups),
+            current_group=groups[len(results)].name if len(results) < len(groups) else None,
+            results=results,
+            error=f"{type(exc).__name__}: {exc}",
         )
-        del quantized_model, model
-        _clear_allocator(torch)
+        raise
 
     baseline_metrics_path = Path(baseline_report["evaluation_outputs"]["metrics"])
     report = build_sensitivity_report(
@@ -170,13 +281,41 @@ def run_sensitivity(args: argparse.Namespace) -> dict[str, Any]:
         method=config.sensitivity.method,
         baseline_evaluation_dir=str(baseline_metrics_path.parent),
         results=results,
+        sensitive_threshold=config.sensitivity.sensitive_threshold,
+        insensitive_threshold=config.sensitivity.insensitive_threshold,
+        baseline_performance={
+            "latency_ms": baseline_report.get("latency_ms"),
+            "completed_samples": baseline_report.get("completed_samples"),
+            "failed_samples": baseline_report.get("failed_samples"),
+            "logical_parameter_count": baseline_report.get("logical_parameter_count"),
+        },
     )
+    report["sampling"] = {
+        "strategy": config.data.sampling_strategy,
+        "seed": config.data.sampling_seed,
+        "samples_per_task": dict(config.data.samples_per_task),
+        "sample_ids": baseline_report.get("sample_ids", []),
+    }
+    report["grouping"] = {
+        "layer_grouping": config.sensitivity.layer_grouping,
+        "layer_group_size": config.sensitivity.layer_group_size,
+        "include_modules": list(config.sensitivity.include_modules),
+        "skip_modules": list(config.sensitivity.skip_modules),
+    }
     outputs = write_sensitivity_report(report, destination)
     report["outputs"] = {name: str(path) for name, path in outputs.items()}
     if args.plot:
         figures = plot_sensitivity_report(report, destination / "figures")
         report["figures"] = [str(path) for path in figures]
         write_sensitivity_report(report, destination)
+    _write_progress(
+        destination,
+        status="completed",
+        completed=len(results),
+        total=len(groups),
+        current_group=None,
+        results=results,
+    )
     return report
 
 
