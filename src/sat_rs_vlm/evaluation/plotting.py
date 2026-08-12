@@ -1,4 +1,4 @@
-"""Generate reproducible static figures from v1.5 evaluation artifacts."""
+"""Generate reproducible static figures from v1.5 or v1.6 evaluation artifacts."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ class PlottingError(ValueError):
 
 @dataclass(frozen=True)
 class NamedEvaluation:
-    """One named v1.5 evaluation directory and its loaded summary."""
+    """One named supported evaluation directory and its loaded summary."""
 
     label: str
     directory: Path
@@ -42,7 +42,7 @@ class NamedComparison:
 
 COLORS = ("#0072B2", "#E69F00", "#009E73", "#CC79A7", "#56B4E9", "#D55E00")
 RATE_LIMITS = (0.0, 1.0)
-CONTRACT_VERSION = "1.5"
+SUPPORTED_CONTRACT_VERSIONS = frozenset({"1.5", "1.6"})
 
 TASK_DISPLAY = {
     "captioning": "Caption",
@@ -94,6 +94,8 @@ COMPARISON_METRICS: tuple[tuple[str, str, str], ...] = (
     ("captioning", "rouge_l_f1_approx", "Caption ROUGE-L"),
     ("captioning", "chrf_approx", "Caption chrF"),
     ("captioning", "cider_d_single_reference_approx", "Caption CIDEr-D"),
+    ("change_detection", "binary_accuracy", "LEVIR binary accuracy"),
+    ("change_detection", "change_f1", "LEVIR change F1"),
 )
 
 REPRESENTATIVE_METRICS: tuple[tuple[str, str, str], ...] = (
@@ -106,6 +108,7 @@ REPRESENTATIVE_METRICS: tuple[tuple[str, str, str], ...] = (
         "Scene · Normalized accuracy",
     ),
     ("captioning", "rouge_l_f1_approx", "Caption · ROUGE-L"),
+    ("change_detection", "binary_accuracy", "LEVIR-CC · Binary accuracy"),
 )
 
 
@@ -157,7 +160,7 @@ def _validate_unique_labels(items: Iterable[tuple[str, Path]], kind: str) -> Non
 
 
 def load_evaluations(specifications: Iterable[str]) -> list[NamedEvaluation]:
-    """Load and validate named v1.5 evaluation directories."""
+    """Load and validate named v1.5/v1.6 evaluation directories."""
 
     parsed = [parse_named_path(specification) for specification in specifications]
     _validate_unique_labels(parsed, "evaluation")
@@ -167,10 +170,11 @@ def load_evaluations(specifications: Iterable[str]) -> list[NamedEvaluation]:
         if not summary_path.is_file():
             raise PlottingError(f"Missing summary.json for evaluation {label}: {directory}")
         summary = _load_json(summary_path)
-        if str(summary.get("contract_version")) != CONTRACT_VERSION:
+        contract_version = str(summary.get("contract_version"))
+        if contract_version not in SUPPORTED_CONTRACT_VERSIONS:
             raise PlottingError(
                 f"Evaluation {label} uses contract {summary.get('contract_version')!r}; "
-                f"expected {CONTRACT_VERSION}."
+                f"supported versions are {sorted(SUPPORTED_CONTRACT_VERSIONS)}."
             )
         candidate_rows_path = directory / "evaluated_predictions.jsonl"
         rows_path: Path | None
@@ -189,7 +193,7 @@ def load_evaluations(specifications: Iterable[str]) -> list[NamedEvaluation]:
 
 
 def load_comparisons(specifications: Iterable[str]) -> list[NamedComparison]:
-    """Load and validate named v1.5 paired-comparison directories."""
+    """Load and validate named v1.5/v1.6 paired-comparison directories."""
 
     parsed = [parse_named_path(specification) for specification in specifications]
     _validate_unique_labels(parsed, "comparison")
@@ -201,10 +205,12 @@ def load_comparisons(specifications: Iterable[str]) -> list[NamedComparison]:
                 f"Missing comparison_summary.json for comparison {label}: {directory}"
             )
         summary = _load_json(summary_path)
-        if str(summary.get("required_contract_version")) != CONTRACT_VERSION:
+        contract_version = str(summary.get("required_contract_version"))
+        if contract_version not in SUPPORTED_CONTRACT_VERSIONS:
             raise PlottingError(
                 f"Comparison {label} requires contract "
-                f"{summary.get('required_contract_version')!r}; expected {CONTRACT_VERSION}."
+                f"{summary.get('required_contract_version')!r}; supported versions are "
+                f"{sorted(SUPPORTED_CONTRACT_VERSIONS)}."
             )
         comparisons.append(
             NamedComparison(
@@ -1006,11 +1012,27 @@ def plot_evaluation_results(
     formats: Iterable[str] = ("png", "svg"),
     overwrite: bool = False,
 ) -> dict[str, Any]:
-    """Generate every applicable v1.5 evaluation figure and a trace manifest."""
+    """Generate every applicable v1.5/v1.6 evaluation figure and a trace manifest."""
 
     normalized_formats = _validate_formats(formats)
     evaluations = load_evaluations(evaluation_specs)
     comparisons = load_comparisons(comparison_specs)
+    evaluation_versions = {
+        str(evaluation.summary.get("contract_version")) for evaluation in evaluations
+    }
+    if len(evaluation_versions) != 1:
+        raise PlottingError(
+            "All evaluation inputs in one plot run must use the same contract_version; "
+            f"received {sorted(evaluation_versions)}."
+        )
+    evaluation_contract = next(iter(evaluation_versions))
+    for comparison in comparisons:
+        required = str(comparison.summary.get("required_contract_version"))
+        if required != evaluation_contract:
+            raise PlottingError(
+                f"Comparison {comparison.label} requires contract {required!r}, but the "
+                f"evaluation inputs use {evaluation_contract!r}."
+            )
     destination = _validate_output_directory(Path(output_dir), overwrite=overwrite)
     matplotlib, plt = _prepare_matplotlib()
     diagnostics = {evaluation.label: _diagnostic_rows(evaluation) for evaluation in evaluations}
@@ -1101,8 +1123,8 @@ def plot_evaluation_results(
 
     manifest = {
         "schema_version": "1.0",
-        "implementation_version": "sat-rs-vlm-evaluation-plotting-v1.5",
-        "contract_version": CONTRACT_VERSION,
+        "implementation_version": "sat-rs-vlm-evaluation-plotting-v1.6",
+        "contract_versions": sorted(evaluation_versions),
         "run_time_utc": datetime.now(timezone.utc).isoformat(),
         "python_version": platform.python_version(),
         "matplotlib_version": matplotlib.__version__,

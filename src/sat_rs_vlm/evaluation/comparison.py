@@ -73,6 +73,19 @@ METRIC_SPECS: dict[str, tuple[MetricSpec, ...]] = {
             True,
         ),
     ),
+    "change_detection": (
+        MetricSpec("binary_accuracy", "binary_correct", True),
+        MetricSpec("bleu_1_approx", "bleu_1_approx", True),
+        MetricSpec("bleu_4_approx", "bleu_4_approx", True),
+        MetricSpec("rouge_l_f1_approx", "rouge_l_f1_approx", True),
+        MetricSpec("meteor_exact_approx", "meteor_exact_approx", True),
+        MetricSpec("chrf_approx", "chrf_approx", True),
+        MetricSpec(
+            "cider_d_single_reference_approx",
+            "cider_d_single_reference_approx",
+            True,
+        ),
+    ),
 }
 
 PRIMARY_METRIC = {
@@ -81,9 +94,11 @@ PRIMARY_METRIC = {
     "vqa": "normalized_accuracy",
     "scene_classification": "normalized_accuracy",
     "captioning": "rouge_l_f1_approx",
+    "change_detection": "binary_accuracy",
 }
 
 TOLERANCE = 1e-12
+SUPPORTED_CONTRACT_VERSIONS = frozenset({"1.5", "1.6"})
 REQUIRED_FILES = (
     "evaluated_predictions.jsonl",
     "summary.json",
@@ -238,14 +253,30 @@ def compare_evaluations(
     candidate_manifest = _load_json(candidate_files["evaluation_manifest.json"])
     baseline_summary = _load_json(baseline_files["summary.json"])
     candidate_summary = _load_json(candidate_files["summary.json"])
+    input_versions: dict[str, str] = {}
     for role, manifest, summary in (
         ("baseline", baseline_manifest, baseline_summary),
         ("candidate", candidate_manifest, candidate_summary),
     ):
-        if str(manifest.get("contract_version")) != "1.5":
-            raise ComparisonError(f"{role} manifest must use contract_version 1.5")
-        if str(summary.get("contract_version")) != "1.5":
-            raise ComparisonError(f"{role} summary must use contract_version 1.5")
+        manifest_version = str(manifest.get("contract_version"))
+        summary_version = str(summary.get("contract_version"))
+        if manifest_version not in SUPPORTED_CONTRACT_VERSIONS:
+            raise ComparisonError(
+                f"{role} manifest uses unsupported contract_version {manifest_version!r}; "
+                f"supported versions are {sorted(SUPPORTED_CONTRACT_VERSIONS)}"
+            )
+        if summary_version != manifest_version:
+            raise ComparisonError(
+                f"{role} manifest/summary contract mismatch: "
+                f"{manifest_version!r} != {summary_version!r}"
+            )
+        input_versions[role] = manifest_version
+    if input_versions["baseline"] != input_versions["candidate"]:
+        raise ComparisonError(
+            "baseline and candidate must use the same contract_version: "
+            f"{input_versions['baseline']!r} != {input_versions['candidate']!r}"
+        )
+    contract_version = input_versions["baseline"]
 
     baseline_rows: dict[str, dict[str, Any]] = {}
     for raw in _iter_jsonl(baseline_files["evaluated_predictions.jsonl"]):
@@ -417,8 +448,8 @@ def compare_evaluations(
     total = len(paired_rows)
     summary = {
         "schema_version": "1.0",
-        "implementation_version": "standalone-paired-comparison-v1.0",
-        "required_contract_version": "1.5",
+        "implementation_version": "standalone-paired-comparison-v1.1",
+        "required_contract_version": contract_version,
         "overall": {
             "num_paired_samples": total,
             "prediction_changed": prediction_changed,
@@ -443,7 +474,7 @@ def compare_evaluations(
     }
     manifest = {
         "schema_version": "1.0",
-        "implementation_version": "standalone-paired-comparison-v1.0",
+        "implementation_version": "standalone-paired-comparison-v1.1",
         "run_time_utc": datetime.now(timezone.utc).isoformat(),
         "python_version": platform.python_version(),
         "baseline_directory": str(Path(baseline_dir).expanduser().resolve()),

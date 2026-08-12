@@ -342,10 +342,15 @@ class ComparisonTests(unittest.TestCase):
         self,
         directory: Path,
         rows: list[dict[str, object]],
+        *,
+        contract_version: str = "1.5",
     ) -> None:
         directory.mkdir()
-        write_json(directory / "evaluation_manifest.json", {"contract_version": "1.5"})
-        write_json(directory / "summary.json", {"contract_version": "1.5"})
+        write_json(
+            directory / "evaluation_manifest.json",
+            {"contract_version": contract_version},
+        )
+        write_json(directory / "summary.json", {"contract_version": contract_version})
         write_jsonl(directory / "evaluated_predictions.jsonl", rows)
 
     def _rows(self, candidate: bool) -> list[dict[str, object]]:
@@ -468,6 +473,56 @@ class ComparisonTests(unittest.TestCase):
                     baseline,
                     candidate,
                     root / "comparison",
+                    protected_repository=root / "protected",
+                    bootstrap_resamples=5,
+                )
+
+    def test_v16_comparison_and_cross_contract_rejection(self) -> None:
+        rows = [
+            {
+                "id": "change",
+                "task_type": "change_detection",
+                "prediction": "No change.",
+                "reference": "No change.",
+                "metadata": {"dataset": "LEVIR-CC", "changeflag": 0},
+                "sample_metrics": {
+                    "binary_correct": True,
+                    "bleu_1_approx": 1.0,
+                    "bleu_4_approx": 1.0,
+                    "rouge_l_f1_approx": 1.0,
+                    "meteor_exact_approx": 1.0,
+                    "chrf_approx": 1.0,
+                    "cider_d_single_reference_approx": 1.0,
+                },
+            }
+        ]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            baseline = root / "baseline"
+            candidate = root / "candidate"
+            self._make_evaluation(baseline, rows, contract_version="1.6")
+            self._make_evaluation(candidate, rows, contract_version="1.6")
+            outputs = compare_evaluations(
+                baseline,
+                candidate,
+                root / "comparison",
+                protected_repository=root / "protected",
+                bootstrap_resamples=5,
+            )
+            summary = json.loads(outputs["comparison_summary"].read_text(encoding="utf-8"))
+            self.assertEqual(summary["required_contract_version"], "1.6")
+            self.assertEqual(
+                summary["by_task"]["change_detection"]["primary_metric"],
+                "binary_accuracy",
+            )
+
+            cross_candidate = root / "cross-candidate"
+            self._make_evaluation(cross_candidate, rows, contract_version="1.5")
+            with self.assertRaisesRegex(ComparisonError, "same contract_version"):
+                compare_evaluations(
+                    baseline,
+                    cross_candidate,
+                    root / "cross-comparison",
                     protected_repository=root / "protected",
                     bootstrap_resamples=5,
                 )

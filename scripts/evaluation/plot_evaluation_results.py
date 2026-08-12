@@ -1,4 +1,4 @@
-"""Generate unified v1.5 evaluation figures from result directories."""
+"""Generate unified v1.5/v1.6 evaluation figures from result directories."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def parse_args() -> argparse.Namespace:
         action="append",
         required=True,
         metavar="LABEL=DIR",
-        help="Named v1.5 evaluation directory; repeat for multiple models/datasets.",
+        help="Named v1.5/v1.6 evaluation directory; repeat for multiple models/datasets.",
     )
     parser.add_argument(
         "--comparison",

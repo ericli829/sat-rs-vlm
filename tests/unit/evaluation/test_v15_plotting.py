@@ -26,9 +26,9 @@ def metric(value: float | int, *, samples: int = 10) -> dict[str, object]:
     }
 
 
-def vrs_summary(scale: float = 1.0) -> dict[str, object]:
+def vrs_summary(scale: float = 1.0, *, contract_version: str = "1.5") -> dict[str, object]:
     return {
-        "contract_version": "1.5",
+        "contract_version": contract_version,
         "overall": {
             "metrics": {
                 "latency_ms_mean": metric(10.0 * scale),
@@ -114,7 +114,7 @@ def vrs_summary(scale: float = 1.0) -> dict[str, object]:
     }
 
 
-def levir_summary() -> dict[str, object]:
+def levir_summary(*, contract_version: str = "1.5") -> dict[str, object]:
     metrics = {
         "true_negatives": metric(8),
         "false_positives": metric(2),
@@ -141,7 +141,7 @@ def levir_summary() -> dict[str, object]:
         metrics[name] = metric(value)
         metrics[f"positive_change_{name}"] = metric(value - 0.05)
     return {
-        "contract_version": "1.5",
+        "contract_version": contract_version,
         "overall": {
             "metrics": {},
             "latency_context": {
@@ -158,7 +158,7 @@ def levir_summary() -> dict[str, object]:
     }
 
 
-def comparison_summary() -> dict[str, object]:
+def comparison_summary(*, contract_version: str = "1.5") -> dict[str, object]:
     metrics: dict[str, dict[str, object]] = {}
     task_metrics = {
         "detection": ("iou", "generalized_iou", "acc_at_0_5"),
@@ -188,7 +188,7 @@ def comparison_summary() -> dict[str, object]:
             }
         by_task[task] = {"metrics": metrics}
     return {
-        "required_contract_version": "1.5",
+        "required_contract_version": contract_version,
         "overall": {"num_paired_samples": 50},
         "by_task": by_task,
     }
@@ -246,8 +246,73 @@ class PlotInputTests(unittest.TestCase):
             payload = vrs_summary()
             payload["contract_version"] = "1.4"
             write_json(evaluation / "summary.json", payload)
-            with self.assertRaisesRegex(PlottingError, "expected 1.5"):
+            with self.assertRaisesRegex(PlottingError, "supported versions"):
                 load_evaluations((f"old={evaluation}",))
+
+    def test_v16_inputs_are_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evaluation = root / "evaluation"
+            comparison = root / "comparison"
+            evaluation.mkdir()
+            comparison.mkdir()
+            write_json(
+                evaluation / "summary.json",
+                vrs_summary(contract_version="1.6"),
+            )
+            write_json(
+                comparison / "comparison_summary.json",
+                comparison_summary(contract_version="1.6"),
+            )
+            outputs = plot_evaluation_results(
+                [f"model={evaluation}"],
+                [f"paired={comparison}"],
+                root / "plots",
+                formats=("png",),
+            )
+            manifest = json.loads(outputs["manifest"].read_text(encoding="utf-8"))
+            self.assertEqual(manifest["contract_versions"], ["1.6"])
+            self.assertEqual(
+                manifest["implementation_version"],
+                "sat-rs-vlm-evaluation-plotting-v1.6",
+            )
+
+    def test_comparison_requires_matching_evaluation_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evaluation = root / "evaluation"
+            comparison = root / "comparison"
+            evaluation.mkdir()
+            comparison.mkdir()
+            write_json(evaluation / "summary.json", vrs_summary())
+            write_json(
+                comparison / "comparison_summary.json",
+                comparison_summary(contract_version="1.6"),
+            )
+            with self.assertRaisesRegex(PlottingError, "evaluation inputs use"):
+                plot_evaluation_results(
+                    [f"model={evaluation}"],
+                    [f"paired={comparison}"],
+                    root / "plots",
+                    formats=("png",),
+                )
+
+    def test_mixed_evaluation_contracts_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            v15 = root / "v15"
+            v16 = root / "v16"
+            v15.mkdir()
+            v16.mkdir()
+            write_json(v15 / "summary.json", vrs_summary(contract_version="1.5"))
+            write_json(v16 / "summary.json", vrs_summary(contract_version="1.6"))
+            with self.assertRaisesRegex(PlottingError, "same contract_version"):
+                plot_evaluation_results(
+                    [f"v15={v15}", f"v16={v16}"],
+                    [],
+                    root / "plots",
+                    formats=("png",),
+                )
 
 
 class PlotPipelineTests(unittest.TestCase):
@@ -287,7 +352,7 @@ class PlotPipelineTests(unittest.TestCase):
             for names in generated.values():
                 self.assertGreater((root / "plots" / names[0]).stat().st_size, 100)
             manifest = json.loads((root / "plots" / "plot_manifest.json").read_text())
-            self.assertEqual(manifest["contract_version"], "1.5")
+            self.assertEqual(manifest["contract_versions"], ["1.5"])
             self.assertFalse(manifest["remote_write_performed"])
             self.assertTrue(any("omitted 1" in item["reason"] for item in manifest["skipped"]))
 

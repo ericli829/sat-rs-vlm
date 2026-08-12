@@ -121,7 +121,8 @@ python scripts/evaluation/compare_evaluations.py `
 
 ## 统一绘图
 
-绘图工具读取一个或多个完整评测目录；每个目录必须包含 `summary.json`，存在
+绘图工具同时支持v1.5和v1.6结果。一次运行中的所有评测目录必须使用同一个契约版本，
+配对比较也必须与该版本一致，避免把不同判定口径直接画在同一张图上。每个目录必须包含 `summary.json`，存在
 `evaluated_predictions.jsonl` 时会额外绘制Grounding IoU CDF和Counting误差分布。配对比较目录必须包含
 `comparison_summary.json`。
 

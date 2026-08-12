@@ -14,7 +14,7 @@ def test_plot_evaluation_cli(tmp_path: Path) -> None:
     output = tmp_path / "plots"
     evaluation.mkdir()
     summary = {
-        "contract_version": "1.5",
+        "contract_version": "1.6",
         "overall": {
             "metrics": {},
             "latency_context": {"status": "unresolved"},
