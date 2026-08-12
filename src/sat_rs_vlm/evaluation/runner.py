@@ -25,9 +25,11 @@ from sat_rs_vlm.evaluation.extended_metrics import (
     text_task_scores,
 )
 from sat_rs_vlm.evaluation.parsers import (
+    CHANGE_DECISION_VERSION,
     CHANGE_PARSER_VERSION,
     parse_change_prediction,
     parse_count,
+    parse_explicit_change_prediction,
     parse_grounding,
 )
 from sat_rs_vlm.evaluation.protocols import (
@@ -335,6 +337,7 @@ def _evaluate_change_caption(
     resolution: ProtocolResolution,
     *,
     strict: bool,
+    explicit_binary_priority: bool,
 ) -> EvaluatedRow:
     if not record.reference.strip() and strict:
         raise InputValidationError(f"sample {record.id}: change caption reference is empty")
@@ -345,34 +348,77 @@ def _evaluate_change_caption(
             f"sample {record.id}: metadata.changeflag must be integer 0 or 1"
         )
     reference_changeflag = cast(int, raw_changeflag) if changeflag_valid else None
-    parsed = parse_change_prediction(record.prediction)
+    binary_source = "caption_fallback"
+    explicit_raw = record.raw.get("binary_prediction")
+    if explicit_binary_priority and "prediction_changeflag" in record.raw:
+        explicit_flag = record.raw.get("prediction_changeflag")
+        if type(explicit_flag) is int and explicit_flag in {0, 1}:
+            predicted_changeflag = cast(int, explicit_flag)
+            binary_reason = None
+            binary_mode = "explicit_changeflag"
+            binary_source = "explicit_changeflag"
+        elif explicit_flag is None and isinstance(explicit_raw, str):
+            explicit = parse_explicit_change_prediction(explicit_raw)
+            predicted_changeflag = explicit.value
+            binary_reason = explicit.reason
+            binary_mode = explicit.match_type
+            binary_source = "binary_prediction_text"
+        else:
+            predicted_changeflag = None
+            binary_reason = "invalid_prediction_changeflag"
+            binary_mode = "unresolved"
+            binary_source = "invalid_explicit_changeflag"
+    elif explicit_binary_priority and "binary_prediction" in record.raw:
+        if isinstance(explicit_raw, str):
+            explicit = parse_explicit_change_prediction(explicit_raw)
+            predicted_changeflag = explicit.value
+            binary_reason = explicit.reason
+            binary_mode = explicit.match_type
+            binary_source = "binary_prediction_text"
+        else:
+            predicted_changeflag = None
+            binary_reason = "binary_prediction_must_be_string"
+            binary_mode = "unresolved"
+            binary_source = "invalid_binary_prediction"
+    else:
+        parsed = parse_change_prediction(record.prediction)
+        predicted_changeflag = parsed.value
+        binary_reason = parsed.reason
+        binary_mode = parsed.match_type
     binary_correct = (
-        parsed.value == reference_changeflag
-        if parsed.value is not None and reference_changeflag is not None
+        predicted_changeflag == reference_changeflag
+        if predicted_changeflag is not None and reference_changeflag is not None
         else None
     )
     scores = caption_scores(record.prediction, record.reference)
     scores.update(
         {
             "changeflag_valid": changeflag_valid,
-            "binary_parse_success": parsed.value is not None,
+            "binary_parse_success": predicted_changeflag is not None,
             "binary_correct": binary_correct,
         }
     )
     output = _base_output(record, resolution)
     output.update(
         {
-            "parsed_prediction": parsed.normalized_text or None,
-            "parse_ok": parsed.value is not None,
-            "parse_error": parsed.reason,
+            "parsed_prediction": record.prediction.strip() or None,
+            "parse_ok": predicted_changeflag is not None,
+            "parse_error": binary_reason,
             "reference_changeflag": reference_changeflag,
-            "predicted_changeflag": parsed.value,
+            "predicted_changeflag": predicted_changeflag,
             "change_parser_version": CHANGE_PARSER_VERSION,
-            "change_parse_mode": parsed.match_type,
+            "change_parse_mode": binary_mode,
             "binary_correct": binary_correct,
             "sample_metrics": scores,
         }
     )
+    if explicit_binary_priority:
+        output.update(
+            {
+                "change_decision_version": CHANGE_DECISION_VERSION,
+                "binary_prediction_source": binary_source,
+            }
+        )
     return EvaluatedRow(output, resolution.name, resolution.kind, resolution.status)
 
 
@@ -418,7 +464,18 @@ def evaluate_record(
     if resolution.kind == "caption":
         return _evaluate_caption(record, resolution, strict=strict), []
     if resolution.kind == "change_caption":
-        return _evaluate_change_caption(record, resolution, strict=strict), []
+        return (
+            _evaluate_change_caption(
+                record,
+                resolution,
+                strict=strict,
+                explicit_binary_priority=(
+                    str(contract.get("change_decision_profile", ""))
+                    == CHANGE_DECISION_VERSION
+                ),
+            ),
+            [],
+        )
     return _evaluate_unimplemented(record, resolution), []
 
 
@@ -674,6 +731,11 @@ def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
         valid_flags = sum(bool(sample.get("changeflag_valid")) for sample in samples)
         parsed = sum(bool(sample.get("binary_parse_success")) for sample in samples)
         parse_modes = Counter(str(row.output.get("change_parse_mode", "unknown")) for row in rows)
+        binary_sources = Counter(
+            str(row.output["binary_prediction_source"])
+            for row in rows
+            if "binary_prediction_source" in row.output
+        )
         tp = tn = fp = fn = 0
         comparable = 0
         positive_samples: list[dict[str, Any]] = []
@@ -838,6 +900,28 @@ def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
                 "false_negatives": metric_value(fn, num_samples=comparable),
             }
         )
+        if binary_sources:
+            metrics.update(
+                {
+                    "explicit_binary_decision_rate": metric_value(
+                        ratio(
+                            binary_sources["explicit_changeflag"]
+                            + binary_sources["binary_prediction_text"],
+                            total,
+                        ),
+                        num_samples=total,
+                        note=f"Decision profile: {CHANGE_DECISION_VERSION}.",
+                    ),
+                    "caption_fallback_decision_rate": metric_value(
+                        ratio(binary_sources["caption_fallback"], total),
+                        num_samples=total,
+                        note=(
+                            "Legacy compatibility only; new P0 predictions should use the "
+                            "independent binary question."
+                        ),
+                    ),
+                }
+            )
         for key in (
             "bleu_1_approx",
             "bleu_2_approx",
@@ -1052,8 +1136,9 @@ def _build_summary(
         if qa_type:
             by_qa_type_rows[qa_type].append(row)
 
+    contract_version = str(contract["contract_version"])
     summary = {
-        "schema_version": "1.5",
+        "schema_version": contract_version,
         "implementation_version": str(contract["implementation_version"]),
         "contract_version": str(contract["contract_version"]),
         "contract_status": str(contract.get("contract_status", "unknown")),
@@ -1091,6 +1176,8 @@ def _build_summary(
             latency_context,
         ),
     }
+    if str(contract.get("change_decision_profile", "")) == CHANGE_DECISION_VERSION:
+        summary["change_decision_version"] = CHANGE_DECISION_VERSION
     if semantic_summary is not None:
         summary["semantic"] = semantic_summary
     grounding_rows = [row for row in rows if row.kind == "visual_grounding"]
@@ -1280,8 +1367,9 @@ def run_evaluation(
         "summary": destination / "summary.json",
         "manifest": destination / "evaluation_manifest.json",
     }
+    contract_version = str(contract["contract_version"])
     manifest = {
-        "schema_version": "1.5",
+        "schema_version": contract_version,
         "implementation_version": str(contract["implementation_version"]),
         "contract_version": str(contract["contract_version"]),
         "change_parser_version": CHANGE_PARSER_VERSION,
@@ -1315,6 +1403,8 @@ def run_evaluation(
         "remote_write_performed": False,
         "protected_repository": str(protected) if protected is not None else None,
     }
+    if str(contract.get("change_decision_profile", "")) == CHANGE_DECISION_VERSION:
+        manifest["change_decision_version"] = CHANGE_DECISION_VERSION
 
     destination.mkdir(parents=True, exist_ok=True)
     _write_jsonl(outputs["evaluated_predictions"], evaluated_outputs)

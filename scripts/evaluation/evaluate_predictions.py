@@ -1,4 +1,4 @@
-"""对已有 predictions.jsonl 执行 v1.5 多任务离线评测。"""
+"""对已有 predictions.jsonl 执行 v1.6 多任务离线评测。"""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ if str(SRC_ROOT) not in sys.path:
 from sat_rs_vlm.evaluation.records import EvaluationError  # noqa: E402
 from sat_rs_vlm.evaluation.runner import run_evaluation  # noqa: E402
 
-DEFAULT_CONTRACT = PROJECT_ROOT / "configs" / "eval" / "evaluation_contract_v1.5.yaml"
+DEFAULT_CONTRACT = PROJECT_ROOT / "configs" / "eval" / "evaluation_contract_v1.6.yaml"
 DEFAULT_SEMANTIC_CONTRACT = (
     PROJECT_ROOT / "configs" / "eval" / "semantic" / "semantic_contract.json"
 )

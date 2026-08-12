@@ -16,6 +16,8 @@ data:
 
 generation:
   max_new_tokens: 256
+  change_binary_enabled: true
+  change_binary_max_new_tokens: 8
   do_sample: false
   temperature: 0.0
   num_beams: 1

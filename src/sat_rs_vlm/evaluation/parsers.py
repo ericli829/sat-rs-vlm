@@ -100,6 +100,7 @@ _NO_CHANGE_EXPRESSIONS = {
 # These patterns deliberately use fullmatch: a partial statement such as
 # "no building changed, but a road appeared" must remain a positive change.
 CHANGE_PARSER_VERSION = "levir_contextual_no_change_v3"
+CHANGE_DECISION_VERSION = "explicit_binary_priority_v1"
 _NO_CHANGE_QUALIFIER = (
     r"(?:(?:significant|visible|discernible|detectable|observable|noticeable|"
     r"obvious|major|meaningful|notable|substantial|apparent) )?"
@@ -455,6 +456,48 @@ def _binary_change_value(value: Any) -> int | None:
         if normalized in {"1", "yes", "true", "change", "changed", "has change"}:
             return 1
     return None
+
+
+def parse_explicit_change_prediction(text: str) -> ChangePredictionResult:
+    """Parse only an explicit binary answer, without caption-level inference.
+
+    This parser is used for the dedicated LEVIR-CC binary question. It accepts
+    a literal/short binary answer or a structured JSON field, but deliberately
+    does not apply the descriptive-caption no-change rules.
+    """
+
+    normalized = normalize_text(text)
+    if not normalized:
+        return ChangePredictionResult(None, normalized, "empty_prediction", "unresolved")
+
+    binary = _binary_change_value(normalized)
+    if binary is not None:
+        return ChangePredictionResult(binary, normalized, None, "explicit_binary_text")
+
+    candidate = _ANSWER_PREFIX_PATTERN.sub("", normalized, count=1)
+    binary = _binary_change_value(candidate)
+    if binary is not None:
+        return ChangePredictionResult(binary, normalized, None, "explicit_binary_text")
+
+    payload = extract_json_object(text).payload
+    if payload is not None:
+        for key in _STRUCTURED_CHANGE_KEYS:
+            if key not in payload:
+                continue
+            binary = _binary_change_value(payload[key])
+            if binary is not None:
+                return ChangePredictionResult(
+                    binary,
+                    normalized,
+                    None,
+                    "explicit_structured_binary",
+                )
+    return ChangePredictionResult(
+        None,
+        normalized,
+        "explicit_binary_unresolved",
+        "unresolved",
+    )
 
 
 def _is_complete_no_change_clause(text: str) -> bool:

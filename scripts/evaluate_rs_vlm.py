@@ -9,6 +9,12 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from sat_rs_vlm.models.qwen3vl_loader import (
+    load_qwen3vl,
+)
+from sat_rs_vlm.models.qwen3vl_loader import (
+    validate_local_adapter as _validate_local_adapter,
+)
 
 from sat_rs_vlm.configuration.environment import expand_environment
 from sat_rs_vlm.data.qwen3vl_collator import Qwen3VLDataCollator
@@ -18,22 +24,19 @@ from sat_rs_vlm.evaluation.checkpoint_loader import (
     read_strategy_manifest,
 )
 from sat_rs_vlm.evaluation.inference import (
-    build_generation_kwargs as _build_generation_kwargs,
+    CHANGE_BINARY_PROMPT_VERSION,
+    change_binary_inference_enabled,
+    extract_reference,
+    timed_change_binary_prediction,
+    timed_prediction,
 )
 from sat_rs_vlm.evaluation.inference import (
-    extract_reference,
-    timed_prediction,
+    build_generation_kwargs as _build_generation_kwargs,
 )
 from sat_rs_vlm.evaluation.inference import (
     generate_prediction as _generate_prediction,
 )
 from sat_rs_vlm.evaluation.metrics import summarize_predictions
-from sat_rs_vlm.models.qwen3vl_loader import (
-    load_qwen3vl,
-)
-from sat_rs_vlm.models.qwen3vl_loader import (
-    validate_local_adapter as _validate_local_adapter,
-)
 from sat_rs_vlm.training.utils import (
     MODEL_DEPS_ERROR,
     resolve_torch_dtype,
@@ -198,16 +201,34 @@ def evaluate(
             generation_cfg,
             torch,
         )
-        predictions.append(
-            {
-                "id": sample["id"],
-                "task_type": sample["task_type"],
-                "prediction": prediction,
-                "reference": extract_reference(sample["messages"]),
-                "metadata": sample.get("metadata", {}),
-                "inference_latency_ms": latency_ms,
-            }
-        )
+        row: dict[str, Any] = {
+            "id": sample["id"],
+            "task_type": sample["task_type"],
+            "prediction": prediction,
+            "reference": extract_reference(sample["messages"]),
+            "metadata": sample.get("metadata", {}),
+            "inference_latency_ms": latency_ms,
+        }
+        if change_binary_inference_enabled(sample, generation_cfg):
+            binary_raw, binary_flag, binary_latency_ms = timed_change_binary_prediction(
+                model,
+                processor,
+                collator,
+                sample,
+                generation_cfg,
+                torch,
+            )
+            row.update(
+                {
+                    "prediction_changeflag": binary_flag,
+                    "binary_prediction": binary_raw,
+                    "binary_prediction_parse_ok": binary_flag is not None,
+                    "binary_prompt_version": CHANGE_BINARY_PROMPT_VERSION,
+                    "binary_inference_latency_ms": binary_latency_ms,
+                    "total_inference_latency_ms": latency_ms + binary_latency_ms,
+                }
+            )
+        predictions.append(row)
         if index == 1 or index % 10 == 0 or index == len(dataset):
             print(f"Evaluated {index}/{len(dataset)} samples")
 

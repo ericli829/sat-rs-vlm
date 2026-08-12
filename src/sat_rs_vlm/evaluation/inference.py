@@ -7,7 +7,21 @@ from pathlib import Path
 from typing import Any
 
 from sat_rs_vlm.data.qwen3vl_collator import Qwen3VLDataCollator
+from sat_rs_vlm.evaluation.parsers import parse_explicit_change_prediction
 from sat_rs_vlm.training.utils import model_input_device, move_to_device
+
+CHANGE_BINARY_PROMPT_VERSION = "levir_semantic_change_binary_v1"
+CHANGE_BINARY_PROMPT = (
+    "The first remote-sensing image is before and the second is after. Determine whether "
+    "a meaningful building or permanent structural change occurred.\n"
+    "Building construction, demolition, expansion, replacement, or removal counts as a "
+    "semantic change.\n"
+    "Ignore illumination, season, resolution, viewpoint, registration noise, and temporary "
+    "objects.\n"
+    "Answer exactly one digit:\n"
+    "0 = no semantic change\n"
+    "1 = semantic change"
+)
 
 
 def extract_reference(messages: list[dict[str, Any]]) -> str:
@@ -121,3 +135,78 @@ def timed_prediction(
     prediction = generate_prediction(model, processor, collator, sample, generation_config, torch)
     _synchronize(torch, device)
     return prediction, (time.perf_counter() - started) * 1000.0
+
+
+def is_change_detection_sample(sample: dict[str, Any]) -> bool:
+    """Return whether a sample uses the repository change-detection task type."""
+
+    task_type = str(sample.get("task_type", "")).strip().lower().replace("-", "_")
+    return task_type == "change_detection"
+
+
+def change_binary_inference_enabled(
+    sample: dict[str, Any], generation_config: dict[str, Any]
+) -> bool:
+    """Enable the P0 auxiliary binary pass for change-detection samples by default."""
+
+    return is_change_detection_sample(sample) and bool(
+        generation_config.get("change_binary_enabled", True)
+    )
+
+
+def build_change_binary_sample(sample: dict[str, Any]) -> dict[str, Any]:
+    """Reuse the original images while replacing the caption question with P0 binary QA."""
+
+    image_items: list[dict[str, Any]] = []
+    for message in list(sample.get("messages", [])):
+        if message.get("role") != "user":
+            continue
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "image":
+                image_items.append(dict(item))
+    if not image_items:
+        raise ValueError(
+            f"Change binary inference requires image items for sample {sample.get('id')}"
+        )
+    binary_sample = dict(sample)
+    binary_sample["task_type"] = "change_binary"
+    binary_sample["messages"] = [
+        {
+            "role": "user",
+            "content": [
+                *image_items,
+                {"type": "text", "text": CHANGE_BINARY_PROMPT},
+            ],
+        }
+    ]
+    return binary_sample
+
+
+def timed_change_binary_prediction(
+    model: Any,
+    processor: Any,
+    collator: Qwen3VLDataCollator,
+    sample: dict[str, Any],
+    generation_config: dict[str, Any],
+    torch: Any,
+) -> tuple[str, int | None, float]:
+    """Run the independent P0 binary question and parse only its explicit answer."""
+
+    binary_config = dict(generation_config)
+    binary_config["max_new_tokens"] = int(
+        generation_config.get("change_binary_max_new_tokens", 8)
+    )
+    binary_config["task_max_new_tokens"] = {}
+    raw, latency_ms = timed_prediction(
+        model,
+        processor,
+        collator,
+        build_change_binary_sample(sample),
+        binary_config,
+        torch,
+    )
+    parsed = parse_explicit_change_prediction(raw)
+    return raw, parsed.value, latency_ms

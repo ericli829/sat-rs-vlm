@@ -27,8 +27,11 @@ from sat_rs_vlm.compression.quantization.report import (
 from sat_rs_vlm.data.qwen3vl_collator import Qwen3VLDataCollator
 from sat_rs_vlm.data.qwen3vl_dataset import Qwen3VLDataset
 from sat_rs_vlm.evaluation.inference import (
+    CHANGE_BINARY_PROMPT_VERSION,
+    change_binary_inference_enabled,
     extract_message_inputs,
     extract_reference,
+    timed_change_binary_prediction,
     timed_prediction,
 )
 from sat_rs_vlm.evaluation.metrics import summarize_predictions
@@ -222,18 +225,49 @@ def _run_variant(
         if prediction is None:
             continue
         latency_values.extend(sample_latencies)
-        rows.append(
-            {
-                "id": sample["id"],
-                "task_type": sample["task_type"],
-                "prediction": prediction,
-                "reference": extract_reference(sample["messages"]),
-                "metadata": sample.get("metadata", {}),
-                "inference_latency_ms": sum(sample_latencies) / len(sample_latencies),
-                "variant": variant,
-                "backend": backend.name if quantized else "none",
-            }
-        )
+        row: dict[str, Any] = {
+            "id": sample["id"],
+            "task_type": sample["task_type"],
+            "prediction": prediction,
+            "reference": extract_reference(sample["messages"]),
+            "metadata": sample.get("metadata", {}),
+            "inference_latency_ms": sum(sample_latencies) / len(sample_latencies),
+            "variant": variant,
+            "backend": backend.name if quantized else "none",
+        }
+        generation_config = config.generation.model_dump(mode="python")
+        if change_binary_inference_enabled(sample, generation_config):
+            try:
+                binary_raw, binary_flag, binary_latency_ms = timed_change_binary_prediction(
+                    model,
+                    processor,
+                    collator,
+                    sample,
+                    generation_config,
+                    torch,
+                )
+                row.update(
+                    {
+                        "prediction_changeflag": binary_flag,
+                        "binary_prediction": binary_raw,
+                        "binary_prediction_parse_ok": binary_flag is not None,
+                        "binary_prompt_version": CHANGE_BINARY_PROMPT_VERSION,
+                        "binary_inference_latency_ms": binary_latency_ms,
+                        "total_inference_latency_ms": row["inference_latency_ms"]
+                        + binary_latency_ms,
+                    }
+                )
+            except (RuntimeError, ValueError, OSError) as exc:
+                row.update(
+                    {
+                        "prediction_changeflag": None,
+                        "binary_prediction": "",
+                        "binary_prediction_parse_ok": False,
+                        "binary_prompt_version": CHANGE_BINARY_PROMPT_VERSION,
+                        "binary_inference_error": f"{type(exc).__name__}: {exc}",
+                    }
+                )
+        rows.append(row)
     _, peak_python_bytes = tracemalloc.get_traced_memory()
     tracemalloc.stop()
     duration = time.perf_counter() - started

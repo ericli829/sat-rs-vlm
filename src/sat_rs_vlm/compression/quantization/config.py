@@ -53,6 +53,8 @@ class QuantGenerationConfig(BaseModel):
     top_p: float | None = None
     top_k: int | None = None
     task_max_new_tokens: dict[str, int] = Field(default_factory=dict)
+    change_binary_enabled: bool = True
+    change_binary_max_new_tokens: int = Field(default=8, gt=0)
 
 
 class QuantBenchmarkConfig(BaseModel):

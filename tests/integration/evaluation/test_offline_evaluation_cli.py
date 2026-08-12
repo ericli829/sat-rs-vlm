@@ -28,5 +28,5 @@ def test_offline_evaluation_cli(tmp_path: Path) -> None:
     assert completed.returncode == 0, completed.stderr
     assert (output_dir / "evaluated_predictions.jsonl").is_file()
     summary = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
-    assert summary["contract_version"] == "1.5"
+    assert summary["contract_version"] == "1.6"
     assert summary["overall"]["metrics"]["num_samples"]["value"] == 10

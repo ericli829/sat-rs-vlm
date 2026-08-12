@@ -6,13 +6,16 @@ import unittest
 from pathlib import Path
 
 from sat_rs_vlm.evaluation.comparison import ComparisonError, compare_evaluations
-from sat_rs_vlm.evaluation.parsers import parse_change_prediction
+from sat_rs_vlm.evaluation.parsers import (
+    parse_change_prediction,
+    parse_explicit_change_prediction,
+)
 from sat_rs_vlm.evaluation.protocols import _protocol_name
 from sat_rs_vlm.evaluation.records import InputValidationError, PredictionRecord
 from sat_rs_vlm.evaluation.runner import run_evaluation
 
 ROOT = Path(__file__).resolve().parents[3]
-CONTRACT = ROOT / "configs" / "eval" / "evaluation_contract_v1.5.yaml"
+CONTRACT = ROOT / "configs" / "eval" / "evaluation_contract_v1.6.yaml"
 
 
 def write_json(path: Path, payload: object) -> None:
@@ -27,6 +30,21 @@ def write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:
 
 
 class LevirParserAndRoutingTests(unittest.TestCase):
+    def test_explicit_binary_parser_does_not_guess_from_caption(self) -> None:
+        for expression, expected in (
+            ("0", 0),
+            ("Answer: 1", 1),
+            ('{"changeflag": 0}', 0),
+            ("unchanged", 0),
+        ):
+            with self.subTest(expression=expression):
+                self.assertEqual(parse_explicit_change_prediction(expression).value, expected)
+        self.assertIsNone(
+            parse_explicit_change_prediction(
+                "The two scenes appear visually similar with no obvious differences."
+            ).value
+        )
+
     def test_no_change_expressions_and_compound_change(self) -> None:
         expressions = (
             "No change has occurred.",
@@ -207,10 +225,85 @@ class LevirEndToEndTests(unittest.TestCase):
             self.assertEqual(evaluated[0]["change_parse_mode"], "pattern_no_change")
             self.assertTrue(evaluated[0]["binary_correct"])
             self.assertEqual(metrics["pattern_no_change_match_rate"]["value"], 0.25)
+            self.assertEqual(metrics["caption_fallback_decision_rate"]["value"], 1.0)
+            self.assertEqual(metrics["explicit_binary_decision_rate"]["value"], 0.0)
             self.assertEqual(
                 summary["change_parser_version"],
                 "levir_contextual_no_change_v3",
             )
+
+    def test_explicit_binary_fields_override_caption_fallback(self) -> None:
+        rows = [
+            {
+                "id": "explicit-flag",
+                "task_type": "change_detection",
+                "prediction": "A new building appeared.",
+                "prediction_changeflag": 0,
+                "binary_prediction": "0",
+                "reference": "no change has occurred .",
+                "metadata": {"dataset": "LEVIR-CC", "changeflag": 0},
+            },
+            {
+                "id": "explicit-text",
+                "task_type": "change_detection",
+                "prediction": "The scene is unchanged.",
+                "prediction_changeflag": None,
+                "binary_prediction": "Answer: 1",
+                "reference": "a building appeared .",
+                "metadata": {"dataset": "LEVIR-CC", "changeflag": 1},
+            },
+            {
+                "id": "legacy",
+                "task_type": "change_detection",
+                "prediction": "No changes were observed between the images.",
+                "reference": "no change has occurred .",
+                "metadata": {"dataset": "LEVIR-CC", "changeflag": 0},
+            },
+            {
+                "id": "invalid-explicit",
+                "task_type": "change_detection",
+                "prediction": "No changes were observed between the images.",
+                "prediction_changeflag": "0",
+                "reference": "no change has occurred .",
+                "metadata": {"dataset": "LEVIR-CC", "changeflag": 0},
+            },
+        ]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            predictions = root / "predictions.jsonl"
+            write_jsonl(predictions, rows)
+            outputs = run_evaluation(
+                predictions,
+                root / "results",
+                contract_path=CONTRACT,
+                strict=True,
+                protected_repository=root / "protected",
+                semantic_enabled=False,
+            )
+            evaluated = [
+                json.loads(line)
+                for line in outputs["evaluated_predictions"]
+                .read_text(encoding="utf-8")
+                .splitlines()
+            ]
+            self.assertEqual(evaluated[0]["predicted_changeflag"], 0)
+            self.assertEqual(evaluated[0]["binary_prediction_source"], "explicit_changeflag")
+            self.assertEqual(evaluated[1]["predicted_changeflag"], 1)
+            self.assertEqual(
+                evaluated[1]["binary_prediction_source"], "binary_prediction_text"
+            )
+            self.assertEqual(evaluated[2]["binary_prediction_source"], "caption_fallback")
+            self.assertIsNone(evaluated[3]["predicted_changeflag"])
+            self.assertEqual(
+                evaluated[3]["binary_prediction_source"],
+                "invalid_explicit_changeflag",
+            )
+            self.assertEqual(evaluated[3]["parse_error"], "invalid_prediction_changeflag")
+            metrics = json.loads(outputs["summary"].read_text(encoding="utf-8"))[
+                "by_protocol"
+            ]["levir_cc_change_caption"]["metrics"]
+            self.assertAlmostEqual(metrics["explicit_binary_decision_rate"]["value"], 0.5)
+            self.assertAlmostEqual(metrics["caption_fallback_decision_rate"]["value"], 0.25)
 
     def test_invalid_changeflag_fails_in_strict_mode(self) -> None:
         invalid_values = (None, True, -1, 2, "1")
