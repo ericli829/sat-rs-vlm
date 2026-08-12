@@ -1,4 +1,4 @@
-"""Generate unified v1.5/v1.6 evaluation figures from result directories."""
+"""从v1.5/v1.6评测结果目录生成统一中文科研图。"""
 
 from __future__ import annotations
 
@@ -22,14 +22,14 @@ def parse_args() -> argparse.Namespace:
         action="append",
         required=True,
         metavar="LABEL=DIR",
-        help="Named v1.5/v1.6 evaluation directory; repeat for multiple models/datasets.",
+        help="命名的v1.5/v1.6评测目录；可重复传入多个模型或数据集。",
     )
     parser.add_argument(
         "--comparison",
         action="append",
         default=[],
         metavar="LABEL=DIR",
-        help="Named paired-comparison directory; may be repeated.",
+        help="命名的逐样本配对比较目录；可重复传入。",
     )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument(
@@ -37,12 +37,12 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         default=("png", "svg"),
         metavar="FORMAT",
-        help="One or more output formats: png svg.",
+        help="一种或多种输出格式：png svg。两种格式使用相同的中文图表内容。",
     )
     parser.add_argument(
         "--overwrite",
         action="store_true",
-        help="Allow generated files and the manifest to be replaced in a non-empty directory.",
+        help="允许在非空目录中替换同名生成图和清单文件。",
     )
     return parser.parse_args()
 

@@ -7,6 +7,9 @@ import unittest
 from pathlib import Path
 
 from sat_rs_vlm.evaluation.plotting import (
+    METRIC_DISPLAY,
+    METRIC_REGISTRY_VERSION,
+    PRESENTATION_VERSION,
     PlottingError,
     _paired_improvement,
     _prepare_matplotlib,
@@ -129,6 +132,8 @@ def levir_summary(*, contract_version: str = "1.5") -> dict[str, object]:
         "cohen_kappa": metric(0.50),
         "false_positive_rate": metric(0.20),
         "false_negative_rate": metric(0.30),
+        "explicit_binary_decision_rate": metric(0.90),
+        "caption_fallback_decision_rate": metric(0.10),
     }
     for name, value in {
         "bleu_1_approx": 0.50,
@@ -276,6 +281,10 @@ class PlotInputTests(unittest.TestCase):
                 manifest["implementation_version"],
                 "sat-rs-vlm-evaluation-plotting-v1.6",
             )
+            self.assertEqual(manifest["language"], "zh-CN")
+            self.assertEqual(manifest["presentation_version"], PRESENTATION_VERSION)
+            self.assertEqual(manifest["metric_registry_version"], METRIC_REGISTRY_VERSION)
+            self.assertTrue(manifest["font_family"])
 
     def test_comparison_requires_matching_evaluation_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -353,6 +362,9 @@ class PlotPipelineTests(unittest.TestCase):
                 self.assertGreater((root / "plots" / names[0]).stat().st_size, 100)
             manifest = json.loads((root / "plots" / "plot_manifest.json").read_text())
             self.assertEqual(manifest["contract_versions"], ["1.5"])
+            self.assertEqual(manifest["language"], "zh-CN")
+            self.assertEqual(manifest["presentation_version"], PRESENTATION_VERSION)
+            self.assertTrue(manifest["font_family"])
             self.assertFalse(manifest["remote_write_performed"])
             self.assertTrue(any("omitted 1" in item["reason"] for item in manifest["skipped"]))
 
@@ -401,7 +413,8 @@ class PlotPipelineTests(unittest.TestCase):
             from sat_rs_vlm.evaluation.plotting import load_comparisons
 
             comparison = load_comparisons((f"paired={directory}",))[0]
-            _, plt = _prepare_matplotlib()
+            _, plt, font_family = _prepare_matplotlib()
+            self.assertTrue(font_family)
             figure = _paired_improvement(plt, comparison)
             self.assertIsNotNone(figure)
             assert figure is not None
@@ -409,6 +422,39 @@ class PlotPipelineTests(unittest.TestCase):
             self.assertTrue(widths)
             self.assertTrue(all(width > 0 for width in widths))
             plt.close(figure)
+
+    def test_metric_registry_has_complete_chinese_explanations(self) -> None:
+        self.assertGreaterEqual(len(METRIC_DISPLAY), 35)
+        for metric_name, display in METRIC_DISPLAY.items():
+            with self.subTest(metric=metric_name):
+                self.assertTrue(display.zh_name)
+                self.assertTrue(display.abbreviation)
+                self.assertTrue(display.description)
+                self.assertIn(display.direction, {"higher", "lower", "target1"})
+                self.assertIn(
+                    display.value_format,
+                    {"percent", "score3", "error2", "latency1", "count"},
+                )
+                self.assertTrue(display.category)
+                self.assertTrue(display.tasks)
+
+    def test_svg_contains_chinese_title_and_no_duplicate_language_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evaluation = root / "evaluation"
+            evaluation.mkdir()
+            write_json(evaluation / "summary.json", vrs_summary(contract_version="1.6"))
+            outputs = plot_evaluation_results(
+                [f"baseline={evaluation}"],
+                [],
+                root / "plots",
+                formats=("svg",),
+            )
+            svg = root / "plots" / outputs["generated"]["task_sample_distribution"][0]
+            content = svg.read_text(encoding="utf-8")
+            self.assertIn("VRSBench五类评测任务的样本分布", content)
+            self.assertFalse((root / "plots" / "paper_en").exists())
+            self.assertFalse((root / "plots" / "report_zh").exists())
 
 
 if __name__ == "__main__":

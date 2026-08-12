@@ -64,3 +64,7 @@ def test_plot_evaluation_cli(tmp_path: Path) -> None:
     payload = json.loads(completed.stdout)
     assert "task_sample_distribution" in payload["generated"]
     assert (output / "plot_manifest.json").is_file()
+    manifest = json.loads((output / "plot_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["language"] == "zh-CN"
+    assert manifest["presentation_version"] == "zh-scientific-v1"
+    assert manifest["font_family"]
