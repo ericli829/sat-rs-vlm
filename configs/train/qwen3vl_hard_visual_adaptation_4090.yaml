@@ -1,4 +1,6 @@
-# H1 continues from the final Stage-B LoRA adapter; it never starts a fresh adapter.
+# H1 throughput-oriented profile for a single RTX 4090 (24 GiB).
+# Effective batch size is 16: 8 samples/device x 2 accumulation steps.
+# Keep this separate from the conservative H1 profile so a running job is unaffected.
 model:
   model_dir: "${LOCAL_MODEL_DIR}"
   processor_dir: "${LOCAL_MODEL_DIR}"
@@ -27,11 +29,7 @@ training:
   freeze_vision_encoder: true
   freeze_projector: true
   num_train_epochs: null
-  # Replace after running estimate_h1_steps.py; this conservative placeholder is
-  # intentionally controlled by steps rather than a full-data epoch.
   max_steps: 1000
-  # RTX 4090: preserve the established effective batch size of 16 while
-  # increasing per-step work enough to amortize image preprocessing overhead.
   per_device_train_batch_size: 8
   per_device_eval_batch_size: 8
   gradient_accumulation_steps: 2
@@ -159,4 +157,4 @@ evaluation:
 
 logging:
   report_to: "none"
-  experiment_name: "h1_hard_visual_adaptation"
+  experiment_name: "h1_hard_visual_adaptation_4090"
