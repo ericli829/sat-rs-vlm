@@ -11,6 +11,12 @@ from sat_rs_vlm.models.reliability.fault_injector import (
     load_safetensors_state,
     save_safetensors_state,
     selectable_parameters,
+    selector_for_fault_target,
+    inject_model_parameter_bitflips,
+    bit_indices_for_tensor,
+    model_fault_inventory,
+    fault_bits_from_density,
+    summarize_fault_inventory,
 )
 
 
@@ -114,3 +120,90 @@ def test_safetensors_adapter_injection_preserves_source_and_reloads(tmp_path: Pa
     assert (tmp_path / "fault" / "processor/processor_config.json").is_file()
     assert not (tmp_path / "fault" / "checkpoint-500").exists()
     assert not (tmp_path / "fault" / "optimizer.pt").exists()
+
+
+def test_named_fault_targets_and_in_memory_model_injection() -> None:
+    torch = pytest.importorskip("torch")
+
+    class TinyModel(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.visual = torch.nn.Linear(2, 2, bias=False)
+            self.model = torch.nn.Module()
+            self.model.layers = torch.nn.ModuleList(
+                [torch.nn.ModuleDict({"self_attn": torch.nn.Linear(2, 2, bias=False),
+                                      "mlp": torch.nn.Linear(2, 2, bias=False)})]
+            )
+
+    model = TinyModel()
+    clean_visual = model.visual.weight.detach().clone()
+    clean_attention = model.model.layers[0]["self_attn"].weight.detach().clone()
+    records = inject_model_parameter_bitflips(
+        model, num_bits=1, seed=7, selector=selector_for_fault_target("vision_encoder")
+    )
+
+    assert len(records) == 1
+    assert records[0].target_name.startswith("visual.")
+    assert not torch.equal(model.visual.weight, clean_visual)
+    assert torch.equal(model.model.layers[0]["self_attn"].weight, clean_attention)
+    attention = selector_for_fault_target("attention", layer_indices=(0,))
+    assert [name for name, _ in selectable_parameters(dict(model.named_parameters()), attention)] == [
+        "model.layers.0.self_attn.weight"
+    ]
+
+
+def test_unknown_fault_target_fails() -> None:
+    with pytest.raises(ValueError, match="fault.target"):
+        selector_for_fault_target("kv_cache")
+
+
+def test_bit_plane_indices_and_in_memory_exponent_injection() -> None:
+    torch = pytest.importorskip("torch")
+    assert bit_indices_for_tensor(torch.zeros(1, dtype=torch.float16), "sign") == (15,)
+    assert bit_indices_for_tensor(torch.zeros(1, dtype=torch.float16), "exponent") == (10, 11, 12, 13, 14)
+    assert bit_indices_for_tensor(torch.zeros(1, dtype=torch.bfloat16), "mantissa") == tuple(range(7))
+
+    class TinyModel(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.visual = torch.nn.Linear(2, 2, bias=False).to(dtype=torch.float16)
+
+    records = inject_model_parameter_bitflips(
+        TinyModel(), num_bits=3, seed=2, selector=selector_for_fault_target("vision_encoder"),
+        bit_plane="exponent",
+    )
+    assert {record.bit_index for record in records}.issubset({10, 11, 12, 13, 14})
+
+
+def test_fault_inventory_and_normalized_density() -> None:
+    torch = pytest.importorskip("torch")
+
+    class TinyModel(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.visual = torch.nn.Linear(2, 3, bias=False).to(dtype=torch.float16)
+
+    inventory = model_fault_inventory(
+        TinyModel(), selector=selector_for_fault_target("vision_encoder"), bit_plane="exponent"
+    )
+    assert inventory["total_elements"] == 6
+    assert inventory["candidate_bits"] == 6 * 5
+    assert fault_bits_from_density(1_000_000, 10) == 10
+    assert fault_bits_from_density(30, 1) == 1
+
+
+def test_fault_inventory_summary_groups_regions_and_layers() -> None:
+    inventory = {
+        "parameters": [
+            {"name": "model.layers.14.self_attn.q_proj.weight", "elements": 4, "candidate_bits": 64},
+            {"name": "model.layers.14.mlp.down_proj.weight", "elements": 8, "candidate_bits": 128},
+            {"name": "visual.blocks.2.weight", "elements": 3, "candidate_bits": 48},
+            {"name": "model.layers.14.self_attn.q_proj.lora_A.weight", "elements": 2, "candidate_bits": 32},
+        ]
+    }
+    summary = summarize_fault_inventory(inventory)
+    by_key = {(row["region"], row["layer"]): row for row in summary}
+    assert by_key[("attention", 14)]["candidate_bits"] == 64
+    assert by_key[("mlp", 14)]["elements"] == 8
+    assert by_key[("vision_encoder", 2)]["tensor_count"] == 1
+    assert by_key[("lora_adapter", 14)]["candidate_bits"] == 32
