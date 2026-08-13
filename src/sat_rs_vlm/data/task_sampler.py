@@ -1,10 +1,14 @@
-"""按 task_type 构造可复现的训练采样权重与 Trainer。"""
+"""按任务或数据来源构造可复现的训练采样器。
+
+本模块只控制“某类样本出现多少次”，不参与 loss 权重计算。Loss 权重由
+``training.losses`` 和 ``loss.task_weights`` 独立负责。
+"""
 
 from __future__ import annotations
 
 import random
 from collections import Counter
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
 
 
@@ -12,7 +16,7 @@ def build_task_sample_weights(
     dataset: Sequence[Mapping[str, Any]],
     task_weights: Mapping[str, float] | None,
 ) -> list[float] | None:
-    """为每条样本生成正权重；空配置表示均匀采样。"""
+    """为每条样本生成正采样权重；空配置表示均匀采样。"""
 
     if not task_weights:
         return None
@@ -29,7 +33,7 @@ def build_weighted_sampler(
     *,
     seed: int = 42,
 ) -> Any | None:
-    """构造 torch WeightedRandomSampler，不在模块导入时强制依赖 torch。"""
+    """构造 ``WeightedRandomSampler``，不在模块导入时强制依赖 torch。"""
 
     weights = build_task_sample_weights(dataset, task_weights)
     if weights is None:
@@ -37,7 +41,7 @@ def build_weighted_sampler(
     try:
         import torch
         from torch.utils.data import WeightedRandomSampler
-    except ImportError as exc:  # pragma: no cover - 真实训练环境分支
+    except ImportError as exc:  # pragma: no cover - 仅真实训练环境会触发
         raise ImportError("torch is required for task-weighted sampling") from exc
     generator = torch.Generator()
     generator.manual_seed(int(seed))
@@ -56,7 +60,7 @@ def build_alternating_source_sampler(
     batch_size: int,
     seed: int = 42,
 ) -> Any:
-    """Build fixed-size, source-homogeneous batches in a repeating source pattern."""
+    """按固定来源顺序构造同来源 batch 的可复现 sampler。"""
 
     if batch_size < 1:
         raise ValueError("batch_size must be positive")
@@ -104,35 +108,3 @@ def build_alternating_source_sampler(
                     positions[source] = end
 
     return AlternatingSourceSampler()
-
-
-def create_trainer(
-    transformers: Any,
-    *,
-    train_sampler: Any | None,
-    trainer_kwargs: dict[str, Any],
-    checkpoint_artifact_saver: Callable[[Any, str], None] | None = None,
-) -> Any:
-    """创建标准 Trainer 或显式覆写采样扩展点的加权 Trainer。
-
-    Transformers 暂无公开 sampler 构造参数，因此集中在此处覆写 `_get_train_sampler`，
-    避免在训练脚本运行时 monkey patch 私有方法。
-    """
-
-    if train_sampler is None and checkpoint_artifact_saver is None:
-        return transformers.Trainer(**trainer_kwargs)
-
-    class TaskWeightedTrainer(transformers.Trainer):  # type: ignore[misc]
-        def _get_train_sampler(self, train_dataset: Any | None = None) -> Any:
-            del train_dataset
-            if train_sampler is not None:
-                return train_sampler
-            return super()._get_train_sampler()
-
-        def _save(self, output_dir: str | None = None, state_dict: Any | None = None) -> None:
-            super()._save(output_dir=output_dir, state_dict=state_dict)
-            if checkpoint_artifact_saver is not None:
-                destination = output_dir or str(self.args.output_dir)
-                checkpoint_artifact_saver(self.model, destination)
-
-    return TaskWeightedTrainer(**trainer_kwargs)

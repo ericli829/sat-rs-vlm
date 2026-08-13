@@ -71,6 +71,18 @@ qlora:
   bnb_4bit_compute_dtype: "bfloat16"
   bnb_4bit_use_double_quant: true
 
+loss:
+  mode: "task_weighted"
+  task_weights:
+    captioning: 1.0
+    detection: 1.0
+    counting: 1.0
+    scene_classification: 1.0
+    vqa: 1.0
+    change_detection: 1.0
+  unknown_task_weight: 1.0
+  strict_task_metadata: true
+
 vision_tuning:
   enabled: true
   unfreeze_last_n_blocks: 2

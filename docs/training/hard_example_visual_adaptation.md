@@ -7,8 +7,9 @@ H1 是对现有最终 LoRA checkpoint 的短程继续训练，不是从 Qwen3-VL
 （VRSBench + LEVIR-CC）的 adapter。历史 checkpoint、593 条固定评测集、历史 predictions、
 Evaluation v1.5 报告和量化敏感度实验均保持不变。
 
-本阶段不修改 LoRA rank、assistant-only loss、bbox 训练协议、visual resolution 或
-`min_pixels/max_pixels`，也不加入 LoRA+、AdaLoRA、DoRA 或任务 loss weighting。
+本阶段不修改 LoRA rank、assistant-only label mask、bbox 训练协议、visual resolution 或
+`min_pixels/max_pixels`，也不加入 LoRA+、AdaLoRA 或 DoRA。多任务 loss 聚合使用正式的
+可替换接口；默认 `task_weighted`，历史对照可显式切换为 `token_mean`。
 
 ## 为什么不从 Base Model 重训
 
@@ -23,8 +24,14 @@ H1 只检验两个假设：当前模型的真实失败样本是否值得重点�
 padding 的 label 都是 `-100`，只有 assistant answer 满足 `labels != -100`。截断后没有
 assistant token 会直接报错并包含 sample ID。H1 没有修改这段 mask。
 
-`task_sampling_weights` 只改变样本被抽到的概率，不乘 loss，也不是 task-specific loss
-weight。H1 的 hard/replay 比例是数据组成，同样不是 loss weighting。
+`task_sampling_weights` 只改变样本被抽到的概率。独立的 `loss.task_weights` 才参与
+loss 聚合，两者不能混用。H1 的 hard/replay 比例是数据组成，同样不是 loss weighting。
+
+默认 `task_weighted` 先对每条样本的 assistant token CE 求均值，再按
+`loss.task_weights` 聚合样本；因此 captioning 不会只因答案更长获得更高梯度权重。
+当前所有任务权重均为 `1.0`，尚未人为提高 detection 或 counting 优先级。需要复现
+Stage A/B 的历史 loss 数值时，使用 `loss.mode: token_mean`。两种聚合方式的
+`train_loss/eval_loss` 数值不可直接比较，模型质量继续通过 Evaluation v1.5 的任务指标比较。
 
 ## 训练前统计
 

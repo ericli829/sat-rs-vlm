@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 from scripts.train_qwen3vl_lora import build_strategy_manifest
 
-from sat_rs_vlm.training.config import ResolvedTrainingPaths
+from sat_rs_vlm.training.config import MultitaskLossConfig, ResolvedTrainingPaths
 
 
 class _Parameter:
@@ -33,6 +33,8 @@ def test_lora_manifest_is_compatible_with_checkpoint_loader_contract(tmp_path: P
             bnb_4bit_use_double_quant=True,
             bnb_4bit_compute_dtype="bfloat16",
         ),
+        loss=MultitaskLossConfig(),
+        vision_tuning=SimpleNamespace(enabled=False),
     )
     paths = ResolvedTrainingPaths(
         model_source="/models/Qwen3-VL-2B-Instruct",
@@ -56,3 +58,4 @@ def test_lora_manifest_is_compatible_with_checkpoint_loader_contract(tmp_path: P
         "base_model.model.layers.0.self_attn.q_proj",
         "base_model.model.layers.0.self_attn.v_proj",
     ]
+    assert manifest["loss"]["mode"] == "task_weighted"

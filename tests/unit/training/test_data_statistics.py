@@ -6,7 +6,12 @@ from typing import Any
 import pytest
 
 from sat_rs_vlm.data.qwen3vl_collator import Qwen3VLDataCollator
-from sat_rs_vlm.training.data_statistics import analyze_training_data, numeric_summary, percentile
+from sat_rs_vlm.training.data_statistics import (
+    analyze_training_data,
+    numeric_summary,
+    percentile,
+    stratified_sample_by_task,
+)
 
 torch = pytest.importorskip("torch")
 
@@ -113,3 +118,78 @@ def test_task_aggregation_and_percentiles_use_exact_supervised_counts() -> None:
     assert report["truncation_statistics"]["truncation_rate"] == 0
     assert percentile([1, 2, 3, 4], 0.90) == pytest.approx(3.7)
     assert numeric_summary([1, 2, 3, 4])["p95"] == pytest.approx(3.85)
+
+
+def test_statistics_progress_callback_reports_interval_and_completion() -> None:
+    class FakeCollator:
+        max_seq_length = 1024
+        processor = SimpleNamespace(image_processor=SimpleNamespace(merge_size=2))
+
+        def tokenization_diagnostics(self, sample: dict[str, Any]) -> dict[str, Any]:
+            del sample
+            return {
+                "encoded": {},
+                "prompt_tokens": 1,
+                "assistant_tokens": 1,
+                "total_tokens": 2,
+                "uncapped_total_tokens": 2,
+                "truncated": False,
+                "assistant_truncated": False,
+            }
+
+    progress: list[tuple[int, int]] = []
+    analyze_training_data(
+        [_sample("a"), _sample("b"), _sample("c")],
+        FakeCollator(),  # type: ignore[arg-type]
+        image_root=".",
+        inspect_images=False,
+        progress_callback=lambda processed, total: progress.append((processed, total)),
+        progress_every=2,
+    )
+
+    assert progress == [(2, 3), (3, 3)]
+
+
+def test_stratified_sampling_is_seeded_and_token_contribution_uses_population() -> None:
+    samples = [
+        _sample("vqa-a", "vqa"),
+        _sample("vqa-b", "vqa"),
+        _sample("caption-a", "captioning"),
+        _sample("caption-b", "captioning"),
+    ]
+    selected = stratified_sample_by_task(samples, 1, seed=42)
+    assert len(selected) == 2
+    assert {sample["task_type"] for sample in selected} == {"vqa", "captioning"}
+
+    class FakeCollator:
+        max_seq_length = 1024
+        processor = SimpleNamespace(image_processor=SimpleNamespace(merge_size=2))
+
+        def tokenization_diagnostics(self, sample: dict[str, Any]) -> dict[str, Any]:
+            tokens = 2 if sample["task_type"] == "vqa" else 10
+            return {
+                "encoded": {},
+                "prompt_tokens": 1,
+                "assistant_tokens": tokens,
+                "total_tokens": tokens + 1,
+                "uncapped_total_tokens": tokens + 1,
+                "truncated": False,
+                "assistant_truncated": False,
+            }
+
+    report = analyze_training_data(
+        selected,
+        FakeCollator(),  # type: ignore[arg-type]
+        image_root=".",
+        inspect_images=False,
+        population_task_counts={"vqa": 100, "captioning": 100},
+    )
+    contribution = report["supervised_token_statistics"]["estimated_supervised_token_exposure"]
+    assert contribution["task_sampling_weights_are_loss_weights"] is False
+    assert contribution["not_a_task_loss_weight"] is True
+    assert contribution["by_task"]["captioning"]["population_sample_share"] == 0.5
+    assert contribution["by_task"]["captioning"][
+        "estimated_supervised_token_share"
+    ] == pytest.approx(10 / 12)
+    interpretation = report["supervised_token_statistics"]["loss_weighting_interpretation"]
+    assert interpretation["task_level_control"] == "sampler draw frequency, not token-count totals"

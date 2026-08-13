@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import json
 import math
+import random
 import statistics
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -75,6 +76,43 @@ def bbox_area_bucket(area: float, thresholds: BBoxAreaThresholdConfig) -> str:
     if area <= thresholds.medium_max:
         return "medium"
     return "large"
+
+
+def task_counts(samples: Sequence[Mapping[str, Any]]) -> Counter[str]:
+    """Count normalized task types without tokenizing or opening any image."""
+
+    return Counter(
+        str(sample.get("task_type", "unknown")).strip().lower() or "unknown" for sample in samples
+    )
+
+
+def stratified_sample_by_task(
+    samples: Sequence[Mapping[str, Any]],
+    samples_per_task: int,
+    *,
+    seed: int,
+) -> list[Mapping[str, Any]]:
+    """Draw a deterministic, bounded random sample from every observed task.
+
+    This is used for fast token-length diagnostics. It deliberately preserves no
+    original task proportion: per-task means can then be estimated with comparable
+    sample support, while population task counts remain in the final report.
+    """
+
+    if samples_per_task < 1:
+        raise ValueError("samples_per_task must be positive")
+    grouped: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    for sample in samples:
+        task = str(sample.get("task_type", "unknown")).strip().lower() or "unknown"
+        grouped[task].append(sample)
+    rng = random.Random(seed)
+    selected: list[Mapping[str, Any]] = []
+    for task in sorted(grouped):
+        candidates = list(grouped[task])
+        rng.shuffle(candidates)
+        selected.extend(candidates[:samples_per_task])
+    rng.shuffle(selected)
+    return selected
 
 
 def _distribution(counter: Counter[str], total: int) -> dict[str, dict[str, float | int]]:
@@ -149,6 +187,12 @@ def analyze_training_data(
     image_root: str | Path,
     bbox_thresholds: BBoxAreaThresholdConfig | None = None,
     inspect_images: bool = True,
+    progress_callback: Callable[[int, int], None] | None = None,
+    progress_every: int = 100,
+    population_task_counts: Mapping[str, int] | None = None,
+    analysis_selection: Mapping[str, Any] | None = None,
+    training_sampling_mode: str = "uniform",
+    task_sampling_weights: Mapping[str, float] | None = None,
 ) -> dict[str, Any]:
     """Analyze source/task composition, exact supervision, and visual properties.
 
@@ -158,17 +202,27 @@ def analyze_training_data(
         image_root: Root used to resolve relative image paths.
         bbox_thresholds: Normalized area thresholds for small/medium/large boxes.
         inspect_images: When false, image dimensions are reported as unavailable.
+        progress_callback: Optional callback receiving ``(processed, total)``.
+        progress_every: Callback interval in samples. The final sample is always
+            reported when a callback is configured.
+        population_task_counts: Optional full-dataset task counts when a smaller
+            analysis sample was selected before tokenization.
+        analysis_selection: JSON-safe description of the selected analysis sample.
+        training_sampling_mode: Existing training sampler mode for interpretation.
+        task_sampling_weights: Existing sampler weights; these are not loss weights.
 
     Returns:
         A JSON-serializable statistics report. Missing low-cost observations remain
         ``None``/``unavailable`` rather than being fabricated.
     """
 
+    if progress_every < 1:
+        raise ValueError("progress_every must be positive")
     thresholds = bbox_thresholds or BBoxAreaThresholdConfig()
     root = Path(image_root)
     dataset_counts: Counter[str] = Counter()
     source_counts: Counter[str] = Counter()
-    task_counts: Counter[str] = Counter()
+    analyzed_task_counts: Counter[str] = Counter()
     token_rows: list[dict[str, Any]] = []
     per_task_tokens: dict[str, list[dict[str, Any]]] = defaultdict(list)
     class_counts: Counter[str] = Counter()
@@ -187,7 +241,8 @@ def analyze_training_data(
     visual_grid_rows: list[list[int]] = []
     merge_size = _processor_merge_size(collator)
 
-    for sample in samples:
+    total_samples = len(samples)
+    for index, sample in enumerate(samples, start=1):
         metadata_value = sample.get("metadata", {})
         metadata = metadata_value if isinstance(metadata_value, Mapping) else {}
         dataset = str(metadata.get("dataset") or metadata.get("training_source") or "unknown")
@@ -195,7 +250,7 @@ def analyze_training_data(
         task = str(sample.get("task_type", "unknown")).strip().lower() or "unknown"
         dataset_counts[dataset] += 1
         source_counts[source] += 1
-        task_counts[task] += 1
+        analyzed_task_counts[task] += 1
 
         diagnostics = collator.tokenization_diagnostics(dict(sample))
         row = {
@@ -256,7 +311,12 @@ def analyze_training_data(
                 except (OSError, ValueError) as exc:
                     image_errors.append({"path": str(image_path), "error": str(exc)})
 
-    total = len(samples)
+        if progress_callback is not None and (
+            index % progress_every == 0 or index == total_samples
+        ):
+            progress_callback(index, total_samples)
+
+    total = total_samples
     total_supervised = sum(int(row["assistant_tokens"]) for row in token_rows)
     task_token_summary: dict[str, Any] = {}
     for task, rows in sorted(per_task_tokens.items()):
@@ -273,6 +333,56 @@ def analyze_training_data(
             },
         }
 
+    population_counts = Counter(
+        {
+            str(task): int(count)
+            for task, count in (population_task_counts or task_counts(samples)).items()
+        }
+    )
+    population_total = sum(population_counts.values())
+    sampler_weights = {
+        str(task): float(weight) for task, weight in (task_sampling_weights or {}).items()
+    }
+    sampling_mass = {
+        task: count * sampler_weights.get(task, 1.0) for task, count in population_counts.items()
+    }
+    total_sampling_mass = sum(sampling_mass.values())
+    estimated_contribution: dict[str, Any] = {}
+    estimates: dict[str, float] = {}
+    for task, values in task_token_summary.items():
+        mean_tokens = values["mean"]
+        population_count = population_counts.get(task, 0)
+        estimated = float(mean_tokens) * population_count if mean_tokens is not None else None
+        if estimated is not None:
+            estimates[task] = estimated
+        estimated_contribution[task] = {
+            "population_sample_count": population_count,
+            "population_sample_share": (
+                population_count / population_total if population_total else None
+            ),
+            "sampler_weight": sampler_weights.get(task, 1.0),
+            "estimated_sample_draw_share": (
+                sampling_mass.get(task, 0.0) / total_sampling_mass if total_sampling_mass else None
+            ),
+            "analyzed_sample_count": values["sample_count"],
+            "mean_supervised_tokens": mean_tokens,
+            "estimated_supervised_tokens": estimated,
+        }
+    estimated_total = sum(estimates.values())
+    for _task, values in estimated_contribution.items():
+        token_share = (
+            float(values["estimated_supervised_tokens"]) / estimated_total
+            if values["estimated_supervised_tokens"] is not None and estimated_total
+            else None
+        )
+        sample_share = values["population_sample_share"]
+        values["estimated_supervised_token_share"] = token_share
+        values["token_share_minus_sample_share"] = (
+            token_share - float(sample_share)
+            if token_share is not None and sample_share is not None
+            else None
+        )
+
     truncated = sum(bool(row["truncated"]) for row in token_rows)
     assistant_truncated = sum(bool(row["assistant_truncated"]) for row in token_rows)
     report: dict[str, Any] = {
@@ -280,11 +390,34 @@ def analyze_training_data(
         "sample_count": total,
         "dataset_statistics": _distribution(dataset_counts, total),
         "training_source_statistics": _distribution(source_counts, total),
-        "task_statistics": _distribution(task_counts, total),
+        "task_statistics": _distribution(analyzed_task_counts, total),
+        "analysis_selection": dict(analysis_selection or {"mode": "full_dataset"}),
+        "population_task_statistics": _distribution(population_counts, population_total),
         "supervised_token_statistics": {
             "definition": "labels != -100",
             "total_supervised_tokens": total_supervised,
             "by_task": task_token_summary,
+            "estimated_supervised_token_exposure": {
+                "estimation_method": (
+                    "population task count multiplied by analyzed mean supervised tokens"
+                ),
+                "purpose": "token budget, truncation, and supervision-density diagnostic",
+                "not_a_task_loss_weight": True,
+                "training_sampling_mode": training_sampling_mode,
+                "task_sampling_weights": sampler_weights,
+                "task_sampling_weights_are_loss_weights": False,
+                "by_task": estimated_contribution,
+            },
+            "loss_weighting_interpretation": {
+                "model_loss_reduction": "mean over labels != -100 within each model call",
+                "task_level_control": "sampler draw frequency, not token-count totals",
+                "task_sampling_weights_are_loss_weights": False,
+                "batch_size_caveat": (
+                    "With one sample per micro-batch, each selected sample contributes one "
+                    "mean-reduced loss. With mixed multi-sample micro-batches, supervised "
+                    "tokens are mean-reduced across that micro-batch."
+                ),
+            },
         },
         "sequence_statistics": {
             "prompt_tokens": numeric_summary(int(row["prompt_tokens"]) for row in token_rows),
@@ -355,7 +488,38 @@ def statistics_markdown(report: Mapping[str, Any]) -> str:
     ]
     for task, values in dict(report.get("task_statistics", {})).items():
         lines.append(f"| {task} | {values['sample_count']} | {float(values['proportion']):.4f} |")
+    supervision = dict(report.get("supervised_token_statistics", {}))
+    exposure = dict(supervision.get("estimated_supervised_token_exposure", {}))
+    interpretation = dict(supervision.get("loss_weighting_interpretation", {}))
     truncation = dict(report.get("truncation_statistics", {}))
+    lines.extend(
+        [
+            "",
+            "## Supervision Weighting Interpretation",
+            "",
+            "- Task-level training weight is controlled by sampler draw frequency, not by "
+            "supervised-token totals.",
+            "- `task_sampling_weights` are sampling weights, not loss weights.",
+            "- Model loss reduction: "
+            f"`{interpretation.get('model_loss_reduction', 'unavailable')}`.",
+            "- Supervised-token exposure below is a token-budget/truncation diagnostic, "
+            "not an effective task-loss weighting table.",
+            "",
+            "| Task | Population share | Estimated sampler draw share | Token exposure share |",
+            "|---|---:|---:|---:|",
+        ]
+    )
+    for task, values in dict(exposure.get("by_task", {})).items():
+        population_share = values.get("population_sample_share")
+        draw_share = values.get("estimated_sample_draw_share")
+        token_share = values.get("estimated_supervised_token_share")
+        lines.append(
+            "| "
+            f"{task} | {float(population_share):.4f} | {float(draw_share):.4f} | "
+            f"{float(token_share):.4f} |"
+            if population_share is not None and draw_share is not None and token_share is not None
+            else f"| {task} | unavailable | unavailable | unavailable |"
+        )
     lines.extend(
         [
             "",

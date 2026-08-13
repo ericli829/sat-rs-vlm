@@ -163,6 +163,12 @@ python scripts/evaluate_rs_vlm.py --config configs/eval/qwen3vl_eval_e0_zeroshot
 data、sampler 和 combined 三种配置，避免把配额倾斜和加权采样混为同一变量。详见
 [结构化微调实验](docs/finetune_playbook.md) 和 [数据协议](docs/data_format.md)。
 
+正式 LoRA/QLoRA 训练默认使用 `loss.mode: task_weighted`：先按样本平均 assistant token
+CE，再按 `loss.task_weights` 聚合，以消除 mixed-task batch 的答案长度偏置。历史实验可用
+`loss.mode: token_mean` 精确复现原 HuggingFace token 均值行为。`data.task_sampling_weights`
+只控制样本出现频率，`loss.task_weights` 才控制 loss 权重；使用不同 loss mode 得到的
+train/eval loss 数值不可直接横向比较，模型能力仍以 Evaluation v1.5 任务指标为准。
+
 AutoDL RTX 4090 正式 LoRA 配置使用环境变量路径：
 
 ```bash

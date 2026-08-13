@@ -26,12 +26,14 @@ class Qwen3VLDataCollator:
         *,
         debug_shapes: bool = False,
         for_generation: bool = False,
+        include_task_metadata: bool = False,
     ) -> None:
         self.processor = processor
         self.max_seq_length = max_seq_length
         self.image_root = Path(image_root)
         self.debug_shapes = debug_shapes
         self.for_generation = for_generation
+        self.include_task_metadata = include_task_metadata
 
     def __call__(self, batch: list[dict[str, Any]]) -> dict[str, Any]:
         """编码一个 batch 并生成 labels。"""
@@ -86,6 +88,11 @@ class Qwen3VLDataCollator:
                 prompt_encoded,
                 sample_ids,
             )
+            if self.include_task_metadata:
+                encoded["task_types"] = [
+                    str(sample.get("task_type", "unknown")).strip().lower() or "unknown"
+                    for sample in batch
+                ]
         if self.debug_shapes:
             shapes = {
                 key: tuple(value.shape) for key, value in encoded.items() if hasattr(value, "shape")

@@ -1,3 +1,4 @@
+# Historical-loss compatibility smoke: same local LoRA path, explicit token_mean loss.
 model:
   model_dir: "${LOCAL_MODEL_DIR}"
   processor_dir: "${LOCAL_MODEL_DIR}"
@@ -17,7 +18,7 @@ data:
   skip_bad_samples: false
 
 training:
-  output_dir: "checkpoints/smoke/qwen3vl-local-smoke"
+  output_dir: "checkpoints/smoke/qwen3vl-local-smoke-token-mean"
   method: "lora"
   freeze_vision_encoder: true
   freeze_projector: false
@@ -61,16 +62,7 @@ qlora:
   bnb_4bit_use_double_quant: true
 
 loss:
-  mode: "task_weighted"
-  task_weights:
-    captioning: 1.0
-    detection: 1.0
-    counting: 1.0
-    scene_classification: 1.0
-    vqa: 1.0
-    change_detection: 1.0
-  unknown_task_weight: 1.0
-  strict_task_metadata: true
+  mode: "token_mean"
 
 evaluation:
   do_eval: true
@@ -80,4 +72,4 @@ evaluation:
 
 logging:
   report_to: "none"
-  experiment_name: "qwen3vl-local-smoke"
+  experiment_name: "qwen3vl-local-smoke-token-mean"

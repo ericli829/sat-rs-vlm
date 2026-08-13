@@ -136,6 +136,42 @@ class QLoRAConfig(BaseModel):
     bnb_4bit_use_double_quant: bool = True
 
 
+DEFAULT_MULTITASK_LOSS_WEIGHTS: dict[str, float] = {
+    "captioning": 1.0,
+    "detection": 1.0,
+    "counting": 1.0,
+    "scene_classification": 1.0,
+    "vqa": 1.0,
+    "change_detection": 1.0,
+}
+
+
+class MultitaskLossConfig(BaseModel):
+    """独立的多任务 loss 配置；不得与数据采样权重混用。"""
+
+    mode: Literal["token_mean", "task_weighted"] = "task_weighted"
+    task_weights: dict[str, float] = Field(
+        default_factory=lambda: dict(DEFAULT_MULTITASK_LOSS_WEIGHTS)
+    )
+    unknown_task_weight: float = Field(default=1.0, gt=0.0)
+    strict_task_metadata: bool = True
+
+    @model_validator(mode="after")
+    def validate_task_weights(self) -> MultitaskLossConfig:
+        """拒绝非正权重，并归一化任务键，避免配置中的大小写产生隐藏分支。"""
+
+        normalized = {
+            str(task).strip().lower(): float(weight) for task, weight in self.task_weights.items()
+        }
+        if any(not task for task in normalized):
+            raise ValueError("loss.task_weights keys must not be empty")
+        invalid = {task: weight for task, weight in normalized.items() if weight <= 0.0}
+        if invalid:
+            raise ValueError(f"loss.task_weights must contain only positive values: {invalid}")
+        self.task_weights = normalized
+        return self
+
+
 class EvalConfig(BaseModel):
     """训练期间评测配置。"""
 
@@ -270,6 +306,7 @@ class Qwen3VLTrainingConfig(BaseModel):
     training: TrainConfig
     lora: LoRAConfig
     qlora: QLoRAConfig = Field(default_factory=QLoRAConfig)
+    loss: MultitaskLossConfig = Field(default_factory=MultitaskLossConfig)
     evaluation: EvalConfig = Field(default_factory=EvalConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     statistics: TrainingStatisticsConfig = Field(default_factory=TrainingStatisticsConfig)

@@ -18,7 +18,6 @@ from sat_rs_vlm.data.qwen3vl_dataset import Qwen3VLDataset
 from sat_rs_vlm.data.task_sampler import (
     build_alternating_source_sampler,
     build_weighted_sampler,
-    create_trainer,
 )
 from sat_rs_vlm.models.qwen3vl_loader import compatible_model_class
 from sat_rs_vlm.training.config import (
@@ -30,10 +29,12 @@ from sat_rs_vlm.training.config import (
     resolve_training_paths,
 )
 from sat_rs_vlm.training.freeze import freeze_projector, freeze_vision_encoder
+from sat_rs_vlm.training.losses import compute_multitask_loss
 from sat_rs_vlm.training.optimizer import (
     build_h1_parameter_groups,
     optimizer_group_report,
 )
+from sat_rs_vlm.training.trainer import create_multitask_trainer
 from sat_rs_vlm.training.utils import (
     MODEL_DEPS_ERROR,
     count_trainable_parameters,
@@ -346,6 +347,8 @@ def print_resolved_summary(
     print(f"Training method: {config.training.method}")
     print(f"Data composition: {config.data.data_composition}")
     print(f"Sampling mode: {config.data.sampling_mode}")
+    print(f"Loss mode: {config.loss.mode}")
+    print(f"Loss task weights: {config.loss.task_weights}")
     if config.data.source_batch_pattern:
         print(f"Source batch pattern: {config.data.source_batch_pattern}")
     print(f"LoRA rank: {config.lora.r}")
@@ -422,6 +425,11 @@ def build_strategy_manifest(
             "use_double_quant": config.qlora.bnb_4bit_use_double_quant,
             "compute_dtype": config.qlora.bnb_4bit_compute_dtype,
         }
+    loss_manifest = config.loss.model_dump(mode="json")
+    loss_manifest["comparison_note"] = (
+        "train_loss and eval_loss are comparable only between runs using the same loss mode; "
+        "compare model quality with Evaluation v1.5 task metrics"
+    )
     manifest = {
         "schema_version": "1.0",
         "strategy": config.training.method,
@@ -445,6 +453,7 @@ def build_strategy_manifest(
             ("torch", "transformers", "peft", "accelerate", "bitsandbytes")
         ),
         "device": device,
+        "loss": loss_manifest,
     }
     if config.vision_tuning.enabled:
         manifest.update(
@@ -534,6 +543,7 @@ def forward_only(config: Qwen3VLTrainingConfig, paths: ResolvedTrainingPaths) ->
         config.data.max_seq_length,
         paths.image_root,
         debug_shapes=True,
+        include_task_metadata=True,
     )
     batch = collator([train_dataset[0]])
     input_device = model_input_device(model, torch)
@@ -541,10 +551,19 @@ def forward_only(config: Qwen3VLTrainingConfig, paths: ResolvedTrainingPaths) ->
     print(f"Forward-only input device: {input_device}")
     if hasattr(model, "eval"):
         model.eval()
+    task_types = batch.pop("task_types")
+    labels = batch.pop("labels")
     with torch.inference_mode():
         output = model(**batch)
-    loss = getattr(output, "loss", None)
-    print(f"Forward-only loss: {float(loss.detach().cpu()) if loss is not None else None}")
+        result = compute_multitask_loss(
+            output.logits,
+            labels,
+            task_types,
+            config.loss,
+            torch=torch,
+        )
+    print(f"Forward-only loss mode: {config.loss.mode}")
+    print(f"Forward-only loss: {float(result.loss.detach().cpu())}")
 
 
 def train(
@@ -625,6 +644,7 @@ def train(
         config.data.max_seq_length,
         paths.image_root,
         debug_shapes=False,
+        include_task_metadata=True,
     )
     train_sampler = None
     if config.data.sampling_mode == "weighted":
@@ -655,8 +675,9 @@ def train(
     }
     if grouped_optimizer is not None:
         trainer_kwargs["optimizers"] = (grouped_optimizer, None)
-    trainer = create_trainer(
+    trainer = create_multitask_trainer(
         transformers,
+        loss_config=config.loss,
         train_sampler=train_sampler,
         trainer_kwargs=trainer_kwargs,
         checkpoint_artifact_saver=checkpoint_artifact_saver,
@@ -713,6 +734,13 @@ def train(
         "data_composition": config.data.data_composition,
         "sampling_mode": config.data.sampling_mode,
         "task_sampling_weights": config.data.task_sampling_weights,
+        "loss": {
+            **config.loss.model_dump(mode="json"),
+            "comparison_note": (
+                "train_loss and eval_loss are comparable only between runs using the same "
+                "loss mode; compare model quality with Evaluation v1.5 task metrics"
+            ),
+        },
         "source_batch_pattern": config.data.source_batch_pattern,
         "initial_adapter_dir": (
             str(paths.initial_adapter_dir) if paths.initial_adapter_dir is not None else None

@@ -91,6 +91,26 @@ def test_generation_mode_has_no_labels(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "labels" not in collator([_sample("one", "long question")])
 
 
+def test_training_collator_optionally_carries_task_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        Qwen3VLDataCollator,
+        "_process_vision_info",
+        staticmethod(lambda messages: (None, None)),
+    )
+    collator = Qwen3VLDataCollator(
+        FakeProcessor("right"),
+        32,
+        ".",
+        include_task_metadata=True,
+    )
+
+    batch = collator([_sample("one", "long question")])
+
+    assert batch["task_types"] == ["vqa"]
+
+
 def test_missing_assistant_tokens_reports_sample_id(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         Qwen3VLDataCollator,

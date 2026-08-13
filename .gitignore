@@ -36,6 +36,8 @@ wandb/
 outputs/*
 !outputs/.gitkeep
 reports/environment/*-pip-freeze.txt
+reports/training_statistics/vrsbench_supervision_fast/
+reports/debug/multitask_loss_bias/
 .local_plugins/
 .codex_staging/
 external_plugins/
