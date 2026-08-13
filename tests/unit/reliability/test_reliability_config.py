@@ -87,7 +87,7 @@ def test_formal_bitflip_config_includes_vrsbench_and_levircc() -> None:
 
     sources = config["data"]["reliability_sources"]
     assert config["data"]["dataset_root"] == "/mnt/data"
-    assert config["data"]["eval_batch_size"] == 8
+    assert config["data"]["eval_batch_size"] == 16
     assert [source["name"] for source in sources] == ["VRSBench", "LEVIR-CC"]
     assert sources[1]["task_samples"] == {"change_detection": 20}
 

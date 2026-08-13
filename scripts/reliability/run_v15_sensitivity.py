@@ -1,4 +1,4 @@
-"""Run SEU sensitivity scans using Evaluation v1.5 and paired comparisons."""
+"""Run resumable SEU sensitivity scans using Evaluation v1.5 and paired comparisons."""
 
 from __future__ import annotations
 
@@ -48,7 +48,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bit-counts", nargs="+", type=int)
     parser.add_argument("--repeats", type=int)
     parser.add_argument("--bit-planes", nargs="+", choices=("all", "sign", "exponent", "mantissa"))
-    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Create and print a reproducible condition plan."
+    )
+    parser.add_argument(
+        "--preflight",
+        action="store_true",
+        help="Validate configured paths and report GPU visibility.",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume a matching interrupted run and skip completed conditions.",
+    )
     return parser.parse_args()
 
 
@@ -83,7 +95,6 @@ def load_config(args: argparse.Namespace) -> tuple[dict[str, Any], PathConfig]:
         environ=_environment(),
         apply_environment_overrides=False,
     )
-    paths.create_output_directories()
     return config, paths
 
 
@@ -136,6 +147,53 @@ def build_conditions(
                         )
                         ordinal += 1
     return conditions
+
+
+def _configured_paths(config: dict[str, Any]) -> dict[str, Path]:
+    model, data = dict(config["model"]), dict(config["data"])
+    return {
+        "base_model": Path(str(model["base_model"])).expanduser(),
+        "processor": Path(str(model.get("processor_id", model["base_model"]))).expanduser(),
+        "adapter": Path(str(model["adapter_path"])).expanduser(),
+        "eval_manifest": Path(str(data["eval_manifest"])).expanduser(),
+        "dataset_root": Path(str(data["dataset_root"])).expanduser(),
+    }
+
+
+def preflight_report(config: dict[str, Any]) -> dict[str, Any]:
+    paths = _configured_paths(config)
+    report: dict[str, Any] = {
+        "success": all(
+            path.is_dir()
+            if name in {"base_model", "processor", "adapter", "dataset_root"}
+            else path.is_file()
+            for name, path in paths.items()
+        ),
+        "paths": {
+            name: {
+                "path": str(path),
+                "exists": path.exists(),
+                "kind": "directory" if path.is_dir() else "file" if path.is_file() else "missing",
+            }
+            for name, path in paths.items()
+        },
+    }
+    try:
+        import torch
+
+        report["cuda"] = {
+            "available": bool(torch.cuda.is_available()),
+            "count": int(torch.cuda.device_count()),
+            "name": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+        }
+    except ImportError:
+        report["cuda"] = {
+            "available": False,
+            "count": 0,
+            "name": None,
+            "error": "torch is not installed",
+        }
+    return report
 
 
 def _write_eval_config(config: dict[str, Any], destination: Path) -> Path:
@@ -192,6 +250,46 @@ def _run(command: list[str], log: Path) -> None:
         raise RuntimeError(f"subprocess failed ({result.returncode}); see {log}")
 
 
+def _condition_complete(directory: Path) -> bool:
+    return (directory / "fault_injection_summary.json").is_file() and (
+        directory / "comparison" / "comparison.json"
+    ).is_file()
+
+
+def _load_condition_result(directory: Path, condition: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **condition,
+        "injection": json.loads(
+            (directory / "fault_injection_summary.json").read_text(encoding="utf-8")
+        ),
+        "comparison": json.loads(
+            (directory / "comparison" / "comparison.json").read_text(encoding="utf-8")
+        ),
+    }
+
+
+def _write_progress(
+    root: Path,
+    *,
+    status: str,
+    completed: int,
+    total: int,
+    current: str | None = None,
+    error: Exception | None = None,
+) -> None:
+    payload: dict[str, Any] = {
+        "schema_version": "2.0",
+        "status": status,
+        "completed_conditions": completed,
+        "total_conditions": total,
+        "current_condition": current,
+    }
+    if error is not None:
+        payload["error_type"] = type(error).__name__
+        payload["error"] = str(error)
+    write_json(root / "sensitivity_progress.json", payload)
+
+
 def main() -> int:
     args = parse_args()
     config, paths = load_config(args)
@@ -203,12 +301,25 @@ def main() -> int:
         repeats_override=args.repeats,
         bit_planes_override=args.bit_planes,
     )
+    report = preflight_report(config)
+    if args.preflight:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0
+    paths.create_output_directories()
     root = paths.output_root / "reliability" / "v15_sensitivity" / args.run_id
+    plan = {"schema_version": "2.0", "conditions": conditions}
     if root.exists():
-        raise FileExistsError(f"run directory already exists: {root}")
-    root.mkdir(parents=True)
-    write_resolved_config(config, root / "config_resolved.yaml")
-    write_json(root / "condition_plan.json", {"schema_version": "2.0", "conditions": conditions})
+        if not args.resume:
+            raise FileExistsError(
+                f"run directory already exists: {root}; use --resume to continue it"
+            )
+        previous = json.loads((root / "condition_plan.json").read_text(encoding="utf-8"))
+        if previous != plan:
+            raise ValueError("resume plan differs from existing plan; choose a new run-id")
+    else:
+        root.mkdir(parents=True)
+        write_resolved_config(config, root / "config_resolved.yaml")
+        write_json(root / "condition_plan.json", plan)
     if args.dry_run:
         print(
             json.dumps(
@@ -217,70 +328,92 @@ def main() -> int:
             )
         )
         return 0
+    if not report["success"]:
+        raise SystemExit(
+            "Preflight failed: configured model, adapter, data manifest, "
+            "or dataset path is missing. Run with --preflight for details."
+        )
+    if not report["cuda"]["available"]:
+        raise SystemExit(
+            "CUDA is unavailable; real_inference is intentionally blocked. "
+            "Run --preflight for details."
+        )
+
     eval_config = _write_eval_config(config, root / "evaluation_config.yaml")
     baseline_dir = root / "baseline"
-    _run(
-        [
-            sys.executable,
-            str(PROJECT_ROOT / "scripts/reliability/run_fault_evaluation.py"),
-            "--config",
-            str(eval_config),
-            "--output-dir",
-            str(baseline_dir),
-        ],
-        root / "logs" / "baseline.log",
-    )
-    summary: list[dict[str, Any]] = []
-    for condition in conditions:
-        directory = root / "conditions" / condition["id"]
-        fault_command = [
-            sys.executable,
-            str(PROJECT_ROOT / "scripts/reliability/run_fault_evaluation.py"),
-            "--config",
-            str(eval_config),
-            "--output-dir",
-            str(directory),
-            "--fault-target",
-            condition["target"],
-            "--fault-num-bits",
-            str(condition["num_bits"]),
-            "--fault-seed",
-            str(condition["seed"]),
-            "--fault-bit-plane",
-            condition["bit_plane"],
-        ]
-        if condition["layers"]:
-            fault_command.extend(["--fault-layers", *(str(value) for value in condition["layers"])])
-        _run(fault_command, root / "logs" / f"{condition['id']}.log")
-        comparison_dir = directory / "comparison"
-        _run(
-            [
+    try:
+        if not (baseline_dir / "evaluation_v1_5" / "metrics.json").is_file():
+            _run(
+                [
+                    sys.executable,
+                    str(PROJECT_ROOT / "scripts/reliability/run_fault_evaluation.py"),
+                    "--config",
+                    str(eval_config),
+                    "--output-dir",
+                    str(baseline_dir),
+                ],
+                root / "logs" / "baseline.log",
+            )
+        summary: list[dict[str, Any]] = []
+        for condition in conditions:
+            directory = root / "conditions" / condition["id"]
+            if _condition_complete(directory):
+                summary.append(_load_condition_result(directory, condition))
+                continue
+            _write_progress(
+                root,
+                status="running",
+                completed=len(summary),
+                total=len(conditions),
+                current=condition["id"],
+            )
+            fault_command = [
                 sys.executable,
-                str(PROJECT_ROOT / "scripts/evaluation/compare_evaluations.py"),
-                "--baseline-dir",
-                str(baseline_dir / "evaluation_v1_5"),
-                "--candidate-dir",
-                str(directory / "evaluation_v1_5"),
+                str(PROJECT_ROOT / "scripts/reliability/run_fault_evaluation.py"),
+                "--config",
+                str(eval_config),
                 "--output-dir",
-                str(comparison_dir),
-                "--protect-repository",
-            ],
-            root / "logs" / f"{condition['id']}_comparison.log",
+                str(directory),
+                "--fault-target",
+                condition["target"],
+                "--fault-num-bits",
+                str(condition["num_bits"]),
+                "--fault-seed",
+                str(condition["seed"]),
+                "--fault-bit-plane",
+                condition["bit_plane"],
+            ]
+            if condition["layers"]:
+                fault_command.extend(
+                    ["--fault-layers", *(str(value) for value in condition["layers"])]
+                )
+            _run(fault_command, root / "logs" / f"{condition['id']}.log")
+            comparison_dir = directory / "comparison"
+            _run(
+                [
+                    sys.executable,
+                    str(PROJECT_ROOT / "scripts/evaluation/compare_evaluations.py"),
+                    "--baseline-dir",
+                    str(baseline_dir / "evaluation_v1_5"),
+                    "--candidate-dir",
+                    str(directory / "evaluation_v1_5"),
+                    "--output-dir",
+                    str(comparison_dir),
+                    "--protect-repository",
+                ],
+                root / "logs" / f"{condition['id']}_comparison.log",
+            )
+            summary.append(_load_condition_result(directory, condition))
+            _write_progress(root, status="running", completed=len(summary), total=len(conditions))
+    except Exception as exc:
+        _write_progress(
+            root,
+            status="failed",
+            completed=len(summary) if "summary" in locals() else 0,
+            total=len(conditions),
+            error=exc,
         )
-        injection = json.loads(
-            (directory / "fault_injection_summary.json").read_text(encoding="utf-8")
-        )
-        comparison = json.loads((comparison_dir / "comparison.json").read_text(encoding="utf-8"))
-        summary.append({**condition, "injection": injection, "comparison": comparison})
-        write_json(
-            root / "sensitivity_progress.json",
-            {
-                "status": "running",
-                "completed_conditions": len(summary),
-                "total_conditions": len(conditions),
-                "current_condition": condition["id"],
-            },
-        )
+        raise
     write_json(
         root / "sensitivity_report.json",
         {
@@ -294,14 +427,7 @@ def main() -> int:
             ),
         },
     )
-    write_json(
-        root / "sensitivity_progress.json",
-        {
-            "status": "completed",
-            "completed_conditions": len(summary),
-            "total_conditions": len(conditions),
-        },
-    )
+    _write_progress(root, status="completed", completed=len(summary), total=len(conditions))
     print(
         json.dumps(
             {"success": True, "run_dir": str(root), "num_conditions": len(summary)},
