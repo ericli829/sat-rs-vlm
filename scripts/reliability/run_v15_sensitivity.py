@@ -61,6 +61,9 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Resume a matching interrupted run and skip completed conditions.",
     )
+    parser.add_argument("--activation-guard", action="store_true")
+    parser.add_argument("--activation-patterns", nargs="+", default=["self_attn", "mlp"])
+    parser.add_argument("--activation-max-abs", type=float, default=10000.0)
     return parser.parse_args()
 
 
@@ -383,6 +386,16 @@ def main() -> int:
                 "--fault-bit-plane",
                 condition["bit_plane"],
             ]
+            if args.activation_guard:
+                fault_command.extend(
+                    [
+                        "--activation-guard",
+                        "--activation-patterns",
+                        *args.activation_patterns,
+                        "--activation-max-abs",
+                        str(args.activation_max_abs),
+                    ]
+                )
             if condition["layers"]:
                 fault_command.extend(
                     ["--fault-layers", *(str(value) for value in condition["layers"])]
