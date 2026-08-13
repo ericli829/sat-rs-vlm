@@ -25,12 +25,16 @@ def parse_args() -> argparse.Namespace:
         "--fault-bit-plane", choices=("all", "sign", "exponent", "mantissa"), default="all"
     )
     parser.add_argument("--fault-layers", nargs="*", type=int, default=[])
+    parser.add_argument("--activation-guard", action="store_true")
+    parser.add_argument("--activation-patterns", nargs="+", default=["self_attn", "mlp"])
+    parser.add_argument("--activation-max-abs", type=float, default=10000.0)
     return parser.parse_args()
 
 
 def main() -> int:
     from scripts.evaluate_rs_vlm import evaluate, load_model, load_yaml
 
+    from sat_rs_vlm.models.reliability.activation_guard import ActivationGuard
     from sat_rs_vlm.models.reliability.fault_injector import (
         inject_model_parameter_bitflips,
         model_fault_inventory,
@@ -60,14 +64,29 @@ def main() -> int:
             selector=selector,
             bit_plane=args.fault_bit_plane,
         )
-    result = evaluate(
-        args.config,
-        output_dir=args.output_dir,
-        loaded_model=model,
-        loaded_processor=processor,
-        loaded_modules=modules,
-        config_override=config,
-    )
+    guard = None
+    guard_report = None
+    if args.activation_guard:
+        guard = ActivationGuard(
+            model, module_patterns=list(args.activation_patterns), max_abs=args.activation_max_abs
+        )
+        guard.install()
+    try:
+        result = evaluate(
+            args.config,
+            output_dir=args.output_dir,
+            loaded_model=model,
+            loaded_processor=processor,
+            loaded_modules=modules,
+            config_override=config,
+        )
+    finally:
+        if guard is not None:
+            guard.close()
+            guard_report = guard.report()
+            write_json(args.output_dir / "activation_guard_report.json", guard_report)
+    if guard is not None:
+        guard.assert_healthy()
     write_json(
         args.output_dir / "fault_injection_summary.json",
         {
@@ -83,6 +102,7 @@ def main() -> int:
             "inventory": inventory,
             "records": [record.model_dump(mode="json") for record in records],
             "evaluation": result,
+            "activation_guard": guard_report,
         },
     )
     return 0
