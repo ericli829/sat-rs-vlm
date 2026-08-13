@@ -32,9 +32,9 @@ training:
   max_steps: 1000
   # RTX 4090: preserve the established effective batch size of 16 while
   # increasing per-step work enough to amortize image preprocessing overhead.
-  per_device_train_batch_size: 8
-  per_device_eval_batch_size: 8
-  gradient_accumulation_steps: 2
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 4
+  gradient_accumulation_steps: 4
   learning_rate: 0.00001
   weight_decay: 0.01
   warmup_ratio: 0.03
