@@ -1,4 +1,4 @@
-"""按 task_type 构造可复现的训练采样权重与 Trainer。"""
+"""按 task/source 构造可复现的训练 sampler；Trainer 由 training.trainer 统一创建。"""
 
 from __future__ import annotations
 
@@ -104,26 +104,3 @@ def build_alternating_source_sampler(
                     positions[source] = end
 
     return AlternatingSourceSampler()
-
-
-def create_trainer(
-    transformers: Any,
-    *,
-    train_sampler: Any | None,
-    trainer_kwargs: dict[str, Any],
-) -> Any:
-    """创建标准 Trainer 或显式覆写采样扩展点的加权 Trainer。
-
-    Transformers 暂无公开 sampler 构造参数，因此集中在此处覆写 `_get_train_sampler`，
-    避免在训练脚本运行时 monkey patch 私有方法。
-    """
-
-    if train_sampler is None:
-        return transformers.Trainer(**trainer_kwargs)
-
-    class TaskWeightedTrainer(transformers.Trainer):  # type: ignore[misc]
-        def _get_train_sampler(self, train_dataset: Any | None = None) -> Any:
-            del train_dataset
-            return train_sampler
-
-    return TaskWeightedTrainer(**trainer_kwargs)

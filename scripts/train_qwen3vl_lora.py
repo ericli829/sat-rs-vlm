@@ -18,18 +18,25 @@ from sat_rs_vlm.data.qwen3vl_dataset import Qwen3VLDataset
 from sat_rs_vlm.data.task_sampler import (
     build_alternating_source_sampler,
     build_weighted_sampler,
-    create_trainer,
 )
 from sat_rs_vlm.models.qwen3vl_loader import compatible_model_class
 from sat_rs_vlm.training.config import (
+    MultitaskLossConfig,
     Qwen3VLTrainingConfig,
     ResolvedTrainingPaths,
     TrainingPathOverrides,
+    VisionTuningConfig,
     apply_training_overrides,
     load_training_config,
     resolve_training_paths,
 )
 from sat_rs_vlm.training.freeze import freeze_projector, freeze_vision_encoder
+from sat_rs_vlm.training.losses import compute_multitask_loss
+from sat_rs_vlm.training.optimizer import (
+    build_training_parameter_groups,
+    optimizer_group_report,
+)
+from sat_rs_vlm.training.trainer import create_multitask_trainer
 from sat_rs_vlm.training.training_plan import (
     TrainingPlan,
     detected_world_size,
@@ -45,6 +52,13 @@ from sat_rs_vlm.training.utils import (
     set_seed,
     torch_device_summary,
 )
+from sat_rs_vlm.training.vision_tuning import (
+    VISUAL_SIDECAR_FILENAME,
+    configure_h1_trainable_parameters,
+    save_visual_sidecar,
+    write_trainable_audit,
+)
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CHECKPOINT_DIRECTORY_PATTERN = re.compile(r"^checkpoint-(\d+)$")
 
@@ -229,7 +243,12 @@ def build_training_arguments(
     bf16, fp16 = precision_flags(torch, config)
     kwargs: dict[str, Any] = {
         "output_dir": str(paths.output_dir),
-        "num_train_epochs": config.training.num_train_epochs,
+        # Trainer still expects a numeric epoch value even when max_steps controls H1.
+        "num_train_epochs": (
+            config.training.num_train_epochs
+            if config.training.num_train_epochs is not None
+            else 1.0
+        ),
         "max_steps": config.training.max_steps if config.training.max_steps is not None else -1,
         "per_device_train_batch_size": config.training.per_device_train_batch_size,
         "per_device_eval_batch_size": config.training.per_device_eval_batch_size,
@@ -264,6 +283,28 @@ def build_training_arguments(
         return transformers.TrainingArguments(**kwargs)
 
 
+def validate_h1_configuration(
+    config: Qwen3VLTrainingConfig,
+    paths: ResolvedTrainingPaths,
+) -> None:
+    """在加载模型前拒绝会偏离历史 H1 语义的配置。"""
+
+    if not config.vision_tuning.enabled:
+        return
+    if config.training.method != "lora":
+        raise ValueError("H1 partial visual adaptation requires training.method='lora'")
+    if paths.initial_adapter_dir is None:
+        raise ValueError("H1 partial visual adaptation must start from lora.initial_adapter_dir")
+    if config.training.num_train_epochs is not None:
+        raise ValueError(
+            "H1 is step-budgeted; set training.num_train_epochs=null when vision_tuning is enabled"
+        )
+    if config.training.max_steps is None and config.training.target_effective_epochs is None:
+        raise ValueError(
+            "H1 requires training.max_steps or training.target_effective_epochs"
+        )
+
+
 def resolve_configured_training_plan(
     config: Qwen3VLTrainingConfig,
     *,
@@ -285,6 +326,8 @@ def resolve_configured_training_plan(
     if plan.resolved_max_steps is not None:
         config.training.max_steps = plan.resolved_max_steps
     return plan
+
+
 def load_datasets(
     config: Qwen3VLTrainingConfig,
     paths: ResolvedTrainingPaths,
@@ -339,9 +382,21 @@ def print_resolved_summary(
     print(f"Training method: {config.training.method}")
     print(f"Data composition: {config.data.data_composition}")
     print(f"Sampling mode: {config.data.sampling_mode}")
+    print(f"Loss mode: {config.loss.mode}")
+    print(f"Loss task weights: {config.loss.task_weights}")
     if config.data.source_batch_pattern:
         print(f"Source batch pattern: {config.data.source_batch_pattern}")
     print(f"LoRA rank: {config.lora.r}")
+    print(f"Vision tuning enabled: {config.vision_tuning.enabled}")
+    if config.vision_tuning.enabled:
+        print(f"Vision last N blocks: {config.vision_tuning.unfreeze_last_n_blocks}")
+        print(f"Train main visual merger: {config.vision_tuning.train_main_merger}")
+        print(
+            "Grouped learning rates: "
+            f"LoRA={config.optimization.lora_lr}, "
+            f"merger={config.optimization.visual_merger_lr}, "
+            f"ViT={config.optimization.vision_lr}"
+        )
     print(f"Train samples: {train_samples}")
     print(f"Eval samples: {eval_samples}")
     print(f"Max steps: {config.training.max_steps}")
@@ -387,6 +442,9 @@ def build_strategy_manifest(
     paths: ResolvedTrainingPaths,
     param_stats: tuple[int, int, float],
     device: dict[str, Any],
+    *,
+    trainable_audit: dict[str, Any] | None = None,
+    optimizer_groups: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """构造统一 checkpoint 自描述文件，供评估与可靠性流程加载。"""
 
@@ -409,7 +467,14 @@ def build_strategy_manifest(
             "use_double_quant": config.qlora.bnb_4bit_use_double_quant,
             "compute_dtype": config.qlora.bnb_4bit_compute_dtype,
         }
-    return {
+    loss_config = getattr(config, "loss", MultitaskLossConfig())
+    vision_config = getattr(config, "vision_tuning", VisionTuningConfig())
+    loss_manifest = loss_config.model_dump(mode="json")
+    loss_manifest["comparison_note"] = (
+        "train_loss and eval_loss are comparable only between runs using the same loss mode; "
+        "compare model quality with the canonical Evaluation task metrics"
+    )
+    manifest = {
         "schema_version": "1.0",
         "strategy": config.training.method,
         "adapter_based": True,
@@ -432,7 +497,27 @@ def build_strategy_manifest(
             ("torch", "transformers", "peft", "accelerate", "bitsandbytes")
         ),
         "device": device,
+        "loss": loss_manifest,
     }
+
+    if vision_config.enabled:
+        manifest.update(
+            {
+                "training_stage": "h1_hard_example_visual_adaptation",
+                "checkpoint_type": "adapter_with_visual_sidecar",
+                "visual_sidecar": VISUAL_SIDECAR_FILENAME,
+                "vision_tuning": vision_config.model_dump(mode="json"),
+                "optimizer_groups": optimizer_groups or [],
+                "trainable_parameter_audit": trainable_audit,
+                "bbox_protocol": {
+                    "schema": "label+bbox",
+                    "coordinate_format": "normalized_0_1",
+                },
+            }
+        )
+    return manifest
+
+
 def save_strategy_manifest(manifest: dict[str, Any], output_dir: Path) -> None:
     """把统一策略 manifest 写到 adapter 根目录。"""
 
@@ -445,6 +530,7 @@ def save_strategy_manifest(manifest: dict[str, Any], output_dir: Path) -> None:
 def dry_run(config: Qwen3VLTrainingConfig, paths: ResolvedTrainingPaths) -> None:
     """只检查配置、路径、Dataset 和 Collator 初始化。"""
 
+    validate_h1_configuration(config, paths)
     if paths.model_dir is not None and not paths.model_dir.exists():
         raise FileNotFoundError(f"Model directory does not exist: {paths.model_dir}")
     if paths.processor_dir is not None and not paths.processor_dir.exists():
@@ -484,6 +570,7 @@ def dry_run(config: Qwen3VLTrainingConfig, paths: ResolvedTrainingPaths) -> None
 def forward_only(config: Qwen3VLTrainingConfig, paths: ResolvedTrainingPaths) -> None:
     """执行单 batch 前向传播并打印 loss。"""
 
+    validate_h1_configuration(config, paths)
     modules = safe_import_model_dependencies(require_bitsandbytes=config.training.method == "qlora")
     torch = modules["torch"]
     transformers = modules["transformers"]
@@ -494,12 +581,19 @@ def forward_only(config: Qwen3VLTrainingConfig, paths: ResolvedTrainingPaths) ->
     )
     model = load_qwen3vl_model(config, paths, modules)
     model = apply_lora(model, config, paths, modules)
+    if config.vision_tuning.enabled:
+        configure_h1_trainable_parameters(
+            model,
+            config.vision_tuning,
+            config.trainable_audit,
+        )
     train_dataset, _ = load_datasets(config, paths)
     collator = Qwen3VLDataCollator(
         processor,
         config.data.max_seq_length,
         paths.image_root,
         debug_shapes=True,
+        include_task_metadata=True,
     )
     batch = collator([train_dataset[0]])
     input_device = model_input_device(model, torch)
@@ -507,10 +601,19 @@ def forward_only(config: Qwen3VLTrainingConfig, paths: ResolvedTrainingPaths) ->
     print(f"Forward-only input device: {input_device}")
     if hasattr(model, "eval"):
         model.eval()
+    task_types = batch.pop("task_types")
+    labels = batch.pop("labels")
     with torch.inference_mode():
         output = model(**batch)
-    loss = getattr(output, "loss", None)
-    print(f"Forward-only loss: {float(loss.detach().cpu()) if loss is not None else None}")
+        result = compute_multitask_loss(
+            output.logits,
+            labels,
+            task_types,
+            config.loss,
+            torch=torch,
+        )
+    print(f"Forward-only loss mode: {config.loss.mode}")
+    print(f"Forward-only loss: {float(result.loss.detach().cpu())}")
 
 
 def train(
@@ -520,6 +623,7 @@ def train(
 ) -> dict[str, Any]:
     """执行 LoRA/QLoRA 训练。"""
 
+    validate_h1_configuration(config, paths)
     started = time.perf_counter()
     modules = safe_import_model_dependencies(require_bitsandbytes=config.training.method == "qlora")
     torch = modules["torch"]
@@ -534,13 +638,57 @@ def train(
         local_files_only=config.model.local_files_only,
     )
     model = load_qwen3vl_model(config, paths, modules)
-    if config.training.freeze_vision_encoder:
+    if config.training.freeze_vision_encoder and not config.vision_tuning.enabled:
         freeze_vision_encoder(model)
-    if config.training.freeze_projector:
+    if config.training.freeze_projector and not config.vision_tuning.enabled:
         freeze_projector(model)
     if config.training.gradient_checkpointing and hasattr(model, "gradient_checkpointing_enable"):
         model.gradient_checkpointing_enable()
     model = apply_lora(model, config, paths, modules)
+
+    trainable_audit: dict[str, Any] | None = None
+    optimizer_groups: list[dict[str, Any]] | None = None
+    grouped_optimizer = None
+    checkpoint_artifact_saver = None
+    if config.vision_tuning.enabled:
+        trainable_audit = configure_h1_trainable_parameters(
+            model,
+            config.vision_tuning,
+            config.trainable_audit,
+        )
+        paths.output_dir.mkdir(parents=True, exist_ok=True)
+        run_audit_path = (
+            Path(config.trainable_audit.report_dir)
+            / config.logging.experiment_name
+            / "trainable_parameters.json"
+        )
+        write_trainable_audit(trainable_audit, run_audit_path)
+        write_trainable_audit(trainable_audit, paths.output_dir / "trainable_parameters.json")
+        raw_groups = build_training_parameter_groups(
+            model,
+            trainable_audit,
+            config.optimization,
+            weight_decay=config.training.weight_decay,
+        )
+        optimizer_groups = optimizer_group_report(raw_groups)
+        grouped_optimizer = torch.optim.AdamW(raw_groups)
+
+        def save_h1_checkpoint_artifacts(checkpoint_model: Any, output_dir: str) -> None:
+            assert trainable_audit is not None
+            save_visual_sidecar(
+                checkpoint_model,
+                trainable_audit,
+                output_dir,
+                base_checkpoint=paths.model_source,
+                adapter_checkpoint=(
+                    str(paths.initial_adapter_dir)
+                    if paths.initial_adapter_dir is not None
+                    else None
+                ),
+                vision_tuning=config.vision_tuning.model_dump(mode="json"),
+            )
+
+        checkpoint_artifact_saver = save_h1_checkpoint_artifacts
 
     train_dataset, eval_dataset = load_datasets(config, paths)
     training_plan = resolve_configured_training_plan(
@@ -567,6 +715,7 @@ def train(
         config.data.max_seq_length,
         paths.image_root,
         debug_shapes=False,
+        include_task_metadata=True,
     )
     train_sampler = None
     if config.data.sampling_mode == "weighted":
@@ -588,16 +737,21 @@ def train(
             f"pattern={config.data.source_batch_pattern}, "
             f"samples_per_epoch={len(train_sampler)}"
         )
-    trainer = create_trainer(
+    trainer_kwargs: dict[str, Any] = {
+        "model": model,
+        "args": build_training_arguments(config, paths, transformers, torch),
+        "train_dataset": train_dataset,
+        "eval_dataset": eval_dataset,
+        "data_collator": collator,
+    }
+    if grouped_optimizer is not None:
+        trainer_kwargs["optimizers"] = (grouped_optimizer, None)
+    trainer = create_multitask_trainer(
         transformers,
+        loss_config=config.loss,
         train_sampler=train_sampler,
-        trainer_kwargs={
-            "model": model,
-            "args": build_training_arguments(config, paths, transformers, torch),
-            "train_dataset": train_dataset,
-            "eval_dataset": eval_dataset,
-            "data_collator": collator,
-        },
+        trainer_kwargs=trainer_kwargs,
+        checkpoint_artifact_saver=checkpoint_artifact_saver,
     )
     train_output = trainer.train(resume_from_checkpoint=config.training.resume_from_checkpoint)
     train_metrics = dict(getattr(train_output, "metrics", {}) or {})
@@ -625,7 +779,15 @@ def train(
                 break
     device = torch_device_summary(torch)
     save_strategy_manifest(
-        build_strategy_manifest(model, config, paths, param_stats, device),
+        build_strategy_manifest(
+            model,
+            config,
+            paths,
+            param_stats,
+            device,
+            trainable_audit=trainable_audit,
+            optimizer_groups=optimizer_groups,
+        ),
         paths.output_dir,
     )
     peak_memory = 0.0
@@ -644,6 +806,13 @@ def train(
         "data_composition": config.data.data_composition,
         "sampling_mode": config.data.sampling_mode,
         "task_sampling_weights": config.data.task_sampling_weights,
+        "loss": {
+            **config.loss.model_dump(mode="json"),
+            "comparison_note": (
+                "train_loss and eval_loss are comparable only between runs using the same "
+                "loss mode; compare model quality with canonical Evaluation task metrics"
+            ),
+        },
         "source_batch_pattern": config.data.source_batch_pattern,
         "initial_adapter_dir": (
             str(paths.initial_adapter_dir) if paths.initial_adapter_dir is not None else None
@@ -660,6 +829,11 @@ def train(
         "train_runtime_seconds": train_metrics.get("train_runtime"),
         "train_samples_per_second": train_metrics.get("train_samples_per_second"),
         "train_steps_per_second": train_metrics.get("train_steps_per_second"),
+        "training_stage": (
+            "h1_hard_example_visual_adaptation" if config.vision_tuning.enabled else None
+        ),
+        "trainable_parameter_audit": trainable_audit,
+        "optimizer_groups": optimizer_groups,
     }
 
 

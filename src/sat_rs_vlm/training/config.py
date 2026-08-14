@@ -13,12 +13,18 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 ENV_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 
-class TrainModelConfig(BaseModel):
+class StrictTrainingModel(BaseModel):
+    """Fail fast when a training YAML contains an unsupported field."""
+
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
+
+
+class TrainModelConfig(StrictTrainingModel):
     """基座模型与 processor 配置。
 
     `model_dir/processor_dir` 用于本地模型目录，`model_id/processor_id` 保留远程或
@@ -46,7 +52,7 @@ class TrainModelConfig(BaseModel):
         return self
 
 
-class TrainDataConfig(BaseModel):
+class TrainDataConfig(StrictTrainingModel):
     """训练数据配置。"""
 
     train_file: str
@@ -74,7 +80,7 @@ class TrainDataConfig(BaseModel):
         return self
 
 
-class TrainConfig(BaseModel):
+class TrainConfig(StrictTrainingModel):
     """Trainer 训练超参数。"""
 
     output_dir: str
@@ -136,7 +142,7 @@ class TrainConfig(BaseModel):
         return self
 
 
-class LoRAConfig(BaseModel):
+class LoRAConfig(StrictTrainingModel):
     """LoRA adapter 配置。"""
 
     r: int = 16
@@ -146,7 +152,7 @@ class LoRAConfig(BaseModel):
     initial_adapter_dir: str | None = None
 
 
-class QLoRAConfig(BaseModel):
+class QLoRAConfig(StrictTrainingModel):
     """QLoRA 4bit 量化配置。"""
 
     load_in_4bit: bool = True
@@ -155,7 +161,43 @@ class QLoRAConfig(BaseModel):
     bnb_4bit_use_double_quant: bool = True
 
 
-class EvalConfig(BaseModel):
+DEFAULT_MULTITASK_LOSS_WEIGHTS: dict[str, float] = {
+    "captioning": 1.0,
+    "detection": 1.0,
+    "counting": 1.0,
+    "scene_classification": 1.0,
+    "vqa": 1.0,
+    "change_detection": 1.0,
+}
+
+
+class MultitaskLossConfig(StrictTrainingModel):
+    """独立的多任务 loss 配置；不得与数据采样权重混用。"""
+
+    mode: Literal["token_mean", "task_weighted"] = "task_weighted"
+    task_weights: dict[str, float] = Field(
+        default_factory=lambda: dict(DEFAULT_MULTITASK_LOSS_WEIGHTS)
+    )
+    unknown_task_weight: float = Field(default=1.0, gt=0.0)
+    strict_task_metadata: bool = True
+
+    @model_validator(mode="after")
+    def validate_task_weights(self) -> MultitaskLossConfig:
+        """标准化任务键并拒绝不会产生有效梯度权重的配置。"""
+
+        normalized = {
+            str(task).strip().lower(): float(weight) for task, weight in self.task_weights.items()
+        }
+        if any(not task for task in normalized):
+            raise ValueError("loss.task_weights keys must not be empty")
+        invalid = {task: weight for task, weight in normalized.items() if weight <= 0.0}
+        if invalid:
+            raise ValueError(f"loss.task_weights must contain only positive values: {invalid}")
+        self.task_weights = normalized
+        return self
+
+
+class EvalConfig(StrictTrainingModel):
     """训练期间评测配置。"""
 
     do_eval: bool = True
@@ -164,14 +206,37 @@ class EvalConfig(BaseModel):
     num_beams: int = 1
 
 
-class LoggingConfig(BaseModel):
+class LoggingConfig(StrictTrainingModel):
     """实验日志配置。"""
 
     report_to: str = "none"
     experiment_name: str = "qwen3vl-rs-lora-baseline"
 
 
-class VisionTuningConfig(BaseModel):
+class BBoxAreaThresholdConfig(StrictTrainingModel):
+    """统计、难样本挖掘与评测共同采用的归一化 bbox 面积边界。"""
+
+    small_max: float = Field(default=0.01, gt=0.0, lt=1.0)
+    medium_max: float = Field(default=0.10, gt=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def validate_order(self) -> BBoxAreaThresholdConfig:
+        if self.small_max >= self.medium_max:
+            raise ValueError("bbox_area_thresholds.small_max must be less than medium_max")
+        return self
+
+
+class TrainingStatisticsConfig(StrictTrainingModel):
+    """训练前数据组成、监督 token 和截断统计配置。"""
+
+    enabled: bool = False
+    output_dir: str = "reports/training_statistics"
+    inspect_images: bool = True
+    max_samples: int | None = Field(default=None, ge=1)
+    bbox_area_thresholds: BBoxAreaThresholdConfig = Field(default_factory=BBoxAreaThresholdConfig)
+
+
+class VisionTuningConfig(StrictTrainingModel):
     """H1 partial visual-unfreeze surface; disabled for the LoRA baseline."""
 
     enabled: bool = False
@@ -181,22 +246,84 @@ class VisionTuningConfig(BaseModel):
     train_patch_embed: bool = False
 
 
-class OptimizationGroupConfig(BaseModel):
+class OptimizationGroupConfig(StrictTrainingModel):
     """Independent learning rates for LoRA, merger, and ViT groups."""
 
     lora_lr: float = Field(default=1.0e-5, gt=0.0)
     visual_merger_lr: float = Field(default=5.0e-6, gt=0.0)
     vision_lr: float = Field(default=1.0e-6, gt=0.0)
 
+    @model_validator(mode="after")
+    def validate_learning_rate_order(self) -> OptimizationGroupConfig:
+        if not self.vision_lr < self.visual_merger_lr < self.lora_lr:
+            raise ValueError(
+                "H1 learning rates must satisfy vision_lr < visual_merger_lr < lora_lr"
+            )
+        return self
 
-class TrainableAuditConfig(BaseModel):
+
+class TrainableAuditConfig(StrictTrainingModel):
     """Strictness and destination for the pre-training parameter audit."""
 
     fail_on_unexpected_trainable: bool = False
     report_dir: str = "reports/training"
 
 
-class Qwen3VLTrainingConfig(BaseModel):
+class HardScoreWeightsConfig(StrictTrainingModel):
+    """Evaluation 指标到困难度分数的可审计权重。"""
+
+    detection_iou: float = Field(default=0.45, ge=0.0)
+    detection_label_error: float = Field(default=0.20, ge=0.0)
+    detection_parse_failure: float = Field(default=0.25, ge=0.0)
+    detection_center_distance: float = Field(default=0.10, ge=0.0)
+    detection_small_object_bonus: float = Field(default=0.05, ge=0.0)
+    counting_absolute_error: float = Field(default=0.60, ge=0.0)
+    counting_parse_failure: float = Field(default=0.40, ge=0.0)
+    text_error: float = Field(default=1.0, ge=0.0)
+    caption_rouge_l: float = Field(default=0.45, ge=0.0)
+    caption_chrf: float = Field(default=0.30, ge=0.0)
+    caption_cider: float = Field(default=0.25, ge=0.0)
+
+
+class HardAdaptationConfig(StrictTrainingModel):
+    """H1 难样本、replay 组成和评测集泄漏保护配置。"""
+
+    enabled: bool = False
+    source_checkpoint: str | None = None
+    prediction_source: str | None = None
+    source_train_file: str | None = None
+    evaluation_ids_file: str | None = None
+    output_dir: str = "data/processed/hard_examples"
+    evaluation_contract_version: str = "1.5"
+    hard_ratio: float = Field(default=0.70, gt=0.0, lt=1.0)
+    replay_ratio: float = Field(default=0.30, gt=0.0, lt=1.0)
+    hard_score_threshold: float = Field(default=0.35, ge=0.0)
+    max_hard_samples: int | None = Field(default=None, ge=1)
+    fixed_evaluation_sample_count: int = Field(default=593, ge=1)
+    require_evaluation_exclusions: bool = True
+    enforce_replay_coverage: bool = True
+    required_replay_sources: list[str] = Field(default_factory=lambda: ["VRSBench", "LEVIR-CC"])
+    required_replay_tasks: list[str] = Field(
+        default_factory=lambda: [
+            "detection",
+            "counting",
+            "vqa",
+            "captioning",
+            "scene_classification",
+            "change_detection",
+        ]
+    )
+    score_weights: HardScoreWeightsConfig = Field(default_factory=HardScoreWeightsConfig)
+    bbox_area_thresholds: BBoxAreaThresholdConfig = Field(default_factory=BBoxAreaThresholdConfig)
+
+    @model_validator(mode="after")
+    def validate_mix(self) -> HardAdaptationConfig:
+        if abs(self.hard_ratio + self.replay_ratio - 1.0) > 1.0e-9:
+            raise ValueError("hard_ratio and replay_ratio must sum to 1.0")
+        return self
+
+
+class Qwen3VLTrainingConfig(StrictTrainingModel):
     """完整 Qwen3-VL 微调配置。"""
 
     model: TrainModelConfig
@@ -204,11 +331,24 @@ class Qwen3VLTrainingConfig(BaseModel):
     training: TrainConfig
     lora: LoRAConfig
     qlora: QLoRAConfig = Field(default_factory=QLoRAConfig)
+    loss: MultitaskLossConfig = Field(default_factory=MultitaskLossConfig)
     evaluation: EvalConfig = Field(default_factory=EvalConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    statistics: TrainingStatisticsConfig = Field(default_factory=TrainingStatisticsConfig)
     vision_tuning: VisionTuningConfig = Field(default_factory=VisionTuningConfig)
     optimization: OptimizationGroupConfig = Field(default_factory=OptimizationGroupConfig)
     trainable_audit: TrainableAuditConfig = Field(default_factory=TrainableAuditConfig)
+    hard_adaptation: HardAdaptationConfig = Field(default_factory=HardAdaptationConfig)
+
+    @model_validator(mode="after")
+    def validate_shared_bbox_thresholds(self) -> Qwen3VLTrainingConfig:
+        """防止 statistics 与 mining 对 small/medium/large 使用不同定义。"""
+
+        if self.statistics.bbox_area_thresholds != self.hard_adaptation.bbox_area_thresholds:
+            raise ValueError(
+                "statistics and hard_adaptation must use identical bbox_area_thresholds"
+            )
+        return self
 
 
 @dataclass(frozen=True)

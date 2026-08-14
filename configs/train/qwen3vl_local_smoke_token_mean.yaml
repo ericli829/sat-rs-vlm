@@ -1,0 +1,75 @@
+# Historical-loss compatibility smoke: same local LoRA path, explicit token_mean loss.
+model:
+  model_dir: "${LOCAL_MODEL_DIR}"
+  processor_dir: "${LOCAL_MODEL_DIR}"
+  local_files_only: true
+  trust_remote_code: true
+  torch_dtype: "bfloat16"
+  device_map: "auto"
+  attn_implementation: "sdpa"
+
+data:
+  train_file: "${TRAIN_JSONL}"
+  val_file: "${VAL_JSONL}"
+  image_root: "${DATA_ROOT}"
+  max_seq_length: 1024
+  max_train_samples: 4
+  max_eval_samples: 2
+  skip_bad_samples: false
+
+training:
+  output_dir: "checkpoints/smoke/qwen3vl-local-smoke-token-mean"
+  method: "lora"
+  freeze_vision_encoder: true
+  freeze_projector: false
+  num_train_epochs: 1
+  max_steps: 2
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 1
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  warmup_ratio: 0.0
+  lr_scheduler_type: "cosine"
+  logging_steps: 1
+  save_steps: 1
+  eval_steps: 1
+  save_total_limit: 1
+  bf16: true
+  fp16: false
+  gradient_checkpointing: true
+  max_grad_norm: 1.0
+  seed: 42
+  resume_from_checkpoint: null
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+qlora:
+  load_in_4bit: false
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_compute_dtype: "bfloat16"
+  bnb_4bit_use_double_quant: true
+
+loss:
+  mode: "token_mean"
+
+evaluation:
+  do_eval: true
+  predict_with_generate: true
+  max_new_tokens: 64
+  num_beams: 1
+
+logging:
+  report_to: "none"
+  experiment_name: "qwen3vl-local-smoke-token-mean"

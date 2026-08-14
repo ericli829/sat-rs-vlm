@@ -26,12 +26,14 @@ class Qwen3VLDataCollator:
         *,
         debug_shapes: bool = False,
         for_generation: bool = False,
+        include_task_metadata: bool = False,
     ) -> None:
         self.processor = processor
         self.max_seq_length = max_seq_length
         self.image_root = Path(image_root)
         self.debug_shapes = debug_shapes
         self.for_generation = for_generation
+        self.include_task_metadata = include_task_metadata
 
     def __call__(self, batch: list[dict[str, Any]]) -> dict[str, Any]:
         """编码一个 batch 并生成 labels。"""
@@ -86,6 +88,11 @@ class Qwen3VLDataCollator:
                 prompt_encoded,
                 sample_ids,
             )
+            if self.include_task_metadata:
+                encoded["task_types"] = [
+                    str(sample.get("task_type", "unknown")).strip().lower() or "unknown"
+                    for sample in batch
+                ]
         if self.debug_shapes:
             shapes = {
                 key: tuple(value.shape) for key, value in encoded.items() if hasattr(value, "shape")
@@ -98,20 +105,101 @@ class Qwen3VLDataCollator:
         texts: list[str],
         image_inputs: Any,
         video_inputs: Any,
+        *,
+        truncation: bool = True,
+        padding: bool = True,
     ) -> dict[str, Any]:
         """调用 processor 编码文本和视觉输入。"""
 
-        return dict(
-            self.processor(
-                text=texts,
-                images=image_inputs,
-                videos=video_inputs,
-                padding=True,
-                truncation=True,
-                max_length=self.max_seq_length,
-                return_tensors="pt",
+        kwargs: dict[str, Any] = {
+            "text": texts,
+            "images": image_inputs,
+            "videos": video_inputs,
+            "padding": padding,
+            "truncation": truncation,
+            "return_tensors": "pt",
+        }
+        if truncation:
+            kwargs["max_length"] = self.max_seq_length
+        return dict(self.processor(**kwargs))
+
+    def tokenization_diagnostics(self, sample: dict[str, Any]) -> dict[str, Any]:
+        """返回与真实训练 mask 同源的监督和截断诊断。
+
+        capped labels 仍由 :meth:`_build_assistant_labels` 构造；是否截断则通过同一
+        processor 的无上限编码判定，不用字符串长度近似。
+        """
+
+        if self.processor is None:
+            raise ValueError("processor is required for tokenization diagnostics")
+        normalized = self._messages_with_resolved_images(sample)
+        prompt_messages = [message for message in normalized if message.get("role") != "assistant"]
+        full_text = str(
+            self.processor.apply_chat_template(
+                normalized,
+                tokenize=False,
+                add_generation_prompt=False,
             )
         )
+        prompt_text = str(
+            self.processor.apply_chat_template(
+                prompt_messages,
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+        )
+        image_inputs, video_inputs = self._process_vision_info([normalized])
+        capped = self._encode([full_text], image_inputs, video_inputs)
+        capped_prompt = self._encode([prompt_text], image_inputs, video_inputs)
+        labels = self._build_assistant_labels(
+            capped,
+            capped_prompt,
+            [str(sample.get("id", "<unknown>"))],
+        )
+        uncapped = self._encode(
+            [full_text],
+            image_inputs,
+            video_inputs,
+            truncation=False,
+            padding=False,
+        )
+        uncapped_prompt = self._encode(
+            [prompt_text],
+            image_inputs,
+            video_inputs,
+            truncation=False,
+            padding=False,
+        )
+        capped_total = self._active_length(capped)
+        uncapped_total = self._active_length(uncapped)
+        uncapped_prompt_length = self._active_length(uncapped_prompt)
+        uncapped_assistant = max(0, uncapped_total - uncapped_prompt_length)
+        supervised = int((labels[0] != -100).sum().item())
+        encoded = dict(capped)
+        encoded["labels"] = labels
+        return {
+            "encoded": encoded,
+            "prompt_tokens": capped_total - supervised,
+            "assistant_tokens": supervised,
+            "total_tokens": capped_total,
+            "uncapped_prompt_tokens": uncapped_prompt_length,
+            "uncapped_assistant_tokens": uncapped_assistant,
+            "uncapped_total_tokens": uncapped_total,
+            "truncated": uncapped_total > capped_total,
+            "assistant_truncated": uncapped_assistant > supervised,
+        }
+
+    @staticmethod
+    def _active_length(encoded: dict[str, Any]) -> int:
+        """统计单样本 processor 输出中的非 padding token。"""
+
+        attention_mask = encoded.get("attention_mask")
+        if attention_mask is not None:
+            return int(attention_mask[0].sum().item())
+        input_ids = encoded.get("input_ids")
+        if input_ids is None:
+            raise ValueError("processor output must contain input_ids or attention_mask")
+        return int(input_ids.shape[-1])
 
     def _build_assistant_labels(
         self,

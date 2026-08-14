@@ -5,7 +5,8 @@
 H1 是对现有最终 LoRA checkpoint 的短程继续训练，不是从 Qwen3-VL base model
 重新训练。起点必须是已经完成 Stage A（VRSBench）和 Stage B
 （VRSBench + LEVIR-CC）的 adapter。历史 checkpoint、593 条固定评测集、历史 predictions、
-Evaluation v1.5 报告和量化敏感度实验均保持不变。
+Evaluation v1.5 报告和量化敏感度实验均保持不变。恢复 H1 代码是为了历史可复现和
+后续 H2 数据构建；普通 LoRA 配置不会自动启用 hard/replay 或视觉解冻。
 
 本阶段不修改 LoRA rank、assistant-only label mask、bbox 训练协议、visual resolution 或
 `min_pixels/max_pixels`，也不加入 LoRA+、AdaLoRA 或 DoRA。多任务 loss 聚合使用正式的
@@ -84,8 +85,9 @@ python scripts/training/build_hard_example_dataset.py \
 
 生产配置默认 fail closed：未提供排除 ID 或 ID 数少于 593 时不写 H1 数据。预测必须能按
 ID 内连接到训练源；不在训练源中的 prediction 会进入 manifest 的
-`unmatched_prediction_ids`，不会训练。最终 593 条样本仅用于 H1 前后 paired evaluation，
-严禁进入 `hard_train.jsonl`、`replay_train.jsonl` 或 `h1_train.jsonl`。
+`unmatched_prediction_ids`，不会训练。历史 593 条 E1 和当前 E2/E3 的全部冻结 ID 都属于
+evaluation-only，严禁进入 `hard_train.jsonl`、`replay_train.jsonl` 或 `h1_train.jsonl`。
+正式训练后比较默认使用 E2；E1 只用于快速检查。
 
 Detection hard score 综合 `(1-IoU)`、label error、parse/coordinate failure、center distance
 和 small-object bonus；同时保留 GIoU、bbox area bucket 和具体原因。Counting 使用 parse、
@@ -210,15 +212,15 @@ python scripts/train_qwen3vl_lora.py \
 
 ## Evaluation v1.5 与 Small Object 分析
 
-593 条固定 evaluation set 上分别评估 Stage-B baseline 和 H1：
+默认在冻结的 E2 Standard 上分别评估 Stage-B baseline 和 H1，二者必须使用相同 tier hash：
 
 ```bash
 python scripts/evaluation/run_evaluation.py \
-  --config configs/evaluation/evaluation_v1_5.yaml \
+  --config configs/eval/qwen3vl_eval_e2.yaml \
   --checkpoint "$FINAL_LORA_CHECKPOINT"
 
 python scripts/evaluation/run_evaluation.py \
-  --config configs/evaluation/evaluation_v1_5.yaml \
+  --config configs/eval/qwen3vl_eval_e2.yaml \
   --checkpoint "$H1_CHECKPOINT"
 ```
 
@@ -270,7 +272,10 @@ Qwen-native `bbox_2d + scaled_0_1000`，无需从 base model 重训。
 
 ## 后续路线
 
-- H2：仅当 H1 证明视觉适配有效时测试 last-4 ViT blocks。
+- H2 Global Multitask Refinement：目标是整体多任务提升，未来数据组成候选为 representative
+  约 60%、medium-hard 约 25%、core-hard 约 15%。本次只恢复可复用的 scoring、difficulty
+  categorization 和 stratified selection，不固化 H2 阈值，也不启动训练。
+- Last-4 ViT：仅当 H1 证明视觉适配有效时作为独立视觉范围实验。
 - R1：仅当错误与 visual token shortage 明显相关时提高视觉分辨率/token budget。
 - P1：独立测试 `bbox_2d + scaled_0_1000`。
 - L+：H1 完成且有额外预算时再测试 LoRA+。

@@ -45,3 +45,20 @@ def test_tier_asset_hash_and_count_are_verified(tmp_path: Path) -> None:
     assert result["tier"] == "E2"
     assert result["sha256"] == digest
     assert normalize_tier(None) == "E2"
+
+
+def test_tier_hash_accepts_windows_crlf_for_canonical_lf_jsonl(tmp_path: Path) -> None:
+    canonical = b'{"id":"sample-1"}\n{"id":"sample-2"}\n'
+    tier_file = tmp_path / "e2_standard.jsonl"
+    tier_file.write_bytes(canonical.replace(b"\n", b"\r\n"))
+    digest = hashlib.sha256(canonical).hexdigest()
+    manifest = tmp_path / "evaluation_tiers_manifest.json"
+    manifest.write_text(
+        json.dumps({"tiers": {"E2": {"sha256": digest, "sample_count": 2}}}),
+        encoding="utf-8",
+    )
+
+    result = validate_tier_asset(tier="E2", eval_file=tier_file, manifest_path=manifest)
+
+    assert result["sha256"] == digest
+    assert result["raw_sha256"] != digest

@@ -177,6 +177,10 @@ Evaluation v1.5 在训练 mining split 上产生的逐样本指标构造 70% har
 regular replay，并只额外解冻 Qwen3-VL 最后 2 个视觉 block 和主 visual merger。bbox 仍为
 `{"label":"class","bbox":[x1,y1,x2,y2]}` 与 `normalized_0_1`。
 
+当前训练默认 loss 为 `task_weighted`：先对每条样本的 assistant token CE 求均值，再按
+`loss.task_weights` 聚合样本；`token_mean` 仅用于历史兼容对照。H1 的 70/30 组成保持为
+legacy experimental config，不会成为普通 LoRA 的默认数据策略。
+
 ```bash
 python scripts/training/analyze_training_data.py \
   --config configs/train/qwen3vl_hard_visual_adaptation.yaml

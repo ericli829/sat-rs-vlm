@@ -42,3 +42,4 @@ external_plugins/
 sat-rs-vlm-local-plugins/
 plugin_checkpoints/
 plugin_reports/
+reports/debug/multitask_loss_bias/

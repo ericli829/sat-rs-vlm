@@ -113,10 +113,13 @@ def validate_tier_asset(
         )
     actual_hash = file_sha256(eval_file)
     expected_hash = record.get("sha256")
-    if expected_hash and str(expected_hash) != actual_hash:
+    canonical_hash = actual_hash
+    if expected_hash and str(expected_hash) != actual_hash and eval_file.suffix.lower() == ".jsonl":
+        canonical_hash = canonical_jsonl_sha256(eval_file)
+    if expected_hash and str(expected_hash) != canonical_hash:
         raise ValueError(
             f"Evaluation tier {normalized} SHA256 mismatch: expected {expected_hash}, "
-            f"got {actual_hash} for {eval_file}"
+            f"got raw={actual_hash}, canonical_jsonl={canonical_hash} for {eval_file}"
         )
     expected_count = record.get("sample_count")
     if expected_count is not None:
@@ -132,7 +135,8 @@ def validate_tier_asset(
             )
     return {
         "tier": normalized,
-        "sha256": actual_hash,
+        "sha256": canonical_hash,
+        "raw_sha256": actual_hash,
         "sample_count": expected_count,
     }
 
@@ -145,3 +149,10 @@ def file_sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def canonical_jsonl_sha256(path: Path) -> str:
+    """计算以 LF 为 canonical 换行的 JSONL hash，兼容 Windows CRLF checkout。"""
+
+    payload = path.read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(payload).hexdigest()
