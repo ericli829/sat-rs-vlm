@@ -1097,6 +1097,8 @@ def run_evaluation(
     latency_semantics: str = "unresolved",
     eval_batch_size: int | None = None,
     group_by_task: bool | None = None,
+    evaluation_tier: str | None = None,
+    evaluation_tier_sha256: str | None = None,
 ) -> dict[str, Path]:
     """只读 Prediction JSONL，并将全部产物写到受保护仓库之外。"""
 
@@ -1224,6 +1226,8 @@ def run_evaluation(
         ),
         "strict": strict,
         "latency_context": latency_context.to_dict(),
+        "evaluation_tier": evaluation_tier,
+        "evaluation_tier_sha256": evaluation_tier_sha256,
         "repository_compatibility_profile": "repository_native_v2",
         "output_files": {name: str(path) for name, path in outputs.items()},
         "remote_write_performed": False,

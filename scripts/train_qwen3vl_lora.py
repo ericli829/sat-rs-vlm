@@ -15,15 +15,11 @@ import yaml
 
 from sat_rs_vlm.data.qwen3vl_collator import Qwen3VLDataCollator
 from sat_rs_vlm.data.qwen3vl_dataset import Qwen3VLDataset
-<<<<<<< Updated upstream
 from sat_rs_vlm.data.task_sampler import (
     build_alternating_source_sampler,
     build_weighted_sampler,
     create_trainer,
 )
-=======
-from sat_rs_vlm.data.task_sampler import build_alternating_source_sampler, build_weighted_sampler
->>>>>>> Stashed changes
 from sat_rs_vlm.models.qwen3vl_loader import compatible_model_class
 from sat_rs_vlm.training.config import (
     Qwen3VLTrainingConfig,
@@ -34,17 +30,11 @@ from sat_rs_vlm.training.config import (
     resolve_training_paths,
 )
 from sat_rs_vlm.training.freeze import freeze_projector, freeze_vision_encoder
-<<<<<<< Updated upstream
-=======
-from sat_rs_vlm.training.losses import compute_multitask_loss
-from sat_rs_vlm.training.optimizer import build_training_parameter_groups, optimizer_group_report
-from sat_rs_vlm.training.trainer import create_multitask_trainer
 from sat_rs_vlm.training.training_plan import (
     TrainingPlan,
     detected_world_size,
     resolve_training_plan,
 )
->>>>>>> Stashed changes
 from sat_rs_vlm.training.utils import (
     MODEL_DEPS_ERROR,
     count_trainable_parameters,
@@ -55,16 +45,6 @@ from sat_rs_vlm.training.utils import (
     set_seed,
     torch_device_summary,
 )
-<<<<<<< Updated upstream
-=======
-from sat_rs_vlm.training.vision_tuning import (
-    VISUAL_SIDECAR_FILENAME,
-    configure_h1_trainable_parameters,
-    save_visual_sidecar,
-    write_trainable_audit,
-)
->>>>>>> Stashed changes
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CHECKPOINT_DIRECTORY_PATTERN = re.compile(r"^checkpoint-(\d+)$")
 
@@ -284,26 +264,6 @@ def build_training_arguments(
         return transformers.TrainingArguments(**kwargs)
 
 
-<<<<<<< Updated upstream
-=======
-def validate_h1_configuration(
-    config: Qwen3VLTrainingConfig,
-    paths: ResolvedTrainingPaths,
-) -> None:
-    """Reject H1 configurations that would silently start from a fresh adapter."""
-
-    if not config.vision_tuning.enabled:
-        return
-    if config.training.method != "lora":
-        raise ValueError("H1 partial visual adaptation requires training.method='lora'")
-    if paths.initial_adapter_dir is None:
-        raise ValueError("H1 partial visual adaptation must start from lora.initial_adapter_dir")
-    if config.training.num_train_epochs is not None:
-        raise ValueError(
-            "H1 is step-budgeted; set training.num_train_epochs=null when vision_tuning is enabled"
-        )
-
-
 def resolve_configured_training_plan(
     config: Qwen3VLTrainingConfig,
     *,
@@ -325,9 +285,6 @@ def resolve_configured_training_plan(
     if plan.resolved_max_steps is not None:
         config.training.max_steps = plan.resolved_max_steps
     return plan
-
-
->>>>>>> Stashed changes
 def load_datasets(
     config: Qwen3VLTrainingConfig,
     paths: ResolvedTrainingPaths,
@@ -476,27 +433,6 @@ def build_strategy_manifest(
         ),
         "device": device,
     }
-<<<<<<< Updated upstream
-=======
-    if config.vision_tuning.enabled:
-        manifest.update(
-            {
-                "training_stage": "h1_hard_example_visual_adaptation",
-                "checkpoint_type": "adapter_with_visual_sidecar",
-                "visual_sidecar": VISUAL_SIDECAR_FILENAME,
-                "vision_tuning": config.vision_tuning.model_dump(mode="json"),
-                "optimizer_groups": optimizer_groups or [],
-                "trainable_parameter_audit": trainable_audit,
-                "bbox_protocol": {
-                    "schema": "label+bbox",
-                    "coordinate_format": "normalized_0_1",
-                },
-            }
-        )
-    return manifest
->>>>>>> Stashed changes
-
-
 def save_strategy_manifest(manifest: dict[str, Any], output_dir: Path) -> None:
     """把统一策略 manifest 写到 adapter 根目录。"""
 
@@ -606,53 +542,6 @@ def train(
         model.gradient_checkpointing_enable()
     model = apply_lora(model, config, paths, modules)
 
-<<<<<<< Updated upstream
-=======
-    trainable_audit: dict[str, Any] | None = None
-    optimizer_groups: list[dict[str, Any]] | None = None
-    grouped_optimizer = None
-    checkpoint_artifact_saver = None
-    if config.vision_tuning.enabled:
-        trainable_audit = configure_h1_trainable_parameters(
-            model,
-            config.vision_tuning,
-            config.trainable_audit,
-        )
-        paths.output_dir.mkdir(parents=True, exist_ok=True)
-        run_audit_path = (
-            Path(config.trainable_audit.report_dir)
-            / config.logging.experiment_name
-            / "trainable_parameters.json"
-        )
-        write_trainable_audit(trainable_audit, run_audit_path)
-        write_trainable_audit(trainable_audit, paths.output_dir / "trainable_parameters.json")
-        raw_groups = build_training_parameter_groups(
-            model,
-            trainable_audit,
-            config.optimization,
-            weight_decay=config.training.weight_decay,
-        )
-        optimizer_groups = optimizer_group_report(raw_groups)
-        grouped_optimizer = torch.optim.AdamW(raw_groups)
-
-        def save_h1_checkpoint_artifacts(checkpoint_model: Any, output_dir: str) -> None:
-            assert trainable_audit is not None
-            save_visual_sidecar(
-                checkpoint_model,
-                trainable_audit,
-                output_dir,
-                base_checkpoint=paths.model_source,
-                adapter_checkpoint=(
-                    str(paths.initial_adapter_dir)
-                    if paths.initial_adapter_dir is not None
-                    else None
-                ),
-                vision_tuning=config.vision_tuning.model_dump(mode="json"),
-            )
-
-        checkpoint_artifact_saver = save_h1_checkpoint_artifacts
-
->>>>>>> Stashed changes
     train_dataset, eval_dataset = load_datasets(config, paths)
     training_plan = resolve_configured_training_plan(
         config,

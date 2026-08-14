@@ -247,6 +247,28 @@ def compare_evaluations(
         if str(summary.get("contract_version")) != "1.5":
             raise ComparisonError(f"{role} summary must use contract_version 1.5")
 
+    baseline_tier = baseline_manifest.get("evaluation_tier")
+    candidate_tier = candidate_manifest.get("evaluation_tier")
+    tier_warnings: list[str] = []
+    if baseline_tier and candidate_tier and str(baseline_tier) != str(candidate_tier):
+        raise ComparisonError(
+            "Cannot compare different evaluation tiers: "
+            f"baseline={baseline_tier}, candidate={candidate_tier}"
+        )
+    if baseline_tier and candidate_tier:
+        baseline_hash = baseline_manifest.get("evaluation_tier_sha256")
+        candidate_hash = candidate_manifest.get("evaluation_tier_sha256")
+        if baseline_hash and candidate_hash and str(baseline_hash) != str(candidate_hash):
+            raise ComparisonError(
+                "Cannot compare evaluation files with different tier hashes: "
+                f"baseline={baseline_hash}, candidate={candidate_hash}"
+            )
+    else:
+        tier_warnings.append(
+            "One or both evaluation manifests lack evaluation_tier metadata; "
+            "tier compatibility cannot be proven for this legacy comparison."
+        )
+
     baseline_rows: dict[str, dict[str, Any]] = {}
     for raw in _iter_jsonl(baseline_files["evaluated_predictions.jsonl"]):
         row = _compact_row(raw, baseline_files["evaluated_predictions.jsonl"])
@@ -432,6 +454,12 @@ def compare_evaluations(
             "resamples": bootstrap_resamples,
             "seed": seed,
         },
+        "evaluation_tier": baseline_tier or candidate_tier,
+        "evaluation_tier_sha256": (
+            baseline_manifest.get("evaluation_tier_sha256")
+            or candidate_manifest.get("evaluation_tier_sha256")
+        ),
+        "warnings": tier_warnings,
         "by_task": by_task,
     }
     outputs = {
@@ -451,6 +479,12 @@ def compare_evaluations(
         "candidate_directory": str(Path(candidate_dir).expanduser().resolve()),
         "baseline_contract_version": baseline_manifest.get("contract_version"),
         "candidate_contract_version": candidate_manifest.get("contract_version"),
+        "evaluation_tier": baseline_tier or candidate_tier,
+        "evaluation_tier_sha256": (
+            baseline_manifest.get("evaluation_tier_sha256")
+            or candidate_manifest.get("evaluation_tier_sha256")
+        ),
+        "warnings": tier_warnings,
         "baseline_hashes": {name: _sha256(path) for name, path in baseline_files.items()},
         "candidate_hashes": {name: _sha256(path) for name, path in candidate_files.items()},
         "bootstrap_resamples": bootstrap_resamples,

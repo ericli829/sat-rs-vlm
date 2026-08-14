@@ -6,6 +6,9 @@ input:
 
 evaluation:
   contract: "configs/eval/evaluation_contract_v1.5.yaml"
+  # Offline evaluation of a submitted model is paired with E2 by default.
+  tier: "E2"
+  tiers_manifest: "data/evaluation/tiers/evaluation_tiers_manifest.json"
   manifest: null
   strict: true
   semantic: true

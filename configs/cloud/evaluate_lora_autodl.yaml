@@ -8,10 +8,12 @@ model:
   attn_implementation: "sdpa"
 
 data:
-  eval_file: "/root/autodl-tmp/sat-rs-vlm/data/processed/qwen3vl_val.jsonl"
+  # Formal AutoDL submission evaluation: frozen E2 standard tier.
+  eval_file: "/root/autodl-tmp/sat-rs-vlm/data/evaluation/tiers/e2_standard.jsonl"
   image_root: "/root/autodl-tmp/datasets/VRSBench"
   max_seq_length: 1024
   max_eval_samples: null
+  tiers_manifest: "/root/autodl-tmp/sat-rs-vlm/data/evaluation/tiers/evaluation_tiers_manifest.json"
   eval_batch_size: 32
   group_by_task: true
   log_every_samples: 100
@@ -31,3 +33,7 @@ generation:
 output:
   summary_file: "/root/autodl-tmp/outputs/evaluation/summary.json"
   predictions_file: "/root/autodl-tmp/outputs/evaluation/predictions.jsonl"
+
+evaluation:
+  tier: "E2"
+  tiers_manifest: "/root/autodl-tmp/sat-rs-vlm/data/evaluation/tiers/evaluation_tiers_manifest.json"

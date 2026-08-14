@@ -41,8 +41,6 @@ def validate_checkpoint_files(checkpoint: str | Path, manifest: dict[str, Any]) 
         )
         if not any(path.is_file() for path in adapter_weight_files):
             raise FileNotFoundError(f"Adapter weights are missing: {checkpoint_path}")
-<<<<<<< Updated upstream
-=======
         if manifest.get("checkpoint_type") == "adapter_with_visual_sidecar":
             sidecar_name = str(manifest.get("visual_sidecar", ""))
             if not sidecar_name:
@@ -62,7 +60,6 @@ def validate_checkpoint_files(checkpoint: str | Path, manifest: dict[str, Any]) 
                 expected_hash = payload.get("sha256")
                 if expected_hash and file_sha256(checkpoint_path / sidecar_name) != expected_hash:
                     raise ValueError("Visual sidecar checksum mismatch")
->>>>>>> Stashed changes
     else:
         if not (checkpoint_path / "config.json").is_file():
             raise FileNotFoundError(f"Full-model config.json is missing: {checkpoint_path}")

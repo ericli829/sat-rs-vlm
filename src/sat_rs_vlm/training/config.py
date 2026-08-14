@@ -81,7 +81,7 @@ class TrainConfig(BaseModel):
     method: str = "qlora"
     freeze_vision_encoder: bool = True
     freeze_projector: bool = False
-    num_train_epochs: float = 3
+    num_train_epochs: float | None = 3
     max_steps: int | None = None
     target_effective_epochs: float | None = Field(default=None, gt=0.0)
     max_effective_epochs: float | None = Field(default=None, gt=0.0)
@@ -107,8 +107,6 @@ class TrainConfig(BaseModel):
     seed: int = 42
     resume_from_checkpoint: str | None = None
 
-<<<<<<< Updated upstream
-=======
     @model_validator(mode="after")
     def validate_training_length(self) -> TrainConfig:
         """Require either an epoch budget or an explicit positive step budget."""
@@ -137,7 +135,6 @@ class TrainConfig(BaseModel):
             )
         return self
 
->>>>>>> Stashed changes
 
 class LoRAConfig(BaseModel):
     """LoRA adapter 配置。"""
@@ -174,6 +171,31 @@ class LoggingConfig(BaseModel):
     experiment_name: str = "qwen3vl-rs-lora-baseline"
 
 
+class VisionTuningConfig(BaseModel):
+    """H1 partial visual-unfreeze surface; disabled for the LoRA baseline."""
+
+    enabled: bool = False
+    unfreeze_last_n_blocks: int = Field(default=2, ge=1)
+    train_main_merger: bool = True
+    train_deepstack_mergers: bool = False
+    train_patch_embed: bool = False
+
+
+class OptimizationGroupConfig(BaseModel):
+    """Independent learning rates for LoRA, merger, and ViT groups."""
+
+    lora_lr: float = Field(default=1.0e-5, gt=0.0)
+    visual_merger_lr: float = Field(default=5.0e-6, gt=0.0)
+    vision_lr: float = Field(default=1.0e-6, gt=0.0)
+
+
+class TrainableAuditConfig(BaseModel):
+    """Strictness and destination for the pre-training parameter audit."""
+
+    fail_on_unexpected_trainable: bool = False
+    report_dir: str = "reports/training"
+
+
 class Qwen3VLTrainingConfig(BaseModel):
     """完整 Qwen3-VL 微调配置。"""
 
@@ -184,6 +206,9 @@ class Qwen3VLTrainingConfig(BaseModel):
     qlora: QLoRAConfig = Field(default_factory=QLoRAConfig)
     evaluation: EvalConfig = Field(default_factory=EvalConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    vision_tuning: VisionTuningConfig = Field(default_factory=VisionTuningConfig)
+    optimization: OptimizationGroupConfig = Field(default_factory=OptimizationGroupConfig)
+    trainable_audit: TrainableAuditConfig = Field(default_factory=TrainableAuditConfig)
 
 
 @dataclass(frozen=True)

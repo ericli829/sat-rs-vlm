@@ -1,20 +1,37 @@
+# Explicit quick/debug evaluation. It is never the default submission tier.
 model:
-  base_model: "${MODEL_ROOT}/Qwen3-VL-2B-Instruct"
-  adapter_path: "${OUTPUT_ROOT}/training/e1-balanced-r16"
-  processor_id: "${MODEL_ROOT}/Qwen3-VL-2B-Instruct"
+  base_model: "${LOCAL_MODEL_DIR}"
+  processor_id: "${LOCAL_MODEL_DIR}"
   local_files_only: true
+  trust_remote_code: true
   torch_dtype: "bfloat16"
   device_map: "auto"
+  attn_implementation: "sdpa"
+
 data:
-  eval_file: "data/processed/e1/qwen3vl_val_balanced_1k.jsonl"
+  eval_file: "data/evaluation/tiers/e1_quick.jsonl"
   image_root: "${DATA_ROOT}/VRSBench"
   max_seq_length: 1024
-  max_eval_samples: 500
+  max_eval_samples: null
+  tiers_manifest: "data/evaluation/tiers/evaluation_tiers_manifest.json"
+  eval_batch_size: 1
+  group_by_task: true
+  log_every_samples: 100
+
 generation:
-  do_sample: false
-  num_beams: 1
   max_new_tokens: 128
-  task_max_new_tokens: {detection: 64, counting: 16, scene_classification: 32, vqa: 64, captioning: 128}
+  do_sample: false
+  temperature: 0.0
+  num_beams: 1
+
+evaluation:
+  contract: "configs/eval/evaluation_contract_v1.5.yaml"
+  tier: "E1"
+  tiers_manifest: "data/evaluation/tiers/evaluation_tiers_manifest.json"
+  strict: true
+  semantic: true
+
 output:
-  summary_file: "${OUTPUT_ROOT}/evaluation/e1/summary.json"
-  predictions_file: "${OUTPUT_ROOT}/evaluation/e1/predictions.jsonl"
+  summary_file: "reports/eval/qwen3vl_eval_e1_summary.json"
+  predictions_file: "reports/eval/qwen3vl_eval_e1_predictions.jsonl"
+  evaluation_dir: "reports/evaluation/qwen3vl_eval_e1"

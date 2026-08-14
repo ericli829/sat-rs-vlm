@@ -119,6 +119,17 @@ fi
   echo "Evaluation JSONL is missing or empty." >&2
   exit 1
 }
+if [[ ! -s data/evaluation/tiers/e2_standard.jsonl ]] || \
+   [[ ! -s data/evaluation/tiers/evaluation_tiers_manifest.json ]]; then
+  CURRENT_STAGE="frozen E1/E2/E3 evaluation tier preparation"
+  echo "[2b/8] Building frozen evaluation tiers (E2 is the formal default)"
+  "$AUTODL_PYTHON" scripts/evaluation/build_evaluation_tiers.py \
+    --config configs/eval/evaluation_tiers.yaml
+fi
+[[ -s data/evaluation/tiers/e2_standard.jsonl ]] || {
+  echo "E2 standard evaluation tier is missing or empty." >&2
+  exit 1
+}
 
 CURRENT_STAGE="real-model smoke and formal LoRA training"
 echo "[3/8] Running real-model smoke and formal LoRA training"

@@ -30,6 +30,7 @@ from sat_rs_vlm.evaluation.inference import (
 )
 from sat_rs_vlm.evaluation.metrics import summarize_predictions
 from sat_rs_vlm.evaluation.runner import run_evaluation, validate_output_directory
+from sat_rs_vlm.evaluation.tiers import resolve_tier_identity, validate_tier_asset
 from sat_rs_vlm.models.qwen3vl_loader import (
     load_qwen3vl,
 )
@@ -226,6 +227,15 @@ def evaluate(
     """执行评测。"""
 
     config = config_override if config_override is not None else load_yaml(config_path)
+    evaluation_cfg = dict(config.get("evaluation", {}))
+    tier_identity: dict[str, Any] | None = None
+    if evaluation_cfg.get("tier") is not None:
+        configured_tier = resolve_tier_identity(config, project_root=PROJECT_ROOT)
+        tier_identity = validate_tier_asset(
+            tier=configured_tier["tier"],
+            eval_file=resolve_project_path(configured_tier["eval_file"]),
+            manifest_path=resolve_project_path(configured_tier["tiers_manifest"]),
+        )
     summary_file, predictions_file, evaluation_dir = resolve_evaluation_outputs(
         config_path,
         config,
@@ -330,7 +340,6 @@ def evaluate(
     write_jsonl(predictions_file, predictions)
     print(f"Saved predictions to {predictions_file}")
 
-    evaluation_cfg = dict(config.get("evaluation", {}))
     contract_path = resolve_project_path(
         str(evaluation_cfg.get("contract", DEFAULT_EVALUATION_CONTRACT))
     )
@@ -363,6 +372,8 @@ def evaluate(
         ),
         eval_batch_size=batch_size,
         group_by_task=group_by_task,
+        evaluation_tier=tier_identity["tier"] if tier_identity else None,
+        evaluation_tier_sha256=tier_identity["sha256"] if tier_identity else None,
     )
     summary_file.parent.mkdir(parents=True, exist_ok=True)
     summary_file.write_bytes(evaluation_outputs["metrics"].read_bytes())

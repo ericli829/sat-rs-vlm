@@ -170,8 +170,6 @@ python scripts/train_qwen3vl_lora.py \
   --config configs/train/qwen3vl_autodl_4090.yaml
 ```
 
-<<<<<<< Updated upstream
-=======
 ### H1 困难样本视觉适配
 
 H1 从已经完成 Stage A/Stage B 的 LoRA adapter 继续训练，不从 base model 重启。它使用
@@ -200,7 +198,6 @@ python scripts/train_qwen3vl_lora.py \
 完整流程、泄漏保护和 AutoDL 命令见
 [H1 Hard Example Visual Adaptation](docs/training/hard_example_visual_adaptation.md)。
 
->>>>>>> Stashed changes
 ## Evaluation v1.5
 
 `src/sat_rs_vlm/evaluation/` 是唯一正式评估内核，统一负责协议解析、任务指标、语义诊断、
@@ -366,6 +363,7 @@ pytest -q
 - [数据布局](docs/dataset_layout.md)
 - [结构化微调](docs/finetune_playbook.md)
 - [Evaluation Framework](docs/evaluation/README.md)
+- [Fixed Evaluation Tiers (E1/E2/E3)](docs/evaluation/evaluation_tiers.md)
 - [INT8 量化](docs/quantization.md)
 - [量化敏感度分析](docs/quantization_sensitivity.md)
 - [三分支架构合并说明](docs/architecture_merge_v1_5.md)

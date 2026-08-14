@@ -57,7 +57,7 @@ training:
   resume_from_checkpoint: null
 
 lora:
-  initial_adapter_dir: "${FINAL_LORA_CHECKPOINT}"
+  initial_adapter_dir: "${OUTPUT_ROOT}/training/lora_baseline/best_adapter"
   r: 16
   alpha: 32
   dropout: 0.05
@@ -115,9 +115,9 @@ statistics:
 
 hard_adaptation:
   enabled: true
-  source_checkpoint: "${FINAL_LORA_CHECKPOINT}"
-  prediction_source: "${H1_MINING_EVALUATION_DIR}"
-  source_train_file: "${H1_MINING_TRAIN_JSONL}"
+  source_checkpoint: "${OUTPUT_ROOT}/training/lora_baseline/best_adapter"
+  prediction_source: "reports/evaluation/h1_mining"
+  source_train_file: "data/processed/qwen3vl_train.jsonl"
   evaluation_ids_file: "data/evaluation/tiers/evaluation_tiers_manifest.json"
   output_dir: "data/processed/hard_examples"
   evaluation_contract_version: "1.5"

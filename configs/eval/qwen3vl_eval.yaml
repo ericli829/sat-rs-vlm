@@ -9,10 +9,12 @@ model:
   attn_implementation: "sdpa"
 
 data:
-  eval_file: "data/processed/qwen3vl_val.jsonl"
+  # Formal model submissions use the frozen E2 standard set by default.
+  eval_file: "data/evaluation/tiers/e2_standard.jsonl"
   image_root: "${DATA_ROOT}/VRSBench"
   max_seq_length: 1024
-  max_eval_samples: 100
+  max_eval_samples: null
+  tiers_manifest: "data/evaluation/tiers/evaluation_tiers_manifest.json"
 
 generation:
   max_new_tokens: 256
@@ -22,6 +24,8 @@ generation:
 
 evaluation:
   contract: "configs/eval/evaluation_contract_v1.5.yaml"
+  tier: "E2"
+  tiers_manifest: "data/evaluation/tiers/evaluation_tiers_manifest.json"
   strict: true
   semantic: true
   latency_semantics: "batch_amortized_per_sample"

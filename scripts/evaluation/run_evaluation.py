@@ -14,7 +14,12 @@ def parse_args() -> argparse.Namespace:
     """解析评估参数。"""
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=PROJECT_ROOT / "configs/eval/qwen3vl_eval.yaml",
+        help="Model evaluation config; defaults to the formal E2 submission tier.",
+    )
     parser.add_argument("--checkpoint", type=Path)
     return parser.parse_args()
 

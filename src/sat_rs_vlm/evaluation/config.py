@@ -43,6 +43,8 @@ class EvaluationProtocolConfig(BaseModel):
     dataset: str | None = None
     tasks: list[str] = Field(default_factory=list)
     sample_num: int | None = Field(default=None, gt=0)
+    tier: Literal["E1", "E2", "E3"] | None = None
+    tiers_manifest: str | None = None
 
 
 class EvaluationComparisonConfig(BaseModel):

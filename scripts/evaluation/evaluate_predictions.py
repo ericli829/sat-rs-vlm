@@ -99,6 +99,7 @@ def main() -> int:
             group_by_task=(
                 settings.group_by_task if args.group_by_task is None else args.group_by_task
             ),
+            evaluation_tier=settings.tier,
         )
     except (EvaluationError, OSError, ValueError) as exc:
         print(f"Evaluation failed: {exc}", file=sys.stderr)

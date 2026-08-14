@@ -1,7 +1,8 @@
 # Stage 3: whole-model FP32 versus CPU dynamic INT8 accuracy and latency confirmation.
 model:
   base_model: "/root/autodl-tmp/models/Qwen3-VL-2B-Instruct"
-  merged_model: "${MERGED_MODEL_DIR}"
+  # Override this field with the actual merged LoRA directory for a real run.
+  merged_model: null
   processor_id: "/root/autodl-tmp/models/Qwen3-VL-2B-Instruct"
   adapter_path: null
   local_files_only: true

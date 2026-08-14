@@ -1,0 +1,24 @@
+# Frozen evaluation tiers are generated once from the legal evaluation population.
+# On AutoDL replace source_files/train_files with the local project data paths.
+seed: 42
+output_dir: "data/evaluation/tiers"
+
+data:
+  source_files:
+    - "data/processed/qwen3vl_val.jsonl"
+  train_files:
+    - "data/processed/qwen3vl_train.jsonl"
+
+stratification:
+  detection_area_thresholds:
+    small_max: 0.01
+    medium_max: 0.10
+
+tiers:
+  E1:
+    target_samples: 593
+    # existing_e1_file: "reports/historical/fixed_593.jsonl"
+  E2:
+    target_samples: 3000
+  E3:
+    mode: "full"
