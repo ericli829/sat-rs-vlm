@@ -158,7 +158,11 @@ def load_evaluation_ids(path: str | Path) -> set[str]:
     text = source.read_text(encoding="utf-8")
     if source.suffix.lower() == ".json":
         payload = json.loads(text)
-        values = payload.get("ids", payload) if isinstance(payload, dict) else payload
+        if isinstance(payload, dict) and isinstance(payload.get("tiers"), dict):
+            e3 = payload["tiers"].get("E3", {})
+            values = e3.get("sample_ids", []) if isinstance(e3, dict) else []
+        else:
+            values = payload.get("ids", payload) if isinstance(payload, dict) else payload
         if not isinstance(values, list):
             raise ValueError("Evaluation ID JSON must be a list or an object with an ids list")
         return {str(value).strip() for value in values if str(value).strip()}
@@ -372,8 +376,9 @@ def build_hard_example_dataset(
         "excluded_evaluation_ids": sorted(excluded_evaluation_ids),
         "excluded_evaluation_id_count": len(excluded_evaluation_ids),
         "evaluation_exclusion_statement": (
-            f"The fixed {config.fixed_evaluation_sample_count}-sample evaluation set IDs "
-            "are excluded from H1 training."
+            f"The fixed {config.fixed_evaluation_sample_count}-sample evaluation set and all "
+            f"{len(excluded_evaluation_ids)} supplied frozen evaluation-tier IDs are excluded "
+            "from H1 training."
         ),
         "excluded_prediction_ids": sorted(set(excluded_prediction_ids)),
         "unmatched_prediction_ids": sorted(set(unmatched_prediction_ids)),

@@ -1,0 +1,43 @@
+schema_version: "1.0"
+seed: 42
+
+sources:
+  - name: "VRSBench"
+    eval_file: "data/processed/qwen3vl_val.jsonl"
+    train_file: "data/processed/qwen3vl_train.jsonl"
+    image_prefix: "VRSBench"
+    manifest_path: "data/processed/qwen3vl_val.jsonl"
+  - name: "LEVIR-CC"
+    eval_file: "${LEVIR_CC_ROOT}/annotations/levircc_val.jsonl"
+    train_file: "${LEVIR_CC_ROOT}/annotations/levircc_train.jsonl"
+    image_prefix: "LEVIR-CC"
+    manifest_path: "LEVIR-CC/annotations/levircc_val.jsonl"
+
+tiers:
+  E1:
+    mode: "sampled"
+    target_samples: 593
+  E2:
+    mode: "sampled"
+    target_samples: 3000
+  E3:
+    mode: "full"
+    target_samples: null
+
+existing_e1:
+  ids_file: "data/evaluation/tiers/legacy_fixed_593_ids.txt"
+  samples_file: "data/evaluation/tiers/legacy_fixed_593_samples.jsonl"
+  required: true
+  origin: "quantization/contrast_20260811_191408 historical fixed evaluation set"
+
+# Shared with H1 statistics/mining. Area is measured in normalized [0, 1] xyxy space.
+bbox_area_thresholds:
+  small_max: 0.01
+  medium_max: 0.10
+
+output:
+  directory: "data/evaluation/tiers"
+  e1_file: "e1_quick.jsonl"
+  e2_file: "e2_standard.jsonl"
+  e3_file: "e3_full.jsonl"
+  manifest_file: "evaluation_tiers_manifest.json"

@@ -1,5 +1,9 @@
 # 多任务离线评测 v1.5
 
+## 固定评测层级
+
+真实模型生成默认读取 E2 Standard。E1 Quick 用于快速诊断，E3 Full 用于最终结论；冻结 JSONL、分层方法、SHA256 和 AutoDL 命令见 [E1/E2/E3 说明](evaluation_tiers.md)。比较工具会校验双方 `evaluation_tier` 与 `evaluation_tier_sha256`，禁止直接把 E1 baseline 与 E2 candidate 计算 paired improvement。
+
 本模块读取仓库推理脚本生成的 `predictions.jsonl`，在不加载模型的情况下完成质量评测、逐样本扩展、结果追溯和同集配对比较。
 
 ## 输入字段

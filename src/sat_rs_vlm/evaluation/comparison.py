@@ -247,6 +247,32 @@ def compare_evaluations(
         if str(summary.get("contract_version")) != "1.5":
             raise ComparisonError(f"{role} summary must use contract_version 1.5")
 
+    baseline_tier = baseline_manifest.get("evaluation_tier")
+    candidate_tier = candidate_manifest.get("evaluation_tier")
+    baseline_tier_hash = baseline_manifest.get("evaluation_tier_sha256")
+    candidate_tier_hash = candidate_manifest.get("evaluation_tier_sha256")
+    tier_warnings: list[str] = []
+    if baseline_tier and candidate_tier and baseline_tier != candidate_tier:
+        raise ComparisonError(
+            "evaluation tier mismatch: "
+            f"baseline={baseline_tier}, candidate={candidate_tier}"
+        )
+    if baseline_tier_hash and candidate_tier_hash and baseline_tier_hash != candidate_tier_hash:
+        raise ComparisonError(
+            "evaluation tier checksum mismatch: "
+            f"baseline={baseline_tier_hash}, candidate={candidate_tier_hash}"
+        )
+    if bool(baseline_tier) != bool(candidate_tier):
+        tier_warnings.append(
+            "Only one evaluation manifest declares evaluation_tier; exact row compatibility "
+            "checks remain authoritative for this historical comparison."
+        )
+    elif not baseline_tier and not candidate_tier:
+        tier_warnings.append(
+            "Neither evaluation manifest declares evaluation_tier; this is treated as a "
+            "legacy comparison and exact row compatibility checks remain authoritative."
+        )
+
     baseline_rows: dict[str, dict[str, Any]] = {}
     for raw in _iter_jsonl(baseline_files["evaluated_predictions.jsonl"]):
         row = _compact_row(raw, baseline_files["evaluated_predictions.jsonl"])
@@ -432,6 +458,9 @@ def compare_evaluations(
             "resamples": bootstrap_resamples,
             "seed": seed,
         },
+        "evaluation_tier": baseline_tier or candidate_tier,
+        "evaluation_tier_sha256": baseline_tier_hash or candidate_tier_hash,
+        "warnings": tier_warnings,
         "by_task": by_task,
     }
     outputs = {
@@ -451,6 +480,9 @@ def compare_evaluations(
         "candidate_directory": str(Path(candidate_dir).expanduser().resolve()),
         "baseline_contract_version": baseline_manifest.get("contract_version"),
         "candidate_contract_version": candidate_manifest.get("contract_version"),
+        "evaluation_tier": baseline_tier or candidate_tier,
+        "evaluation_tier_sha256": baseline_tier_hash or candidate_tier_hash,
+        "warnings": tier_warnings,
         "baseline_hashes": {name: _sha256(path) for name, path in baseline_files.items()},
         "candidate_hashes": {name: _sha256(path) for name, path in candidate_files.items()},
         "bootstrap_resamples": bootstrap_resamples,

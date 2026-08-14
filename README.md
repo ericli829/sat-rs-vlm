@@ -205,6 +205,22 @@ python scripts/train_qwen3vl_lora.py \
 
 ## Evaluation v1.5
 
+正式训练后的默认评测层级是 **E2 Standard（3000 条固定分层样本）**。E1 Quick 保留历史 593 条固定评测集，E3 Full 使用全部 69577 条合法 evaluation population；满足 `E1 < E2 < E3`，运行时不再随机抽样或按 `max_eval_samples` 截断。
+
+```bash
+# 默认 E2
+python scripts/evaluate_rs_vlm.py --config configs/eval/qwen3vl_eval.yaml \
+  --checkpoint /path/to/experiment
+
+# 显式快速 E1 / 最终 E3
+python scripts/evaluate_rs_vlm.py --config configs/eval/qwen3vl_eval.yaml \
+  --checkpoint /path/to/experiment --eval-tier E1
+python scripts/evaluate_rs_vlm.py --config configs/eval/qwen3vl_eval.yaml \
+  --checkpoint /path/to/experiment --eval-tier E3
+```
+
+每次评测在 manifest 中记录 tier 和 tier SHA256；paired comparison 拒绝比较不同层级或不同 checksum。构建方法、分布口径和防泄漏规则见 [固定分层评测集](docs/evaluation/evaluation_tiers.md)。
+
 `src/sat_rs_vlm/evaluation/` 是唯一正式评估内核，统一负责协议解析、任务指标、语义诊断、
 配对比较和绘图。`evaluate_rs_vlm.py` 只负责真实模型生成，生成的 predictions 会自动进入
 v1.5 runner；Keyword Hit 仅保留在 repository compatibility 诊断中，不作为主要指标。

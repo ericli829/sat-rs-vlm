@@ -16,6 +16,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--checkpoint", type=Path)
+    parser.add_argument("--eval-tier", choices=("E1", "E2", "E3"), type=str.upper)
     return parser.parse_args()
 
 
@@ -31,6 +32,8 @@ def main() -> int:
     ]
     if args.checkpoint:
         command.extend(["--checkpoint", str(args.checkpoint)])
+    if args.eval_tier:
+        command.extend(["--eval-tier", args.eval_tier])
     return subprocess.run(command, cwd=PROJECT_ROOT, check=False).returncode
 
 

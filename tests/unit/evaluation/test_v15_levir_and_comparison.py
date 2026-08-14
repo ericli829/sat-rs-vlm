@@ -177,9 +177,19 @@ class ComparisonTests(unittest.TestCase):
         self,
         directory: Path,
         rows: list[dict[str, object]],
+        *,
+        tier: str | None = None,
+        tier_sha256: str | None = None,
     ) -> None:
         directory.mkdir()
-        write_json(directory / "evaluation_manifest.json", {"contract_version": "1.5"})
+        write_json(
+            directory / "evaluation_manifest.json",
+            {
+                "contract_version": "1.5",
+                "evaluation_tier": tier,
+                "evaluation_tier_sha256": tier_sha256,
+            },
+        )
         write_json(directory / "summary.json", {"contract_version": "1.5"})
         write_jsonl(directory / "evaluated_predictions.jsonl", rows)
 
@@ -299,6 +309,22 @@ class ComparisonTests(unittest.TestCase):
             self._make_evaluation(baseline, baseline_rows)
             self._make_evaluation(candidate, candidate_rows)
             with self.assertRaises(ComparisonError):
+                compare_evaluations(
+                    baseline,
+                    candidate,
+                    root / "comparison",
+                    protected_repository=root / "protected",
+                    bootstrap_resamples=5,
+                )
+
+    def test_mismatched_evaluation_tier_is_rejected_before_pairing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            baseline = root / "baseline"
+            candidate = root / "candidate"
+            self._make_evaluation(baseline, self._rows(False), tier="E1", tier_sha256="a")
+            self._make_evaluation(candidate, self._rows(True), tier="E2", tier_sha256="b")
+            with self.assertRaisesRegex(ComparisonError, "tier mismatch"):
                 compare_evaluations(
                     baseline,
                     candidate,

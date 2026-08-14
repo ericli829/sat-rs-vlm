@@ -113,7 +113,7 @@ hard_adaptation:
   source_checkpoint: "${FINAL_LORA_CHECKPOINT}"
   prediction_source: "${H1_MINING_EVALUATION_DIR}"
   source_train_file: "${H1_MINING_TRAIN_JSONL}"
-  evaluation_ids_file: "${FIXED_EVAL_IDS}"
+  evaluation_ids_file: "data/evaluation/tiers/evaluation_tiers_manifest.json"
   output_dir: "data/processed/hard_examples"
   evaluation_contract_version: "1.5"
   hard_ratio: 0.70

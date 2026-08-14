@@ -30,6 +30,7 @@ from sat_rs_vlm.evaluation.inference import (
 )
 from sat_rs_vlm.evaluation.metrics import summarize_predictions
 from sat_rs_vlm.evaluation.runner import run_evaluation, validate_output_directory
+from sat_rs_vlm.evaluation.tiers import tier_metadata
 from sat_rs_vlm.models.qwen3vl_loader import (
     load_qwen3vl,
 )
@@ -97,6 +98,13 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Override data.eval_batch_size from the YAML config.",
     )
+    parser.add_argument(
+        "--eval-tier",
+        choices=("E1", "E2", "E3"),
+        type=str.upper,
+        default=None,
+        help="Override the configured fixed evaluation tier; default config uses E2.",
+    )
     return parser.parse_args()
 
 
@@ -130,21 +138,37 @@ def resolve_evaluation_outputs(
     config: dict[str, Any],
     checkpoint: Path | None,
     output_dir: Path | None,
+    evaluation_tier: str | None = None,
 ) -> tuple[Path, Path, Path]:
     """统一解析兼容 summary、原始 predictions 和 v1.5 评估目录。"""
+
+    def with_tier(path: Path) -> Path:
+        if not evaluation_tier:
+            return path
+        replacement = evaluation_tier.lower()
+        parts = list(path.parts)
+        for index, part in enumerate(parts):
+            if part.lower() in {"e1", "e2", "e3"}:
+                parts[index] = replacement
+                return Path(*parts)
+        return path.parent / replacement / path.name
 
     output_cfg = dict(config["output"])
     if output_dir is not None:
         root = output_dir.resolve()
+        if evaluation_tier:
+            root = root / evaluation_tier.lower()
         return root / "summary.json", root / "predictions.jsonl", root / "evaluation_v1_5"
     if checkpoint is not None:
         root = checkpoint.resolve() / "evaluation"
+        if evaluation_tier:
+            root = root / evaluation_tier.lower()
         return root / "summary.json", root / "predictions.jsonl", root / "evaluation_v1_5"
-    summary_file = resolve_project_path(str(output_cfg["summary_file"]))
-    predictions_file = resolve_project_path(str(output_cfg["predictions_file"]))
+    summary_file = with_tier(resolve_project_path(str(output_cfg["summary_file"])))
+    predictions_file = with_tier(resolve_project_path(str(output_cfg["predictions_file"])))
     configured_dir = output_cfg.get("evaluation_dir")
     evaluation_dir = (
-        resolve_project_path(str(configured_dir))
+        with_tier(resolve_project_path(str(configured_dir)))
         if configured_dir
         else PROJECT_ROOT / "reports" / "evaluation" / config_path.stem
     )
@@ -217,6 +241,7 @@ def evaluate(
     checkpoint: Path | None = None,
     output_dir: Path | None = None,
     batch_size_override: int | None = None,
+    evaluation_tier_override: str | None = None,
     *,
     loaded_model: Any | None = None,
     loaded_processor: Any | None = None,
@@ -226,11 +251,30 @@ def evaluate(
     """执行评测。"""
 
     config = config_override if config_override is not None else load_yaml(config_path)
+    evaluation_cfg = dict(config.get("evaluation", {}))
+    evaluation_tier = evaluation_tier_override or evaluation_cfg.get("tier")
+    evaluation_tier = str(evaluation_tier).upper() if evaluation_tier else None
+    evaluation_tier_sha256: str | None = None
+    if evaluation_tier:
+        tiers_manifest = evaluation_cfg.get(
+            "tiers_manifest", "data/evaluation/tiers/evaluation_tiers_manifest.json"
+        )
+        frozen_path, evaluation_tier_sha256 = tier_metadata(
+            evaluation_tier,
+            resolve_project_path(str(tiers_manifest)),
+            project_root=PROJECT_ROOT,
+        )
+        config = dict(config)
+        data_override = dict(config["data"])
+        data_override["eval_file"] = str(frozen_path)
+        data_override["max_eval_samples"] = None
+        config["data"] = data_override
     summary_file, predictions_file, evaluation_dir = resolve_evaluation_outputs(
         config_path,
         config,
         checkpoint,
         output_dir,
+        evaluation_tier,
     )
     validate_output_directory(evaluation_dir)
     data_cfg = dict(config["data"])
@@ -330,7 +374,6 @@ def evaluate(
     write_jsonl(predictions_file, predictions)
     print(f"Saved predictions to {predictions_file}")
 
-    evaluation_cfg = dict(config.get("evaluation", {}))
     contract_path = resolve_project_path(
         str(evaluation_cfg.get("contract", DEFAULT_EVALUATION_CONTRACT))
     )
@@ -363,6 +406,8 @@ def evaluate(
         ),
         eval_batch_size=batch_size,
         group_by_task=group_by_task,
+        evaluation_tier=evaluation_tier,
+        evaluation_tier_sha256=evaluation_tier_sha256,
     )
     summary_file.parent.mkdir(parents=True, exist_ok=True)
     summary_file.write_bytes(evaluation_outputs["metrics"].read_bytes())
@@ -376,6 +421,8 @@ def evaluate(
         "evaluation_outputs": {name: str(path) for name, path in evaluation_outputs.items()},
         "sample_count": len(predictions),
         "batch_size": batch_size,
+        "evaluation_tier": evaluation_tier,
+        "evaluation_tier_sha256": evaluation_tier_sha256,
     }
 
 
@@ -386,7 +433,13 @@ def main() -> int:
     try:
         checkpoint = Path(args.checkpoint) if args.checkpoint else None
         output_dir = Path(args.output_dir) if args.output_dir else None
-        evaluate(Path(args.config), checkpoint, output_dir, args.batch_size)
+        evaluate(
+            Path(args.config),
+            checkpoint,
+            output_dir,
+            args.batch_size,
+            args.eval_tier,
+        )
     except ImportError as exc:
         raise SystemExit(str(exc) or MODEL_DEPS_ERROR) from exc
     return 0

@@ -23,6 +23,11 @@ datasets/
 data/raw/
 data/processed/
 data/processed/e1/
+!data/evaluation/
+!data/evaluation/tiers/
+!data/evaluation/tiers/*.jsonl
+!data/evaluation/tiers/*.json
+!data/evaluation/tiers/*.txt
 *.tar
 *.tar.gz
 *.tar.zst

@@ -17,6 +17,11 @@ CLOUD_ENV = {
     "TRAIN_JSONL": "/workspace/data/train.jsonl",
     "VAL_JSONL": "/workspace/data/validation.jsonl",
     "ADAPTER_PATH": "/workspace/outputs/adapter",
+    "LEVIR_CC_ROOT": "/workspace/data/LEVIR-CC",
+    "FINAL_LORA_CHECKPOINT": "/workspace/outputs/final-lora",
+    "H1_MINING_EVALUATION_DIR": "/workspace/outputs/h1-mining/evaluation",
+    "H1_MINING_TRAIN_JSONL": "/workspace/data/h1-mining-train.jsonl",
+    "MERGED_MODEL_DIR": "/workspace/models/qwen3vl-merged",
 }
 
 

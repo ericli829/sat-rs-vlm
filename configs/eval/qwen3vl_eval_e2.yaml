@@ -1,0 +1,33 @@
+# E2 Standard: default stratified post-training evaluation tier.
+model:
+  base_model: "${MODEL_ROOT}/Qwen3-VL-2B-Instruct"
+  adapter_path: "checkpoints/smoke/qwen3vl-local-smoke"
+  processor_id: "${MODEL_ROOT}/Qwen3-VL-2B-Instruct"
+  local_files_only: true
+  trust_remote_code: true
+  torch_dtype: "bfloat16"
+  device_map: "auto"
+  attn_implementation: "sdpa"
+data:
+  eval_file: "data/evaluation/tiers/e2_standard.jsonl"
+  image_root: "${DATA_ROOT}"
+  max_seq_length: 1024
+  max_eval_samples: null
+  eval_batch_size: 1
+  group_by_task: true
+generation:
+  max_new_tokens: 256
+  do_sample: false
+  temperature: 0.0
+  num_beams: 1
+evaluation:
+  tier: "E2"
+  tiers_manifest: "data/evaluation/tiers/evaluation_tiers_manifest.json"
+  contract: "configs/eval/evaluation_contract_v1.5.yaml"
+  strict: true
+  semantic: true
+  latency_semantics: "batch_amortized_per_sample"
+output:
+  summary_file: "reports/eval/e2/qwen3vl_eval_summary.json"
+  predictions_file: "reports/eval/e2/qwen3vl_predictions.jsonl"
+  evaluation_dir: "reports/evaluation/qwen3vl_eval/e2"

@@ -79,7 +79,7 @@ python scripts/training/build_hard_example_dataset.py \
 
 - `H1_MINING_EVALUATION_DIR`：training mining split 的 Evaluation v1.5 输出目录。
 - `H1_MINING_TRAIN_JSONL`：与预测 ID 对应的训练源 JSONL。
-- `FIXED_EVAL_IDS`：最终 593 条固定 evaluation set 的 ID 文件。
+- `data/evaluation/tiers/evaluation_tiers_manifest.json`：E1/E2/E3 全部冻结评测 ID；H1 默认读取 E3 ID 集并全部排除。
 - `FINAL_LORA_CHECKPOINT`：Stage-B 最终 adapter。
 
 生产配置默认 fail closed：未提供排除 ID 或 ID 数少于 593 时不写 H1 数据。预测必须能按

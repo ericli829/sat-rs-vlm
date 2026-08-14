@@ -1097,6 +1097,8 @@ def run_evaluation(
     latency_semantics: str = "unresolved",
     eval_batch_size: int | None = None,
     group_by_task: bool | None = None,
+    evaluation_tier: str | None = None,
+    evaluation_tier_sha256: str | None = None,
 ) -> dict[str, Path]:
     """只读 Prediction JSONL，并将全部产物写到受保护仓库之外。"""
 
@@ -1189,6 +1191,9 @@ def run_evaluation(
         semantic_summary=semantic_summary,
         latency_context=latency_context,
     )
+    if evaluation_tier is not None:
+        summary["evaluation_tier"] = evaluation_tier
+        summary["evaluation_tier_sha256"] = evaluation_tier_sha256
     outputs = {
         "evaluated_predictions": destination / "evaluated_predictions.jsonl",
         "metrics": destination / "metrics.json",
@@ -1209,6 +1214,8 @@ def run_evaluation(
         "contract_file": str(contract_file),
         "contract_sha256": _sha256(contract_file),
         "dataset_manifest": str(manifest_file) if manifest_file else None,
+        "evaluation_tier": evaluation_tier,
+        "evaluation_tier_sha256": evaluation_tier_sha256,
         "semantic_evaluation_enabled": semantic_evaluator is not None,
         "semantic_contract_file": (
             str(semantic_contract_file) if semantic_evaluator is not None else None

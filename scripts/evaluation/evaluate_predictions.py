@@ -17,6 +17,7 @@ from sat_rs_vlm.evaluation.config import (  # noqa: E402
 )
 from sat_rs_vlm.evaluation.records import EvaluationError  # noqa: E402
 from sat_rs_vlm.evaluation.runner import run_evaluation  # noqa: E402
+from sat_rs_vlm.evaluation.tiers import tier_metadata  # noqa: E402
 
 DEFAULT_CONTRACT = PROJECT_ROOT / "configs" / "eval" / "evaluation_contract_v1.5.yaml"
 DEFAULT_SEMANTIC_CONTRACT = (
@@ -45,6 +46,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--eval-batch-size", type=int)
     parser.add_argument("--group-by-task", action=argparse.BooleanOptionalAction, default=None)
+    parser.add_argument("--evaluation-tier", choices=("E1", "E2", "E3"), type=str.upper)
+    parser.add_argument("--evaluation-tier-sha256")
     parser.add_argument(
         "--protect-repository",
         action=argparse.BooleanOptionalAction,
@@ -76,6 +79,14 @@ def main() -> int:
                 "predictions path is required via --predictions or input.predictions"
             )
         output_value = args.output_dir or config.output.output_dir
+        evaluation_tier = args.evaluation_tier or settings.tier
+        evaluation_tier_hash = args.evaluation_tier_sha256
+        if evaluation_tier and evaluation_tier_hash is None and settings.tiers_manifest:
+            _, evaluation_tier_hash = tier_metadata(
+                evaluation_tier,
+                _project_path(settings.tiers_manifest),
+                project_root=PROJECT_ROOT,
+            )
         outputs = run_evaluation(
             _project_path(predictions_value),
             _project_path(output_value),
@@ -99,6 +110,8 @@ def main() -> int:
             group_by_task=(
                 settings.group_by_task if args.group_by_task is None else args.group_by_task
             ),
+            evaluation_tier=evaluation_tier,
+            evaluation_tier_sha256=evaluation_tier_hash,
         )
     except (EvaluationError, OSError, ValueError) as exc:
         print(f"Evaluation failed: {exc}", file=sys.stderr)

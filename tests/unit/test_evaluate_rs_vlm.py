@@ -159,3 +159,44 @@ def test_evaluation_outputs_keep_legacy_files_and_isolate_v15(tmp_path: Path) ->
     assert summary == tmp_path / "run" / "summary.json"
     assert predictions == tmp_path / "run" / "predictions.jsonl"
     assert evaluation_dir == tmp_path / "run" / "evaluation_v1_5"
+
+
+def test_evaluation_outputs_isolate_explicit_tiers(tmp_path: Path) -> None:
+    summary, predictions, evaluation_dir = resolve_evaluation_outputs(
+        tmp_path / "eval.yaml",
+        {
+            "output": {
+                "summary_file": "unused-summary.json",
+                "predictions_file": "unused-predictions.jsonl",
+            }
+        },
+        checkpoint=tmp_path / "checkpoint",
+        output_dir=None,
+        evaluation_tier="E2",
+    )
+
+    assert summary == tmp_path / "checkpoint" / "evaluation" / "e2" / "summary.json"
+    assert predictions == tmp_path / "checkpoint" / "evaluation" / "e2" / "predictions.jsonl"
+    assert evaluation_dir == (
+        tmp_path / "checkpoint" / "evaluation" / "e2" / "evaluation_v1_5"
+    )
+
+
+def test_configured_output_tier_is_replaced_by_cli_selection(tmp_path: Path) -> None:
+    summary, predictions, evaluation_dir = resolve_evaluation_outputs(
+        tmp_path / "eval.yaml",
+        {
+            "output": {
+                "summary_file": tmp_path / "reports" / "e2" / "summary.json",
+                "predictions_file": tmp_path / "reports" / "e2" / "predictions.jsonl",
+                "evaluation_dir": tmp_path / "evaluation" / "e2",
+            }
+        },
+        checkpoint=None,
+        output_dir=None,
+        evaluation_tier="E1",
+    )
+
+    assert summary == tmp_path / "reports" / "e1" / "summary.json"
+    assert predictions == tmp_path / "reports" / "e1" / "predictions.jsonl"
+    assert evaluation_dir == tmp_path / "evaluation" / "e1"
