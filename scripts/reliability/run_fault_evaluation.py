@@ -1,0 +1,119 @@
+"""Run one clean or in-memory SEU-faulted Evaluation v1.5 inference."""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+from typing import Any
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+if str(PROJECT_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", required=True, type=Path)
+    parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--fault-target")
+    parser.add_argument("--fault-num-bits", type=int)
+    parser.add_argument("--fault-seed", type=int)
+    parser.add_argument(
+        "--fault-bit-plane", choices=("all", "sign", "exponent", "mantissa"), default="all"
+    )
+    parser.add_argument("--fault-layers", nargs="*", type=int, default=[])
+    parser.add_argument("--activation-guard", action="store_true")
+    parser.add_argument(
+        "--activation-guard-mode",
+        choices=("research", "deployment"),
+        default="research",
+    )
+    parser.add_argument("--activation-patterns", nargs="+", default=["self_attn", "mlp"])
+    parser.add_argument("--activation-max-abs", type=float, default=10000.0)
+    return parser.parse_args()
+
+
+def main() -> int:
+    from sat_rs_vlm.models.reliability.activation_guard import ActivationGuard
+    from sat_rs_vlm.models.reliability.fault_injector import (
+        inject_model_parameter_bitflips,
+        model_fault_inventory,
+        selector_for_fault_target,
+    )
+    from sat_rs_vlm.training.experiment import write_json
+    from sat_rs_vlm.training.utils import safe_import_model_dependencies
+    from scripts.evaluate_rs_vlm import evaluate, load_model, load_yaml
+
+    args = parse_args()
+    is_fault = args.fault_target is not None
+    if is_fault and (args.fault_num_bits is None or args.fault_seed is None):
+        raise SystemExit("fault target requires --fault-num-bits and --fault-seed")
+    config = load_yaml(args.config)
+    modules = safe_import_model_dependencies(require_bitsandbytes=False)
+    model, processor = load_model(config, modules)
+    records: list[Any] = []
+    inventory: dict[str, Any] | None = None
+    if is_fault:
+        selector = selector_for_fault_target(
+            args.fault_target, layer_indices=tuple(args.fault_layers)
+        )
+        inventory = model_fault_inventory(model, selector=selector, bit_plane=args.fault_bit_plane)
+        records = inject_model_parameter_bitflips(
+            model,
+            num_bits=args.fault_num_bits,
+            seed=args.fault_seed,
+            selector=selector,
+            bit_plane=args.fault_bit_plane,
+        )
+    guard = None
+    guard_report = None
+    if args.activation_guard:
+        guard = ActivationGuard(
+            model,
+            module_patterns=list(args.activation_patterns),
+            max_abs=args.activation_max_abs,
+            mode=args.activation_guard_mode,
+        )
+        guard.install()
+    try:
+        result = evaluate(
+            args.config,
+            output_dir=args.output_dir,
+            loaded_model=model,
+            loaded_processor=processor,
+            loaded_modules=modules,
+            config_override=config,
+        )
+    finally:
+        if guard is not None:
+            guard.close()
+            guard_report = guard.report()
+            write_json(args.output_dir / "activation_guard_report.json", guard_report)
+    if guard is not None:
+        guard.assert_healthy()
+    write_json(
+        args.output_dir / "fault_injection_summary.json",
+        {
+            "schema_version": "2.0",
+            "mode": "fault" if is_fault else "baseline",
+            "target": args.fault_target,
+            "layers": args.fault_layers,
+            "bit_plane": args.fault_bit_plane if is_fault else None,
+            "requested_bit_flips": args.fault_num_bits if is_fault else 0,
+            "actual_bit_flips": len(records),
+            "seed": args.fault_seed,
+            "candidate_bits": inventory["candidate_bits"] if inventory else 0,
+            "inventory": inventory,
+            "records": [record.model_dump(mode="json") for record in records],
+            "evaluation": result,
+            "activation_guard": guard_report,
+        },
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

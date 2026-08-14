@@ -1,0 +1,974 @@
+{
+  "schema_version": "1.0",
+  "sample_count": 125,
+  "dataset_statistics": {
+    "VRSBench": {
+      "sample_count": 125,
+      "proportion": 1.0
+    }
+  },
+  "training_source_statistics": {
+    "VRSBench": {
+      "sample_count": 125,
+      "proportion": 1.0
+    }
+  },
+  "task_statistics": {
+    "captioning": {
+      "sample_count": 25,
+      "proportion": 0.2
+    },
+    "counting": {
+      "sample_count": 25,
+      "proportion": 0.2
+    },
+    "detection": {
+      "sample_count": 25,
+      "proportion": 0.2
+    },
+    "scene_classification": {
+      "sample_count": 25,
+      "proportion": 0.2
+    },
+    "vqa": {
+      "sample_count": 25,
+      "proportion": 0.2
+    }
+  },
+  "analysis_selection": {
+    "mode": "stratified_by_task",
+    "samples_per_task": 25,
+    "seed": 42,
+    "population_sample_count": 142390,
+    "analyzed_sample_count": 125
+  },
+  "population_task_statistics": {
+    "captioning": {
+      "sample_count": 20264,
+      "proportion": 0.14231336470257744
+    },
+    "counting": {
+      "sample_count": 15428,
+      "proportion": 0.10835030549898167
+    },
+    "detection": {
+      "sample_count": 36313,
+      "proportion": 0.2550249315260903
+    },
+    "scene_classification": {
+      "sample_count": 6639,
+      "proportion": 0.0466254652714376
+    },
+    "vqa": {
+      "sample_count": 63746,
+      "proportion": 0.447685933000913
+    }
+  },
+  "supervised_token_statistics": {
+    "definition": "labels != -100",
+    "total_supervised_tokens": 2757,
+    "by_task": {
+      "captioning": {
+        "sample_count": 25,
+        "total_supervised_tokens": 1770,
+        "supervised_token_share": 0.6420021762785637,
+        "mean": 70.8,
+        "median": 70.0,
+        "p90": 95.6,
+        "p95": 97.6,
+        "max": 121.0
+      },
+      "counting": {
+        "sample_count": 25,
+        "total_supervised_tokens": 76,
+        "supervised_token_share": 0.02756619513964454,
+        "mean": 3.04,
+        "median": 3.0,
+        "p90": 3.0,
+        "p95": 3.0,
+        "max": 4.0
+      },
+      "detection": {
+        "sample_count": 25,
+        "total_supervised_tokens": 726,
+        "supervised_token_share": 0.26332970620239393,
+        "mean": 29.04,
+        "median": 29.0,
+        "p90": 30.6,
+        "p95": 31.0,
+        "max": 32.0
+      },
+      "scene_classification": {
+        "sample_count": 25,
+        "total_supervised_tokens": 94,
+        "supervised_token_share": 0.034095030830612987,
+        "mean": 3.76,
+        "median": 4.0,
+        "p90": 5.0,
+        "p95": 5.0,
+        "max": 6.0
+      },
+      "vqa": {
+        "sample_count": 25,
+        "total_supervised_tokens": 91,
+        "supervised_token_share": 0.03300689154878491,
+        "mean": 3.64,
+        "median": 3.0,
+        "p90": 5.0,
+        "p95": 5.0,
+        "max": 5.0
+      }
+    },
+    "estimated_supervised_token_exposure": {
+      "estimation_method": "population task count multiplied by analyzed mean supervised tokens",
+      "purpose": "token budget, truncation, and supervision-density diagnostic",
+      "not_a_task_loss_weight": true,
+      "training_sampling_mode": "uniform",
+      "task_sampling_weights": {},
+      "task_sampling_weights_are_loss_weights": false,
+      "by_task": {
+        "captioning": {
+          "population_sample_count": 20264,
+          "population_sample_share": 0.14231336470257744,
+          "sampler_weight": 1.0,
+          "estimated_sample_draw_share": 0.14231336470257744,
+          "analyzed_sample_count": 25,
+          "mean_supervised_tokens": 70.8,
+          "estimated_supervised_tokens": 1434691.2,
+          "estimated_supervised_token_share": 0.5136518449232929,
+          "token_share_minus_sample_share": 0.3713384802207154
+        },
+        "counting": {
+          "population_sample_count": 15428,
+          "population_sample_share": 0.10835030549898167,
+          "sampler_weight": 1.0,
+          "estimated_sample_draw_share": 0.10835030549898167,
+          "analyzed_sample_count": 25,
+          "mean_supervised_tokens": 3.04,
+          "estimated_supervised_tokens": 46901.12,
+          "estimated_supervised_token_share": 0.016791659987158734,
+          "token_share_minus_sample_share": -0.09155864551182294
+        },
+        "detection": {
+          "population_sample_count": 36313,
+          "population_sample_share": 0.2550249315260903,
+          "sampler_weight": 1.0,
+          "estimated_sample_draw_share": 0.2550249315260903,
+          "analyzed_sample_count": 25,
+          "mean_supervised_tokens": 29.04,
+          "estimated_supervised_tokens": 1054529.52,
+          "estimated_supervised_token_share": 0.37754537943361915,
+          "token_share_minus_sample_share": 0.12252044790752886
+        },
+        "scene_classification": {
+          "population_sample_count": 6639,
+          "population_sample_share": 0.0466254652714376,
+          "sampler_weight": 1.0,
+          "estimated_sample_draw_share": 0.0466254652714376,
+          "analyzed_sample_count": 25,
+          "mean_supervised_tokens": 3.76,
+          "estimated_supervised_tokens": 24962.64,
+          "estimated_supervised_token_share": 0.008937188776341547,
+          "token_share_minus_sample_share": -0.037688276495096054
+        },
+        "vqa": {
+          "population_sample_count": 63746,
+          "population_sample_share": 0.447685933000913,
+          "sampler_weight": 1.0,
+          "estimated_sample_draw_share": 0.447685933000913,
+          "analyzed_sample_count": 25,
+          "mean_supervised_tokens": 3.64,
+          "estimated_supervised_tokens": 232035.44,
+          "estimated_supervised_token_share": 0.08307392687958776,
+          "token_share_minus_sample_share": -0.3646120061213252
+        }
+      }
+    },
+    "loss_weighting_interpretation": {
+      "model_loss_reduction": "mean over labels != -100 within each model call",
+      "task_level_control": "sampler draw frequency, not token-count totals",
+      "task_sampling_weights_are_loss_weights": false,
+      "batch_size_caveat": "With one sample per micro-batch, each selected sample contributes one mean-reduced loss. With mixed multi-sample micro-batches, supervised tokens are mean-reduced across that micro-batch."
+    }
+  },
+  "sequence_statistics": {
+    "prompt_tokens": {
+      "sample_count": 125,
+      "mean": 279.96,
+      "median": 276.0,
+      "p90": 298.6,
+      "p95": 301.8,
+      "max": 310.0
+    },
+    "assistant_tokens": {
+      "sample_count": 125,
+      "mean": 22.056,
+      "median": 4.0,
+      "p90": 67.60000000000005,
+      "p95": 86.39999999999999,
+      "max": 121.0
+    },
+    "total_tokens": {
+      "sample_count": 125,
+      "mean": 302.016,
+      "median": 281.0,
+      "p90": 342.00000000000006,
+      "p95": 360.4,
+      "max": 395.0
+    }
+  },
+  "truncation_statistics": {
+    "max_seq_length": 1024,
+    "method": "same processor/chat template; capped vs truncation=False encoding",
+    "truncated_samples": 0,
+    "truncation_rate": 0.0,
+    "assistant_truncated_samples": 0,
+    "assistant_truncation_rate": 0.0
+  },
+  "detection_statistics": {
+    "bbox_protocol": "label+bbox normalized_0_1",
+    "bbox_area_thresholds": {
+      "small_max": 0.01,
+      "medium_max": 0.1
+    },
+    "class_frequency": {
+      "airplane": 1,
+      "baseball-diamond": 2,
+      "ground-track-field": 2,
+      "harbor": 2,
+      "roundabout": 1,
+      "ship": 2,
+      "tennis-court": 3,
+      "vehicle": 12
+    },
+    "bbox_area_bucket_frequency": {
+      "large": 3,
+      "medium": 8,
+      "small": 14
+    },
+    "bbox_area": {
+      "sample_count": 25,
+      "mean": 0.044592,
+      "median": 0.007200000000000003,
+      "p90": 0.08904000000000006,
+      "p95": 0.19119999999999973,
+      "max": 0.5015000000000001
+    },
+    "bbox_width": {
+      "sample_count": 25,
+      "mean": 0.13360000000000002,
+      "median": 0.09000000000000002,
+      "p90": 0.2600000000000001,
+      "p95": 0.34399999999999975,
+      "max": 0.5900000000000001
+    },
+    "bbox_height": {
+      "sample_count": 25,
+      "mean": 0.17,
+      "median": 0.09,
+      "p90": 0.4220000000000001,
+      "p95": 0.5619999999999996,
+      "max": 0.85
+    },
+    "bbox_aspect_ratio": {
+      "sample_count": 25,
+      "mean": 1.118031134666177,
+      "median": 0.8888888888888894,
+      "p90": 2.3000000000000007,
+      "p95": 2.5444444444444443,
+      "max": 3.0000000000000027
+    }
+  },
+  "counting_statistics": {
+    "bucket_definition": {
+      "5+": "5-9",
+      "10+": ">=10"
+    },
+    "frequency": {
+      "0": 0,
+      "1": 4,
+      "2": 9,
+      "3": 5,
+      "4": 1,
+      "5+": 5,
+      "10+": 0
+    },
+    "sample_count": 24,
+    "mean": 3.1666666666666665,
+    "median": 2.0,
+    "p90": 6.699999999999999,
+    "p95": 7.849999999999998,
+    "max": 9.0
+  },
+  "image_statistics": {
+    "status": "unavailable",
+    "unavailable_reason": "inspect_images=false",
+    "width": {
+      "sample_count": 0,
+      "mean": null,
+      "median": null,
+      "p90": null,
+      "p95": null,
+      "max": null
+    },
+    "height": {
+      "sample_count": 0,
+      "mean": null,
+      "median": null,
+      "p90": null,
+      "p95": null,
+      "max": null
+    },
+    "aspect_ratio": {
+      "sample_count": 0,
+      "mean": null,
+      "median": null,
+      "p90": null,
+      "p95": null,
+      "max": null
+    },
+    "read_error_count": 0,
+    "read_errors": []
+  },
+  "visual_token_statistics": {
+    "status": "ok",
+    "unavailable_reason": null,
+    "processor_spatial_merge_size": 2,
+    "approximation": "product(grid_thw) / spatial_merge_size^2",
+    "image_grid_thw": [
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        1,
+        32,
+        32
+      ]
+    ],
+    "approximate_visual_tokens": {
+      "sample_count": 125,
+      "mean": 256.0,
+      "median": 256.0,
+      "p90": 256.0,
+      "p95": 256.0,
+      "max": 256.0
+    }
+  }
+}

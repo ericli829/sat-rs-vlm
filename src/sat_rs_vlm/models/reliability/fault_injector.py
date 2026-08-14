@@ -24,6 +24,20 @@ from sat_rs_vlm.models.reliability.schemas import AdapterInjectionReport, BitFli
 from sat_rs_vlm.utils.jsonl import write_jsonl
 
 LoraScope = Literal["none", "all", "a", "b"]
+BitPlane = Literal["all", "sign", "exponent", "mantissa"]
+FaultTarget = Literal[
+    "all_parameters",
+    "lora_adapter",
+    "lora_a",
+    "lora_b",
+    "vision_encoder",
+    "visual_blocks",
+    "visual_merger",
+    "language_model",
+    "attention",
+    "mlp",
+    "embeddings",
+]
 
 
 class ParameterChangeSummary(TypedDict):
@@ -80,6 +94,230 @@ class ParameterSelector:
         return True
 
 
+def selector_for_fault_target(
+    target: FaultTarget | str,
+    *,
+    name_regex: str | None = None,
+    module_names: tuple[str, ...] = (),
+    layer_indices: tuple[int, ...] = (),
+) -> ParameterSelector:
+    """Build a reproducible selector for a named model region."""
+
+    presets: dict[str, dict[str, Any]] = {
+        "all_parameters": {},
+        "lora_adapter": {"lora_scope": "all"},
+        "lora_a": {"lora_scope": "a"},
+        "lora_b": {"lora_scope": "b"},
+        "vision_encoder": {"module_names": ("visual", "vision")},
+        "visual_blocks": {"module_names": ("visual.blocks", "vision.blocks")},
+        "visual_merger": {"module_names": (".merger", "deepstack_merger")},
+        "language_model": {"module_names": ("model.layers",)},
+        "attention": {"module_names": ("self_attn",)},
+        "mlp": {"module_names": ("mlp",)},
+        "embeddings": {"name_regex": r"(?:embed|lm_head)"},
+    }
+    key = str(target).lower()
+    if key not in presets:
+        raise ValueError("fault.target must be one of: " + ", ".join(sorted(presets)))
+    preset = presets[key]
+    return ParameterSelector(
+        name_regex=name_regex or preset.get("name_regex"),
+        module_names=tuple(str(item) for item in preset.get("module_names", ())) + module_names,
+        layer_indices=layer_indices,
+        lora_scope=preset.get("lora_scope", "none"),
+    )
+
+
+def bit_indices_for_tensor(tensor: Any, bit_plane: BitPlane | str = "all") -> tuple[int, ...]:
+    """Return bit positions for a physical floating-point fault category."""
+
+    torch = _torch_module()
+    width = tensor_bit_width(tensor)
+    plane = str(bit_plane).lower()
+    if plane == "all":
+        return tuple(range(width))
+    layouts: dict[Any, dict[str, tuple[int, ...]]] = {
+        torch.float32: {
+            "sign": (31,),
+            "exponent": tuple(range(23, 31)),
+            "mantissa": tuple(range(23)),
+        },
+        torch.float16: {
+            "sign": (15,),
+            "exponent": tuple(range(10, 15)),
+            "mantissa": tuple(range(10)),
+        },
+        torch.bfloat16: {
+            "sign": (15,),
+            "exponent": tuple(range(7, 15)),
+            "mantissa": tuple(range(7)),
+        },
+        torch.int8: {"sign": (7,)},
+        torch.uint8: {"sign": (7,)},
+    }
+    if plane not in {"sign", "exponent", "mantissa"}:
+        raise ValueError("fault.bit_plane must be all, sign, exponent or mantissa")
+    return layouts.get(tensor.dtype, {}).get(plane, ())
+
+
+def model_fault_inventory(
+    model: Any,
+    *,
+    selector: ParameterSelector | None = None,
+    bit_plane: BitPlane | str = "all",
+) -> dict[str, Any]:
+    """Describe the exact parameter population eligible for a fault condition."""
+
+    selected = selectable_parameters(dict(model.named_parameters()), selector)
+    rows: list[dict[str, Any]] = []
+    total_elements = total_bits = 0
+    for name, parameter in selected:
+        allowed_bits = bit_indices_for_tensor(parameter, bit_plane)
+        if not allowed_bits:
+            continue
+        elements = int(parameter.numel())
+        candidate_bits = elements * len(allowed_bits)
+        rows.append(
+            {
+                "name": name,
+                "shape": list(parameter.shape),
+                "dtype": str(parameter.dtype).removeprefix("torch."),
+                "elements": elements,
+                "bit_positions": list(allowed_bits),
+                "candidate_bits": candidate_bits,
+            }
+        )
+        total_elements += elements
+        total_bits += candidate_bits
+    return {
+        "bit_plane": str(bit_plane),
+        "num_parameters": len(rows),
+        "total_elements": total_elements,
+        "candidate_bits": total_bits,
+        "parameters": rows,
+    }
+
+
+def summarize_fault_inventory(inventory: dict[str, Any]) -> list[dict[str, Any]]:
+    """Aggregate a raw parameter inventory by model region and transformer layer."""
+
+    groups: dict[tuple[str, int | None], dict[str, Any]] = {}
+    for row in inventory.get("parameters", []):
+        name = str(row["name"])
+        lowered = name.lower()
+        if "lora_" in lowered:
+            region = "lora_adapter"
+        elif ("visual" in lowered or "vision" in lowered) and "merger" in lowered:
+            region = "visual_merger"
+        elif ("visual" in lowered or "vision" in lowered) and ".blocks." in lowered:
+            region = "visual_blocks"
+        elif "visual" in lowered or "vision" in lowered:
+            region = "vision_encoder"
+        elif "self_attn" in lowered or "attention" in lowered:
+            region = "attention"
+        elif ".mlp." in lowered:
+            region = "mlp"
+        elif "embed" in lowered or "lm_head" in lowered:
+            region = "embeddings"
+        elif "model.layers" in lowered:
+            region = "language_model"
+        else:
+            region = "other"
+        match = re.search(r"(?:layers?|blocks?)\.(\d+)(?:\.|$)", name)
+        layer = int(match.group(1)) if match else None
+        item = groups.setdefault(
+            (region, layer),
+            {
+                "region": region,
+                "layer": layer,
+                "tensor_count": 0,
+                "elements": 0,
+                "candidate_bits": 0,
+            },
+        )
+        item["tensor_count"] += 1
+        item["elements"] += int(row["elements"])
+        item["candidate_bits"] += int(row["candidate_bits"])
+    return sorted(
+        groups.values(),
+        key=lambda item: (
+            str(item["region"]),
+            item["layer"] is None,
+            item["layer"] or -1,
+        ),
+    )
+
+
+def fault_bits_from_density(candidate_bits: int, flips_per_million_bits: float) -> int:
+    """Convert a normalized fault density to an executable count, minimum one."""
+
+    if candidate_bits < 1:
+        raise ValueError("candidate_bits must be positive")
+    if flips_per_million_bits <= 0:
+        raise ValueError("fault density must be positive")
+    return max(1, round(candidate_bits * flips_per_million_bits / 1_000_000))
+
+
+def inject_model_parameter_bitflips(
+    model: Any,
+    *,
+    num_bits: int,
+    seed: int,
+    selector: ParameterSelector | None = None,
+    bit_plane: BitPlane | str = "all",
+) -> list[BitFlipRecord]:
+    """Inject faults into loaded model parameters without cloning full weights.
+
+    This is for one evaluation subprocess: only the selected scalar is copied, then
+    process exit discards the in-memory fault. Checkpoint files stay read-only.
+    """
+
+    torch = _torch_module()
+    if num_bits < 0:
+        raise ValueError("num_bits must be non-negative")
+    selected = [
+        (name, parameter, bit_indices_for_tensor(parameter, bit_plane))
+        for name, parameter in selectable_parameters(dict(model.named_parameters()), selector)
+    ]
+    selected = [item for item in selected if item[2]]
+    if not selected:
+        raise ValueError("No model parameters matched the fault selector and bit plane")
+    cumulative: list[int] = []
+    total = 0
+    for _, parameter, allowed_bits in selected:
+        total += int(parameter.numel()) * len(allowed_bits)
+        cumulative.append(total)
+    if num_bits > total:
+        raise ValueError(f"num_bits={num_bits} exceeds candidate bits={total}")
+
+    records: list[BitFlipRecord] = []
+    with torch.no_grad():
+        for address in random.Random(seed).sample(range(total), num_bits):
+            parameter_index = bisect.bisect_right(cumulative, address)
+            start = cumulative[parameter_index - 1] if parameter_index else 0
+            local_address = address - start
+            name, parameter, allowed_bits = selected[parameter_index]
+            flat_index, bit_rank = divmod(local_address, len(allowed_bits))
+            bit_index = allowed_bits[bit_rank]
+            width = tensor_bit_width(parameter)
+            element = parameter.detach().reshape(-1)[flat_index : flat_index + 1].clone()
+            changed, record = flip_tensor_bit(
+                element, flat_index=0, bit_index=bit_index, target_name=name, seed=seed
+            )
+            parameter.reshape(-1)[flat_index].copy_(changed.reshape(-1)[0])
+            element_bytes = width // 8
+            records.append(
+                record.model_copy(
+                    update={
+                        "flat_index": flat_index,
+                        "byte_index": flat_index * element_bytes + bit_index // 8,
+                        "shape": list(parameter.shape),
+                    }
+                )
+            )
+    return records
+
+
 def _torch_module() -> Any:
     try:
         import torch
@@ -108,9 +346,11 @@ def selectable_parameters(
 def _clone_state_dict(state_dict: dict[str, Any]) -> dict[str, Any]:
     torch = _torch_module()
     return {
-        name: value.detach().clone().contiguous()
-        if isinstance(value, torch.Tensor)
-        else copy.deepcopy(value)
+        name: (
+            value.detach().clone().contiguous()
+            if isinstance(value, torch.Tensor)
+            else copy.deepcopy(value)
+        )
         for name, value in state_dict.items()
     }
 
@@ -124,6 +364,7 @@ def inject_state_dict_bitflips(
     parameter_name: str | None = None,
     flat_index: int | None = None,
     bit_index: int | None = None,
+    bit_plane: BitPlane | str = "all",
 ) -> tuple[dict[str, Any], list[BitFlipRecord]]:
     """向候选 state dict bit 地址无放回注入故障。
 
@@ -149,6 +390,13 @@ def inject_state_dict_bitflips(
     if not selected:
         raise ValueError("No tensor parameters matched the fault selector")
 
+    selected = [
+        (name, tensor)
+        for name, tensor in selected
+        if bit_index is not None or bit_indices_for_tensor(tensor, bit_plane)
+    ]
+    if not selected:
+        raise ValueError("No tensor parameters matched the requested bit plane")
     candidate_sizes: list[int] = []
     for name, tensor in selected:
         width = tensor_bit_width(tensor)
@@ -156,9 +404,13 @@ def inject_state_dict_bitflips(
             raise ValueError(f"flat_index is outside selected parameter: {name}")
         if bit_index is not None and not 0 <= bit_index < width:
             raise ValueError(f"bit_index is outside dtype width for parameter: {name}")
+        allowed_bits = (
+            (bit_index,) if bit_index is not None else bit_indices_for_tensor(tensor, bit_plane)
+        )
+        if not allowed_bits:
+            continue
         elements = 1 if flat_index is not None else int(tensor.numel())
-        bits = 1 if bit_index is not None else width
-        candidate_sizes.append(elements * bits)
+        candidate_sizes.append(elements * len(allowed_bits))
 
     cumulative: list[int] = []
     total = 0
@@ -176,10 +428,12 @@ def inject_state_dict_bitflips(
         local_address = address - start
         name, tensor = selected[parameter_index]
         width = tensor_bit_width(tensor)
-        bits_per_candidate = 1 if bit_index is not None else width
-        element_offset, local_bit = divmod(local_address, bits_per_candidate)
+        allowed_bits = (
+            (bit_index,) if bit_index is not None else bit_indices_for_tensor(tensor, bit_plane)
+        )
+        element_offset, bit_rank = divmod(local_address, len(allowed_bits))
         target_flat_index = flat_index if flat_index is not None else element_offset
-        target_bit_index = bit_index if bit_index is not None else local_bit
+        target_bit_index = allowed_bits[bit_rank]
         changed, record = flip_tensor_bit(
             updated[name],
             flat_index=target_flat_index,
@@ -285,6 +539,7 @@ def inject_safetensors_adapter(
     parameter_name: str | None = None,
     flat_index: int | None = None,
     bit_index: int | None = None,
+    bit_plane: BitPlane | str = "all",
     overwrite: bool = False,
 ) -> AdapterInjectionReport:
     """复制 LoRA Adapter 目录并向副本的 safetensors 权重注入故障。
@@ -328,6 +583,7 @@ def inject_safetensors_adapter(
             parameter_name=parameter_name,
             flat_index=flat_index,
             bit_index=bit_index,
+            bit_plane=bit_plane,
         )
         fault_weights = temporary / "adapter_model.safetensors"
         save_safetensors_state(fault_state, fault_weights, metadata)

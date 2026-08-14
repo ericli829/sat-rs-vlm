@@ -83,6 +83,9 @@ class TrainConfig(BaseModel):
     freeze_projector: bool = False
     num_train_epochs: float = 3
     max_steps: int | None = None
+    target_effective_epochs: float | None = Field(default=None, gt=0.0)
+    max_effective_epochs: float | None = Field(default=None, gt=0.0)
+    allow_overtrain: bool = False
     per_device_train_batch_size: int = 1
     per_device_eval_batch_size: int = 1
     gradient_accumulation_steps: int = 16
@@ -104,6 +107,37 @@ class TrainConfig(BaseModel):
     seed: int = 42
     resume_from_checkpoint: str | None = None
 
+<<<<<<< Updated upstream
+=======
+    @model_validator(mode="after")
+    def validate_training_length(self) -> TrainConfig:
+        """Require either an epoch budget or an explicit positive step budget."""
+
+        if self.max_steps is not None and self.max_steps <= 0:
+            raise ValueError("training.max_steps must be positive when configured")
+        if (
+            self.num_train_epochs is None
+            and self.max_steps is None
+            and self.target_effective_epochs is None
+        ):
+            raise ValueError(
+                "Set training.max_steps or training.target_effective_epochs when "
+                "training.num_train_epochs is null"
+            )
+        if self.num_train_epochs is not None and self.num_train_epochs <= 0:
+            raise ValueError("training.num_train_epochs must be positive when configured")
+        if (
+            self.target_effective_epochs is not None
+            and self.max_effective_epochs is not None
+            and self.target_effective_epochs > self.max_effective_epochs
+            and not self.allow_overtrain
+        ):
+            raise ValueError(
+                "training.target_effective_epochs exceeds training.max_effective_epochs"
+            )
+        return self
+
+>>>>>>> Stashed changes
 
 class LoRAConfig(BaseModel):
     """LoRA adapter 配置。"""

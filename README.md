@@ -170,6 +170,37 @@ python scripts/train_qwen3vl_lora.py \
   --config configs/train/qwen3vl_autodl_4090.yaml
 ```
 
+<<<<<<< Updated upstream
+=======
+### H1 困难样本视觉适配
+
+H1 从已经完成 Stage A/Stage B 的 LoRA adapter 继续训练，不从 base model 重启。它使用
+Evaluation v1.5 在训练 mining split 上产生的逐样本指标构造 70% hard examples + 30%
+regular replay，并只额外解冻 Qwen3-VL 最后 2 个视觉 block 和主 visual merger。bbox 仍为
+`{"label":"class","bbox":[x1,y1,x2,y2]}` 与 `normalized_0_1`。
+
+```bash
+python scripts/training/analyze_training_data.py \
+  --config configs/train/qwen3vl_hard_visual_adaptation.yaml
+
+python scripts/training/build_hard_example_dataset.py \
+  --config configs/train/qwen3vl_hard_visual_adaptation.yaml
+
+python scripts/train_qwen3vl_lora.py \
+  --config configs/train/qwen3vl_hard_visual_adaptation.yaml \
+  --dry-run
+```
+
+正式 refinement 配置使用 `target_effective_epochs` 计算训练步数，并以
+`max_effective_epochs` 阻止固定 `max_steps` 导致意外重复曝光；显式越界只有设置
+`allow_overtrain: true` 才能继续。H1 使用 LoRA、merger、ViT 三组独立学习率，训练前生成
+完整参数审计。新 checkpoint 保存标准 PEFT adapter、`visual_trainable_weights.safetensors`
+和校验 manifest；加载器仍兼容历史 `h1_visual_weights.safetensors`。
+
+完整流程、泄漏保护和 AutoDL 命令见
+[H1 Hard Example Visual Adaptation](docs/training/hard_example_visual_adaptation.md)。
+
+>>>>>>> Stashed changes
 ## Evaluation v1.5
 
 `src/sat_rs_vlm/evaluation/` 是唯一正式评估内核，统一负责协议解析、任务指标、语义诊断、
@@ -276,6 +307,11 @@ bash scripts/storage/backup_results.sh \
 | 实验性 weight clamp | 本地 state dict smoke 已测试 |
 | 本地统一 reliability smoke | 本地已测试，明确标记 `smoke_mock` |
 | 云端 Qwen3-VL clean/fault/recovery 入口 | 代码已实现，等待 AutoDL 真实验证 |
+| region/layer/sign-exponent-mantissa sensitivity | 单元测试通过，等待 RTX 4090 真机实验 |
+| Evaluation v1.5 paired Bootstrap + E1/E2/E3 | 已接入，tier/hash 不同会拒绝比较 |
+| activation guard research/deployment 模式 | 单元测试通过 |
+| sensitivity groups → task-metric risk policy | 单元测试通过 |
+| warm/golden adapter replicas 与 scrub | 单元测试通过 |
 
 本地全量 smoke，不加载 Qwen3-VL：
 
@@ -290,6 +326,19 @@ python scripts/reliability/run_experiment.py \
   --config configs/reliability/experiments/lora_bitflip.yaml \
   --mode full \
   --environment autodl
+```
+
+Evaluation v1.5 SEU sensitivity 默认使用 E1；E1 高风险条件再显式升到 E2/E3：
+
+```bash
+python scripts/reliability/run_v15_sensitivity.py \
+  --config configs/reliability/experiments/v15_sensitivity.yaml \
+  --environment autodl --preflight
+
+python scripts/reliability/run_v15_sensitivity.py \
+  --config configs/reliability/experiments/v15_sensitivity.yaml \
+  --environment autodl --run-id seu-e1-pilot \
+  --activation-guard --activation-guard-mode research
 ```
 
 真实模式缺少 CUDA、依赖、模型、数据或 Adapter 时会直接失败，不会回退为 Mock。本地 smoke
@@ -328,4 +377,5 @@ pytest -q
 - [外部实验插件](docs/external_plugins.md)
 - [Bit Flip 可靠性](docs/reliability/README.md)
 - [可靠性命令](docs/reliability/commands.md)
+- [SEU v1.5 sensitivity 与保护策略](docs/reliability/seu_v15_operation.md)
 - [Bit Flip 迁移映射](docs/reliability/bitflip_migration_plan.md)

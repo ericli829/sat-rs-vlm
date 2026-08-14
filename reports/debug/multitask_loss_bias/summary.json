@@ -1,0 +1,1273 @@
+{
+  "batch_count": 20,
+  "sample_count": 40,
+  "supervised_tokens": 921,
+  "current_batch_loss_mean": 0.7600389109924436,
+  "per_sample_normalized_loss_mean": 0.6789829413755797,
+  "task_statistics": {
+    "captioning": {
+      "sample_count": 8,
+      "sample_share": 0.2,
+      "supervised_tokens": 600,
+      "supervised_token_share": 0.6514657980456026,
+      "sum_cross_entropy": 652.3099365234375,
+      "loss_numerator_share": 0.7081751781441811,
+      "loss_numerator_share_minus_sample_share": 0.508175178144181,
+      "mean_token_ce": 1.0871832275390625,
+      "mean_sample_loss": 1.0748464837670326,
+      "materially_overrepresented": true,
+      "length_associated_overrepresentation": true
+    },
+    "counting": {
+      "sample_count": 8,
+      "sample_share": 0.2,
+      "supervised_tokens": 24,
+      "supervised_token_share": 0.026058631921824105,
+      "sum_cross_entropy": 25.533151030540466,
+      "loss_numerator_share": 0.027719865614810532,
+      "loss_numerator_share_minus_sample_share": -0.17228013438518947,
+      "mean_token_ce": 1.063881292939186,
+      "mean_sample_loss": 1.0638813190162182,
+      "materially_overrepresented": false,
+      "length_associated_overrepresentation": false
+    },
+    "detection": {
+      "sample_count": 8,
+      "sample_share": 0.2,
+      "supervised_tokens": 239,
+      "supervised_token_share": 0.25950054288816504,
+      "sum_cross_entropy": 234.5022964477539,
+      "loss_numerator_share": 0.25458558311588875,
+      "loss_numerator_share_minus_sample_share": 0.054585583115888736,
+      "mean_token_ce": 0.9811811566851628,
+      "mean_sample_loss": 0.9842922315001488,
+      "materially_overrepresented": false,
+      "length_associated_overrepresentation": false
+    },
+    "scene_classification": {
+      "sample_count": 8,
+      "sample_share": 0.2,
+      "supervised_tokens": 31,
+      "supervised_token_share": 0.033659066232356136,
+      "sum_cross_entropy": 5.518970653414726,
+      "loss_numerator_share": 0.005991627302942445,
+      "loss_numerator_share_minus_sample_share": -0.19400837269705756,
+      "mean_token_ce": 0.17803131140047504,
+      "mean_sample_loss": 0.16582839144393802,
+      "materially_overrepresented": false,
+      "length_associated_overrepresentation": false
+    },
+    "vqa": {
+      "sample_count": 8,
+      "sample_share": 0.2,
+      "supervised_tokens": 27,
+      "supervised_token_share": 0.029315960912052116,
+      "sum_cross_entropy": 3.249455395154655,
+      "loss_numerator_share": 0.00352774582217718,
+      "loss_numerator_share_minus_sample_share": -0.19647225417782282,
+      "mean_token_ce": 0.12035019982054278,
+      "mean_sample_loss": 0.10606628115056083,
+      "materially_overrepresented": false,
+      "length_associated_overrepresentation": false
+    }
+  },
+  "memory": {
+    "peak_memory_allocated_mb": 5311.02685546875,
+    "peak_memory_reserved_mb": 7144.0
+  },
+  "judgement": {
+    "material_share_gap": 0.1,
+    "length_associated_overrepresented_tasks": [
+      "captioning"
+    ],
+    "captioning_or_detection_overrepresented": [
+      "captioning"
+    ],
+    "vqa_or_counting_underrepresented": [
+      "vqa",
+      "counting"
+    ],
+    "supports_per_sample_normalized_loss_experiment": true,
+    "conclusion": "Evidence supports a per-sample normalized-loss experiment: long-answer tasks are materially overrepresented in the batch loss numerator while VQA/counting are underrepresented."
+  },
+  "schema_version": "1.0",
+  "diagnostic_mode": "read_only_no_grad_no_backward_no_generation",
+  "model": {
+    "base_model": "D:\\Desktop\\tzb-2026\\Qwen3-VL-2B-Instruct",
+    "adapter": "D:\\Desktop\\tzb-2026\\results\\levir_train\\vrsbench_levircc_replay_formal\\round_2_adapter",
+    "dtype": "bfloat16",
+    "input_device": "cuda:0"
+  },
+  "configuration": {
+    "train_file": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\data\\processed\\qwen3vl_train.jsonl",
+    "image_root": "F:\\VIT-data\\VRSBench",
+    "max_seq_length": 1024,
+    "batch_size": 2,
+    "num_batches": 20,
+    "samples_per_task": 32,
+    "seed": 42
+  },
+  "execution_seconds": 11.988828000146896,
+  "batch_reports": [
+    {
+      "sample_rows": [
+        {
+          "sample_id": "vrsbench_train_03793_0000_det_003",
+          "task_type": "detection",
+          "supervised_token_count": 30,
+          "causal_supervised_token_count": 30,
+          "sum_cross_entropy": 36.048736572265625,
+          "mean_token_ce": 1.2016246318817139,
+          "sample_loss": 1.2016246318817139
+        },
+        {
+          "sample_id": "vrsbench_train_P0966_0001_caption",
+          "task_type": "captioning",
+          "supervised_token_count": 84,
+          "causal_supervised_token_count": 84,
+          "sum_cross_entropy": 100.95843505859375,
+          "mean_token_ce": 1.2018861770629883,
+          "sample_loss": 1.2018861770629883
+        }
+      ],
+      "task_statistics": {
+        "captioning": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 84,
+          "supervised_token_share": 0.7368421052631579,
+          "sum_cross_entropy": 100.95843505859375,
+          "loss_numerator_share": 0.7368843094623374,
+          "mean_token_ce": 1.2018861316499256,
+          "mean_sample_loss": 1.2018861770629883
+        },
+        "detection": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 30,
+          "supervised_token_share": 0.2631578947368421,
+          "sum_cross_entropy": 36.048736572265625,
+          "loss_numerator_share": 0.26311569053766265,
+          "mean_token_ce": 1.2016245524088542,
+          "mean_sample_loss": 1.2016246318817139
+        }
+      },
+      "batch_statistics": {
+        "sample_count": 2,
+        "supervised_tokens": 114,
+        "sum_cross_entropy": 137.00717163085938,
+        "current_batch_loss": 1.201817274093628,
+        "manual_batch_token_mean_loss": 1.2018172950075383,
+        "model_manual_loss_absolute_difference": 2.0913910381281653e-08,
+        "per_sample_normalized_loss_mean": 1.201755404472351
+      },
+      "batch_index": 1,
+      "memory": {
+        "peak_memory_allocated_mb": 5265.14208984375,
+        "peak_memory_reserved_mb": 5440.0
+      }
+    },
+    {
+      "sample_rows": [
+        {
+          "sample_id": "vrsbench_train_01983_0000_det_000",
+          "task_type": "detection",
+          "supervised_token_count": 34,
+          "causal_supervised_token_count": 34,
+          "sum_cross_entropy": 28.009510040283203,
+          "mean_token_ce": 0.8238091468811035,
+          "sample_loss": 0.8238091468811035
+        },
+        {
+          "sample_id": "vrsbench_train_P1470_0016_qa_001",
+          "task_type": "counting",
+          "supervised_token_count": 3,
+          "causal_supervised_token_count": 3,
+          "sum_cross_entropy": 3.6922831535339355,
+          "mean_token_ce": 1.2307610511779785,
+          "sample_loss": 1.2307610511779785
+        }
+      ],
+      "task_statistics": {
+        "counting": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 3,
+          "supervised_token_share": 0.08108108108108109,
+          "sum_cross_entropy": 3.6922831535339355,
+          "loss_numerator_share": 0.11646922087215081,
+          "mean_token_ce": 1.2307610511779785,
+          "mean_sample_loss": 1.2307610511779785
+        },
+        "detection": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 34,
+          "supervised_token_share": 0.918918918918919,
+          "sum_cross_entropy": 28.009510040283203,
+          "loss_numerator_share": 0.8835307791278492,
+          "mean_token_ce": 0.8238091188318589,
+          "mean_sample_loss": 0.8238091468811035
+        }
+      },
+      "batch_statistics": {
+        "sample_count": 2,
+        "supervised_tokens": 37,
+        "sum_cross_entropy": 31.70179319381714,
+        "current_batch_loss": 0.8568052649497986,
+        "manual_batch_token_mean_loss": 0.8568052214545172,
+        "model_manual_loss_absolute_difference": 4.34952813765932e-08,
+        "per_sample_normalized_loss_mean": 1.027285099029541
+      },
+      "batch_index": 2,
+      "memory": {
+        "peak_memory_allocated_mb": 5265.14208984375,
+        "peak_memory_reserved_mb": 5440.0
+      }
+    },
+    {
+      "sample_rows": [
+        {
+          "sample_id": "vrsbench_train_P1382_0039_qa_000",
+          "task_type": "counting",
+          "supervised_token_count": 3,
+          "causal_supervised_token_count": 3,
+          "sum_cross_entropy": 2.333462715148926,
+          "mean_token_ce": 0.7778209447860718,
+          "sample_loss": 0.7778209447860718
+        },
+        {
+          "sample_id": "vrsbench_train_P5203_2456_qa_002",
+          "task_type": "vqa",
+          "supervised_token_count": 4,
+          "causal_supervised_token_count": 4,
+          "sum_cross_entropy": 0.5239955186843872,
+          "mean_token_ce": 0.1309988796710968,
+          "sample_loss": 0.1309988796710968
+        }
+      ],
+      "task_statistics": {
+        "counting": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 3,
+          "supervised_token_share": 0.42857142857142855,
+          "sum_cross_entropy": 2.333462715148926,
+          "loss_numerator_share": 0.8166218100827878,
+          "mean_token_ce": 0.777820905049642,
+          "mean_sample_loss": 0.7778209447860718
+        },
+        "vqa": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 4,
+          "supervised_token_share": 0.5714285714285714,
+          "sum_cross_entropy": 0.5239955186843872,
+          "loss_numerator_share": 0.18337818991721228,
+          "mean_token_ce": 0.1309988796710968,
+          "mean_sample_loss": 0.1309988796710968
+        }
+      },
+      "batch_statistics": {
+        "sample_count": 2,
+        "supervised_tokens": 7,
+        "sum_cross_entropy": 2.857458233833313,
+        "current_batch_loss": 0.40820834040641785,
+        "manual_batch_token_mean_loss": 0.4082083191190447,
+        "model_manual_loss_absolute_difference": 2.1287373141998245e-08,
+        "per_sample_normalized_loss_mean": 0.4544099122285843
+      },
+      "batch_index": 3,
+      "memory": {
+        "peak_memory_allocated_mb": 5265.14208984375,
+        "peak_memory_reserved_mb": 5440.0
+      }
+    },
+    {
+      "sample_rows": [
+        {
+          "sample_id": "vrsbench_train_P2801_0028_qa_000",
+          "task_type": "scene_classification",
+          "supervised_token_count": 3,
+          "causal_supervised_token_count": 3,
+          "sum_cross_entropy": 0.4556134343147278,
+          "mean_token_ce": 0.15187114477157593,
+          "sample_loss": 0.15187114477157593
+        },
+        {
+          "sample_id": "vrsbench_train_P5102_0103_qa_005",
+          "task_type": "vqa",
+          "supervised_token_count": 3,
+          "causal_supervised_token_count": 3,
+          "sum_cross_entropy": 0.012899530120193958,
+          "mean_token_ce": 0.004299843683838844,
+          "sample_loss": 0.004299843683838844
+        }
+      ],
+      "task_statistics": {
+        "scene_classification": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 3,
+          "supervised_token_share": 0.5,
+          "sum_cross_entropy": 0.4556134343147278,
+          "loss_numerator_share": 0.9724670796767552,
+          "mean_token_ce": 0.15187114477157593,
+          "mean_sample_loss": 0.15187114477157593
+        },
+        "vqa": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 3,
+          "supervised_token_share": 0.5,
+          "sum_cross_entropy": 0.012899530120193958,
+          "loss_numerator_share": 0.02753292032324487,
+          "mean_token_ce": 0.004299843373397986,
+          "mean_sample_loss": 0.004299843683838844
+        }
+      },
+      "batch_statistics": {
+        "sample_count": 2,
+        "supervised_tokens": 6,
+        "sum_cross_entropy": 0.46851296443492174,
+        "current_batch_loss": 0.07808548957109451,
+        "manual_batch_token_mean_loss": 0.07808549407248695,
+        "model_manual_loss_absolute_difference": 4.5013924393488836e-09,
+        "per_sample_normalized_loss_mean": 0.07808549422770739
+      },
+      "batch_index": 4,
+      "memory": {
+        "peak_memory_allocated_mb": 5265.14208984375,
+        "peak_memory_reserved_mb": 5440.0
+      }
+    },
+    {
+      "sample_rows": [
+        {
+          "sample_id": "vrsbench_train_P0522_0007_caption",
+          "task_type": "captioning",
+          "supervised_token_count": 59,
+          "causal_supervised_token_count": 59,
+          "sum_cross_entropy": 61.92388153076172,
+          "mean_token_ce": 1.0495573282241821,
+          "sample_loss": 1.0495573282241821
+        },
+        {
+          "sample_id": "vrsbench_train_P2650_0018_qa_000",
+          "task_type": "scene_classification",
+          "supervised_token_count": 5,
+          "causal_supervised_token_count": 5,
+          "sum_cross_entropy": 0.5175081491470337,
+          "mean_token_ce": 0.10350163280963898,
+          "sample_loss": 0.10350163280963898
+        }
+      ],
+      "task_statistics": {
+        "captioning": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 59,
+          "supervised_token_share": 0.921875,
+          "sum_cross_entropy": 61.92388153076172,
+          "loss_numerator_share": 0.9917120975077601,
+          "mean_token_ce": 1.049557314080707,
+          "mean_sample_loss": 1.0495573282241821
+        },
+        "scene_classification": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 5,
+          "supervised_token_share": 0.078125,
+          "sum_cross_entropy": 0.5175081491470337,
+          "loss_numerator_share": 0.008287902492239823,
+          "mean_token_ce": 0.10350162982940674,
+          "mean_sample_loss": 0.10350163280963898
+        }
+      },
+      "batch_statistics": {
+        "sample_count": 2,
+        "supervised_tokens": 64,
+        "sum_cross_entropy": 62.44138967990875,
+        "current_batch_loss": 0.9756467342376709,
+        "manual_batch_token_mean_loss": 0.9756467137485743,
+        "model_manual_loss_absolute_difference": 2.0489096641540527e-08,
+        "per_sample_normalized_loss_mean": 0.5765294805169106
+      },
+      "batch_index": 5,
+      "memory": {
+        "peak_memory_allocated_mb": 5265.14208984375,
+        "peak_memory_reserved_mb": 5440.0
+      }
+    },
+    {
+      "sample_rows": [
+        {
+          "sample_id": "vrsbench_train_P0100_0001_det_000",
+          "task_type": "detection",
+          "supervised_token_count": 29,
+          "causal_supervised_token_count": 29,
+          "sum_cross_entropy": 19.24163818359375,
+          "mean_token_ce": 0.6635047793388367,
+          "sample_loss": 0.6635047793388367
+        },
+        {
+          "sample_id": "vrsbench_train_P2634_0011_caption",
+          "task_type": "captioning",
+          "supervised_token_count": 70,
+          "causal_supervised_token_count": 70,
+          "sum_cross_entropy": 91.42306518554688,
+          "mean_token_ce": 1.3060437440872192,
+          "sample_loss": 1.3060437440872192
+        }
+      ],
+      "task_statistics": {
+        "captioning": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 70,
+          "supervised_token_share": 0.7070707070707071,
+          "sum_cross_entropy": 91.42306518554688,
+          "loss_numerator_share": 0.826126690825619,
+          "mean_token_ce": 1.3060437883649554,
+          "mean_sample_loss": 1.3060437440872192
+        },
+        "detection": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 29,
+          "supervised_token_share": 0.29292929292929293,
+          "sum_cross_entropy": 19.24163818359375,
+          "loss_numerator_share": 0.17387330917438099,
+          "mean_token_ce": 0.6635047649515087,
+          "mean_sample_loss": 0.6635047793388367
+        }
+      },
+      "batch_statistics": {
+        "sample_count": 2,
+        "supervised_tokens": 99,
+        "sum_cross_entropy": 110.66470336914062,
+        "current_batch_loss": 1.1178251504898071,
+        "manual_batch_token_mean_loss": 1.117825286556976,
+        "model_manual_loss_absolute_difference": 1.3606716886549464e-07,
+        "per_sample_normalized_loss_mean": 0.984774261713028
+      },
+      "batch_index": 6,
+      "memory": {
+        "peak_memory_allocated_mb": 5265.14208984375,
+        "peak_memory_reserved_mb": 5440.0
+      }
+    },
+    {
+      "sample_rows": [
+        {
+          "sample_id": "vrsbench_train_P1365_0026_qa_000",
+          "task_type": "counting",
+          "supervised_token_count": 3,
+          "causal_supervised_token_count": 3,
+          "sum_cross_entropy": 4.679810523986816,
+          "mean_token_ce": 1.5599368810653687,
+          "sample_loss": 1.5599368810653687
+        },
+        {
+          "sample_id": "vrsbench_train_P1329_0030_det_000",
+          "task_type": "detection",
+          "supervised_token_count": 29,
+          "causal_supervised_token_count": 29,
+          "sum_cross_entropy": 43.0054931640625,
+          "mean_token_ce": 1.4829480648040771,
+          "sample_loss": 1.4829480648040771
+        }
+      ],
+      "task_statistics": {
+        "counting": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 3,
+          "supervised_token_share": 0.09375,
+          "sum_cross_entropy": 4.679810523986816,
+          "loss_numerator_share": 0.09813947195558388,
+          "mean_token_ce": 1.5599368413289387,
+          "mean_sample_loss": 1.5599368810653687
+        },
+        "detection": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 29,
+          "supervised_token_share": 0.90625,
+          "sum_cross_entropy": 43.0054931640625,
+          "loss_numerator_share": 0.9018605280444161,
+          "mean_token_ce": 1.4829480401400863,
+          "mean_sample_loss": 1.4829480648040771
+        }
+      },
+      "batch_statistics": {
+        "sample_count": 2,
+        "supervised_tokens": 32,
+        "sum_cross_entropy": 47.685303688049316,
+        "current_batch_loss": 1.4901655912399292,
+        "manual_batch_token_mean_loss": 1.4901657402515411,
+        "model_manual_loss_absolute_difference": 1.4901161193847656e-07,
+        "per_sample_normalized_loss_mean": 1.521442472934723
+      },
+      "batch_index": 7,
+      "memory": {
+        "peak_memory_allocated_mb": 5265.14208984375,
+        "peak_memory_reserved_mb": 5440.0
+      }
+    },
+    {
+      "sample_rows": [
+        {
+          "sample_id": "vrsbench_train_P2225_0004_qa_004",
+          "task_type": "vqa",
+          "supervised_token_count": 3,
+          "causal_supervised_token_count": 3,
+          "sum_cross_entropy": 0.1017647460103035,
+          "mean_token_ce": 0.033921584486961365,
+          "sample_loss": 0.033921584486961365
+        },
+        {
+          "sample_id": "vrsbench_train_P1505_0014_qa_001",
+          "task_type": "counting",
+          "supervised_token_count": 3,
+          "causal_supervised_token_count": 3,
+          "sum_cross_entropy": 3.4575588703155518,
+          "mean_token_ce": 1.152519702911377,
+          "sample_loss": 1.152519702911377
+        }
+      ],
+      "task_statistics": {
+        "counting": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 3,
+          "supervised_token_share": 0.5,
+          "sum_cross_entropy": 3.4575588703155518,
+          "loss_numerator_share": 0.9714089650225873,
+          "mean_token_ce": 1.1525196234385173,
+          "mean_sample_loss": 1.152519702911377
+        },
+        "vqa": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 3,
+          "supervised_token_share": 0.5,
+          "sum_cross_entropy": 0.1017647460103035,
+          "loss_numerator_share": 0.028591034977412673,
+          "mean_token_ce": 0.0339215820034345,
+          "mean_sample_loss": 0.033921584486961365
+        }
+      },
+      "batch_statistics": {
+        "sample_count": 2,
+        "supervised_tokens": 6,
+        "sum_cross_entropy": 3.5593236163258553,
+        "current_batch_loss": 0.593220591545105,
+        "manual_batch_token_mean_loss": 0.5932206027209759,
+        "model_manual_loss_absolute_difference": 1.1175870895385742e-08,
+        "per_sample_normalized_loss_mean": 0.5932206436991692
+      },
+      "batch_index": 8,
+      "memory": {
+        "peak_memory_allocated_mb": 5265.14208984375,
+        "peak_memory_reserved_mb": 5440.0
+      }
+    },
+    {
+      "sample_rows": [
+        {
+          "sample_id": "vrsbench_train_P0013_0011_qa_004",
+          "task_type": "vqa",
+          "supervised_token_count": 3,
+          "causal_supervised_token_count": 3,
+          "sum_cross_entropy": 0.21369920670986176,
+          "mean_token_ce": 0.07123307138681412,
+          "sample_loss": 0.07123307138681412
+        },
+        {
+          "sample_id": "vrsbench_train_P1357_0048_qa_000",
+          "task_type": "scene_classification",
+          "supervised_token_count": 5,
+          "causal_supervised_token_count": 5,
+          "sum_cross_entropy": 2.8675973415374756,
+          "mean_token_ce": 0.5735194683074951,
+          "sample_loss": 0.5735194683074951
+        }
+      ],
+      "task_statistics": {
+        "scene_classification": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 5,
+          "supervised_token_share": 0.625,
+          "sum_cross_entropy": 2.8675973415374756,
+          "loss_numerator_share": 0.9306463356045963,
+          "mean_token_ce": 0.5735194683074951,
+          "mean_sample_loss": 0.5735194683074951
+        },
+        "vqa": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 3,
+          "supervised_token_share": 0.375,
+          "sum_cross_entropy": 0.21369920670986176,
+          "loss_numerator_share": 0.06935366439540372,
+          "mean_token_ce": 0.07123306890328725,
+          "mean_sample_loss": 0.07123307138681412
+        }
+      },
+      "batch_statistics": {
+        "sample_count": 2,
+        "supervised_tokens": 8,
+        "sum_cross_entropy": 3.0812965482473373,
+        "current_batch_loss": 0.38516202569007874,
+        "manual_batch_token_mean_loss": 0.38516206853091717,
+        "model_manual_loss_absolute_difference": 4.284083843231201e-08,
+        "per_sample_normalized_loss_mean": 0.3223762698471546
+      },
+      "batch_index": 9,
+      "memory": {
+        "peak_memory_allocated_mb": 5265.14208984375,
+        "peak_memory_reserved_mb": 5440.0
+      }
+    },
+    {
+      "sample_rows": [
+        {
+          "sample_id": "vrsbench_train_P0946_0028_caption",
+          "task_type": "captioning",
+          "supervised_token_count": 87,
+          "causal_supervised_token_count": 87,
+          "sum_cross_entropy": 59.18817138671875,
+          "mean_token_ce": 0.6803237795829773,
+          "sample_loss": 0.6803237795829773
+        },
+        {
+          "sample_id": "vrsbench_train_P1055_0056_qa_000",
+          "task_type": "scene_classification",
+          "supervised_token_count": 4,
+          "causal_supervised_token_count": 4,
+          "sum_cross_entropy": 0.21160469949245453,
+          "mean_token_ce": 0.05290117487311363,
+          "sample_loss": 0.05290117487311363
+        }
+      ],
+      "task_statistics": {
+        "captioning": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 87,
+          "supervised_token_share": 0.9560439560439561,
+          "sum_cross_entropy": 59.18817138671875,
+          "loss_numerator_share": 0.9964376178929473,
+          "mean_token_ce": 0.6803238090427443,
+          "mean_sample_loss": 0.6803237795829773
+        },
+        "scene_classification": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 4,
+          "supervised_token_share": 0.04395604395604396,
+          "sum_cross_entropy": 0.21160469949245453,
+          "loss_numerator_share": 0.003562382107052681,
+          "mean_token_ce": 0.05290117487311363,
+          "mean_sample_loss": 0.05290117487311363
+        }
+      },
+      "batch_statistics": {
+        "sample_count": 2,
+        "supervised_tokens": 91,
+        "sum_cross_entropy": 59.399776086211205,
+        "current_batch_loss": 0.6527447700500488,
+        "manual_batch_token_mean_loss": 0.6527447921561671,
+        "model_manual_loss_absolute_difference": 2.2106118269249464e-08,
+        "per_sample_normalized_loss_mean": 0.36661247722804546
+      },
+      "batch_index": 10,
+      "memory": {
+        "peak_memory_allocated_mb": 5273.9580078125,
+        "peak_memory_reserved_mb": 6280.0
+      }
+    },
+    {
+      "sample_rows": [
+        {
+          "sample_id": "vrsbench_train_00924_0000_caption",
+          "task_type": "captioning",
+          "supervised_token_count": 60,
+          "causal_supervised_token_count": 60,
+          "sum_cross_entropy": 53.94865417480469,
+          "mean_token_ce": 0.8991442918777466,
+          "sample_loss": 0.8991442918777466
+        },
+        {
+          "sample_id": "vrsbench_train_P0792_0006_det_000",
+          "task_type": "detection",
+          "supervised_token_count": 28,
+          "causal_supervised_token_count": 28,
+          "sum_cross_entropy": 24.085742950439453,
+          "mean_token_ce": 0.8602051734924316,
+          "sample_loss": 0.8602051734924316
+        }
+      ],
+      "task_statistics": {
+        "captioning": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 60,
+          "supervised_token_share": 0.6818181818181818,
+          "sum_cross_entropy": 53.94865417480469,
+          "loss_numerator_share": 0.691344537309846,
+          "mean_token_ce": 0.8991442362467448,
+          "mean_sample_loss": 0.8991442918777466
+        },
+        "detection": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 28,
+          "supervised_token_share": 0.3181818181818182,
+          "sum_cross_entropy": 24.085742950439453,
+          "loss_numerator_share": 0.308655462690154,
+          "mean_token_ce": 0.8602051053728376,
+          "mean_sample_loss": 0.8602051734924316
+        }
+      },
+      "batch_statistics": {
+        "sample_count": 2,
+        "supervised_tokens": 88,
+        "sum_cross_entropy": 78.03439712524414,
+        "current_batch_loss": 0.88675457239151,
+        "manual_batch_token_mean_loss": 0.8867545127868652,
+        "model_manual_loss_absolute_difference": 5.960464477539063e-08,
+        "per_sample_normalized_loss_mean": 0.8796747326850891
+      },
+      "batch_index": 11,
+      "memory": {
+        "peak_memory_allocated_mb": 5273.9580078125,
+        "peak_memory_reserved_mb": 6280.0
+      }
+    },
+    {
+      "sample_rows": [
+        {
+          "sample_id": "vrsbench_train_P2662_0010_qa_003",
+          "task_type": "counting",
+          "supervised_token_count": 3,
+          "causal_supervised_token_count": 3,
+          "sum_cross_entropy": 3.083254337310791,
+          "mean_token_ce": 1.0277514457702637,
+          "sample_loss": 1.0277514457702637
+        },
+        {
+          "sample_id": "vrsbench_train_P2759_0125_det_001",
+          "task_type": "detection",
+          "supervised_token_count": 29,
+          "causal_supervised_token_count": 29,
+          "sum_cross_entropy": 24.117412567138672,
+          "mean_token_ce": 0.8316349387168884,
+          "sample_loss": 0.8316349387168884
+        }
+      ],
+      "task_statistics": {
+        "counting": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 3,
+          "supervised_token_share": 0.09375,
+          "sum_cross_entropy": 3.083254337310791,
+          "loss_numerator_share": 0.11335215964158712,
+          "mean_token_ce": 1.0277514457702637,
+          "mean_sample_loss": 1.0277514457702637
+        },
+        "detection": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 29,
+          "supervised_token_share": 0.90625,
+          "sum_cross_entropy": 24.117412567138672,
+          "loss_numerator_share": 0.8866478403584128,
+          "mean_token_ce": 0.83163491610823,
+          "mean_sample_loss": 0.8316349387168884
+        }
+      },
+      "batch_statistics": {
+        "sample_count": 2,
+        "supervised_tokens": 32,
+        "sum_cross_entropy": 27.200666904449463,
+        "current_batch_loss": 0.8500207662582397,
+        "manual_batch_token_mean_loss": 0.8500208407640457,
+        "model_manual_loss_absolute_difference": 7.450580596923828e-08,
+        "per_sample_normalized_loss_mean": 0.929693192243576
+      },
+      "batch_index": 12,
+      "memory": {
+        "peak_memory_allocated_mb": 5273.9580078125,
+        "peak_memory_reserved_mb": 6280.0
+      }
+    },
+    {
+      "sample_rows": [
+        {
+          "sample_id": "vrsbench_train_05695_0000_qa_002",
+          "task_type": "counting",
+          "supervised_token_count": 3,
+          "causal_supervised_token_count": 3,
+          "sum_cross_entropy": 1.1652559041976929,
+          "mean_token_ce": 0.38841864466667175,
+          "sample_loss": 0.38841864466667175
+        },
+        {
+          "sample_id": "vrsbench_train_P5102_0131_qa_003",
+          "task_type": "vqa",
+          "supervised_token_count": 4,
+          "causal_supervised_token_count": 4,
+          "sum_cross_entropy": 0.3709343671798706,
+          "mean_token_ce": 0.09273359179496765,
+          "sample_loss": 0.09273359179496765
+        }
+      ],
+      "task_statistics": {
+        "counting": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 3,
+          "supervised_token_share": 0.42857142857142855,
+          "sum_cross_entropy": 1.1652559041976929,
+          "loss_numerator_share": 0.7585361825998033,
+          "mean_token_ce": 0.38841863473256427,
+          "mean_sample_loss": 0.38841864466667175
+        },
+        "vqa": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 4,
+          "supervised_token_share": 0.5714285714285714,
+          "sum_cross_entropy": 0.3709343671798706,
+          "loss_numerator_share": 0.2414638174001967,
+          "mean_token_ce": 0.09273359179496765,
+          "mean_sample_loss": 0.09273359179496765
+        }
+      },
+      "batch_statistics": {
+        "sample_count": 2,
+        "supervised_tokens": 7,
+        "sum_cross_entropy": 1.5361902713775635,
+        "current_batch_loss": 0.219455748796463,
+        "manual_batch_token_mean_loss": 0.21945575305393764,
+        "model_manual_loss_absolute_difference": 4.257474622848534e-09,
+        "per_sample_normalized_loss_mean": 0.2405761182308197
+      },
+      "batch_index": 13,
+      "memory": {
+        "peak_memory_allocated_mb": 5273.9580078125,
+        "peak_memory_reserved_mb": 6280.0
+      }
+    },
+    {
+      "sample_rows": [
+        {
+          "sample_id": "vrsbench_train_P5392_0016_qa_000",
+          "task_type": "scene_classification",
+          "supervised_token_count": 3,
+          "causal_supervised_token_count": 3,
+          "sum_cross_entropy": 0.2038174569606781,
+          "mean_token_ce": 0.0679391548037529,
+          "sample_loss": 0.0679391548037529
+        },
+        {
+          "sample_id": "vrsbench_train_P4746_0040_qa_003",
+          "task_type": "vqa",
+          "supervised_token_count": 3,
+          "causal_supervised_token_count": 3,
+          "sum_cross_entropy": 0.015000184997916222,
+          "mean_token_ce": 0.005000061821192503,
+          "sample_loss": 0.005000061821192503
+        }
+      ],
+      "task_statistics": {
+        "scene_classification": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 3,
+          "supervised_token_share": 0.5,
+          "sum_cross_entropy": 0.2038174569606781,
+          "loss_numerator_share": 0.9314489231140027,
+          "mean_token_ce": 0.06793915232022603,
+          "mean_sample_loss": 0.0679391548037529
+        },
+        "vqa": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 3,
+          "supervised_token_share": 0.5,
+          "sum_cross_entropy": 0.015000184997916222,
+          "loss_numerator_share": 0.06855107688599726,
+          "mean_token_ce": 0.005000061665972074,
+          "mean_sample_loss": 0.005000061821192503
+        }
+      },
+      "batch_statistics": {
+        "sample_count": 2,
+        "supervised_tokens": 6,
+        "sum_cross_entropy": 0.21881764195859432,
+        "current_batch_loss": 0.036469604820013046,
+        "manual_batch_token_mean_loss": 0.036469606993099056,
+        "model_manual_loss_absolute_difference": 2.173086009749081e-09,
+        "per_sample_normalized_loss_mean": 0.0364696083124727
+      },
+      "batch_index": 14,
+      "memory": {
+        "peak_memory_allocated_mb": 5273.9580078125,
+        "peak_memory_reserved_mb": 6280.0
+      }
+    },
+    {
+      "sample_rows": [
+        {
+          "sample_id": "vrsbench_train_P1359_0043_caption",
+          "task_type": "captioning",
+          "supervised_token_count": 47,
+          "causal_supervised_token_count": 47,
+          "sum_cross_entropy": 47.02153778076172,
+          "mean_token_ce": 1.0004582405090332,
+          "sample_loss": 1.0004582405090332
+        },
+        {
+          "sample_id": "vrsbench_train_00302_0000_qa_000",
+          "task_type": "scene_classification",
+          "supervised_token_count": 3,
+          "causal_supervised_token_count": 3,
+          "sum_cross_entropy": 0.6705639362335205,
+          "mean_token_ce": 0.22352132201194763,
+          "sample_loss": 0.22352132201194763
+        }
+      ],
+      "task_statistics": {
+        "captioning": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 47,
+          "supervised_token_share": 0.94,
+          "sum_cross_entropy": 47.02153778076172,
+          "loss_numerator_share": 0.9859397277097863,
+          "mean_token_ce": 1.0004582506545046,
+          "mean_sample_loss": 1.0004582405090332
+        },
+        "scene_classification": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 3,
+          "supervised_token_share": 0.06,
+          "sum_cross_entropy": 0.6705639362335205,
+          "loss_numerator_share": 0.014060272290213682,
+          "mean_token_ce": 0.22352131207784018,
+          "mean_sample_loss": 0.22352132201194763
+        }
+      },
+      "batch_statistics": {
+        "sample_count": 2,
+        "supervised_tokens": 50,
+        "sum_cross_entropy": 47.69210171699524,
+        "current_batch_loss": 0.9538419842720032,
+        "manual_batch_token_mean_loss": 0.9538420343399048,
+        "model_manual_loss_absolute_difference": 5.006790160244634e-08,
+        "per_sample_normalized_loss_mean": 0.6119897812604904
+      },
+      "batch_index": 15,
+      "memory": {
+        "peak_memory_allocated_mb": 5273.9580078125,
+        "peak_memory_reserved_mb": 6280.0
+      }
+    },
+    {
+      "sample_rows": [
+        {
+          "sample_id": "vrsbench_train_P0893_0018_caption",
+          "task_type": "captioning",
+          "supervised_token_count": 98,
+          "causal_supervised_token_count": 98,
+          "sum_cross_entropy": 131.2271728515625,
+          "mean_token_ce": 1.3390527963638306,
+          "sample_loss": 1.3390527963638306
+        },
+        {
+          "sample_id": "vrsbench_train_P0769_0003_det_001",
+          "task_type": "detection",
+          "supervised_token_count": 31,
+          "causal_supervised_token_count": 31,
+          "sum_cross_entropy": 26.133636474609375,
+          "mean_token_ce": 0.843020498752594,
+          "sample_loss": 0.843020498752594
+        }
+      ],
+      "task_statistics": {
+        "captioning": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 98,
+          "supervised_token_share": 0.7596899224806202,
+          "sum_cross_entropy": 131.2271728515625,
+          "loss_numerator_share": 0.8339253808714182,
+          "mean_token_ce": 1.3390527841996174,
+          "mean_sample_loss": 1.3390527963638306
+        },
+        "detection": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 31,
+          "supervised_token_share": 0.24031007751937986,
+          "sum_cross_entropy": 26.133636474609375,
+          "loss_numerator_share": 0.1660746191285818,
+          "mean_token_ce": 0.8430205314390121,
+          "mean_sample_loss": 0.843020498752594
+        }
+      },
+      "batch_statistics": {
+        "sample_count": 2,
+        "supervised_tokens": 129,
+        "sum_cross_entropy": 157.36080932617188,
+        "current_batch_loss": 1.2198514938354492,
+        "manual_batch_token_mean_loss": 1.2198512350866038,
+        "model_manual_loss_absolute_difference": 2.587488454608433e-07,
+        "per_sample_normalized_loss_mean": 1.0910366475582123
+      },
+      "batch_index": 16,
+      "memory": {
+        "peak_memory_allocated_mb": 5311.02685546875,
+        "peak_memory_reserved_mb": 7144.0
+      }
+    },
+    {
+      "sample_rows": [
+        {
+          "sample_id": "vrsbench_train_P1228_0005_qa_001",
+          "task_type": "counting",
+          "supervised_token_count": 3,
+          "causal_supervised_token_count": 3,
+          "sum_cross_entropy": 2.408665895462036,
+          "mean_token_ce": 0.8028886318206787,
+          "sample_loss": 0.8028886318206787
+        },
+        {
+          "sample_id": "vrsbench_train_01841_0000_det_000",
+          "task_type": "detection",
+          "supervised_token_count": 29,
+          "causal_supervised_token_count": 29,
+          "sum_cross_entropy": 33.86012649536133,
+          "mean_token_ce": 1.167590618133545,
+          "sample_loss": 1.167590618133545
+        }
+      ],
+      "task_statistics": {
+        "counting": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 3,
+          "supervised_token_share": 0.09375,
+          "sum_cross_entropy": 2.408665895462036,
+          "loss_numerator_share": 0.06641152728513428,
+          "mean_token_ce": 0.8028886318206787,
+          "mean_sample_loss": 0.8028886318206787
+        },
+        "detection": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 29,
+          "supervised_token_share": 0.90625,
+          "sum_cross_entropy": 33.86012649536133,
+          "loss_numerator_share": 0.9335884727148658,
+          "mean_token_ce": 1.167590568805563,
+          "mean_sample_loss": 1.167590618133545
+        }
+      },
+      "batch_statistics": {
+        "sample_count": 2,
+        "supervised_tokens": 32,
+        "sum_cross_entropy": 36.268792390823364,
+        "current_batch_loss": 1.1333998441696167,
+        "manual_batch_token_mean_loss": 1.1333997622132301,
+        "model_manual_loss_absolute_difference": 8.195638656616211e-08,
+        "per_sample_normalized_loss_mean": 0.9852396249771118
+      },
+      "batch_index": 17,
+      "memory": {
+        "peak_memory_allocated_mb": 5311.02685546875,
+        "peak_memory_reserved_mb": 7144.0
+      }
+    },
+    {
+      "sample_rows": [
+        {
+          "sample_id": "vrsbench_train_P2704_0020_qa_000",
+          "task_type": "vqa",
+          "supervised_token_count": 3,
+          "causal_supervised_token_count": 3,
+          "sum_cross_entropy": 0.09063307195901871,
+          "mean_token_ce": 0.03021102398633957,
+          "sample_loss": 0.03021102398633957
+        },
+        {
+          "sample_id": "vrsbench_train_P8204_0107_qa_002",
+          "task_type": "counting",
+          "supervised_token_count": 3,
+          "causal_supervised_token_count": 3,
+          "sum_cross_entropy": 4.712859630584717,
+          "mean_token_ce": 1.5709532499313354,
+          "sample_loss": 1.5709532499313354
+        }
+      ],
+      "task_statistics": {
+        "counting": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 3,
+          "supervised_token_share": 0.5,
+          "sum_cross_entropy": 4.712859630584717,
+          "loss_numerator_share": 0.9811318393570114,
+          "mean_token_ce": 1.5709532101949055,
+          "mean_sample_loss": 1.5709532499313354
+        },
+        "vqa": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 3,
+          "supervised_token_share": 0.5,
+          "sum_cross_entropy": 0.09063307195901871,
+          "loss_numerator_share": 0.018868160642988612,
+          "mean_token_ce": 0.03021102398633957,
+          "mean_sample_loss": 0.03021102398633957
+        }
+      },
+      "batch_statistics": {
+        "sample_count": 2,
+        "supervised_tokens": 6,
+        "sum_cross_entropy": 4.8034927025437355,
+        "current_batch_loss": 0.8005821108818054,
+        "manual_batch_token_mean_loss": 0.8005821170906225,
+        "model_manual_loss_absolute_difference": 6.208817127095756e-09,
+        "per_sample_normalized_loss_mean": 0.8005821369588375
+      },
+      "batch_index": 18,
+      "memory": {
+        "peak_memory_allocated_mb": 5311.02685546875,
+        "peak_memory_reserved_mb": 7144.0
+      }
+    },
+    {
+      "sample_rows": [
+        {
+          "sample_id": "vrsbench_train_05730_0000_qa_000",
+          "task_type": "scene_classification",
+          "supervised_token_count": 5,
+          "causal_supervised_token_count": 5,
+          "sum_cross_entropy": 0.3303648829460144,
+          "mean_token_ce": 0.066072978079319,
+          "sample_loss": 0.066072978079319
+        },
+        {
+          "sample_id": "vrsbench_train_P7476_0129_qa_001",
+          "task_type": "vqa",
+          "supervised_token_count": 4,
+          "causal_supervised_token_count": 4,
+          "sum_cross_entropy": 1.920528769493103,
+          "mean_token_ce": 0.48013219237327576,
+          "sample_loss": 0.48013219237327576
+        }
+      ],
+      "task_statistics": {
+        "scene_classification": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 5,
+          "supervised_token_share": 0.5555555555555556,
+          "sum_cross_entropy": 0.3303648829460144,
+          "loss_numerator_share": 0.14677054270779244,
+          "mean_token_ce": 0.06607297658920289,
+          "mean_sample_loss": 0.066072978079319
+        },
+        "vqa": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 4,
+          "supervised_token_share": 0.4444444444444444,
+          "sum_cross_entropy": 1.920528769493103,
+          "loss_numerator_share": 0.8532294572922076,
+          "mean_token_ce": 0.48013219237327576,
+          "mean_sample_loss": 0.48013219237327576
+        }
+      },
+      "batch_statistics": {
+        "sample_count": 2,
+        "supervised_tokens": 9,
+        "sum_cross_entropy": 2.2508936524391174,
+        "current_batch_loss": 0.2500992715358734,
+        "manual_batch_token_mean_loss": 0.2500992947154575,
+        "model_manual_loss_absolute_difference": 2.3179584085486482e-08,
+        "per_sample_normalized_loss_mean": 0.2731025852262974
+      },
+      "batch_index": 19,
+      "memory": {
+        "peak_memory_allocated_mb": 5311.02685546875,
+        "peak_memory_reserved_mb": 7144.0
+      }
+    },
+    {
+      "sample_rows": [
+        {
+          "sample_id": "vrsbench_train_P1353_0045_caption",
+          "task_type": "captioning",
+          "supervised_token_count": 95,
+          "causal_supervised_token_count": 95,
+          "sum_cross_entropy": 106.6190185546875,
+          "mean_token_ce": 1.1223055124282837,
+          "sample_loss": 1.1223055124282837
+        },
+        {
+          "sample_id": "vrsbench_train_P2641_0075_qa_003",
+          "task_type": "scene_classification",
+          "supervised_token_count": 3,
+          "causal_supervised_token_count": 3,
+          "sum_cross_entropy": 0.26190075278282166,
+          "mean_token_ce": 0.08730025589466095,
+          "sample_loss": 0.08730025589466095
+        }
+      ],
+      "task_statistics": {
+        "captioning": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 95,
+          "supervised_token_share": 0.9693877551020408,
+          "sum_cross_entropy": 106.6190185546875,
+          "loss_numerator_share": 0.9975496023567182,
+          "mean_token_ce": 1.1223054584703946,
+          "mean_sample_loss": 1.1223055124282837
+        },
+        "scene_classification": {
+          "sample_count": 1,
+          "sample_share": 0.5,
+          "supervised_tokens": 3,
+          "supervised_token_share": 0.030612244897959183,
+          "sum_cross_entropy": 0.26190075278282166,
+          "loss_numerator_share": 0.002450397643281839,
+          "mean_token_ce": 0.08730025092760722,
+          "mean_sample_loss": 0.08730025589466095
+        }
+      },
+      "batch_statistics": {
+        "sample_count": 2,
+        "supervised_tokens": 98,
+        "sum_cross_entropy": 106.88091930747032,
+        "current_batch_loss": 1.0906215906143188,
+        "manual_batch_token_mean_loss": 1.0906216255864318,
+        "model_manual_loss_absolute_difference": 3.4972112983311376e-08,
+        "per_sample_normalized_loss_mean": 0.6048028841614723
+      },
+      "batch_index": 20,
+      "memory": {
+        "peak_memory_allocated_mb": 5311.02685546875,
+        "peak_memory_reserved_mb": 7144.0
+      }
+    }
+  ]
+}

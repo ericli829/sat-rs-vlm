@@ -22,6 +22,8 @@ Number = int | float
 VqaQuestionType = Literal["yes_no", "number", "direction", "short_answer"]
 NON_FINITE_PATTERN = re.compile(r"(?<!\w)(?:nan|[-+]?inf(?:inity)?)(?!\w)", re.IGNORECASE)
 NUMBER_PATTERN = re.compile(r"[-+]?\d+(?:\.\d+)?")
+REPEATED_CHARACTER_PATTERN = re.compile(r"(.)\1{15,}", re.DOTALL)
+REPEATED_TOKEN_PATTERN = re.compile(r"\b(\w+)(?:\s+\1){5,}\b", re.IGNORECASE)
 
 
 def extract_first_number(text: str) -> int | float | None:
@@ -49,6 +51,36 @@ def _contains_non_finite(value: Any) -> bool:
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         return any(_contains_non_finite(item) for item in value)
     return False
+
+
+def _contains_letter_or_number(text: str) -> bool:
+    return any(character.isalnum() for character in text)
+
+
+def _detect_degenerate_text(text: str, errors: list[str]) -> None:
+    """Detect obvious generation collapse before confidence voting.
+
+    These checks intentionally target only high-confidence degeneration patterns:
+    repeated symbols such as ``!!!!!!!!`` or ``???????``, one-token loops, and
+    very low-diversity long strings. Short valid answers such as ``yes`` or ``3``
+    should not be rejected by this generic guard.
+    """
+
+    stripped = text.strip()
+    if not stripped:
+        return
+    if REPEATED_CHARACTER_PATTERN.search(stripped):
+        _append_once(errors, "degenerate_repeated_character")
+    if REPEATED_TOKEN_PATTERN.search(stripped):
+        _append_once(errors, "degenerate_repeated_token")
+    if len(stripped) >= 8 and not _contains_letter_or_number(stripped):
+        _append_once(errors, "degenerate_symbol_only")
+    compact = "".join(stripped.split())
+    if len(compact) >= 32:
+        unique_count = len(set(compact))
+        most_common = max((compact.count(character) for character in set(compact)), default=0)
+        if unique_count <= 3 or most_common / len(compact) >= 0.85:
+            _append_once(errors, "degenerate_low_diversity")
 
 
 def _as_payload(output: Any) -> Any:
@@ -244,6 +276,7 @@ def validate_prediction(
             return ValidationResult(valid=False, errors=["output_empty"])
         if len(stripped) > max_length:
             _append_once(errors, "output_too_long")
+        _detect_degenerate_text(stripped, errors)
         should_parse = task == TaskType.DETECTION.value or stripped.startswith(("{", "["))
         payload = _parse_json_text(stripped, errors) if should_parse else stripped
     if isinstance(payload, (Mapping, list)) and not payload:

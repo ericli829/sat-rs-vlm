@@ -468,14 +468,7 @@ def run_benchmark(
 
     torch = None
     modules: dict[str, Any] | None = None
-    if dry_run:
-        try:
-            torch = importlib.import_module("torch")
-        except ModuleNotFoundError as exc:
-            raise ImportError(
-                "Quantization dry-run requires torch for backend capability checks"
-            ) from exc
-    else:
+    if not dry_run:
         modules = safe_import_model_dependencies(require_bitsandbytes=backend.requires_bitsandbytes)
         torch = modules["torch"]
     dataset, sample_manifest, eval_file, image_root = validate_assets(

@@ -1,0 +1,38 @@
+# Formal SEU sensitivity experiment: Evaluation v1.5 + paired Bootstrap comparison.
+experiment:
+  name: qwen3vl_v15_seu_sensitivity
+  seed: 20260814
+model:
+  base_model: ${MODEL_ROOT}/Qwen3-VL-2B-Instruct
+  processor_id: ${MODEL_ROOT}/Qwen3-VL-2B-Instruct
+  adapter_path: ${OUTPUT_ROOT}/training/lora_baseline/best_adapter
+  local_files_only: true
+  trust_remote_code: true
+  device_map: auto
+  torch_dtype: float16
+  attn_implementation: sdpa
+data:
+  dataset_root: ${DATA_ROOT}
+  # E1 is the high-throughput diagnostic sweep tier. Promote high-risk
+  # conditions to E2/E3 explicitly; never compare different tier hashes.
+  eval_manifest: data/evaluation/tiers/e1_quick.jsonl
+  max_eval_samples: null
+  max_seq_length: 1024
+  eval_batch_size: 16
+  group_by_task: true
+  log_every_samples: 20
+generation:
+  do_sample: false
+  num_beams: 1
+  max_new_tokens: 128
+evaluation:
+  contract: configs/eval/evaluation_contract_v1.5.yaml
+  tier: E1
+  tiers_manifest: data/evaluation/tiers/evaluation_tiers_manifest.json
+  semantic: false
+fault:
+  sensitivity_targets: [lora_adapter]
+  layer_indices: []
+  bit_flip_counts: [1, 10, 100]
+  repeats: 3
+  bit_planes: [all]

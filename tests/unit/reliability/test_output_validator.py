@@ -45,3 +45,21 @@ def test_vqa_type_constraints() -> None:
         in validate_prediction("vqa", "maybe", vqa_question_type="yes_no").errors
     )
     assert validate_prediction("vqa", "north", vqa_question_type="direction").valid
+
+
+@pytest.mark.parametrize(
+    ("output", "error"),
+    [
+        ("!!!!!!!!!!!!!!!!!!!!", "degenerate_repeated_character"),
+        ("loop loop loop loop loop loop", "degenerate_repeated_token"),
+        ("!@#$%^&*", "degenerate_symbol_only"),
+        ("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "degenerate_low_diversity"),
+    ],
+)
+def test_generation_collapse_patterns_are_rejected(output: str, error: str) -> None:
+    assert error in validate_prediction("captioning", output).errors
+
+
+@pytest.mark.parametrize("output", ["yes", "no", "3", "north"])
+def test_valid_short_answers_are_not_rejected_as_degenerate(output: str) -> None:
+    assert validate_prediction("vqa", output).valid

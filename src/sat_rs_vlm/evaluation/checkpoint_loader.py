@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from sat_rs_vlm.models.qwen3vl_loader import compatible_model_class
+from sat_rs_vlm.models.reliability.checksum import file_sha256
 from sat_rs_vlm.training.utils import resolve_torch_dtype
 
 
@@ -40,6 +41,28 @@ def validate_checkpoint_files(checkpoint: str | Path, manifest: dict[str, Any]) 
         )
         if not any(path.is_file() for path in adapter_weight_files):
             raise FileNotFoundError(f"Adapter weights are missing: {checkpoint_path}")
+<<<<<<< Updated upstream
+=======
+        if manifest.get("checkpoint_type") == "adapter_with_visual_sidecar":
+            sidecar_name = str(manifest.get("visual_sidecar", ""))
+            if not sidecar_name:
+                raise ValueError("H1 checkpoint manifest does not declare visual_sidecar")
+            if not (checkpoint_path / sidecar_name).is_file():
+                raise FileNotFoundError(
+                    f"H1 visual sidecar is missing: {checkpoint_path / sidecar_name}"
+                )
+            sidecar_manifest = checkpoint_path / "visual_trainable_manifest.json"
+            if sidecar_manifest.is_file():
+                payload = json.loads(sidecar_manifest.read_text(encoding="utf-8"))
+                if payload.get("weights") != sidecar_name:
+                    raise ValueError(
+                        "Visual sidecar manifest does not match strategy manifest: "
+                        f"{payload.get('weights')} != {sidecar_name}"
+                    )
+                expected_hash = payload.get("sha256")
+                if expected_hash and file_sha256(checkpoint_path / sidecar_name) != expected_hash:
+                    raise ValueError("Visual sidecar checksum mismatch")
+>>>>>>> Stashed changes
     else:
         if not (checkpoint_path / "config.json").is_file():
             raise FileNotFoundError(f"Full-model config.json is missing: {checkpoint_path}")

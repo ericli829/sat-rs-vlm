@@ -6,11 +6,17 @@ import pytest
 from sat_rs_vlm.models.reliability.checksum import file_sha256
 from sat_rs_vlm.models.reliability.fault_injector import (
     ParameterSelector,
+    bit_indices_for_tensor,
+    fault_bits_from_density,
+    inject_model_parameter_bitflips,
     inject_safetensors_adapter,
     inject_state_dict_bitflips,
     load_safetensors_state,
+    model_fault_inventory,
     save_safetensors_state,
     selectable_parameters,
+    selector_for_fault_target,
+    summarize_fault_inventory,
 )
 
 
@@ -74,6 +80,80 @@ def test_no_matching_parameter_fails() -> None:
             seed=1,
             selector=ParameterSelector(name_regex=r"does_not_exist"),
         )
+
+
+def test_visual_sidecar_regions_are_selectable_by_target_and_layer() -> None:
+    torch = pytest.importorskip("torch")
+    state = {
+        "base_model.model.visual.blocks.25.attn.weight": torch.ones(2),
+        "base_model.model.visual.blocks.26.attn.weight": torch.ones(2),
+        "base_model.model.visual.merger.mlp.weight": torch.ones(2),
+        "base_model.model.model.layers.0.self_attn.weight": torch.ones(2),
+    }
+    blocks = selectable_parameters(
+        state,
+        selector_for_fault_target("visual_blocks", layer_indices=(26,)),
+    )
+    merger = selectable_parameters(state, selector_for_fault_target("visual_merger"))
+    assert [name for name, _ in blocks] == ["base_model.model.visual.blocks.26.attn.weight"]
+    assert [name for name, _ in merger] == ["base_model.model.visual.merger.mlp.weight"]
+
+
+def test_named_target_in_memory_injection_changes_only_selected_region() -> None:
+    torch = pytest.importorskip("torch")
+
+    class Model(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.visual = torch.nn.Linear(2, 2, bias=False)
+            self.language = torch.nn.Linear(2, 2, bias=False)
+
+    model = Model()
+    clean_visual = model.visual.weight.detach().clone()
+    clean_language = model.language.weight.detach().clone()
+    records = inject_model_parameter_bitflips(
+        model,
+        num_bits=1,
+        seed=7,
+        selector=selector_for_fault_target("vision_encoder"),
+    )
+    assert len(records) == 1
+    assert records[0].target_name.startswith("visual.")
+    assert not torch.equal(model.visual.weight, clean_visual)
+    assert torch.equal(model.language.weight, clean_language)
+
+
+def test_unknown_target_and_normalized_density_are_explicit() -> None:
+    with pytest.raises(ValueError, match="fault.target"):
+        selector_for_fault_target("kv_cache")
+    assert fault_bits_from_density(1_000_000, 10) == 10
+    assert fault_bits_from_density(30, 1) == 1
+
+
+def test_float_bit_planes_are_disjoint_and_cover_dtype() -> None:
+    torch = pytest.importorskip("torch")
+    tensor = torch.ones(1, dtype=torch.float32)
+    sign = set(bit_indices_for_tensor(tensor, "sign"))
+    exponent = set(bit_indices_for_tensor(tensor, "exponent"))
+    mantissa = set(bit_indices_for_tensor(tensor, "mantissa"))
+    assert not sign & exponent
+    assert not sign & mantissa
+    assert not exponent & mantissa
+    assert sign | exponent | mantissa == set(range(32))
+
+
+def test_visual_merger_inventory_is_not_misclassified_as_generic_mlp() -> None:
+    torch = pytest.importorskip("torch")
+
+    class Model(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.visual = torch.nn.Module()
+            self.visual.merger = torch.nn.Linear(2, 2)
+
+    inventory = model_fault_inventory(Model())
+    groups = summarize_fault_inventory(inventory)
+    assert {group["region"] for group in groups} == {"visual_merger"}
 
 
 def test_safetensors_adapter_injection_preserves_source_and_reloads(tmp_path: Path) -> None:

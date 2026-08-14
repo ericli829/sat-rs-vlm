@@ -16,6 +16,9 @@
 | 输出层 | 通用、counting、detection、VQA 验证 | 文本、JSON、统一结果字典 | 本地已测试 |
 | 保护/恢复 | no protection、checksum recovery、output guard vote、weight clamp | 文件、输出、state dict | 本地 smoke 已测试 |
 | 真实实验 | Qwen3-VL clean/fault/recovered 推理 | 标准 LoRA checkpoint | 代码已实现，等待 AutoDL 验证 |
+| v1.5 sensitivity | target/layer/bit-plane/repeat + paired Bootstrap | E1/E2/E3 | 本地控制流已测试 |
+| Activation Guard | research 记录、deployment fail closed | NaN/Inf/max_abs | 本地已测试 |
+| 冗余恢复 | checksum、warm/golden replica、scrub | Adapter bundle | 本地已测试 |
 
 每条 `BitFlipRecord` 包含目标名、元素/字节/bit 地址、dtype、shape、翻转前后值或
 字节、随机 seed。随机注入在候选 bit 地址空间中无放回抽样，固定 seed 可复现。
@@ -76,5 +79,10 @@ ${OUTPUT_ROOT}/reliability/<experiment>/<run_id>/
 - bit flip 是软件级故障模型，不模拟缓存层次、总线、电磁环境或真实器件故障率。
 - bfloat16/float16/float32 Adapter 已由本地小文件覆盖；大型分片或非标准 PEFT 文件布局需另测。
 
-后续可扩展 ECC、参数冗余、故障时间模型、层敏感性扫描、量化权重注入和卫星平台硬件在环实验。
+Evaluation v1.5 sensitivity、恢复运行和 task-metric risk policy 的操作方法见
+[SEU Sensitivity 与保护策略](seu_v15_operation.md)。Reliability sweep 默认 E1，训练后模型
+评测默认 E2；两者用途不同。
+
+后续可扩展 ECC、故障时间模型、量化权重注入和卫星平台硬件在环实验。Consensus Guard 当前只
+保留 detector/recovery 接口，尚未实现未经验证的 generalist/specialist ensemble。
 

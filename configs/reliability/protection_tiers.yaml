@@ -1,0 +1,15 @@
+# Software protection policy. Hardware ECC/TMR implementation is platform-specific.
+protection_tiers:
+  low:
+    triggers: "low changed/invalid rate, low task degradation"
+    actions: [monitor, record_fault_metadata]
+  medium:
+    triggers: "intermittent invalid output or moderate task degradation"
+    actions: [output_validation, retry, recompute_current_step]
+  high:
+    triggers: "sensitive file or recurrent task degradation"
+    actions: [sha256_manifest, warm_replica, golden_replica, scheduled_scrub]
+  critical:
+    triggers: "high-risk layer or exponent/sign bit with catastrophic degradation"
+    actions: [selective_ecc, dual_execution_detection, tmr, rollback]
+    note: "ECC/TMR/rollback require target runtime or hardware integration; this repository provides the policy boundary and software simulation only."
