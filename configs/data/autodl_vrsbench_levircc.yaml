@@ -6,6 +6,12 @@ output:
   validation_file: "/root/autodl-tmp/sat-rs-vlm/data/processed/multisource/vrsbench_levircc_val.jsonl"
   report_file: "/root/autodl-tmp/sat-rs-vlm/data/processed/multisource/vrsbench_levircc_report.json"
 
+# Additive evaluation-only output. The normal training-data command ignores this
+# section, so the historical 1024/1333 validation preparation remains unchanged.
+evaluation:
+  full_population_file: "/root/autodl-tmp/sat-rs-vlm/data/processed/multisource/vrsbench_levircc_eval_full.jsonl"
+  full_population_report: "/root/autodl-tmp/sat-rs-vlm/data/processed/multisource/vrsbench_levircc_eval_full_report.json"
+
 sources:
   - name: "VRSBench"
     image_root: "/root/autodl-tmp/datasets/VRSBench"

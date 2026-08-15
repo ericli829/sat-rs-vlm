@@ -373,6 +373,9 @@ def evaluate(
         eval_batch_size=batch_size,
         group_by_task=group_by_task,
         evaluation_tier=tier_identity["tier"] if tier_identity else None,
+        evaluation_tier_version=(
+            tier_identity["tier_version"] if tier_identity else None
+        ),
         evaluation_tier_sha256=tier_identity["sha256"] if tier_identity else None,
     )
     summary_file.parent.mkdir(parents=True, exist_ok=True)

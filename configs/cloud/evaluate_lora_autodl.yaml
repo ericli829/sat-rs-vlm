@@ -8,12 +8,12 @@ model:
   attn_implementation: "sdpa"
 
 data:
-  # Formal AutoDL submission evaluation: frozen E2 standard tier.
-  eval_file: "/root/autodl-tmp/sat-rs-vlm/data/evaluation/tiers/e2_standard.jsonl"
-  image_root: "/root/autodl-tmp/datasets/VRSBench"
+  # Formal AutoDL submission evaluation: Unified VRSBench + LEVIR-CC E2 v2.
+  eval_file: "/root/autodl-tmp/sat-rs-vlm/data/evaluation/tiers_v2/e2_standard.jsonl"
+  image_root: "/root/autodl-tmp/datasets"
   max_seq_length: 1024
   max_eval_samples: null
-  tiers_manifest: "/root/autodl-tmp/sat-rs-vlm/data/evaluation/tiers/evaluation_tiers_manifest.json"
+  tiers_manifest: "/root/autodl-tmp/sat-rs-vlm/data/evaluation/tiers_v2/evaluation_tiers_manifest.json"
   eval_batch_size: 32
   group_by_task: true
   log_every_samples: 100
@@ -26,6 +26,7 @@ generation:
     counting: 16
     scene_classification: 32
     vqa: 64
+    change_detection: 128
   do_sample: false
   temperature: 0.0
   num_beams: 1
@@ -36,4 +37,5 @@ output:
 
 evaluation:
   tier: "E2"
-  tiers_manifest: "/root/autodl-tmp/sat-rs-vlm/data/evaluation/tiers/evaluation_tiers_manifest.json"
+  tier_version: "unified-v2"
+  tiers_manifest: "/root/autodl-tmp/sat-rs-vlm/data/evaluation/tiers_v2/evaluation_tiers_manifest.json"

@@ -13,12 +13,23 @@ from typing import Any
 
 TIER_NAMES = ("E1", "E2", "E3")
 DEFAULT_EVALUATION_TIER = "E2"
-DEFAULT_TIER_FILES = {
+LEGACY_TIER_VERSION = "legacy-vrs-v1"
+UNIFIED_TIER_VERSION = "unified-v2"
+DEFAULT_EVALUATION_TIER_VERSION = UNIFIED_TIER_VERSION
+LEGACY_TIER_FILES = {
     "E1": "data/evaluation/tiers/e1_quick.jsonl",
     "E2": "data/evaluation/tiers/e2_standard.jsonl",
     "E3": "data/evaluation/tiers/e3_full.jsonl",
 }
-DEFAULT_TIERS_MANIFEST = "data/evaluation/tiers/evaluation_tiers_manifest.json"
+UNIFIED_TIER_FILES = {
+    "E1": "data/evaluation/tiers_v2/e1_quick.jsonl",
+    "E2": "data/evaluation/tiers_v2/e2_standard.jsonl",
+    "E3": "data/evaluation/tiers_v2/e3_full.jsonl",
+}
+DEFAULT_TIER_FILES = UNIFIED_TIER_FILES
+LEGACY_TIERS_MANIFEST = "data/evaluation/tiers/evaluation_tiers_manifest.json"
+UNIFIED_TIERS_MANIFEST = "data/evaluation/tiers_v2/evaluation_tiers_manifest.json"
+DEFAULT_TIERS_MANIFEST = UNIFIED_TIERS_MANIFEST
 
 
 def normalize_tier(value: str | None) -> str:
@@ -30,10 +41,20 @@ def normalize_tier(value: str | None) -> str:
     return tier
 
 
-def default_tier_file(tier: str = DEFAULT_EVALUATION_TIER) -> str:
+def default_tier_file(
+    tier: str = DEFAULT_EVALUATION_TIER,
+    *,
+    tier_version: str = DEFAULT_EVALUATION_TIER_VERSION,
+) -> str:
     """返回仓库相对路径形式的固定评测 JSONL 路径。"""
 
-    return DEFAULT_TIER_FILES[normalize_tier(tier)]
+    files = LEGACY_TIER_FILES if tier_version == LEGACY_TIER_VERSION else UNIFIED_TIER_FILES
+    if tier_version not in {LEGACY_TIER_VERSION, UNIFIED_TIER_VERSION}:
+        raise ValueError(
+            f"Unknown evaluation tier version {tier_version!r}; choose "
+            f"{LEGACY_TIER_VERSION!r} or {UNIFIED_TIER_VERSION!r}."
+        )
+    return files[normalize_tier(tier)]
 
 
 def resolve_tier_identity(
@@ -52,11 +73,20 @@ def resolve_tier_identity(
     evaluation = dict(config.get("evaluation", {}))
     data = dict(config.get("data", {}))
     tier = normalize_tier(evaluation.get("tier"))
-    eval_file = str(data.get("eval_file") or default_tier_file(tier))
+    tier_version = str(
+        evaluation.get("tier_version") or DEFAULT_EVALUATION_TIER_VERSION
+    )
+    eval_file = str(
+        data.get("eval_file") or default_tier_file(tier, tier_version=tier_version)
+    )
     manifest = str(
         evaluation.get("tiers_manifest")
         or data.get("tiers_manifest")
-        or DEFAULT_TIERS_MANIFEST
+        or (
+            LEGACY_TIERS_MANIFEST
+            if tier_version == LEGACY_TIER_VERSION
+            else UNIFIED_TIERS_MANIFEST
+        )
     )
     eval_path = Path(eval_file).expanduser()
     if not eval_path.is_absolute():
@@ -66,12 +96,13 @@ def resolve_tier_identity(
         manifest_path = project_root / manifest_path
     return {
         "tier": tier,
+        "tier_version": tier_version,
         "eval_file": eval_file,
         "eval_path": eval_path,
         "tiers_manifest": manifest,
         "tiers_manifest_path": manifest_path,
         "is_default_tier_file": eval_file.replace("\\", "/")
-        == default_tier_file(tier),
+        == default_tier_file(tier, tier_version=tier_version),
     }
 
 
@@ -135,6 +166,11 @@ def validate_tier_asset(
             )
     return {
         "tier": normalized,
+        "tier_version": str(
+            json.loads(manifest_path.read_text(encoding="utf-8")).get(
+                "tier_version", LEGACY_TIER_VERSION
+            )
+        ),
         "sha256": canonical_hash,
         "raw_sha256": actual_hash,
         "sample_count": expected_count,

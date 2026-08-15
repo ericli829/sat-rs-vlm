@@ -202,11 +202,24 @@ python scripts/train_qwen3vl_lora.py \
 完整流程、泄漏保护和 AutoDL 命令见
 [H1 Hard Example Visual Adaptation](docs/training/hard_example_visual_adaptation.md)。
 
+### H2 全局多任务精炼
+
+H2-A 从 Replay generalist adapter 继续 LoRA-only 训练：先在 Unified E3 v2 排除保护下
+构建 6000 条 mining candidates，经现有 Evaluation v1.5 评分后，在每个
+`dataset × task` cell 内构建 60% regular、25% medium-hard、15% core-hard 的 8000 条
+训练集。默认源比例为 VRSBench 75% / LEVIR-CC 25%，Vision 完全冻结，训练长度由
+1.5 effective epochs 动态解析。详见
+[H2 Global Multitask Refinement](docs/training/h2_global_multitask_refinement.md)。
+
 ## Evaluation v1.5
 
 `src/sat_rs_vlm/evaluation/` 是唯一正式评估内核，统一负责协议解析、任务指标、语义诊断、
 配对比较和绘图。`evaluate_rs_vlm.py` 只负责真实模型生成，生成的 predictions 会自动进入
 v1.5 runner；Keyword Hit 仅保留在 repository compatibility 诊断中，不作为主要指标。
+
+未来正式训练默认使用 Unified E2 v2（VRSBench + LEVIR-CC）。历史 VRS-only E1/E2/E3
+保留为 `legacy-vrs-v1`，只用于旧实验的同 SHA 配对比较；comparison 会同时校验 tier
+version 与 SHA256。
 
 ```bash
 # 真实模型生成 + 统一评估

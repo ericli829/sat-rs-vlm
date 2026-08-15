@@ -1,0 +1,45 @@
+schema_version: "2.0"
+tier_version: "unified-v2"
+seed: 42
+output_dir: "data/evaluation/tiers_v2"
+
+evaluation_scope:
+  datasets:
+    - "VRSBench"
+    - "LEVIR-CC"
+  tasks:
+    - captioning
+    - detection
+    - counting
+    - scene_classification
+    - vqa
+    - change_detection
+  evaluation_unit:
+    VRSBench: "annotation_task_case"
+    LEVIR-CC: "one_deterministic_reference_per_image_pair"
+
+data:
+  common_image_root: "${DATA_ROOT}"
+  source_files:
+    - "data/processed/multisource/vrsbench_levircc_eval_full.jsonl"
+  train_files:
+    - "data/processed/multisource/vrsbench_levircc_train.jsonl"
+
+stratification:
+  dataset_weights:
+    VRSBench: 0.80
+    LEVIR-CC: 0.20
+  task_balance: "sqrt_population"
+  subtype_balance: "equal_with_capacity_redistribution"
+  source_shortage_policy: "redistribute"
+  detection_area_thresholds:
+    small_max: 0.01
+    medium_max: 0.10
+
+tiers:
+  E1:
+    target_samples: 593
+  E2:
+    target_samples: 3000
+  E3:
+    mode: "full"

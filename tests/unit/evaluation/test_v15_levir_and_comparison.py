@@ -307,6 +307,41 @@ class ComparisonTests(unittest.TestCase):
                     bootstrap_resamples=5,
                 )
 
+    def test_legacy_and_unified_tier_versions_cannot_be_paired(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            baseline = root / "baseline"
+            candidate = root / "candidate"
+            self._make_evaluation(baseline, self._rows(False))
+            self._make_evaluation(candidate, self._rows(True))
+            write_json(
+                baseline / "evaluation_manifest.json",
+                {
+                    "contract_version": "1.5",
+                    "evaluation_tier": "E2",
+                    "evaluation_tier_version": "legacy-vrs-v1",
+                    "evaluation_tier_sha256": "legacy-sha",
+                },
+            )
+            write_json(
+                candidate / "evaluation_manifest.json",
+                {
+                    "contract_version": "1.5",
+                    "evaluation_tier": "E2",
+                    "evaluation_tier_version": "unified-v2",
+                    "evaluation_tier_sha256": "unified-sha",
+                },
+            )
+
+            with self.assertRaisesRegex(ComparisonError, "tier versions"):
+                compare_evaluations(
+                    baseline,
+                    candidate,
+                    root / "comparison",
+                    protected_repository=root / "protected",
+                    bootstrap_resamples=5,
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

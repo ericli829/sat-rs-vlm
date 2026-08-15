@@ -8,7 +8,8 @@ evaluation:
   contract: "configs/eval/evaluation_contract_v1.5.yaml"
   # Offline evaluation of a submitted model is paired with E2 by default.
   tier: "E2"
-  tiers_manifest: "data/evaluation/tiers/evaluation_tiers_manifest.json"
+  tier_version: "unified-v2"
+  tiers_manifest: "data/evaluation/tiers_v2/evaluation_tiers_manifest.json"
   manifest: null
   strict: true
   semantic: true
@@ -17,12 +18,14 @@ evaluation:
   latency_semantics: "single_sample"
   eval_batch_size: 1
   group_by_task: true
-  dataset: "VRSBench"
+  dataset: "Unified VRSBench + LEVIR-CC"
   tasks:
     - detection
     - counting
     - captioning
     - vqa
+    - scene_classification
+    - change_detection
   sample_num: null
 
 comparison:

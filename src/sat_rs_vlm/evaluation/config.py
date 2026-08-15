@@ -44,6 +44,7 @@ class EvaluationProtocolConfig(BaseModel):
     tasks: list[str] = Field(default_factory=list)
     sample_num: int | None = Field(default=None, gt=0)
     tier: Literal["E1", "E2", "E3"] | None = None
+    tier_version: Literal["legacy-vrs-v1", "unified-v2"] | None = None
     tiers_manifest: str | None = None
 
 

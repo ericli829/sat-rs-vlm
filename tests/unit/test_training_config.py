@@ -64,3 +64,38 @@ def test_statistics_and_hard_mining_share_bbox_thresholds(tmp_path: Path) -> Non
 
     with pytest.raises(ValidationError, match="identical bbox_area_thresholds"):
         load_training_config(config_path, allow_unresolved_env=True)
+
+
+def test_h2_a_config_strictly_preserves_single_variable_protocol() -> None:
+    config = load_training_config(
+        "configs/train/qwen3vl_h2_global_refinement.yaml",
+        allow_unresolved_env=True,
+    )
+
+    assert config.h2_refinement.enabled is True
+    assert config.h2_refinement.difficulty_mode == "cell_rank"
+    assert config.h2_refinement.source_weights == {"VRSBench": 0.75, "LEVIR-CC": 0.25}
+    assert config.loss.mode == "task_weighted"
+    assert set(config.loss.task_weights.values()) == {1.0}
+    assert config.vision_tuning.enabled is False
+    assert config.training.freeze_vision_encoder is True
+    assert config.data.sampling_mode == "uniform"
+    assert config.training.num_train_epochs is None
+    assert config.training.max_steps is None
+    assert config.training.target_effective_epochs == pytest.approx(1.5)
+    assert config.training.max_effective_epochs == pytest.approx(2.0)
+    assert config.training.allow_overtrain is False
+    assert config.lora.initial_adapter_dir == config.h2_refinement.source_checkpoint
+
+
+def test_h2_a_requires_replay_adapter_and_rejects_vision_tuning(tmp_path: Path) -> None:
+    payload = yaml.safe_load(
+        Path("configs/train/qwen3vl_h2_global_refinement.yaml").read_text("utf-8")
+    )
+    payload["lora"]["initial_adapter_dir"] = None
+    payload["vision_tuning"]["enabled"] = True
+    config_path = tmp_path / "invalid-h2.yaml"
+    config_path.write_text(yaml.safe_dump(payload), encoding="utf-8")
+
+    with pytest.raises(ValidationError, match="Invalid H2-A configuration"):
+        load_training_config(config_path, allow_unresolved_env=True)

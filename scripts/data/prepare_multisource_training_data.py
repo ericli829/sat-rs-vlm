@@ -37,6 +37,16 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help="Zero-based replay round used for deterministic sample rotation.",
     )
+    parser.add_argument(
+        "--full-evaluation-only",
+        action="store_true",
+        help=(
+            "Build the complete legal evaluation population without applying "
+            "validation_samples limits or preparing training output."
+        ),
+    )
+    parser.add_argument("--evaluation-output", default=None)
+    parser.add_argument("--evaluation-report-output", default=None)
     return parser.parse_args()
 
 
@@ -467,18 +477,141 @@ def prepare_multisource_data(
     return report
 
 
+def prepare_full_evaluation_population(
+    config: dict[str, Any],
+    *,
+    include_sources: set[str] | None = None,
+    evaluation_output: str | Path | None = None,
+    report_output: str | Path | None = None,
+) -> dict[str, Any]:
+    """构建完整合法多源评测 population，不改变历史训练采样行为。
+
+    对 ``validation_group_by_images=true`` 的数据源，每组图像只保留一个由固定
+    seed 选择的 reference case。LEVIR-CC 因而以 image pair 为评测单位，而不是
+    把同一 image pair 的五条 caption 当作五个独立 case。所有图像仍通过现有
+    ``_load_source_split`` 路径修复和 portable-path 校验链路。
+    """
+
+    common_image_root = Path(str(config["common_image_root"])).expanduser().resolve()
+    if not common_image_root.is_dir():
+        raise FileNotFoundError(f"common_image_root does not exist: {common_image_root}")
+    output_config = dict(config.get("output", {}))
+    evaluation_config = dict(config.get("evaluation", {}))
+    destination_value = (
+        evaluation_output
+        or evaluation_config.get("full_population_file")
+        or output_config.get("full_evaluation_file")
+    )
+    report_value = (
+        report_output
+        or evaluation_config.get("full_population_report")
+        or output_config.get("full_evaluation_report")
+    )
+    if destination_value is None or report_value is None:
+        raise ValueError(
+            "Full evaluation preparation requires --evaluation-output and "
+            "--evaluation-report-output, or matching evaluation/output config fields"
+        )
+    destination = Path(str(destination_value))
+    report_path = Path(str(report_value))
+    seed = int(config.get("seed", 42))
+    selected_sources = [
+        dict(source)
+        for source in list(config.get("sources", []))
+        if not include_sources or str(source.get("name", "")).lower() in include_sources
+    ]
+    if not selected_sources:
+        raise ValueError("No data sources were selected")
+
+    population: list[dict[str, Any]] = []
+    source_report: dict[str, Any] = {}
+    train_ids: set[str] = set()
+    for source_index, source in enumerate(selected_sources):
+        name = str(source["name"])
+        validation_rows = _load_source_split(source, "validation_file", common_image_root)
+        group_by_images = bool(source.get("validation_group_by_images", False))
+        selected = _sample_validation_rows(
+            validation_rows,
+            limit=None,
+            group_by_images=group_by_images,
+            seed=seed + source_index,
+        )
+        raw_train_path = Path(str(source["train_file"])).expanduser()
+        train_ids.update(str(row.get("id", "")) for row in read_jsonl(raw_train_path))
+        available_image_groups = {
+            tuple(_message_images(row)) for row in validation_rows
+        }
+        population.extend(selected)
+        source_report[name] = {
+            "validation_rows_available": len(validation_rows),
+            "unique_image_groups": len(available_image_groups),
+            "evaluation_cases_selected": len(selected),
+            "evaluation_unit": "image_pair" if group_by_images else "sample",
+            "group_by_images": group_by_images,
+            "reference_selection": (
+                "one_deterministic_reference_per_image_group"
+                if group_by_images
+                else "every_validation_row"
+            ),
+            "task_distribution": dict(
+                sorted(Counter(row["task_type"] for row in selected).items())
+            ),
+        }
+
+    _assert_unique_ids(population, "full evaluation population")
+    population_ids = {str(row["id"]) for row in population}
+    overlap = sorted(population_ids.intersection(train_ids))
+    if overlap:
+        raise ValueError(f"Train/evaluation id overlap: {', '.join(overlap[:5])}")
+    population.sort(key=lambda row: str(row["id"]))
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    write_jsonl(destination, population)
+    report = {
+        "schema_version": "2.0",
+        "valid": True,
+        "common_image_root": str(common_image_root),
+        "evaluation_file": str(destination),
+        "evaluation_samples": len(population),
+        "unique_ids": len(population_ids),
+        "train_evaluation_overlap": 0,
+        "task_distribution": dict(
+            sorted(Counter(row["task_type"] for row in population).items())
+        ),
+        "dataset_distribution": dict(
+            sorted(
+                Counter(
+                    str(dict(row.get("metadata", {})).get("dataset", "unknown"))
+                    for row in population
+                ).items()
+            )
+        ),
+        "sources": source_report,
+    }
+    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    return report
+
+
 def main() -> int:
     args = parse_args()
     config = load_config(args.config)
     include_sources = {name.lower() for name in args.include_source} or None
-    report = prepare_multisource_data(
-        config,
-        include_sources=include_sources,
-        train_output=args.train_output,
-        validation_output=args.validation_output,
-        report_output=args.report_output,
-        round_index=args.round_index,
-    )
+    if args.full_evaluation_only:
+        report = prepare_full_evaluation_population(
+            config,
+            include_sources=include_sources,
+            evaluation_output=args.evaluation_output,
+            report_output=args.evaluation_report_output,
+        )
+    else:
+        report = prepare_multisource_data(
+            config,
+            include_sources=include_sources,
+            train_output=args.train_output,
+            validation_output=args.validation_output,
+            report_output=args.report_output,
+            round_index=args.round_index,
+        )
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0
 

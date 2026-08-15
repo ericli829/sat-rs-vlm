@@ -17,6 +17,7 @@ CLOUD_ENV = {
     "TRAIN_JSONL": "/workspace/data/train.jsonl",
     "VAL_JSONL": "/workspace/data/validation.jsonl",
     "ADAPTER_PATH": "/workspace/outputs/adapter",
+    "REPLAY_ADAPTER_DIR": "/workspace/outputs/replay-generalist-adapter",
 }
 
 

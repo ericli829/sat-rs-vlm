@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -76,6 +77,19 @@ def main() -> int:
                 "predictions path is required via --predictions or input.predictions"
             )
         output_value = args.output_dir or config.output.output_dir
+        tier_sha256 = None
+        tier_version = settings.tier_version
+        if settings.tier and settings.tiers_manifest:
+            tiers_payload = json.loads(
+                _project_path(settings.tiers_manifest).read_text(encoding="utf-8")
+            )
+            tier_record = dict(tiers_payload.get("tiers", {}).get(settings.tier, {}))
+            tier_sha256 = tier_record.get("sha256")
+            tier_version = tier_version or tiers_payload.get("tier_version")
+            if not tier_sha256:
+                raise EvaluationError(
+                    f"Tier {settings.tier} is missing from {settings.tiers_manifest}"
+                )
         outputs = run_evaluation(
             _project_path(predictions_value),
             _project_path(output_value),
@@ -100,6 +114,8 @@ def main() -> int:
                 settings.group_by_task if args.group_by_task is None else args.group_by_task
             ),
             evaluation_tier=settings.tier,
+            evaluation_tier_version=tier_version,
+            evaluation_tier_sha256=tier_sha256,
         )
     except (EvaluationError, OSError, ValueError) as exc:
         print(f"Evaluation failed: {exc}", file=sys.stderr)

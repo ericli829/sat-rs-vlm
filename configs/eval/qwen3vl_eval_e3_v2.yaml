@@ -1,7 +1,6 @@
 model:
-  base_model: "${MODEL_ROOT}/Qwen3-VL-2B-Instruct"
-  adapter_path: "checkpoints/smoke/qwen3vl-local-smoke"
-  processor_id: "${MODEL_ROOT}/Qwen3-VL-2B-Instruct"
+  base_model: "${LOCAL_MODEL_DIR}"
+  processor_id: "${LOCAL_MODEL_DIR}"
   local_files_only: true
   trust_remote_code: true
   torch_dtype: "bfloat16"
@@ -9,12 +8,14 @@ model:
   attn_implementation: "sdpa"
 
 data:
-  # Future formal submissions use Unified VRSBench + LEVIR-CC E2 v2.
-  eval_file: "data/evaluation/tiers_v2/e2_standard.jsonl"
+  eval_file: "data/evaluation/tiers_v2/e3_full.jsonl"
   image_root: "${DATA_ROOT}"
   max_seq_length: 1024
   max_eval_samples: null
   tiers_manifest: "data/evaluation/tiers_v2/evaluation_tiers_manifest.json"
+  eval_batch_size: 1
+  group_by_task: true
+  log_every_samples: 100
 
 generation:
   max_new_tokens: 256
@@ -24,14 +25,13 @@ generation:
 
 evaluation:
   contract: "configs/eval/evaluation_contract_v1.5.yaml"
-  tier: "E2"
+  tier: "E3"
   tier_version: "unified-v2"
   tiers_manifest: "data/evaluation/tiers_v2/evaluation_tiers_manifest.json"
   strict: true
   semantic: true
-  latency_semantics: "batch_amortized_per_sample"
 
 output:
-  summary_file: "reports/eval/qwen3vl_eval_summary.json"
-  predictions_file: "reports/eval/qwen3vl_predictions.jsonl"
-  evaluation_dir: "reports/evaluation/qwen3vl_eval"
+  summary_file: "reports/eval/qwen3vl_eval_e3_v2_summary.json"
+  predictions_file: "reports/eval/qwen3vl_eval_e3_v2_predictions.jsonl"
+  evaluation_dir: "reports/evaluation/qwen3vl_eval_e3_v2"

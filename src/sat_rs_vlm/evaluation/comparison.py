@@ -249,6 +249,12 @@ def compare_evaluations(
 
     baseline_tier = baseline_manifest.get("evaluation_tier")
     candidate_tier = candidate_manifest.get("evaluation_tier")
+    baseline_tier_version = (
+        baseline_manifest.get("evaluation_tier_version") or "legacy-vrs-v1"
+    )
+    candidate_tier_version = (
+        candidate_manifest.get("evaluation_tier_version") or "legacy-vrs-v1"
+    )
     tier_warnings: list[str] = []
     if baseline_tier and candidate_tier and str(baseline_tier) != str(candidate_tier):
         raise ComparisonError(
@@ -256,6 +262,11 @@ def compare_evaluations(
             f"baseline={baseline_tier}, candidate={candidate_tier}"
         )
     if baseline_tier and candidate_tier:
+        if str(baseline_tier_version) != str(candidate_tier_version):
+            raise ComparisonError(
+                "Cannot compare different evaluation tier versions: "
+                f"baseline={baseline_tier_version}, candidate={candidate_tier_version}"
+            )
         baseline_hash = baseline_manifest.get("evaluation_tier_sha256")
         candidate_hash = candidate_manifest.get("evaluation_tier_sha256")
         if baseline_hash and candidate_hash and str(baseline_hash) != str(candidate_hash):
@@ -455,6 +466,7 @@ def compare_evaluations(
             "seed": seed,
         },
         "evaluation_tier": baseline_tier or candidate_tier,
+        "evaluation_tier_version": baseline_tier_version,
         "evaluation_tier_sha256": (
             baseline_manifest.get("evaluation_tier_sha256")
             or candidate_manifest.get("evaluation_tier_sha256")
@@ -480,6 +492,7 @@ def compare_evaluations(
         "baseline_contract_version": baseline_manifest.get("contract_version"),
         "candidate_contract_version": candidate_manifest.get("contract_version"),
         "evaluation_tier": baseline_tier or candidate_tier,
+        "evaluation_tier_version": baseline_tier_version,
         "evaluation_tier_sha256": (
             baseline_manifest.get("evaluation_tier_sha256")
             or candidate_manifest.get("evaluation_tier_sha256")

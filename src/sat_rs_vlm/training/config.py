@@ -323,6 +323,68 @@ class HardAdaptationConfig(StrictTrainingModel):
         return self
 
 
+class H2DifficultyMixConfig(StrictTrainingModel):
+    """H2 regular/medium/core 三类样本的独立组成比例。"""
+
+    regular_representative: float = Field(default=0.60, gt=0.0, lt=1.0)
+    medium_hard: float = Field(default=0.25, gt=0.0, lt=1.0)
+    core_hard: float = Field(default=0.15, gt=0.0, lt=1.0)
+
+    @model_validator(mode="after")
+    def validate_sum(self) -> H2DifficultyMixConfig:
+        if abs(
+            self.regular_representative + self.medium_hard + self.core_hard - 1.0
+        ) > 1.0e-9:
+            raise ValueError("H2 difficulty_mix values must sum to 1.0")
+        return self
+
+
+class H2RefinementConfig(StrictTrainingModel):
+    """H2 candidate mining、cell-local ranking 与最终数据集构建协议。"""
+
+    enabled: bool = False
+    schema_version: str = "2.0"
+    source_checkpoint: str | None = None
+    source_training_file: str | None = None
+    protected_evaluation_manifest: str = (
+        "data/evaluation/tiers_v2/evaluation_tiers_manifest.json"
+    )
+    mining_candidates_file: str = "data/processed/h2/h2_mining_candidates.jsonl"
+    mining_candidates_manifest: str = (
+        "data/processed/h2/h2_mining_candidates_manifest.json"
+    )
+    evaluated_predictions_file: str | None = None
+    output_dir: str = "data/processed/h2"
+    mining_target_samples: int = Field(default=6000, ge=1)
+    target_samples: int = Field(default=8000, ge=1)
+    source_weights: dict[str, float] = Field(
+        default_factory=lambda: {"VRSBench": 0.75, "LEVIR-CC": 0.25}
+    )
+    task_balance: Literal["sqrt_population", "natural"] = "sqrt_population"
+    subtype_balance: Literal["equal_with_capacity_redistribution"] = (
+        "equal_with_capacity_redistribution"
+    )
+    difficulty_mode: Literal["cell_rank", "global_threshold_experimental"] = "cell_rank"
+    medium_hard_threshold: float | None = Field(default=None, ge=0.0)
+    core_hard_threshold: float | None = Field(default=None, ge=0.0)
+    difficulty_mix: H2DifficultyMixConfig = Field(default_factory=H2DifficultyMixConfig)
+    evaluation_contract_version: str = "1.5"
+    seed: int = 42
+
+    @model_validator(mode="after")
+    def validate_protocol(self) -> H2RefinementConfig:
+        if not self.source_weights or any(value <= 0.0 for value in self.source_weights.values()):
+            raise ValueError("H2 source_weights must contain positive values")
+        if abs(sum(self.source_weights.values()) - 1.0) > 1.0e-9:
+            raise ValueError("H2 source_weights must sum to 1.0")
+        if self.difficulty_mode == "global_threshold_experimental":
+            if self.medium_hard_threshold is None or self.core_hard_threshold is None:
+                raise ValueError("Experimental threshold mode requires both thresholds")
+            if self.medium_hard_threshold >= self.core_hard_threshold:
+                raise ValueError("medium_hard_threshold must be less than core_hard_threshold")
+        return self
+
+
 class Qwen3VLTrainingConfig(StrictTrainingModel):
     """完整 Qwen3-VL 微调配置。"""
 
@@ -339,6 +401,7 @@ class Qwen3VLTrainingConfig(StrictTrainingModel):
     optimization: OptimizationGroupConfig = Field(default_factory=OptimizationGroupConfig)
     trainable_audit: TrainableAuditConfig = Field(default_factory=TrainableAuditConfig)
     hard_adaptation: HardAdaptationConfig = Field(default_factory=HardAdaptationConfig)
+    h2_refinement: H2RefinementConfig = Field(default_factory=H2RefinementConfig)
 
     @model_validator(mode="after")
     def validate_shared_bbox_thresholds(self) -> Qwen3VLTrainingConfig:
@@ -348,6 +411,39 @@ class Qwen3VLTrainingConfig(StrictTrainingModel):
             raise ValueError(
                 "statistics and hard_adaptation must use identical bbox_area_thresholds"
             )
+        return self
+
+    @model_validator(mode="after")
+    def validate_h2_training_isolation(self) -> Qwen3VLTrainingConfig:
+        """H2-A 只允许 Replay adapter 上的 LoRA-only 单变量实验。"""
+
+        if not self.h2_refinement.enabled:
+            return self
+        errors: list[str] = []
+        if not self.lora.initial_adapter_dir:
+            errors.append("lora.initial_adapter_dir is required")
+        if self.h2_refinement.source_checkpoint != self.lora.initial_adapter_dir:
+            errors.append("h2_refinement.source_checkpoint must equal lora.initial_adapter_dir")
+        if self.training.method != "lora":
+            errors.append("training.method must be 'lora'")
+        if self.vision_tuning.enabled:
+            errors.append("vision_tuning.enabled must be false for H2-A")
+        if not self.training.freeze_vision_encoder:
+            errors.append("training.freeze_vision_encoder must be true")
+        if self.data.sampling_mode != "uniform":
+            errors.append("data.sampling_mode must be 'uniform'")
+        if self.loss.mode != "task_weighted":
+            errors.append("loss.mode must be 'task_weighted'")
+        if self.training.num_train_epochs is not None or self.training.max_steps is not None:
+            errors.append("H2-A must use dynamic effective epochs, not fixed epochs/steps")
+        if self.training.target_effective_epochs != 1.5:
+            errors.append("training.target_effective_epochs must be 1.5")
+        if self.training.max_effective_epochs != 2.0:
+            errors.append("training.max_effective_epochs must be 2.0")
+        if self.training.allow_overtrain:
+            errors.append("training.allow_overtrain must be false")
+        if errors:
+            raise ValueError("Invalid H2-A configuration: " + "; ".join(errors))
         return self
 
 

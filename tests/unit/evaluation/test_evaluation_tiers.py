@@ -8,6 +8,8 @@ import yaml
 
 from sat_rs_vlm.evaluation.tiers import (
     DEFAULT_EVALUATION_TIER,
+    DEFAULT_EVALUATION_TIER_VERSION,
+    LEGACY_TIER_VERSION,
     default_tier_file,
     normalize_tier,
     validate_tier_asset,
@@ -19,6 +21,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 def test_formal_evaluation_config_defaults_to_e2() -> None:
     payload = yaml.safe_load((PROJECT_ROOT / "configs/eval/qwen3vl_eval.yaml").read_text())
     assert payload["evaluation"]["tier"] == DEFAULT_EVALUATION_TIER == "E2"
+    assert payload["evaluation"]["tier_version"] == DEFAULT_EVALUATION_TIER_VERSION
     assert payload["data"]["eval_file"] == default_tier_file("E2")
     assert payload["data"]["max_eval_samples"] is None
 
@@ -28,7 +31,21 @@ def test_explicit_tier_configs_are_not_implicitly_downgraded() -> None:
         path = PROJECT_ROOT / f"configs/eval/qwen3vl_eval_{tier.lower()}.yaml"
         payload = yaml.safe_load(path.read_text())
         assert payload["evaluation"]["tier"] == tier
+        assert payload["evaluation"]["tier_version"] == LEGACY_TIER_VERSION
+        assert payload["data"]["eval_file"] == default_tier_file(
+            tier, tier_version=LEGACY_TIER_VERSION
+        )
+        assert payload["data"]["max_eval_samples"] is None
+
+
+def test_explicit_unified_v2_configs_use_common_data_root() -> None:
+    for tier in ("E1", "E2", "E3"):
+        path = PROJECT_ROOT / f"configs/eval/qwen3vl_eval_{tier.lower()}_v2.yaml"
+        payload = yaml.safe_load(path.read_text())
+        assert payload["evaluation"]["tier"] == tier
+        assert payload["evaluation"]["tier_version"] == DEFAULT_EVALUATION_TIER_VERSION
         assert payload["data"]["eval_file"] == default_tier_file(tier)
+        assert payload["data"]["image_root"] == "${DATA_ROOT}"
         assert payload["data"]["max_eval_samples"] is None
 
 

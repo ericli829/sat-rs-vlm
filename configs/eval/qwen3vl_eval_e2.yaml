@@ -27,6 +27,7 @@ generation:
 evaluation:
   contract: "configs/eval/evaluation_contract_v1.5.yaml"
   tier: "E2"
+  tier_version: "legacy-vrs-v1"
   tiers_manifest: "data/evaluation/tiers/evaluation_tiers_manifest.json"
   strict: true
   semantic: true

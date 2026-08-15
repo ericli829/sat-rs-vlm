@@ -13,12 +13,19 @@ import hashlib
 import json
 import random
 import re
+import sys
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
 import yaml
+
+SRC_ROOT = Path(__file__).resolve().parents[2] / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
+from sat_rs_vlm.evaluation.tier_builder import build_unified_evaluation_tiers
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -173,6 +180,8 @@ def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
 
 def build(config_path: Path) -> dict[str, Any]:
     payload = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    if str(payload.get("schema_version", "1.0")) == "2.0":
+        return build_unified_evaluation_tiers(config_path, project_root=PROJECT_ROOT)
     seed = int(payload.get("seed", 42))
     data_cfg = dict(payload.get("data", {}))
     source_files = [_project_path(value) for value in data_cfg.get("source_files", [])]

@@ -212,3 +212,57 @@ def test_task_quotas_are_group_balanced() -> None:
     )
 
     assert len({tuple(module._message_images(row)) for row in selected}) == 3
+
+
+def test_full_evaluation_population_uses_one_case_per_image_pair(tmp_path: Path) -> None:
+    module = load_script_module()
+    common_root = tmp_path / "datasets"
+    source_root = common_root / "LEVIR-CC"
+    train_images: list[str] = []
+    val_images: list[str] = []
+    for split, destination in (("train", train_images), ("val", val_images)):
+        for period in ("A", "B"):
+            image = source_root / "images" / split / period / "pair.png"
+            image.parent.mkdir(parents=True, exist_ok=True)
+            image.write_bytes(b"png")
+            destination.append(f"images/{split}/{period}/pair.png")
+    train_file = source_root / "train.jsonl"
+    val_file = source_root / "val.jsonl"
+    write_jsonl(train_file, [internal_row("train", train_images)])
+    write_jsonl(
+        val_file,
+        [internal_row(f"val-caption-{index}", val_images) for index in range(5)],
+    )
+    output = tmp_path / "full-eval.jsonl"
+    report_path = tmp_path / "full-eval-report.json"
+    config = {
+        "common_image_root": str(common_root),
+        "seed": 42,
+        "sources": [
+            {
+                "name": "LEVIR-CC",
+                "image_root": str(source_root),
+                "train_file": str(train_file),
+                "validation_file": str(val_file),
+                "validation_samples": 1,
+                "validation_group_by_images": True,
+            }
+        ],
+    }
+
+    report = module.prepare_full_evaluation_population(
+        config,
+        evaluation_output=output,
+        report_output=report_path,
+    )
+
+    assert len(list(read_jsonl(output))) == 1
+    assert report["sources"]["LEVIR-CC"] == {
+        "validation_rows_available": 5,
+        "unique_image_groups": 1,
+        "evaluation_cases_selected": 1,
+        "evaluation_unit": "image_pair",
+        "group_by_images": True,
+        "reference_selection": "one_deterministic_reference_per_image_group",
+        "task_distribution": {"change_detection": 1},
+    }
