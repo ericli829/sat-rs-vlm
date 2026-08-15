@@ -170,18 +170,6 @@ def test_final_builder_uses_cell_local_ranking_and_exact_composition(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    shortage_policies: list[str] = []
-    original_select = refinement_dataset_module.select_hierarchical_tier
-
-    def capture_shortage_policy(*args, shortage_policy: str, **kwargs):
-        shortage_policies.append(shortage_policy)
-        return original_select(*args, shortage_policy=shortage_policy, **kwargs)
-
-    monkeypatch.setattr(
-        refinement_dataset_module,
-        "select_hierarchical_tier",
-        capture_shortage_policy,
-    )
     rows = _training_rows()
     _, protected = _protected(tmp_path)
     source = tmp_path / "train.jsonl"
@@ -200,6 +188,18 @@ def test_final_builder_uses_cell_local_ranking_and_exact_composition(
     predictions = tmp_path / "evaluated_predictions.jsonl"
     write_jsonl(predictions, evaluated)
     output = tmp_path / "h2"
+    shortage_policies: list[str] = []
+    original_select = refinement_dataset_module.select_hierarchical_tier
+
+    def capture_shortage_policy(*args, shortage_policy: str, **kwargs):
+        shortage_policies.append(shortage_policy)
+        return original_select(*args, shortage_policy=shortage_policy, **kwargs)
+
+    monkeypatch.setattr(
+        refinement_dataset_module,
+        "select_hierarchical_tier",
+        capture_shortage_policy,
+    )
     first = build_h2_refinement_dataset(
         rows,
         candidates,
