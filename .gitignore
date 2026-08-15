@@ -43,3 +43,12 @@ sat-rs-vlm-local-plugins/
 plugin_checkpoints/
 plugin_reports/
 reports/debug/multitask_loss_bias/
+
+# Locally generated evaluation tier JSONL files. Historical files already
+# tracked under data/evaluation/tiers/ remain versioned and are not removed.
+data/evaluation/tiers/e1_quick.jsonl
+data/evaluation/tiers/e2_standard.jsonl
+data/evaluation/tiers/e3_full.jsonl
+data/evaluation/tiers_v2/e1_quick.jsonl
+data/evaluation/tiers_v2/e2_standard.jsonl
+data/evaluation/tiers_v2/e3_full.jsonl
