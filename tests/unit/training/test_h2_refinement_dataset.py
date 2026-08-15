@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from sat_rs_vlm.training import refinement_dataset as refinement_dataset_module
 from sat_rs_vlm.training.config import H2DifficultyMixConfig, H2RefinementConfig
 from sat_rs_vlm.training.config import HardAdaptationConfig
 from sat_rs_vlm.training.refinement_dataset import (
@@ -165,7 +166,22 @@ def test_candidate_builder_is_deterministic_balanced_and_excludes_e3(tmp_path: P
     assert first["evaluation_leakage_check"]["passed"] is True
 
 
-def test_final_builder_uses_cell_local_ranking_and_exact_composition(tmp_path: Path) -> None:
+def test_final_builder_uses_cell_local_ranking_and_exact_composition(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    shortage_policies: list[str] = []
+    original_select = refinement_dataset_module.select_hierarchical_tier
+
+    def capture_shortage_policy(*args, shortage_policy: str, **kwargs):
+        shortage_policies.append(shortage_policy)
+        return original_select(*args, shortage_policy=shortage_policy, **kwargs)
+
+    monkeypatch.setattr(
+        refinement_dataset_module,
+        "select_hierarchical_tier",
+        capture_shortage_policy,
+    )
     rows = _training_rows()
     _, protected = _protected(tmp_path)
     source = tmp_path / "train.jsonl"
@@ -213,6 +229,7 @@ def test_final_builder_uses_cell_local_ranking_and_exact_composition(tmp_path: P
     assert not (ids_by_role["regular_representative"] & ids_by_role["core_hard"])
     assert not (ids_by_role["medium_hard"] & ids_by_role["core_hard"])
     assert first["difficulty_mode"] == "source_task_cell_rank"
+    assert shortage_policies == ["redistribute"]
     assert first["duplicate_check"]["passed"] is True
     assert first["evaluation_leakage_check"]["passed"] is True
     assert first["output_sha256"]["h2_train"]

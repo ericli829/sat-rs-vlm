@@ -442,7 +442,7 @@ def build_h2_refinement_dataset(
         task_balance=config.task_balance,
         small_max=hard_config.bbox_area_thresholds.small_max,
         medium_max=hard_config.bbox_area_thresholds.medium_max,
-        shortage_policy="fail",
+        shortage_policy="redistribute",
     )
     selected_regular = [
         _annotate(row, h2_data_role="regular_representative")

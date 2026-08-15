@@ -96,9 +96,9 @@ python scripts/evaluate_rs_vlm.py \
   --checkpoint <AUTODL_H2_OUTPUT>/checkpoints/lora/h2_global_refinement_4090
 ```
 
-The 4090 profile uses BF16, batch size 16, accumulation 1, 12 workers, pinned memory,
-and persistent workers. It follows the existing repository 4090 LoRA profile; it is not
-a claim that this task benchmarked the maximum feasible batch.
+The 4090 profile uses BF16, micro-batch size 4, accumulation 4, 12 workers, pinned
+memory, and persistent workers. The effective batch size remains 16 while the smaller
+micro-batch avoids the observed 24 GB VRAM overflow.
 
 ## Training and Guardrails
 
