@@ -1,0 +1,38 @@
+# Qwen3-VL 4B base-model baseline on the fixed Unified E3 v2 tier.
+model:
+  base_model: "${QWEN3VL_4B_MODEL_DIR}"
+  processor_id: "${QWEN3VL_4B_MODEL_DIR}"
+  local_files_only: true
+  trust_remote_code: true
+  torch_dtype: "bfloat16"
+  device_map: "auto"
+  attn_implementation: "sdpa"
+
+data:
+  eval_file: "data/evaluation/tiers_v2/e3_full.jsonl"
+  image_root: "${DATA_ROOT}"
+  max_seq_length: 1024
+  max_eval_samples: null
+  tiers_manifest: "data/evaluation/tiers_v2/evaluation_tiers_manifest.json"
+  eval_batch_size: 2
+  group_by_task: true
+  log_every_samples: 100
+
+generation:
+  max_new_tokens: 256
+  do_sample: false
+  temperature: 0.0
+  num_beams: 1
+
+evaluation:
+  contract: "configs/eval/evaluation_contract_v1.5.yaml"
+  tier: "E3"
+  tier_version: "unified-v2"
+  tiers_manifest: "data/evaluation/tiers_v2/evaluation_tiers_manifest.json"
+  strict: true
+  semantic: true
+
+output:
+  summary_file: "reports/eval/qwen3vl_4b_baseline_e3_v2_summary.json"
+  predictions_file: "reports/eval/qwen3vl_4b_baseline_e3_v2_predictions.jsonl"
+  evaluation_dir: "reports/evaluation/qwen3vl_4b_baseline_e3_v2"

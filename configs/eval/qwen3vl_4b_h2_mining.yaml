@@ -1,0 +1,43 @@
+# Future H2 mining must use a Qwen3-VL 4B Replay adapter, never a 2B adapter.
+model:
+  base_model: "${QWEN3VL_4B_MODEL_DIR}"
+  adapter_path: "${QWEN3VL_4B_REPLAY_ADAPTER_DIR}"
+  processor_id: "${QWEN3VL_4B_MODEL_DIR}"
+  local_files_only: true
+  trust_remote_code: true
+  torch_dtype: "bfloat16"
+  device_map: "auto"
+  attn_implementation: "sdpa"
+
+data:
+  eval_file: "data/processed/h2/qwen3vl_4b/h2_mining_candidates.jsonl"
+  image_root: "${DATA_ROOT}"
+  max_seq_length: 1024
+  max_eval_samples: null
+  eval_batch_size: 2
+  group_by_task: true
+  log_every_samples: 100
+
+generation:
+  max_new_tokens: 256
+  task_max_new_tokens:
+    captioning: 128
+    detection: 64
+    counting: 16
+    scene_classification: 32
+    vqa: 64
+    change_detection: 128
+  do_sample: false
+  temperature: 0.0
+  num_beams: 1
+
+evaluation:
+  contract: "configs/eval/evaluation_contract_v1.5.yaml"
+  strict: true
+  semantic: true
+  latency_semantics: "batch_amortized_per_sample"
+
+output:
+  summary_file: "reports/evaluation/qwen3vl_4b_h2_mining/summary.json"
+  predictions_file: "reports/evaluation/qwen3vl_4b_h2_mining/predictions.jsonl"
+  evaluation_dir: "reports/evaluation/qwen3vl_4b_h2_mining/evaluation_v1_5"

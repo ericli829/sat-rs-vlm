@@ -1,0 +1,8 @@
+model:
+  model_path: ${QWEN3VL_4B_MODEL_DIR}
+  processor_path: ${QWEN3VL_4B_MODEL_DIR}
+  trust_remote_code: true
+  local_files_only: true
+  torch_dtype: bfloat16
+  attn_implementation: sdpa
+  device_map: auto

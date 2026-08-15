@@ -99,3 +99,29 @@ def test_h2_a_requires_replay_adapter_and_rejects_vision_tuning(tmp_path: Path) 
 
     with pytest.raises(ValidationError, match="Invalid H2-A configuration"):
         load_training_config(config_path, allow_unresolved_env=True)
+
+
+def test_qwen3vl_4b_future_training_configs_are_isolated() -> None:
+    smoke = load_training_config(
+        "configs/train/qwen3vl_4b_lora_smoke.yaml",
+        allow_unresolved_env=True,
+    )
+    full = load_training_config(
+        "configs/train/qwen3vl_4b_lora_4090.yaml",
+        allow_unresolved_env=True,
+    )
+    h2 = load_training_config(
+        "configs/train/qwen3vl_4b_h2_global_refinement_4090.yaml",
+        allow_unresolved_env=True,
+    )
+
+    for config in (smoke, full, h2):
+        assert config.model.model_dir == "${QWEN3VL_4B_MODEL_DIR}"
+        assert "qwen3vl_4b" in config.training.output_dir
+        assert config.training.method == "lora"
+        assert config.vision_tuning.enabled is False
+    assert smoke.training.max_steps == 2
+    assert full.training.per_device_train_batch_size == 4
+    assert h2.lora.initial_adapter_dir == "${QWEN3VL_4B_REPLAY_ADAPTER_DIR}"
+    assert h2.h2_refinement.source_checkpoint == h2.lora.initial_adapter_dir
+    assert h2.h2_refinement.output_dir == "data/processed/h2/qwen3vl_4b"

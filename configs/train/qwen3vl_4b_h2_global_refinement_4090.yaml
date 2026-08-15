@@ -1,0 +1,138 @@
+# Future 4B H2-A profile. QWEN3VL_4B_REPLAY_ADAPTER_DIR must be a 4B Replay adapter.
+model:
+  model_dir: "${QWEN3VL_4B_MODEL_DIR}"
+  processor_dir: "${QWEN3VL_4B_MODEL_DIR}"
+  local_files_only: true
+  trust_remote_code: true
+  torch_dtype: "bfloat16"
+  attn_implementation: "sdpa"
+  device_map: "auto"
+
+data:
+  train_file: "data/processed/h2/qwen3vl_4b/h2_train.jsonl"
+  val_file: "data/evaluation/tiers_v2/e2_standard.jsonl"
+  image_root: "${DATA_ROOT}"
+  max_seq_length: 1024
+  max_train_samples: null
+  max_eval_samples: null
+  skip_bad_samples: false
+  data_composition: "full"
+  sampling_mode: "uniform"
+  task_sampling_weights: {}
+  source_batch_pattern: []
+
+training:
+  output_dir: "${OUTPUT_ROOT}/checkpoints/lora/qwen3vl_4b/h2_global_refinement_4090"
+  method: "lora"
+  freeze_vision_encoder: true
+  freeze_projector: false
+  num_train_epochs: null
+  max_steps: null
+  target_effective_epochs: 1.5
+  max_effective_epochs: 2.0
+  allow_overtrain: false
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 2
+  gradient_accumulation_steps: 4
+  learning_rate: 0.00001
+  weight_decay: 0.01
+  warmup_ratio: 0.03
+  lr_scheduler_type: "cosine"
+  logging_steps: 20
+  save_steps: 125
+  eval_steps: 125
+  save_total_limit: 5
+  bf16: true
+  fp16: false
+  gradient_checkpointing: true
+  dataloader_num_workers: 8
+  dataloader_pin_memory: true
+  dataloader_persistent_workers: true
+  max_grad_norm: 1.0
+  seed: 42
+  resume_from_checkpoint: null
+
+lora:
+  initial_adapter_dir: "${QWEN3VL_4B_REPLAY_ADAPTER_DIR}"
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+qlora:
+  load_in_4bit: false
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_compute_dtype: "bfloat16"
+  bnb_4bit_use_double_quant: true
+
+loss:
+  mode: "task_weighted"
+  task_weights:
+    captioning: 1.0
+    detection: 1.0
+    counting: 1.0
+    scene_classification: 1.0
+    vqa: 1.0
+    change_detection: 1.0
+  unknown_task_weight: 1.0
+  strict_task_metadata: true
+
+vision_tuning:
+  enabled: false
+  unfreeze_last_n_blocks: 2
+  train_main_merger: false
+  train_deepstack_mergers: false
+  train_patch_embed: false
+
+optimization:
+  lora_lr: 0.00001
+  visual_merger_lr: 0.000005
+  vision_lr: 0.000001
+
+trainable_audit:
+  fail_on_unexpected_trainable: true
+  report_dir: "reports/training"
+
+h2_refinement:
+  enabled: true
+  schema_version: "2.0"
+  source_checkpoint: "${QWEN3VL_4B_REPLAY_ADAPTER_DIR}"
+  source_training_file: "data/processed/multisource/vrsbench_levircc_train.jsonl"
+  protected_evaluation_manifest: "data/evaluation/tiers_v2/evaluation_tiers_manifest.json"
+  mining_candidates_file: "data/processed/h2/qwen3vl_4b/h2_mining_candidates.jsonl"
+  mining_candidates_manifest: "data/processed/h2/qwen3vl_4b/h2_mining_candidates_manifest.json"
+  evaluated_predictions_file: null
+  output_dir: "data/processed/h2/qwen3vl_4b"
+  mining_target_samples: 6000
+  target_samples: 8000
+  source_weights:
+    VRSBench: 0.75
+    LEVIR-CC: 0.25
+  task_balance: "sqrt_population"
+  subtype_balance: "equal_with_capacity_redistribution"
+  difficulty_mode: "cell_rank"
+  medium_hard_threshold: null
+  core_hard_threshold: null
+  difficulty_mix:
+    regular_representative: 0.60
+    medium_hard: 0.25
+    core_hard: 0.15
+  evaluation_contract_version: "1.5"
+  seed: 42
+
+evaluation:
+  do_eval: true
+  predict_with_generate: true
+  max_new_tokens: 256
+  num_beams: 1
+
+logging:
+  report_to: "none"
+  experiment_name: "qwen3vl_4b_h2_global_refinement_4090"

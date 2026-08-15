@@ -14,10 +14,12 @@ CLOUD_ENV = {
     "OUTPUT_ROOT": "/workspace/outputs",
     "CACHE_ROOT": "/workspace/cache",
     "LOCAL_MODEL_DIR": "/workspace/models/Qwen3-VL-2B-Instruct",
+    "QWEN3VL_4B_MODEL_DIR": "/workspace/models/Qwen3-VL-4B-Instruct",
     "TRAIN_JSONL": "/workspace/data/train.jsonl",
     "VAL_JSONL": "/workspace/data/validation.jsonl",
     "ADAPTER_PATH": "/workspace/outputs/adapter",
     "REPLAY_ADAPTER_DIR": "/workspace/outputs/replay-generalist-adapter",
+    "QWEN3VL_4B_REPLAY_ADAPTER_DIR": "/workspace/outputs/qwen3vl-4b-replay-adapter",
 }
 
 
