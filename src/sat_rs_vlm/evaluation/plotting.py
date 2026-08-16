@@ -1,4 +1,4 @@
-"""Generate reproducible static figures from v1.5 or v1.6 evaluation artifacts."""
+"""Generate reproducible static figures from v1.5-v1.7 evaluation artifacts."""
 
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ class MetricDisplay:
 
 COLORS = ("#0072B2", "#E69F00", "#009E73", "#CC79A7", "#56B4E9", "#D55E00")
 RATE_LIMITS = (0.0, 1.0)
-SUPPORTED_CONTRACT_VERSIONS = frozenset({"1.5", "1.6"})
+SUPPORTED_CONTRACT_VERSIONS = frozenset({"1.5", "1.6", "1.7"})
 PRESENTATION_VERSION = "zh-scientific-v1"
 METRIC_REGISTRY_VERSION = "1.0"
 CJK_FONT_CANDIDATES = (
@@ -518,6 +518,60 @@ METRIC_DISPLAY: dict[str, MetricDisplay] = {
         "diagnostic",
         "change_detection",
     ),
+    "local_semantic_rule_decision_rate": _display(
+        "高置信无变化规则占比",
+        "No-change Rule",
+        "由高置信规则直接确认整体无目标变化的比例",
+        "higher",
+        "percent",
+        "diagnostic",
+        "change_detection",
+    ),
+    "local_semantic_positive_rule_decision_rate": _display(
+        "高置信永久结构变化规则占比",
+        "Target-change Rule",
+        "由高置信规则直接确认道路、建筑等永久结构变化的比例",
+        "higher",
+        "percent",
+        "diagnostic",
+        "change_detection",
+    ),
+    "local_semantic_non_target_rule_decision_rate": _display(
+        "高置信非目标差异规则占比",
+        "Non-target Rule",
+        "由高置信规则确认仅含植被、外观等非目标差异的比例",
+        "higher",
+        "percent",
+        "diagnostic",
+        "change_detection",
+    ),
+    "local_llm_judge_decision_rate": _display(
+        "本地小模型判定占比",
+        "Local LLM",
+        "由本地文本小模型解析自由变化描述的比例",
+        "higher",
+        "percent",
+        "diagnostic",
+        "change_detection",
+    ),
+    "local_llm_judge_uncertain_rate": _display(
+        "待人工审计占比",
+        "Uncertain",
+        "本地小模型返回不确定、需要人工语义复核的比例",
+        "lower",
+        "percent",
+        "diagnostic",
+        "change_detection",
+    ),
+    "local_input_guard_rate": _display(
+        "输入安全审计占比",
+        "Input Guard",
+        "因包含疑似评测操控指令而不自动判定的比例",
+        "lower",
+        "percent",
+        "diagnostic",
+        "change_detection",
+    ),
     "latency_ms_mean": _display(
         "平均延迟",
         "Mean",
@@ -706,7 +760,7 @@ def _validate_unique_labels(items: Iterable[tuple[str, Path]], kind: str) -> Non
 
 
 def load_evaluations(specifications: Iterable[str]) -> list[NamedEvaluation]:
-    """Load and validate named v1.5/v1.6 evaluation directories."""
+    """Load and validate named v1.5-v1.7 evaluation directories."""
 
     parsed = [parse_named_path(specification) for specification in specifications]
     _validate_unique_labels(parsed, "evaluation")
@@ -1576,7 +1630,26 @@ def _levir_binary_metrics(plt: Any, evaluation: NamedEvaluation) -> Any | None:
         "cohen_kappa",
     )
     error_metrics = ("false_positive_rate", "false_negative_rate")
-    source_metrics = ("explicit_binary_decision_rate", "caption_fallback_decision_rate")
+    legacy_source_metrics = (
+        "explicit_binary_decision_rate",
+        "caption_fallback_decision_rate",
+    )
+    local_source_metrics = (
+        "local_semantic_rule_decision_rate",
+        "local_semantic_positive_rule_decision_rate",
+        "local_semantic_non_target_rule_decision_rate",
+        "local_llm_judge_decision_rate",
+        "local_llm_judge_uncertain_rate",
+        "local_input_guard_rate",
+    )
+    local_source_values = [
+        _metric_value(evaluation.summary, "change_detection", name) for name in local_source_metrics
+    ]
+    source_metrics = (
+        local_source_metrics
+        if any(value is not None for value in local_source_values)
+        else legacy_source_metrics
+    )
     core_values = [
         _metric_value(evaluation.summary, "change_detection", name) for name in core_metrics
     ]
@@ -1616,15 +1689,16 @@ def _levir_binary_metrics(plt: Any, evaluation: NamedEvaluation) -> Any | None:
     error_axis.set_title("错误诊断｜越低越好")
     if has_source:
         source_axis = axes[2]
-        _grouped_bars(
-            source_axis,
-            [_metric_label(metric) for metric in source_metrics],
-            [(evaluation.label, source_values)],
-            annotate=True,
-            value_formats=["percent", "percent"],
-        )
-        source_axis.set_ylabel("判定样本比例")
-        source_axis.set_title("变化结论来源｜P0应以独立二分类为主")
+        positions = list(range(len(source_metrics)))
+        values = [value if value is not None else 0.0 for value in source_values]
+        source_axis.barh(positions, values, color=COLORS[0])
+        source_axis.set_yticks(positions, [_metric_label(metric) for metric in source_metrics])
+        source_axis.invert_yaxis()
+        source_axis.set_xlim(0, 1)
+        source_axis.set_xlabel("判定样本比例")
+        for position, value in zip(positions, values, strict=True):
+            source_axis.text(min(value + 0.015, 0.96), position, f"{value:.1%}", va="center")
+        source_axis.set_title("变化结论来源｜评测端离线判定")
     figure.suptitle(f"LEVIR-CC变化判定性能 · {evaluation.label}", fontsize=14)
     sample_count = _evaluation_sample_count(evaluation)
     count_note = f"n={sample_count:,}｜" if sample_count is not None else ""
@@ -1783,7 +1857,7 @@ def plot_evaluation_results(
     formats: Iterable[str] = ("png", "svg"),
     overwrite: bool = False,
 ) -> dict[str, Any]:
-    """Generate every applicable v1.5/v1.6 evaluation figure and a trace manifest."""
+    """Generate every applicable v1.5-v1.7 evaluation figure and a trace manifest."""
 
     normalized_formats = _validate_formats(formats)
     evaluations = load_evaluations(evaluation_specs)

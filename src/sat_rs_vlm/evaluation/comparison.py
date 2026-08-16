@@ -98,7 +98,7 @@ PRIMARY_METRIC = {
 }
 
 TOLERANCE = 1e-12
-SUPPORTED_CONTRACT_VERSIONS = frozenset({"1.5", "1.6"})
+SUPPORTED_CONTRACT_VERSIONS = frozenset({"1.5", "1.6", "1.7"})
 REQUIRED_FILES = (
     "evaluated_predictions.jsonl",
     "summary.json",

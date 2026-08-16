@@ -109,7 +109,9 @@ def read_prediction_jsonl(
     records: list[PredictionRecord] = []
     errors: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
-    with path.open("r", encoding="utf-8") as file:
+    # ``utf-8-sig`` accepts ordinary UTF-8 and the BOM-prefixed JSONL files
+    # commonly produced by Windows PowerShell without changing file bytes.
+    with path.open("r", encoding="utf-8-sig") as file:
         for line_number, line in enumerate(file, start=1):
             if not line.strip():
                 continue

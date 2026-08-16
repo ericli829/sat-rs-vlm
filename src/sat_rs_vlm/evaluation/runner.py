@@ -54,6 +54,11 @@ DEFAULT_SEMANTIC_CONTRACT = (
 DEFAULT_SEMANTIC_ONTOLOGY = (
     PROJECT_ROOT / "configs" / "eval" / "semantic" / "remote_sensing_ontology.json"
 )
+LOCAL_TEXT_JUDGE_DECISION_VERSION = "local_text_judge_priority_v1"
+SUPPORTED_CHANGE_DECISION_PROFILES = {
+    CHANGE_DECISION_VERSION,
+    LOCAL_TEXT_JUDGE_DECISION_VERSION,
+}
 
 
 @dataclass(frozen=True)
@@ -337,7 +342,7 @@ def _evaluate_change_caption(
     resolution: ProtocolResolution,
     *,
     strict: bool,
-    explicit_binary_priority: bool,
+    change_decision_profile: str,
 ) -> EvaluatedRow:
     if not record.reference.strip() and strict:
         raise InputValidationError(f"sample {record.id}: change caption reference is empty")
@@ -348,38 +353,49 @@ def _evaluate_change_caption(
             f"sample {record.id}: metadata.changeflag must be integer 0 or 1"
         )
     reference_changeflag = cast(int, raw_changeflag) if changeflag_valid else None
+    decision_priority = change_decision_profile in SUPPORTED_CHANGE_DECISION_PROFILES
     binary_source = "caption_fallback"
     explicit_raw = record.raw.get("binary_prediction")
-    if explicit_binary_priority and "prediction_changeflag" in record.raw:
+    requested_source = record.raw.get("binary_prediction_source")
+    if change_decision_profile == LOCAL_TEXT_JUDGE_DECISION_VERSION and isinstance(
+        requested_source, str
+    ):
+        binary_source = requested_source
+    if decision_priority and "prediction_changeflag" in record.raw:
         explicit_flag = record.raw.get("prediction_changeflag")
         if type(explicit_flag) is int and explicit_flag in {0, 1}:
             predicted_changeflag = cast(int, explicit_flag)
             binary_reason = None
             binary_mode = "explicit_changeflag"
-            binary_source = "explicit_changeflag"
+            if change_decision_profile != LOCAL_TEXT_JUDGE_DECISION_VERSION:
+                binary_source = "explicit_changeflag"
         elif explicit_flag is None and isinstance(explicit_raw, str):
             explicit = parse_explicit_change_prediction(explicit_raw)
             predicted_changeflag = explicit.value
             binary_reason = explicit.reason
             binary_mode = explicit.match_type
-            binary_source = "binary_prediction_text"
+            if change_decision_profile != LOCAL_TEXT_JUDGE_DECISION_VERSION:
+                binary_source = "binary_prediction_text"
         else:
             predicted_changeflag = None
             binary_reason = "invalid_prediction_changeflag"
             binary_mode = "unresolved"
-            binary_source = "invalid_explicit_changeflag"
-    elif explicit_binary_priority and "binary_prediction" in record.raw:
+            if change_decision_profile != LOCAL_TEXT_JUDGE_DECISION_VERSION:
+                binary_source = "invalid_explicit_changeflag"
+    elif decision_priority and "binary_prediction" in record.raw:
         if isinstance(explicit_raw, str):
             explicit = parse_explicit_change_prediction(explicit_raw)
             predicted_changeflag = explicit.value
             binary_reason = explicit.reason
             binary_mode = explicit.match_type
-            binary_source = "binary_prediction_text"
+            if change_decision_profile != LOCAL_TEXT_JUDGE_DECISION_VERSION:
+                binary_source = "binary_prediction_text"
         else:
             predicted_changeflag = None
             binary_reason = "binary_prediction_must_be_string"
             binary_mode = "unresolved"
-            binary_source = "invalid_binary_prediction"
+            if change_decision_profile != LOCAL_TEXT_JUDGE_DECISION_VERSION:
+                binary_source = "invalid_binary_prediction"
     else:
         parsed = parse_change_prediction(record.prediction)
         predicted_changeflag = parsed.value
@@ -412,10 +428,10 @@ def _evaluate_change_caption(
             "sample_metrics": scores,
         }
     )
-    if explicit_binary_priority:
+    if decision_priority:
         output.update(
             {
-                "change_decision_version": CHANGE_DECISION_VERSION,
+                "change_decision_version": change_decision_profile,
                 "binary_prediction_source": binary_source,
             }
         )
@@ -469,10 +485,7 @@ def evaluate_record(
                 record,
                 resolution,
                 strict=strict,
-                explicit_binary_priority=(
-                    str(contract.get("change_decision_profile", ""))
-                    == CHANGE_DECISION_VERSION
-                ),
+                change_decision_profile=str(contract.get("change_decision_profile", "")),
             ),
             [],
         )
@@ -901,27 +914,80 @@ def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
             }
         )
         if binary_sources:
-            metrics.update(
-                {
-                    "explicit_binary_decision_rate": metric_value(
-                        ratio(
-                            binary_sources["explicit_changeflag"]
-                            + binary_sources["binary_prediction_text"],
-                            total,
+            if any(
+                binary_sources[source]
+                for source in (
+                    "explicit_changeflag",
+                    "binary_prediction_text",
+                    "caption_fallback",
+                )
+            ):
+                metrics.update(
+                    {
+                        "explicit_binary_decision_rate": metric_value(
+                            ratio(
+                                binary_sources["explicit_changeflag"]
+                                + binary_sources["binary_prediction_text"],
+                                total,
+                            ),
+                            num_samples=total,
+                            note=f"Decision profile: {CHANGE_DECISION_VERSION}.",
                         ),
-                        num_samples=total,
-                        note=f"Decision profile: {CHANGE_DECISION_VERSION}.",
-                    ),
-                    "caption_fallback_decision_rate": metric_value(
-                        ratio(binary_sources["caption_fallback"], total),
-                        num_samples=total,
-                        note=(
-                            "Legacy compatibility only; new P0 predictions should use the "
-                            "independent binary question."
+                        "caption_fallback_decision_rate": metric_value(
+                            ratio(binary_sources["caption_fallback"], total),
+                            num_samples=total,
+                            note=(
+                                "Legacy compatibility only; new P0 predictions should use the "
+                                "independent binary question."
+                            ),
                         ),
-                    ),
-                }
-            )
+                    }
+                )
+            if any(
+                binary_sources[source]
+                for source in (
+                    "local_semantic_rule",
+                    "local_semantic_positive_rule",
+                    "local_semantic_non_target_rule",
+                    "local_llm_judge",
+                    "local_llm_judge_uncertain",
+                    "local_input_guard",
+                )
+            ):
+                metrics.update(
+                    {
+                        "local_semantic_rule_decision_rate": metric_value(
+                            ratio(binary_sources["local_semantic_rule"], total),
+                            num_samples=total,
+                            note=f"Decision profile: {LOCAL_TEXT_JUDGE_DECISION_VERSION}.",
+                        ),
+                        "local_semantic_positive_rule_decision_rate": metric_value(
+                            ratio(binary_sources["local_semantic_positive_rule"], total),
+                            num_samples=total,
+                            note="Explicit permanent-structure change resolved locally.",
+                        ),
+                        "local_semantic_non_target_rule_decision_rate": metric_value(
+                            ratio(binary_sources["local_semantic_non_target_rule"], total),
+                            num_samples=total,
+                            note="Explicit non-target-only difference resolved locally.",
+                        ),
+                        "local_llm_judge_decision_rate": metric_value(
+                            ratio(binary_sources["local_llm_judge"], total),
+                            num_samples=total,
+                            note=f"Decision profile: {LOCAL_TEXT_JUDGE_DECISION_VERSION}.",
+                        ),
+                        "local_llm_judge_uncertain_rate": metric_value(
+                            ratio(binary_sources["local_llm_judge_uncertain"], total),
+                            num_samples=total,
+                            note="Uncertain captions require human semantic audit.",
+                        ),
+                        "local_input_guard_rate": metric_value(
+                            ratio(binary_sources["local_input_guard"], total),
+                            num_samples=total,
+                            note="Instruction-like captions are withheld for human audit.",
+                        ),
+                    }
+                )
         for key in (
             "bleu_1_approx",
             "bleu_2_approx",
@@ -1176,8 +1242,9 @@ def _build_summary(
             latency_context,
         ),
     }
-    if str(contract.get("change_decision_profile", "")) == CHANGE_DECISION_VERSION:
-        summary["change_decision_version"] = CHANGE_DECISION_VERSION
+    change_decision_profile = str(contract.get("change_decision_profile", ""))
+    if change_decision_profile in SUPPORTED_CHANGE_DECISION_PROFILES:
+        summary["change_decision_version"] = change_decision_profile
     if semantic_summary is not None:
         summary["semantic"] = semantic_summary
     grounding_rows = [row for row in rows if row.kind == "visual_grounding"]
@@ -1403,8 +1470,9 @@ def run_evaluation(
         "remote_write_performed": False,
         "protected_repository": str(protected) if protected is not None else None,
     }
-    if str(contract.get("change_decision_profile", "")) == CHANGE_DECISION_VERSION:
-        manifest["change_decision_version"] = CHANGE_DECISION_VERSION
+    change_decision_profile = str(contract.get("change_decision_profile", ""))
+    if change_decision_profile in SUPPORTED_CHANGE_DECISION_PROFILES:
+        manifest["change_decision_version"] = change_decision_profile
 
     destination.mkdir(parents=True, exist_ok=True)
     _write_jsonl(outputs["evaluated_predictions"], evaluated_outputs)

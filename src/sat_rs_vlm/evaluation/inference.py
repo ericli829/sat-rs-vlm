@@ -147,10 +147,10 @@ def is_change_detection_sample(sample: dict[str, Any]) -> bool:
 def change_binary_inference_enabled(
     sample: dict[str, Any], generation_config: dict[str, Any]
 ) -> bool:
-    """Enable the P0 auxiliary binary pass for change-detection samples by default."""
+    """Enable the legacy auxiliary binary pass only when explicitly requested."""
 
     return is_change_detection_sample(sample) and bool(
-        generation_config.get("change_binary_enabled", True)
+        generation_config.get("change_binary_enabled", False)
     )
 
 

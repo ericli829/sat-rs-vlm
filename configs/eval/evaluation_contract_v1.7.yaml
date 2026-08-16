@@ -1,0 +1,102 @@
+contract_version: "1.7"
+contract_status: provisional
+implementation_version: sat-rs-vlm-evaluation-v1.7
+change_decision_profile: local_text_judge_priority_v1
+
+upstream_repository:
+  url: https://github.com/ericli829/sat-rs-vlm
+  branch: master
+  commit: 05b4f7831a3eb5cb3140febeef18e73922a057d8
+  commit_short: 05b4f78
+  verified_at: "2026-08-07"
+  note: "Evaluation integration baseline; v1.7 changes only the offline LEVIR decision source."
+
+metric_labels:
+  - official
+  - internal
+  - human_audit
+default_metric_label: internal
+
+optional_profiles:
+  repository_native_v2:
+    status: implemented_compatibility
+    metrics_version: v2_task_metrics
+  semantic_reference_text_v1:
+    status: implemented_internal_only
+    contract: configs/eval/semantic/semantic_contract.json
+    ontology: configs/eval/semantic/remote_sensing_ontology.json
+  p0_dependency_free_extended_v1:
+    status: implemented_internal_only
+  local_text_judge_v1:
+    status: implemented_internal_only
+    note: Parses free-form LEVIR captions with conservative rules and a versioned local text LLM.
+
+protocols:
+  vrsbench_visual_grounding:
+    kind: visual_grounding
+    status: implemented
+    metric_profile: continuous_normalized_v2
+  vrsbench_counting:
+    kind: counting
+    status: implemented
+    metric_profile: counting_internal_v2
+  vrsbench_open_vqa:
+    kind: text
+    status: implemented_internal_only
+    metric_profile: normalized_text_internal_v2
+  vrsbench_detailed_caption:
+    kind: caption
+    status: implemented_internal_only
+    metric_profile: caption_approx_internal_v2
+  levir_cc_change_caption:
+    kind: change_caption
+    status: implemented_internal_only
+    metric_profile: levir_cc_local_text_judge_v1
+  generic_single_target_grounding_internal:
+    kind: visual_grounding
+    status: implemented_internal_only
+    metric_profile: continuous_normalized_v2
+  generic_counting_internal:
+    kind: counting
+    status: implemented_internal_only
+    metric_profile: counting_internal_v2
+  generic_text_internal:
+    kind: text
+    status: implemented_internal_only
+    metric_profile: normalized_text_internal_v2
+  generic_captioning_internal:
+    kind: caption
+    status: implemented_internal_only
+    metric_profile: caption_approx_internal_v2
+  generic_change_captioning_internal:
+    kind: caption
+    status: implemented_internal_only
+    metric_profile: change_caption_approx_internal_v2
+  segmentation_not_implemented:
+    kind: unimplemented
+    status: registered_not_implemented
+    metric_profile: null
+  unknown_not_implemented:
+    kind: unimplemented
+    status: registered_not_implemented
+    metric_profile: null
+  mme_realworld_rs_mcq:
+    kind: unimplemented
+    status: registered_not_implemented
+    metric_profile: null
+  xlrs_vqa_mcq:
+    kind: unimplemented
+    status: registered_not_implemented
+    metric_profile: null
+  xlrs_vqa_multiselect:
+    kind: unimplemented
+    status: registered_not_implemented
+    metric_profile: null
+  xlrs_visual_grounding:
+    kind: unimplemented
+    status: registered_not_implemented
+    metric_profile: null
+  xlrs_caption:
+    kind: unimplemented
+    status: registered_not_implemented
+    metric_profile: null

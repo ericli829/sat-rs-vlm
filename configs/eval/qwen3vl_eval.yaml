@@ -16,7 +16,9 @@ data:
 
 generation:
   max_new_tokens: 256
-  change_binary_enabled: true
+  # v1.7 keeps LEVIR-CC caption generation free-form. Binary semantics are
+  # judged offline by scripts/evaluation/judge_change_captions.py.
+  change_binary_enabled: false
   change_binary_max_new_tokens: 8
   do_sample: false
   temperature: 0.0
