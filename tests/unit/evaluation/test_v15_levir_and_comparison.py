@@ -527,6 +527,45 @@ class ComparisonTests(unittest.TestCase):
                     bootstrap_resamples=5,
                 )
 
+    def test_v17_change_detection_comparison_is_supported(self) -> None:
+        rows = [
+            {
+                "id": "change-v17",
+                "task_type": "change_detection",
+                "prediction": "No change.",
+                "reference": "No change.",
+                "metadata": {"dataset": "LEVIR-CC", "changeflag": 0},
+                "sample_metrics": {
+                    "binary_correct": True,
+                    "bleu_1_approx": 1.0,
+                    "bleu_4_approx": 1.0,
+                    "rouge_l_f1_approx": 1.0,
+                    "meteor_exact_approx": 1.0,
+                    "chrf_approx": 1.0,
+                    "cider_d_single_reference_approx": 1.0,
+                },
+            }
+        ]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            baseline = root / "baseline"
+            candidate = root / "candidate"
+            self._make_evaluation(baseline, rows, contract_version="1.7")
+            self._make_evaluation(candidate, rows, contract_version="1.7")
+            outputs = compare_evaluations(
+                baseline,
+                candidate,
+                root / "comparison",
+                protected_repository=root / "protected",
+                bootstrap_resamples=5,
+            )
+            summary = json.loads(outputs["comparison_summary"].read_text(encoding="utf-8"))
+            self.assertEqual(summary["required_contract_version"], "1.7")
+            self.assertEqual(
+                summary["by_task"]["change_detection"]["primary_metric"],
+                "binary_accuracy",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

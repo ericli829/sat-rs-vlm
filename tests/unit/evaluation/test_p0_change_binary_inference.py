@@ -61,7 +61,8 @@ def test_build_change_binary_sample_keeps_images_and_replaces_text() -> None:
         "after.png",
     ]
     assert sample["task_type"] == "change_detection"
-    assert change_binary_inference_enabled(sample, {})
+    assert not change_binary_inference_enabled(sample, {})
+    assert change_binary_inference_enabled(sample, {"change_binary_enabled": True})
     assert not change_binary_inference_enabled(sample, {"change_binary_enabled": False})
 
 
