@@ -264,3 +264,4 @@ pytest -q
 - [Bit Flip 迁移映射](docs/reliability/bitflip_migration_plan.md)
 - [多任务离线评测 v1.5](docs/evaluation/README.md)
 - [模型评测与绘图第一阶段结果](docs/evaluation/phase1_results.md)
+- [LEVIR-CC本地小模型语义评审](docs/evaluation/levir_local_judge.md)
