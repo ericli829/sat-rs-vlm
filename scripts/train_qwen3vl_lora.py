@@ -32,6 +32,12 @@ from sat_rs_vlm.training.config import (
 )
 from sat_rs_vlm.training.freeze import freeze_projector, freeze_vision_encoder
 from sat_rs_vlm.training.losses import compute_multitask_loss
+from sat_rs_vlm.training.model_audit import (
+    audit_lora_targets,
+    finalize_lora_trainable_audit,
+    model_fingerprint,
+    validate_adapter_architecture,
+)
 from sat_rs_vlm.training.optimizer import (
     build_training_parameter_groups,
     optimizer_group_report,
@@ -103,6 +109,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--initial-adapter", default=None)
     parser.add_argument("--learning-rate", type=float, default=None)
     parser.add_argument("--num-train-epochs", type=float, default=None)
+    parser.add_argument("--resume-from-checkpoint", default=None)
     local_group = parser.add_mutually_exclusive_group()
     local_group.add_argument("--local-files-only", dest="local_files_only", action="store_true")
     local_group.add_argument("--no-local-files-only", dest="local_files_only", action="store_false")
@@ -132,6 +139,7 @@ def build_overrides(args: argparse.Namespace) -> TrainingPathOverrides:
         initial_adapter_dir=args.initial_adapter,
         learning_rate=args.learning_rate,
         num_train_epochs=args.num_train_epochs,
+        resume_from_checkpoint=args.resume_from_checkpoint,
     )
 
 
@@ -210,6 +218,16 @@ def apply_lora(
     if config.training.method not in {"lora", "qlora"}:
         raise ValueError("Only LoRA/QLoRA are supported by default; full fine-tuning is disabled.")
     peft = modules["peft"]
+    lora_settings = getattr(config, "lora", None)
+    targets = list(getattr(lora_settings, "target_modules", []))
+    target_audit: dict[str, Any] | None = None
+    if targets and hasattr(model, "named_modules"):
+        target_audit = audit_lora_targets(model, targets)
+        print(
+            "LoRA target audit: "
+            + json.dumps(target_audit["target_match_counts"], sort_keys=True)
+        )
+        setattr(model, "_sat_rs_lora_target_audit", target_audit)
     if paths.initial_adapter_dir is not None:
         if not (paths.initial_adapter_dir / "adapter_config.json").is_file():
             raise FileNotFoundError(
@@ -217,19 +235,50 @@ def apply_lora(
             )
         if paths.initial_adapter_dir.resolve() == paths.output_dir.resolve():
             raise ValueError("Initial adapter and output directory must be different")
-        return peft.PeftModel.from_pretrained(
+        adapter_audit = validate_adapter_architecture(
+            model,
+            paths.initial_adapter_dir,
+            require_fingerprint=bool(
+                getattr(
+                    getattr(config, "cycle_training", None),
+                    "require_adapter_fingerprint",
+                    False,
+                )
+            ),
+        )
+        print("Adapter architecture audit: " + json.dumps(adapter_audit, sort_keys=True))
+        prepared = peft.PeftModel.from_pretrained(
             model,
             str(paths.initial_adapter_dir),
             is_trainable=True,
         )
-    lora_config = peft.LoraConfig(
-        r=config.lora.r,
-        lora_alpha=config.lora.alpha,
-        lora_dropout=config.lora.dropout,
-        target_modules=config.lora.target_modules,
-        task_type="CAUSAL_LM",
+    else:
+        lora_config = peft.LoraConfig(
+            r=config.lora.r,
+            lora_alpha=config.lora.alpha,
+            lora_dropout=config.lora.dropout,
+            target_modules=config.lora.target_modules,
+            task_type="CAUSAL_LM",
+        )
+        prepared = peft.get_peft_model(model, lora_config)
+    if target_audit is None or not hasattr(prepared, "named_parameters"):
+        return prepared
+    final_audit = finalize_lora_trainable_audit(prepared, target_audit)
+    setattr(prepared, "_sat_rs_lora_target_audit", final_audit)
+    print(
+        "LoRA trainable audit: "
+        + json.dumps(
+            {
+                "trainable_parameters_by_target": final_audit[
+                    "trainable_parameters_by_target"
+                ],
+                "trainable_parameters": final_audit["trainable_parameters"],
+                "trainable_ratio": final_audit["trainable_ratio"],
+            },
+            sort_keys=True,
+        )
     )
-    return peft.get_peft_model(model, lora_config)
+    return prepared
 
 
 def build_training_arguments(
@@ -482,12 +531,14 @@ def build_strategy_manifest(
         "supports_merge": True,
         "checkpoint_type": "adapter",
         "model_dir": paths.model_source,
+        "base_model_fingerprint": model_fingerprint(model),
         "processor_dir": str(paths.output_dir / "processor"),
         "trainable_parameters": trainable,
         "total_parameters": total,
         "trainable_ratio": ratio,
         "matched_modules": matched_modules,
         "target_modules": list(targets),
+        "lora_target_audit": getattr(model, "_sat_rs_lora_target_audit", None),
         "initialized_from_adapter": (
             str(paths.initial_adapter_dir) if paths.initial_adapter_dir is not None else None
         ),
@@ -595,7 +646,31 @@ def forward_only(config: Qwen3VLTrainingConfig, paths: ResolvedTrainingPaths) ->
         debug_shapes=True,
         include_task_metadata=True,
     )
-    batch = collator([train_dataset[0]])
+    probe_samples: list[dict[str, Any]] = []
+    required_sources = list(dict.fromkeys(config.data.source_batch_pattern))
+    for source in required_sources:
+        match = next(
+            (
+                row
+                for row in train_dataset
+                if str(dict(row.get("metadata", {})).get("training_source", "")) == source
+            ),
+            None,
+        )
+        if match is not None:
+            probe_samples.append(match)
+    if config.cycle_training.enabled and len(probe_samples) != len(required_sources):
+        found = {
+            str(dict(row.get("metadata", {})).get("training_source", ""))
+            for row in probe_samples
+        }
+        raise ValueError(
+            "Cycle forward probe must include every configured source; missing: "
+            + ", ".join(sorted(set(required_sources).difference(found)))
+        )
+    if not probe_samples:
+        probe_samples = [train_dataset[0]]
+    batch = collator(probe_samples[: config.training.per_device_train_batch_size])
     input_device = model_input_device(model, torch)
     batch = move_to_device(batch, input_device, torch)
     print(f"Forward-only input device: {input_device}")
@@ -731,10 +806,12 @@ def train(
             config.data.source_batch_pattern,
             batch_size=config.training.per_device_train_batch_size,
             seed=config.training.seed,
+            exhaustion_policy=config.data.source_exhaustion_policy,
         )
         print(
             "Alternating source batches enabled: "
             f"pattern={config.data.source_batch_pattern}, "
+            f"exhaustion_policy={config.data.source_exhaustion_policy}, "
             f"samples_per_epoch={len(train_sampler)}"
         )
     trainer_kwargs: dict[str, Any] = {

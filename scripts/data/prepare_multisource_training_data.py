@@ -13,6 +13,15 @@ from typing import Any
 import yaml
 
 from sat_rs_vlm.configuration.environment import expand_environment
+from sat_rs_vlm.data.cyclic_training import (
+    assert_no_evaluation_leakage,
+    combine_source_rounds,
+    load_protected_e3_ids,
+    partition_group_variants,
+    partition_task_population,
+    sha256_file,
+    validate_cycle_coverage,
+)
 from sat_rs_vlm.data.prompt_templates import strengthen_answer, strengthen_instruction
 from sat_rs_vlm.utils.jsonl import read_jsonl, write_jsonl
 
@@ -47,6 +56,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--evaluation-output", default=None)
     parser.add_argument("--evaluation-report-output", default=None)
+    parser.add_argument("--build-cycle", action="store_true")
+    parser.add_argument("--cycle-index", type=int, default=0)
+    parser.add_argument("--cycle-output-dir", default=None)
     return parser.parse_args()
 
 
@@ -74,6 +86,8 @@ def _to_qwen_row(
     *,
     source_name: str,
     instruction_override: str | None,
+    prompt_profile: str = "canonical",
+    strengthen_existing_messages: bool = False,
 ) -> dict[str, Any]:
     sample_id = str(row.get("id", "")).strip()
     task_type = str(row.get("task_type", "unknown")).strip().lower()
@@ -86,6 +100,8 @@ def _to_qwen_row(
 
     if "messages" in row:
         messages = [dict(message) for message in list(row["messages"])]
+        if strengthen_existing_messages:
+            messages = _strengthen_existing_messages(messages, task_type, prompt_profile)
     else:
         missing = [key for key in ("images", "instruction", "answer") if key not in row]
         if missing:
@@ -97,14 +113,14 @@ def _to_qwen_row(
         content.append(
             {
                 "type": "text",
-                "text": strengthen_instruction(task_type, instruction),
+                "text": strengthen_instruction(task_type, instruction, profile=prompt_profile),
             }
         )
         messages = [
             {"role": "user", "content": content},
             {
                 "role": "assistant",
-                "content": strengthen_answer(task_type, row["answer"]),
+                "content": strengthen_answer(task_type, row["answer"], profile=prompt_profile),
             },
         ]
 
@@ -212,6 +228,8 @@ def _load_source_split(
             source_row,
             source_name=source_name,
             instruction_override=source.get("instruction_override"),
+            prompt_profile=str(source.get("prompt_profile", "canonical")),
+            strengthen_existing_messages=bool(source.get("strengthen_existing_messages", False)),
         )
         rows.append(
             _rewrite_images(
@@ -592,11 +610,243 @@ def prepare_full_evaluation_population(
     return report
 
 
+def _strengthen_existing_messages(
+    messages: list[dict[str, Any]], task_type: str, prompt_profile: str
+) -> list[dict[str, Any]]:
+    """加固已转换 messages 的输出协议，同时保留图片与对话结构。"""
+
+    normalized: list[dict[str, Any]] = []
+    for message in messages:
+        copied = dict(message)
+        role = str(copied.get("role", ""))
+        content = copied.get("content")
+        if role == "user" and isinstance(content, list):
+            items = [dict(item) for item in content]
+            text_indices = [index for index, item in enumerate(items) if item.get("type") == "text"]
+            if text_indices:
+                index = text_indices[-1]
+                items[index]["text"] = strengthen_instruction(
+                    task_type, str(items[index].get("text", "")), profile=prompt_profile
+                )
+            copied["content"] = items
+        elif role == "user" and isinstance(content, str):
+            copied["content"] = strengthen_instruction(
+                task_type, content, profile=prompt_profile
+            )
+        elif role == "assistant" and isinstance(content, str):
+            copied["content"] = strengthen_answer(task_type, content, profile=prompt_profile)
+        elif role == "assistant" and isinstance(content, list):
+            items = [dict(item) for item in content]
+            for item in items:
+                if item.get("type") == "text":
+                    item["text"] = strengthen_answer(
+                        task_type, item.get("text", ""), profile=prompt_profile
+                    )
+            copied["content"] = items
+        normalized.append(copied)
+    return normalized
+
+
+def _distribution(rows: list[dict[str, Any]], field: str) -> dict[str, int]:
+    if field == "source":
+        values = (
+            str(dict(row.get("metadata", {})).get("training_source", "unknown"))
+            for row in rows
+        )
+    else:
+        values = (str(row.get("task_type", "unknown")) for row in rows)
+    return dict(sorted(Counter(values).items()))
+
+
+def prepare_training_cycle(
+    config: dict[str, Any],
+    *,
+    cycle_index: int = 0,
+    cycle_output_dir: str | Path | None = None,
+) -> dict[str, Any]:
+    """构建一个可审计的 full-coverage cycle，并一次性写出所有 round。"""
+
+    if config.get("training_selection_mode") != "cyclic_full_coverage":
+        raise ValueError(
+            "--build-cycle requires training_selection_mode='cyclic_full_coverage'; "
+            "legacy_round_sampling remains available through the historical command"
+        )
+    if cycle_index < 0:
+        raise ValueError("cycle_index must be non-negative")
+    common_root = Path(str(config["common_image_root"])).expanduser().resolve()
+    if not common_root.is_dir():
+        raise FileNotFoundError(f"common_image_root does not exist: {common_root}")
+    cycle_config = dict(config.get("cycle", {}))
+    output_value = cycle_output_dir or cycle_config.get("output_dir")
+    if not output_value:
+        raise ValueError("Cyclic preparation requires cycle.output_dir or --cycle-output-dir")
+    output_dir = Path(str(output_value))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    seed = int(config.get("seed", 42))
+
+    source_rounds: dict[str, list[list[dict[str, Any]]]] = {}
+    source_population: dict[str, list[dict[str, Any]]] = {}
+    validation_rows: list[dict[str, Any]] = []
+    levir_report: dict[str, Any] = {}
+    for source_index, source_value in enumerate(list(config.get("sources", []))):
+        source = dict(source_value)
+        name = str(source["name"])
+        population = _load_source_split(source, "train_file", common_root)
+        source_population[name] = population
+        source_seed = seed + source_index
+        if source.get("training_task_quotas"):
+            source_rounds[name] = partition_task_population(
+                population,
+                {
+                    str(task): int(size)
+                    for task, size in dict(source["training_task_quotas"]).items()
+                },
+                seed=source_seed,
+                cycle_index=cycle_index,
+            )
+        elif source.get("training_samples_per_image_group") is not None:
+            rounds, variant_report = partition_group_variants(
+                population,
+                variants_per_round=int(source["training_samples_per_image_group"]),
+                seed=source_seed,
+                cycle_index=cycle_index,
+                image_key=lambda row: tuple(_message_images(row)),
+            )
+            source_rounds[name] = rounds
+            levir_report[name] = variant_report
+        else:
+            source_rounds[name] = [population]
+
+        source_validation_all = _load_source_split(source, "validation_file", common_root)
+        validation_limit = source.get("validation_samples")
+        validation_rows.extend(
+            _sample_validation_rows(
+                source_validation_all,
+                limit=int(validation_limit) if validation_limit is not None else None,
+                group_by_images=bool(source.get("validation_group_by_images", False)),
+                seed=source_seed,
+            )
+        )
+
+    population = [row for name in sorted(source_population) for row in source_population[name]]
+    _assert_unique_ids(population, "cyclic training population")
+    _assert_unique_ids(validation_rows, "cyclic validation")
+    protected_path = cycle_config.get("protected_evaluation_manifest")
+    if not protected_path:
+        raise ValueError("cycle.protected_evaluation_manifest is required")
+    leakage = assert_no_evaluation_leakage(
+        population,
+        load_protected_e3_ids(str(protected_path)),
+    )
+
+    rounds = combine_source_rounds(
+        source_rounds,
+        seed=seed,
+        cycle_index=cycle_index,
+    )
+    coverage = validate_cycle_coverage(population, rounds)
+    if not coverage["valid"]:
+        raise ValueError(f"Full-cycle coverage validation failed: {coverage}")
+    validation_rows.sort(key=lambda row: str(row["id"]))
+    validation_path = output_dir / "validation.jsonl"
+    write_jsonl(validation_path, validation_rows)
+
+    round_entries: list[dict[str, Any]] = []
+    for round_index, rows in enumerate(rounds):
+        train_path = output_dir / f"round_{round_index:03d}_train.jsonl"
+        report_path = output_dir / f"round_{round_index:03d}_report.json"
+        write_jsonl(train_path, rows)
+        report = {
+            "schema_version": "1.0",
+            "cycle_index": cycle_index,
+            "round_index": round_index,
+            "sample_count": len(rows),
+            "unique_id_count": len({str(row["id"]) for row in rows}),
+            "source_distribution": _distribution(rows, "source"),
+            "task_distribution": _distribution(rows, "task"),
+            "train_file": str(train_path),
+            "sha256": sha256_file(train_path),
+        }
+        report_path.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+        round_entries.append({**report, "report_file": str(report_path)})
+
+    manifest = {
+        "schema_version": "1.0",
+        "training_selection_mode": "cyclic_full_coverage",
+        "seed": seed,
+        "cycle_index": cycle_index,
+        "num_rounds": len(rounds),
+        "validation_file": str(validation_path),
+        "validation_sha256": sha256_file(validation_path),
+        "source_population_counts": {
+            name: len(rows) for name, rows in sorted(source_population.items())
+        },
+        "source_scheduling": {
+            "level": "batch",
+            "preference_pattern": list(cycle_config.get("source_batch_pattern", [])),
+            "exhaustion_policy": "coverage_first",
+            "expected_exposure_counts": _distribution(population, "source"),
+            "expected_exposure_ratio": {
+                source: count / max(1, len(population))
+                for source, count in _distribution(population, "source").items()
+            },
+            "tail_may_deviate_from_pattern": True,
+        },
+        "task_population_counts": _distribution(population, "task"),
+        "rounds": round_entries,
+        "global": coverage,
+        "source_coverage": {
+            name: validate_cycle_coverage(
+                rows,
+                [
+                    [
+                        row
+                        for row in round_rows
+                        if dict(row.get("metadata", {})).get("training_source") == name
+                    ]
+                    for round_rows in rounds
+                ],
+            )
+            for name, rows in sorted(source_population.items())
+        },
+        "task_coverage": {
+            task: validate_cycle_coverage(
+                [row for row in population if row.get("task_type") == task],
+                [
+                    [row for row in round_rows if row.get("task_type") == task]
+                    for round_rows in rounds
+                ],
+            )
+            for task in sorted({str(row.get("task_type")) for row in population})
+        },
+        "levir": levir_report,
+        "protected_evaluation": {
+            "manifest": str(protected_path),
+            **leakage,
+        },
+    }
+    manifest_path = output_dir / "cycle_manifest.json"
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    return {**manifest, "cycle_manifest": str(manifest_path)}
+
+
 def main() -> int:
     args = parse_args()
     config = load_config(args.config)
     include_sources = {name.lower() for name in args.include_source} or None
-    if args.full_evaluation_only:
+    if args.build_cycle:
+        if include_sources:
+            raise ValueError("--include-source is not supported by full-cycle preparation")
+        report = prepare_training_cycle(
+            config,
+            cycle_index=args.cycle_index,
+            cycle_output_dir=args.cycle_output_dir,
+        )
+    elif args.full_evaluation_only:
         report = prepare_full_evaluation_population(
             config,
             include_sources=include_sources,

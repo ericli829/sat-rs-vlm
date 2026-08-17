@@ -125,3 +125,25 @@ def test_qwen3vl_4b_future_training_configs_are_isolated() -> None:
     assert h2.lora.initial_adapter_dir == "${QWEN3VL_4B_REPLAY_ADAPTER_DIR}"
     assert h2.h2_refinement.source_checkpoint == h2.lora.initial_adapter_dir
     assert h2.h2_refinement.output_dir == "data/processed/h2/qwen3vl_4b"
+
+
+def test_qwen3vl_4b_stage_a_uses_strict_full_coverage_contract() -> None:
+    config = load_training_config(
+        "configs/train/qwen3vl_4b_stage_a_multisource_4090.yaml",
+        allow_unresolved_env=True,
+    )
+
+    assert config.model.model_dir == config.model.processor_dir
+    assert config.cycle_training.enabled is True
+    assert config.cycle_training.selection_mode == "cyclic_full_coverage"
+    assert config.cycle_training.learning_rates == [2.0e-5, 1.0e-5]
+    assert config.data.sampling_mode == "alternating_source"
+    assert config.data.source_exhaustion_policy == "coverage_first"
+    assert config.training.per_device_train_batch_size == 4
+    assert config.training.gradient_accumulation_steps == 4
+    assert config.training.num_train_epochs == 1
+    assert config.training.max_steps is None
+    assert config.training.freeze_vision_encoder is True
+    assert config.vision_tuning.enabled is False
+    assert config.loss.mode == "task_weighted"
+    assert set(config.loss.task_weights.values()) == {1.0}

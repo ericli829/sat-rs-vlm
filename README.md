@@ -170,6 +170,24 @@ python scripts/train_qwen3vl_lora.py \
   --config configs/train/qwen3vl_autodl_4090.yaml
 ```
 
+### Qwen3-VL-4B Stage-A 多源对齐
+
+4B Stage-A 从 4B base 开始，将 VRSBench 各 task 与 LEVIR-CC caption variants 组织成
+可证明无遗漏、无重复的多个 cycle bucket。每轮训练 1 epoch 并把上一轮 adapter 作为下一轮
+起点；训练完成后默认运行 Unified E2 v2。历史 2B round sampling 语义保持不变。
+
+```bash
+export QWEN3VL_4B_MODEL_DIR=/root/autodl-tmp/models/Qwen3-VL-4B-Instruct
+export DATA_ROOT=/root/autodl-tmp/datasets
+export OUTPUT_ROOT=/root/autodl-tmp/outputs
+bash scripts/training/run_autodl_qwen3vl_4b_stage_a.sh --prepare-only
+bash scripts/training/run_autodl_qwen3vl_4b_stage_a.sh --dry-run
+bash scripts/training/run_autodl_qwen3vl_4b_stage_a.sh --forward-only
+```
+
+正式后台训练、resume、coverage manifest 与 adapter 兼容审计见
+[Qwen3-VL-4B Stage-A 多源训练](docs/training/qwen3vl_4b_stage_a_multisource.md)。
+
 ### H1 困难样本视觉适配
 
 H1 从已经完成 Stage A/Stage B 的 LoRA adapter 继续训练，不从 base model 重启。它使用

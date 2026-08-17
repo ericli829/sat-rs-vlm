@@ -55,14 +55,21 @@ def build_alternating_source_sampler(
     *,
     batch_size: int,
     seed: int = 42,
+    exhaustion_policy: str = "truncate",
 ) -> Any:
-    """Build fixed-size, source-homogeneous batches in a repeating source pattern."""
+    """按 source batch pattern 排序索引。
+
+    ``truncate`` 精确保留历史行为；``coverage_first`` 在完整 pattern 无法继续后，
+    将所有 source 的剩余样本各使用一次。尾部允许混合/不满 batch，以换取零遗漏。
+    """
 
     if batch_size < 1:
         raise ValueError("batch_size must be positive")
     pattern = [str(source) for source in source_batch_pattern]
     if not pattern:
         raise ValueError("source_batch_pattern must not be empty")
+    if exhaustion_policy not in {"truncate", "coverage_first"}:
+        raise ValueError("exhaustion_policy must be 'truncate' or 'coverage_first'")
 
     source_indices: dict[str, list[int]] = {}
     for index, row in enumerate(dataset):
@@ -78,9 +85,13 @@ def build_alternating_source_sampler(
         (len(source_indices[source]) // batch_size) // required_batches
         for source, required_batches in batches_per_cycle.items()
     )
-    if cycle_capacity < 1:
+    if cycle_capacity < 1 and exhaustion_policy == "truncate":
         raise ValueError("Not enough samples to build one complete source batch cycle")
-    sample_count = cycle_capacity * len(pattern) * batch_size
+    sample_count = (
+        sum(len(indices) for indices in source_indices.values())
+        if exhaustion_policy == "coverage_first"
+        else cycle_capacity * len(pattern) * batch_size
+    )
 
     class AlternatingSourceSampler:
         def __init__(self) -> None:
@@ -102,5 +113,15 @@ def build_alternating_source_sampler(
                     end = start + batch_size
                     yield from shuffled[source][start:end]
                     positions[source] = end
+            if exhaustion_policy == "coverage_first":
+                tail_sources: list[str] = []
+                seen: set[str] = set()
+                for source in pattern:
+                    if source not in seen:
+                        tail_sources.append(source)
+                        seen.add(source)
+                tail_sources.extend(source for source in sorted(shuffled) if source not in seen)
+                for source in tail_sources:
+                    yield from shuffled[source][positions[source] :]
 
     return AlternatingSourceSampler()

@@ -266,3 +266,100 @@ def test_full_evaluation_population_uses_one_case_per_image_pair(tmp_path: Path)
         "reference_selection": "one_deterministic_reference_per_image_group",
         "task_distribution": {"change_detection": 1},
     }
+
+
+def test_full_cycle_manifest_proves_coverage_and_is_reproducible(tmp_path: Path) -> None:
+    module = load_script_module()
+    common_root = tmp_path / "datasets"
+    vrs_root = common_root / "VRSBench"
+    levir_root = common_root / "LEVIR-CC"
+    vrs_image = vrs_root / "images/vrs.png"
+    vrs_image.parent.mkdir(parents=True)
+    vrs_image.write_bytes(b"png")
+    pair_images: list[str] = []
+    for period in ("A", "B"):
+        image = levir_root / "images/train" / period / "pair.png"
+        image.parent.mkdir(parents=True)
+        image.write_bytes(b"png")
+        pair_images.append(f"images/train/{period}/pair.png")
+    val_pair_images: list[str] = []
+    for period in ("A", "B"):
+        image = levir_root / "images/val" / period / "pair.png"
+        image.parent.mkdir(parents=True)
+        image.write_bytes(b"png")
+        val_pair_images.append(f"images/val/{period}/pair.png")
+
+    vrs_train = vrs_root / "train.jsonl"
+    vrs_val = vrs_root / "val.jsonl"
+    tasks = ["detection", "detection", "detection", "vqa", "counting"]
+    write_jsonl(
+        vrs_train,
+        [
+            internal_row(f"vrs-{index}", ["images/vrs.png"], task_type=task)
+            for index, task in enumerate(tasks)
+        ],
+    )
+    write_jsonl(vrs_val, [internal_row("vrs-val", ["images/vrs.png"], task_type="vqa")])
+    levir_train = levir_root / "train.jsonl"
+    levir_val = levir_root / "val.jsonl"
+    write_jsonl(
+        levir_train,
+        [internal_row(f"levir-{index}", pair_images) for index in range(5)],
+    )
+    write_jsonl(levir_val, [internal_row("levir-val", val_pair_images)])
+    protected = tmp_path / "evaluation_manifest.json"
+    protected.write_text('{"tiers":{"E3":{"sample_ids":["protected-only"]}}}', "utf-8")
+    config = {
+        "common_image_root": str(common_root),
+        "seed": 42,
+        "training_selection_mode": "cyclic_full_coverage",
+        "cycle": {"protected_evaluation_manifest": str(protected)},
+        "sources": [
+            {
+                "name": "VRSBench",
+                "image_root": str(vrs_root),
+                "train_file": str(vrs_train),
+                "validation_file": str(vrs_val),
+                "training_task_quotas": {"detection": 2, "vqa": 1, "counting": 1},
+            },
+            {
+                "name": "LEVIR-CC",
+                "image_root": str(levir_root),
+                "train_file": str(levir_train),
+                "validation_file": str(levir_val),
+                "training_samples_per_image_group": 2,
+            },
+        ],
+    }
+
+    first = module.prepare_training_cycle(config, cycle_output_dir=tmp_path / "cycle-a")
+    second = module.prepare_training_cycle(config, cycle_output_dir=tmp_path / "cycle-b")
+
+    assert first["num_rounds"] == 3
+    assert first["global"]["valid"] is True
+    assert first["global"]["population_samples"] == 10
+    assert first["protected_evaluation"]["overlap_count"] == 0
+    assert [item["sha256"] for item in first["rounds"]] == [
+        item["sha256"] for item in second["rounds"]
+    ]
+
+
+def test_stage_a_prompt_profile_strengthens_existing_messages() -> None:
+    module = load_script_module()
+    sample = {
+        "id": "count-1",
+        "task_type": "counting",
+        "messages": [
+            {"role": "user", "content": [{"type": "text", "text": "How many cars?"}]},
+            {"role": "assistant", "content": '{"count":3}'},
+        ],
+    }
+    converted = module._to_qwen_row(
+        sample,
+        source_name="VRSBench",
+        instruction_override=None,
+        prompt_profile="qwen3vl_4b_stage_a",
+        strengthen_existing_messages=True,
+    )
+    assert "ONLY the integer" in converted["messages"][0]["content"][0]["text"]
+    assert converted["messages"][1]["content"] == "3"

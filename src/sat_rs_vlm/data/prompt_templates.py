@@ -19,6 +19,8 @@ COUNTING_FORMAT_SUFFIX = (
     "Return ONLY a JSON object with this schema: "
     f"{COUNTING_JSON_SCHEMA}. Do not include any other text."
 )
+STAGE_A_COUNTING_FORMAT_SUFFIX = "Return ONLY the integer. Do not include any other text."
+VQA_SHORT_FORMAT_SUFFIX = "Answer with the short answer only. Do not explain."
 CAPTION_INSTRUCTION = (
     "Describe this remote sensing image in 1-3 concise sentences. "
     "Focus on the main land-cover types, objects, and spatial layout."
@@ -56,7 +58,12 @@ def scene_instruction(question: str) -> str:
     return text if SCENE_FORMAT_SUFFIX in text else f"{text} {SCENE_FORMAT_SUFFIX}"
 
 
-def strengthen_instruction(task_type: str, instruction: str) -> str:
+def strengthen_instruction(
+    task_type: str,
+    instruction: str,
+    *,
+    profile: str = "canonical",
+) -> str:
     """按 task_type 幂等地加固结构化输出要求。"""
 
     task = task_type.strip().lower()
@@ -67,11 +74,23 @@ def strengthen_instruction(task_type: str, instruction: str) -> str:
         match = re.search(r'described as:\s*"(.*?)"', text, flags=re.IGNORECASE | re.DOTALL)
         return detection_instruction(match.group(1) if match else text)
     if task == "counting":
+        if profile == "qwen3vl_4b_stage_a":
+            return (
+                text
+                if STAGE_A_COUNTING_FORMAT_SUFFIX in text
+                else f"{text} {STAGE_A_COUNTING_FORMAT_SUFFIX}".strip()
+            )
         return counting_instruction(text)
     if task == "captioning":
         return text if "1-3 concise sentences" in text else CAPTION_INSTRUCTION
     if task == "scene_classification":
         return scene_instruction(text)
+    if task == "vqa" and profile == "qwen3vl_4b_stage_a":
+        return (
+            text
+            if VQA_SHORT_FORMAT_SUFFIX in text
+            else f"{text} {VQA_SHORT_FORMAT_SUFFIX}".strip()
+        )
     if task == "change_detection":
         return (
             text
@@ -81,12 +100,21 @@ def strengthen_instruction(task_type: str, instruction: str) -> str:
     return text
 
 
-def strengthen_answer(task_type: str, answer: Any) -> str:
+def strengthen_answer(
+    task_type: str,
+    answer: Any,
+    *,
+    profile: str = "canonical",
+) -> str:
     """规范监督答案；计数无法可靠解析时保留原值供调用方统计。"""
 
     task = task_type.strip().lower()
     text = str(answer).strip()
     if task == "counting":
+        if profile == "qwen3vl_4b_stage_a":
+            parsed = counting_json(answer)
+            if parsed is not None:
+                return str(json.loads(parsed)["count"])
         return counting_json(answer) or text
     if task == "detection":
         parsed = parse_detection(answer)

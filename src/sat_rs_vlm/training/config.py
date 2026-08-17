@@ -64,6 +64,7 @@ class TrainDataConfig(StrictTrainingModel):
     skip_bad_samples: bool = False
     data_composition: Literal["full", "balanced_quota", "detection_quota"] = "full"
     sampling_mode: Literal["uniform", "weighted", "alternating_source"] = "uniform"
+    source_exhaustion_policy: Literal["truncate", "coverage_first"] = "truncate"
     task_sampling_weights: dict[str, float] = Field(default_factory=dict)
     source_batch_pattern: list[str] = Field(default_factory=list)
 
@@ -75,6 +76,13 @@ class TrainDataConfig(StrictTrainingModel):
             raise ValueError("sampling_mode='weighted' requires task_sampling_weights")
         if self.sampling_mode == "alternating_source" and not self.source_batch_pattern:
             raise ValueError("sampling_mode='alternating_source' requires source_batch_pattern")
+        if (
+            self.sampling_mode != "alternating_source"
+            and self.source_exhaustion_policy != "truncate"
+        ):
+            raise ValueError(
+                "source_exhaustion_policy='coverage_first' requires alternating_source"
+            )
         if any(value <= 0 for value in self.task_sampling_weights.values()):
             raise ValueError("task_sampling_weights must contain only positive values")
         return self
@@ -385,6 +393,34 @@ class H2RefinementConfig(StrictTrainingModel):
         return self
 
 
+class CycleTrainingConfig(StrictTrainingModel):
+    """连续 bucket 训练的串联、学习率和泄漏保护配置。"""
+
+    enabled: bool = False
+    selection_mode: Literal["legacy_round_sampling", "cyclic_full_coverage"] = (
+        "legacy_round_sampling"
+    )
+    cycle_manifest: str | None = None
+    protected_evaluation_manifest: str | None = None
+    learning_rates: list[float] = Field(default_factory=lambda: [2.0e-5, 1.0e-5])
+    require_adapter_fingerprint: bool = False
+
+    @model_validator(mode="after")
+    def validate_cycle(self) -> CycleTrainingConfig:
+        if any(rate <= 0.0 for rate in self.learning_rates):
+            raise ValueError("cycle_training.learning_rates must be positive")
+        if self.enabled:
+            if self.selection_mode != "cyclic_full_coverage":
+                raise ValueError("Enabled cycle training requires cyclic_full_coverage")
+            if not self.cycle_manifest:
+                raise ValueError("cycle_training.cycle_manifest is required")
+            if not self.protected_evaluation_manifest:
+                raise ValueError(
+                    "cycle_training.protected_evaluation_manifest is required"
+                )
+        return self
+
+
 class Qwen3VLTrainingConfig(StrictTrainingModel):
     """完整 Qwen3-VL 微调配置。"""
 
@@ -402,6 +438,37 @@ class Qwen3VLTrainingConfig(StrictTrainingModel):
     trainable_audit: TrainableAuditConfig = Field(default_factory=TrainableAuditConfig)
     hard_adaptation: HardAdaptationConfig = Field(default_factory=HardAdaptationConfig)
     h2_refinement: H2RefinementConfig = Field(default_factory=H2RefinementConfig)
+    cycle_training: CycleTrainingConfig = Field(default_factory=CycleTrainingConfig)
+
+    @model_validator(mode="after")
+    def validate_cycle_stage(self) -> Qwen3VLTrainingConfig:
+        if not self.cycle_training.enabled:
+            return self
+        errors: list[str] = []
+        if self.training.method != "lora":
+            errors.append("training.method must be 'lora'")
+        if self.vision_tuning.enabled or not self.training.freeze_vision_encoder:
+            errors.append("vision encoder must remain frozen")
+        if self.training.num_train_epochs != 1 or self.training.max_steps is not None:
+            errors.append("each cycle bucket must use exactly one epoch and max_steps=null")
+        if self.data.sampling_mode != "alternating_source":
+            errors.append("data.sampling_mode must be 'alternating_source'")
+        if self.data.source_exhaustion_policy != "coverage_first":
+            errors.append("data.source_exhaustion_policy must be 'coverage_first'")
+        required_tasks = set(DEFAULT_MULTITASK_LOSS_WEIGHTS)
+        if (
+            self.loss.mode != "task_weighted"
+            or set(self.loss.task_weights) != required_tasks
+            or set(self.loss.task_weights.values()) != {1.0}
+            or self.loss.unknown_task_weight != 1.0
+            or not self.loss.strict_task_metadata
+        ):
+            errors.append("task_weighted loss with unit task weights is required")
+        if errors:
+            raise ValueError(
+                "Invalid full-coverage cycle training configuration: " + "; ".join(errors)
+            )
+        return self
 
     @model_validator(mode="after")
     def validate_shared_bbox_thresholds(self) -> Qwen3VLTrainingConfig:
@@ -466,6 +533,7 @@ class TrainingPathOverrides:
     initial_adapter_dir: str | None = None
     learning_rate: float | None = None
     num_train_epochs: float | None = None
+    resume_from_checkpoint: str | None = None
 
 
 @dataclass(frozen=True)
@@ -585,6 +653,8 @@ def apply_training_overrides(
         train_updates["learning_rate"] = overrides.learning_rate
     if overrides.num_train_epochs is not None:
         train_updates["num_train_epochs"] = overrides.num_train_epochs
+    if overrides.resume_from_checkpoint is not None:
+        train_updates["resume_from_checkpoint"] = overrides.resume_from_checkpoint
     if overrides.initial_adapter_dir is not None:
         lora_updates["initial_adapter_dir"] = overrides.initial_adapter_dir
 

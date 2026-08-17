@@ -1,0 +1,50 @@
+common_image_root: "/root/autodl-tmp/datasets"
+seed: 42
+training_selection_mode: "cyclic_full_coverage"
+
+cycle:
+  output_dir: "data/processed/multisource/qwen3vl_4b_stage_a"
+  protected_evaluation_manifest: "data/evaluation/tiers_v2/evaluation_tiers_manifest.json"
+  source_batch_pattern:
+    - "VRSBench"
+    - "VRSBench"
+    - "VRSBench"
+    - "LEVIR-CC"
+
+output:
+  # Historical single-round fields remain present for compatibility; --build-cycle ignores them.
+  train_file: "data/processed/multisource/qwen3vl_4b_stage_a/round_000_train.jsonl"
+  validation_file: "data/processed/multisource/qwen3vl_4b_stage_a/validation.jsonl"
+  report_file: "data/processed/multisource/qwen3vl_4b_stage_a/round_000_report.json"
+
+sources:
+  - name: "VRSBench"
+    image_root: "/root/autodl-tmp/datasets/VRSBench"
+    train_file: "data/processed/qwen3vl_train.jsonl"
+    validation_file: "data/processed/qwen3vl_val.jsonl"
+    validation_samples: 1024
+    validation_group_by_images: false
+    training_group_by_images: true
+    prompt_profile: "qwen3vl_4b_stage_a"
+    strengthen_existing_messages: true
+    # In cyclic mode these values are bucket sizes, not random per-round quotas.
+    training_task_quotas:
+      detection: 12000
+      counting: 8000
+      captioning: 6000
+      vqa: 13720
+      scene_classification: 1200
+
+  - name: "LEVIR-CC"
+    image_root: "/root/autodl-tmp/datasets/LEVIR-CC"
+    train_file: "/root/autodl-tmp/datasets/LEVIR-CC/annotations/levircc_train.jsonl"
+    validation_file: "/root/autodl-tmp/datasets/LEVIR-CC/annotations/levircc_val.jsonl"
+    validation_samples: 1333
+    validation_group_by_images: true
+    training_samples_per_image_group: 2
+    prompt_profile: "qwen3vl_4b_stage_a"
+    strengthen_existing_messages: true
+    instruction_override: >-
+      The first image is before the change and the second image is after the
+      change. Describe all visible changes concisely. If there is no change,
+      state that clearly.

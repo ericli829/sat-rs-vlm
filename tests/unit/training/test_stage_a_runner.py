@@ -1,0 +1,57 @@
+from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+
+ROOT = Path(__file__).parents[3]
+SCRIPT = ROOT / "scripts/training/run_qwen3vl_4b_stage_a.py"
+
+
+def load_runner() -> Any:
+    spec = importlib.util.spec_from_file_location("run_qwen3vl_4b_stage_a", SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_round_command_chains_previous_adapter_without_changing_processor() -> None:
+    module = load_runner()
+    args = SimpleNamespace(
+        train_config="stage-a.yaml",
+        max_train_samples=None,
+        max_eval_samples=None,
+    )
+    command = module._training_command(
+        args,
+        train_file=Path("round_001.jsonl"),
+        validation_file=Path("validation.jsonl"),
+        output_dir=Path("round_001/adapter"),
+        initial_adapter=Path("round_000/adapter"),
+        learning_rate=1.0e-5,
+        mode=None,
+    )
+    adapter_index = command.index("--initial-adapter")
+    assert command[adapter_index + 1] == str(Path("round_000/adapter"))
+    assert "--processor-dir" not in command
+
+
+def test_adapter_chain_starts_from_base_then_uses_immediately_previous_round() -> None:
+    module = load_runner()
+    root = Path("run")
+    assert module._previous_round_adapter(root, 0) is None
+    assert module._previous_round_adapter(root, 1) == root / "round_000/adapter"
+    assert module._previous_round_adapter(root, 2) == root / "round_001/adapter"
+
+
+def test_round_learning_rate_reuses_last_configured_value(tmp_path: Path) -> None:
+    module = load_runner()
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        "cycle_training:\n  learning_rates: [0.00002, 0.00001]\n", encoding="utf-8"
+    )
+    assert module._learning_rate(config, 0, None) == 2.0e-5
+    assert module._learning_rate(config, 4, None) == 1.0e-5
+    assert module._learning_rate(config, 4, 3.0e-6) == 3.0e-6

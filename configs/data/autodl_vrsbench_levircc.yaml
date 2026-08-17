@@ -1,5 +1,6 @@
 common_image_root: "/root/autodl-tmp/datasets"
 seed: 42
+training_selection_mode: "legacy_round_sampling"
 
 output:
   train_file: "/root/autodl-tmp/sat-rs-vlm/data/processed/multisource/vrsbench_levircc_train.jsonl"
