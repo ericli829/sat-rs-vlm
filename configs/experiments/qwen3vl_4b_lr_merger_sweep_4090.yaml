@@ -17,6 +17,8 @@ common:
   bf16: true
   fp16: false
   gradient_checkpointing: true
+  # A 阶段未解冻 merger，仅为统一 Pydantic schema 提供正值占位符。
+  visual_merger_lr: 1.0e-6
   vision_lr: 1.0e-6
   eval_batch_size: 4
 

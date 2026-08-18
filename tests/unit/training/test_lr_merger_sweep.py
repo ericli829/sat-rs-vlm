@@ -151,3 +151,30 @@ def test_materialized_merger_config_uses_existing_training_schema(
     assert payload["vision_tuning"]["unfreeze_last_n_blocks"] == 0
     assert payload["vision_tuning"]["train_main_merger"] is True
     assert destination.is_file()
+
+
+def test_lora_only_materialization_uses_unused_positive_merger_placeholder(
+    tmp_path: Path,
+) -> None:
+    root = Path(__file__).resolve().parents[3]
+    base = root / "configs/train/qwen3vl_4b_vit_probe_last2_4090.yaml"
+    destination = tmp_path / "lora_only.yaml"
+    payload = materialize_training_config(
+        base,
+        output_path=destination,
+        model_dir=tmp_path / "model",
+        processor_dir=tmp_path / "model",
+        train_file=tmp_path / "train.jsonl",
+        val_file=tmp_path / "val.jsonl",
+        image_root=tmp_path,
+        initial_adapter=tmp_path / "round1",
+        output_dir=tmp_path / "checkpoint",
+        spec=ExperimentSpec("A1", "lora-only", "A", 2e-5, 0.0, 0, False),
+        common={"max_seq_length": 1024, "seed": 42},
+        max_steps=2,
+        batch_size=2,
+        gradient_accumulation_steps=1,
+    )
+    assert payload["optimization"]["visual_merger_lr"] == pytest.approx(1.0e-6)
+    assert payload["vision_tuning"]["enabled"] is False
+    assert payload["vision_tuning"]["train_main_merger"] is False

@@ -134,10 +134,13 @@ bash scripts/training/run_autodl_qwen3vl_4b_lr_merger_sweep.sh \
   --config configs/experiments/qwen3vl_4b_lr_merger_sweep_4090.yaml \
   --initial-adapter /ABS/PATH/TO/ROUND1_FINAL_ADAPTER \
   --existing-vit-checkpoint /ABS/PATH/TO/VIT_CHECKPOINT_100 \
-  --shutdown
+  --shutdown-after-run
 ```
 
-`--shutdown` 只能显式传入，并且必须存在 `/root/autodl_env.sh`；否则 runner 拒绝关机。`--prepare-only`、`--dry-run`、`--forward-only` 永远不会关机。
+AutoDL 正式运行建议始终通过 `run_autodl_qwen3vl_4b_lr_merger_sweep.sh` 启动。它会复用
+Stage-A 已验证的 `activate_autodl_python.sh` 和 `--shutdown-after-run` 处理，避免 screen
+内退回 base Python。`--shutdown` 仍作为 Python 入口的兼容别名保留，但不建议绕过 shell
+wrapper 直接使用；`--prepare-only`、`--dry-run`、`--forward-only` 永远不会关机。
 
 编排 smoke：
 

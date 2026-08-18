@@ -79,7 +79,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--only", default=None, help="Comma-separated A1,A2,A3,B1,B2,B3"
     )
-    parser.add_argument("--shutdown", action="store_true")
+    parser.add_argument(
+        "--shutdown",
+        "--shutdown-after-run",
+        dest="shutdown",
+        action="store_true",
+        help="Request shutdown after completion; the AutoDL shell wrapper is preferred.",
+    )
     return parser.parse_args()
 
 

@@ -502,9 +502,16 @@ def materialize_training_config(
         "train_deepstack_mergers": spec.deepstack,
         "train_patch_embed": spec.patch_embed,
     }
+    # A 阶段是 LoRA-only：merger 没有可训练参数，但统一配置 schema 仍要求
+    # learning rate 为正值。这个占位值不会创建 visual_merger optimizer group。
+    visual_merger_lr = (
+        float(spec.merger_lr)
+        if spec.main_merger and spec.merger_lr > 0.0
+        else float(common.get("visual_merger_lr", 1.0e-6))
+    )
     payload["optimization"] = {
         "lora_lr": float(spec.lora_lr or 5.0e-5),
-        "visual_merger_lr": float(spec.merger_lr),
+        "visual_merger_lr": visual_merger_lr,
         "vision_lr": float(common.get("vision_lr", 1.0e-6)),
     }
     payload["evaluation"] = {
@@ -871,8 +878,8 @@ def shutdown_if_requested(enabled: bool) -> None:
     env_file = Path("/root/autodl_env.sh")
     if not env_file.is_file():
         raise RuntimeError("Refusing shutdown: /root/autodl_env.sh is missing")
-    command = "/sbin/shutdown" if Path("/sbin/shutdown").is_file() else "poweroff"
-    subprocess.run(
-        [command, "-h", "now"] if command.endswith("shutdown") else [command],
-        check=False,
-    )
+    for command in ("/usr/sbin/shutdown", "/sbin/shutdown"):
+        if Path(command).is_file():
+            subprocess.run([command, "-h", "now"], check=False)
+            return
+    subprocess.run(["poweroff"], check=False)
