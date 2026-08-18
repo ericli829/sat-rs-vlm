@@ -13,19 +13,24 @@ from typing import Any
 
 import yaml
 
-from sat_rs_vlm.configuration.layered import (
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+SRC_ROOT = PROJECT_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
+from sat_rs_vlm.configuration.layered import (  # noqa: E402
     LayeredConfigRequest,
     load_layered_config,
     write_resolved_config,
 )
-from sat_rs_vlm.configuration.paths import PathConfig, resolve_path_value
-from sat_rs_vlm.configuration.precision import select_precision
-from sat_rs_vlm.data.manifest import (
+from sat_rs_vlm.configuration.paths import PathConfig, resolve_path_value  # noqa: E402
+from sat_rs_vlm.configuration.precision import select_precision  # noqa: E402
+from sat_rs_vlm.data.manifest import (  # noqa: E402
     load_dataset_manifest,
     resolve_split_path,
     validate_dataset,
 )
-from sat_rs_vlm.training.experiment import (
+from sat_rs_vlm.training.experiment import (  # noqa: E402
     create_experiment_layout,
     disk_report,
     environment_snapshot,
@@ -33,8 +38,6 @@ from sat_rs_vlm.training.experiment import (
     resolve_resume_checkpoint,
     write_json,
 )
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 BASE_CONFIGS = (
     PROJECT_ROOT / "configs/base/default.yaml",

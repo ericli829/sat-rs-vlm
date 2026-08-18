@@ -239,6 +239,12 @@ v1.5 runner；Keyword Hit 仅保留在 repository compatibility 诊断中，不�
 保留为 `legacy-vrs-v1`，只用于旧实验的同 SHA 配对比较；comparison 会同时校验 tier
 version 与 SHA256。
 
+Qwen3-VL-4B 当前 LR + visual merger sweep 使用独立的
+`configs/eval/qwen3vl_4b_e1_sweep_4090.yaml`，默认 `eval_batch_size=4`。该配置及后续同一
+轮新建的 E1 评测配置保持 batch 4；历史 4B baseline、E2、E3 配置不改写，以保留历史吞吐
+元数据。若 4090 首次 E1 发生 CUDA OOM，sweep 只回退到 batch 2，并固定所有候选实验使用
+batch 2。
+
 ```bash
 # 真实模型生成 + 统一评估
 python scripts/evaluate_rs_vlm.py --config configs/eval/qwen3vl_eval.yaml
@@ -408,6 +414,7 @@ pytest -q
 - [故障排查](docs/troubleshooting.md)
 - [原 LoRA 训练说明](docs/training_qwen3vl.md)
 - [Qwen3-VL-4B ViT Last-2 Probe](docs/experiments/QWEN3VL_4B_VIT_PROBE.md)
+- [Qwen3-VL-4B LR + Visual Merger Sweep](docs/experiments/QWEN3VL_4B_LR_MERGER_SWEEP.md)
 - [外部实验插件](docs/external_plugins.md)
 - [Bit Flip 可靠性](docs/reliability/README.md)
 - [可靠性命令](docs/reliability/commands.md)

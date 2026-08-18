@@ -105,6 +105,16 @@ def configure_h1_trainable_parameters(
     merger_ids: set[int] = set()
     optional_visual_ids: set[int] = set()
     if vision_config.enabled:
+        requested_surface = (
+            vision_config.unfreeze_last_n_blocks > 0
+            or vision_config.train_main_merger
+            or vision_config.train_deepstack_mergers
+            or vision_config.train_patch_embed
+        )
+        if not requested_surface:
+            raise ValueError(
+                "vision_tuning.enabled=true but no non-LoRA visual surface was requested"
+            )
         start = len(blocks) - vision_config.unfreeze_last_n_blocks
         selected_indices = list(range(start, len(blocks)))
         for index in selected_indices:
@@ -127,7 +137,11 @@ def configure_h1_trainable_parameters(
         merger_ids=merger_ids,
         optional_visual_ids=optional_visual_ids,
     )
-    if vision_config.enabled and int(audit["vision_blocks"]["parameter_count"]) <= 0:
+    if (
+        vision_config.enabled
+        and vision_config.unfreeze_last_n_blocks > 0
+        and int(audit["vision_blocks"]["parameter_count"]) <= 0
+    ):
         raise ValueError("vision_tuning.enabled=true but no visual block parameters are trainable")
     if (
         vision_config.enabled

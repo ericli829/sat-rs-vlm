@@ -245,28 +245,49 @@ class TrainingStatisticsConfig(StrictTrainingModel):
 
 
 class VisionTuningConfig(StrictTrainingModel):
-    """H1 partial visual-unfreeze surface; disabled for the LoRA baseline."""
+    """可配置的视觉参数解冻面。
+
+    ``unfreeze_last_n_blocks=0`` 专门支持 merger-only 诊断实验；启用视觉调优
+    时至少要打开一个非 LoRA 视觉面，避免 ``enabled=true`` 实际仍是 LoRA-only。
+    """
 
     enabled: bool = False
-    unfreeze_last_n_blocks: int = Field(default=2, ge=1)
+    unfreeze_last_n_blocks: int = Field(default=2, ge=0)
     train_main_merger: bool = True
     train_deepstack_mergers: bool = False
     train_patch_embed: bool = False
 
+    @model_validator(mode="after")
+    def validate_visual_surface(self) -> VisionTuningConfig:
+        if self.enabled and not (
+            self.unfreeze_last_n_blocks > 0
+            or self.train_main_merger
+            or self.train_deepstack_mergers
+            or self.train_patch_embed
+        ):
+            raise ValueError(
+                "vision_tuning.enabled=true requires at least one visual surface: "
+                "unfreeze_last_n_blocks>0, train_main_merger, "
+                "train_deepstack_mergers, or train_patch_embed"
+            )
+        return self
+
 
 class OptimizationGroupConfig(StrictTrainingModel):
-    """Independent learning rates for LoRA, merger, and ViT groups."""
+    """Independent learning rates for LoRA, merger, and ViT groups.
+
+    诊断 sweep 允许 merger 学习率高于当前 LoRA 学习率，因此这里仅校验正值；
+    是否启用某个参数组以及最终参数归属由视觉 audit 和 optimizer builder 校验。
+    """
 
     lora_lr: float = Field(default=1.0e-5, gt=0.0)
     visual_merger_lr: float = Field(default=5.0e-6, gt=0.0)
     vision_lr: float = Field(default=1.0e-6, gt=0.0)
 
     @model_validator(mode="after")
-    def validate_learning_rate_order(self) -> OptimizationGroupConfig:
-        if not self.vision_lr < self.visual_merger_lr < self.lora_lr:
-            raise ValueError(
-                "H1 learning rates must satisfy vision_lr < visual_merger_lr < lora_lr"
-            )
+    def validate_learning_rates(self) -> OptimizationGroupConfig:
+        if min(self.lora_lr, self.visual_merger_lr, self.vision_lr) <= 0.0:
+            raise ValueError("All grouped learning rates must be positive")
         return self
 
 
@@ -287,9 +308,7 @@ class VitProbeConfig(StrictTrainingModel):
 
     enabled: bool = False
     source_train_files: list[str] = Field(default_factory=list)
-    protected_evaluation_manifest: str = (
-        "data/evaluation/tiers_v2/evaluation_tiers_manifest.json"
-    )
+    protected_evaluation_manifest: str = "data/evaluation/tiers_v2/evaluation_tiers_manifest.json"
     output_dir: str = "data/processed/experiments/qwen3vl_4b_vit_probe"
     target_samples: int = Field(default=6000, ge=1)
     seed: int = 42
@@ -372,9 +391,7 @@ class H2DifficultyMixConfig(StrictTrainingModel):
 
     @model_validator(mode="after")
     def validate_sum(self) -> H2DifficultyMixConfig:
-        if abs(
-            self.regular_representative + self.medium_hard + self.core_hard - 1.0
-        ) > 1.0e-9:
+        if abs(self.regular_representative + self.medium_hard + self.core_hard - 1.0) > 1.0e-9:
             raise ValueError("H2 difficulty_mix values must sum to 1.0")
         return self
 
@@ -386,13 +403,9 @@ class H2RefinementConfig(StrictTrainingModel):
     schema_version: str = "2.0"
     source_checkpoint: str | None = None
     source_training_file: str | None = None
-    protected_evaluation_manifest: str = (
-        "data/evaluation/tiers_v2/evaluation_tiers_manifest.json"
-    )
+    protected_evaluation_manifest: str = "data/evaluation/tiers_v2/evaluation_tiers_manifest.json"
     mining_candidates_file: str = "data/processed/h2/h2_mining_candidates.jsonl"
-    mining_candidates_manifest: str = (
-        "data/processed/h2/h2_mining_candidates_manifest.json"
-    )
+    mining_candidates_manifest: str = "data/processed/h2/h2_mining_candidates_manifest.json"
     evaluated_predictions_file: str | None = None
     output_dir: str = "data/processed/h2"
     mining_target_samples: int = Field(default=6000, ge=1)
@@ -447,9 +460,7 @@ class CycleTrainingConfig(StrictTrainingModel):
             if not self.cycle_manifest:
                 raise ValueError("cycle_training.cycle_manifest is required")
             if not self.protected_evaluation_manifest:
-                raise ValueError(
-                    "cycle_training.protected_evaluation_manifest is required"
-                )
+                raise ValueError("cycle_training.protected_evaluation_manifest is required")
         return self
 
 

@@ -115,6 +115,45 @@ def test_requesting_more_blocks_than_available_fails() -> None:
         )
 
 
+def test_merger_only_visual_tuning_is_valid() -> None:
+    model = FakePeftModel()
+    audit = configure_h1_trainable_parameters(
+        model,
+        VisionTuningConfig(
+            enabled=True,
+            unfreeze_last_n_blocks=0,
+            train_main_merger=True,
+            train_deepstack_mergers=False,
+            train_patch_embed=False,
+        ),
+        TrainableAuditConfig(fail_on_unexpected_trainable=True),
+    )
+    visual = model.base_model.model.model.visual
+    assert audit["vision_blocks"]["block_indices"] == []
+    assert audit["vision_blocks"]["parameter_count"] == 0
+    assert audit["visual_merger"]["parameter_count"] > 0
+    assert all(not parameter.requires_grad for parameter in visual.blocks.parameters())
+    assert all(parameter.requires_grad for parameter in visual.merger.parameters())
+    groups = build_h1_parameter_groups(
+        model,
+        audit,
+        OptimizationGroupConfig(lora_lr=5e-5, visual_merger_lr=3e-5, vision_lr=1e-6),
+        weight_decay=0.01,
+    )
+    assert {group["group_name"] for group in groups} == {"lora", "visual_merger"}
+
+
+def test_enabled_visual_tuning_without_surface_fails_fast() -> None:
+    with pytest.raises(ValueError, match="at least one visual surface"):
+        VisionTuningConfig(
+            enabled=True,
+            unfreeze_last_n_blocks=0,
+            train_main_merger=False,
+            train_deepstack_mergers=False,
+            train_patch_embed=False,
+        )
+
+
 def test_visual_sidecar_round_trip_uses_generic_name(tmp_path) -> None:
     pytest.importorskip("safetensors")
     model = FakePeftModel()

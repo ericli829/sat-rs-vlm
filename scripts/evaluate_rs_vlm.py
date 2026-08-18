@@ -3,13 +3,21 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import sys
+import time
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = PROJECT_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
 
 from sat_rs_vlm.configuration.environment import expand_environment
 from sat_rs_vlm.data.qwen3vl_collator import Qwen3VLDataCollator
@@ -44,8 +52,9 @@ from sat_rs_vlm.training.utils import (
 )
 from sat_rs_vlm.utils.jsonl import write_jsonl
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_EVALUATION_CONTRACT = PROJECT_ROOT / "configs/eval/evaluation_contract_v1.5.yaml"
+DEFAULT_EVALUATION_CONTRACT = (
+    PROJECT_ROOT / "configs/eval/evaluation_contract_v1.5.yaml"
+)
 
 
 def build_generation_kwargs(generation_cfg: dict[str, Any]) -> dict[str, Any]:
@@ -64,7 +73,9 @@ def generate_prediction(
 ) -> str:
     """兼容旧脚本导入，委托统一新增 token 解码实现。"""
 
-    return _generate_prediction(model, processor, collator, sample, generation_cfg, torch)
+    return _generate_prediction(
+        model, processor, collator, sample, generation_cfg, torch
+    )
 
 
 def validate_local_adapter(adapter_source: str, *, local_files_only: bool) -> None:
@@ -76,7 +87,9 @@ def validate_local_adapter(adapter_source: str, *, local_files_only: bool) -> No
 def parse_args() -> argparse.Namespace:
     """解析评测参数。"""
 
-    parser = argparse.ArgumentParser(description="Evaluate remote-sensing VLM predictions.")
+    parser = argparse.ArgumentParser(
+        description="Evaluate remote-sensing VLM predictions."
+    )
     parser.add_argument(
         "--config",
         default="configs/eval/qwen3vl_eval.yaml",
@@ -137,10 +150,18 @@ def resolve_evaluation_outputs(
     output_cfg = dict(config["output"])
     if output_dir is not None:
         root = output_dir.resolve()
-        return root / "summary.json", root / "predictions.jsonl", root / "evaluation_v1_5"
+        return (
+            root / "summary.json",
+            root / "predictions.jsonl",
+            root / "evaluation_v1_5",
+        )
     if checkpoint is not None:
         root = checkpoint.resolve() / "evaluation"
-        return root / "summary.json", root / "predictions.jsonl", root / "evaluation_v1_5"
+        return (
+            root / "summary.json",
+            root / "predictions.jsonl",
+            root / "evaluation_v1_5",
+        )
     summary_file = resolve_project_path(str(output_cfg["summary_file"]))
     predictions_file = resolve_project_path(str(output_cfg["predictions_file"]))
     configured_dir = output_cfg.get("evaluation_dir")
@@ -260,7 +281,9 @@ def evaluate(
             require_bitsandbytes = bool(
                 read_strategy_manifest(checkpoint).get("quantized_base", False)
             )
-        modules = safe_import_model_dependencies(require_bitsandbytes=require_bitsandbytes)
+        modules = safe_import_model_dependencies(
+            require_bitsandbytes=require_bitsandbytes
+        )
         if checkpoint is None:
             model, processor = load_model(config, modules)
         else:
@@ -277,6 +300,9 @@ def evaluate(
         processor = loaded_processor
     model.eval()
     torch = modules["torch"]
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats()
+    evaluation_started = time.perf_counter()
     generation_cfg = dict(config.get("generation", {}))
     dataset = Qwen3VLDataset(eval_file, data_cfg.get("max_eval_samples"))
     batch_size = int(batch_size_override or data_cfg.get("eval_batch_size", 1))
@@ -334,7 +360,9 @@ def evaluate(
 
     if any(prediction is None for prediction in predictions_by_index):
         raise RuntimeError("Evaluation finished with missing predictions")
-    predictions = [prediction for prediction in predictions_by_index if prediction is not None]
+    predictions = [
+        prediction for prediction in predictions_by_index if prediction is not None
+    ]
 
     predictions_file.parent.mkdir(parents=True, exist_ok=True)
     write_jsonl(predictions_file, predictions)
@@ -348,7 +376,9 @@ def evaluate(
         predictions_file,
         evaluation_dir,
         contract_path=contract_path,
-        manifest_path=(resolve_project_path(str(manifest_value)) if manifest_value else None),
+        manifest_path=(
+            resolve_project_path(str(manifest_value)) if manifest_value else None
+        ),
         strict=bool(evaluation_cfg.get("strict", True)),
         semantic_enabled=bool(evaluation_cfg.get("semantic", True)),
         semantic_contract_path=resolve_project_path(
@@ -378,6 +408,37 @@ def evaluate(
         ),
         evaluation_tier_sha256=tier_identity["sha256"] if tier_identity else None,
     )
+    evaluation_runtime_seconds = time.perf_counter() - evaluation_started
+    peak_vram_mb = (
+        torch.cuda.max_memory_allocated() / (1024 * 1024)
+        if torch.cuda.is_available()
+        else None
+    )
+    metadata_path = (
+        output_dir / "evaluation_metadata.json"
+        if output_dir is not None
+        else evaluation_dir.parent / "evaluation_metadata.json"
+    )
+    metadata_path.parent.mkdir(parents=True, exist_ok=True)
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "eval_batch_size": batch_size,
+                "sample_count": len(predictions),
+                "evaluation_runtime_seconds": evaluation_runtime_seconds,
+                "samples_per_second": (
+                    len(predictions) / evaluation_runtime_seconds
+                    if evaluation_runtime_seconds > 0
+                    else None
+                ),
+                "peak_vram_mb": peak_vram_mb,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     summary_file.parent.mkdir(parents=True, exist_ok=True)
     summary_file.write_bytes(evaluation_outputs["metrics"].read_bytes())
     print(f"Saved Evaluation v1.5 metrics to {evaluation_outputs['metrics']}")
@@ -387,7 +448,9 @@ def evaluate(
         "summary_file": str(summary_file),
         "predictions_file": str(predictions_file),
         "evaluation_dir": str(evaluation_dir),
-        "evaluation_outputs": {name: str(path) for name, path in evaluation_outputs.items()},
+        "evaluation_outputs": {
+            name: str(path) for name, path in evaluation_outputs.items()
+        },
         "sample_count": len(predictions),
         "batch_size": batch_size,
     }
