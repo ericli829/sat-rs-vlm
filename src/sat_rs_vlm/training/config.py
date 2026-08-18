@@ -527,6 +527,7 @@ class TrainingPathOverrides:
     max_train_samples: int | None = None
     max_eval_samples: int | None = None
     max_steps: int | None = None
+    save_steps: int | None = None
     local_files_only: bool | None = None
     method: str | None = None
     max_seq_length: int | None = None
@@ -647,6 +648,10 @@ def apply_training_overrides(
         train_updates["output_dir"] = overrides.output_dir
     if overrides.max_steps is not None:
         train_updates["max_steps"] = overrides.max_steps
+    if overrides.save_steps is not None:
+        if overrides.save_steps <= 0:
+            raise ValueError("training.save_steps must be positive when overridden")
+        train_updates["save_steps"] = overrides.save_steps
     if overrides.method is not None:
         train_updates["method"] = overrides.method
     if overrides.learning_rate is not None:

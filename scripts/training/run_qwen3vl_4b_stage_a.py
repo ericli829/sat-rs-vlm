@@ -35,6 +35,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--forward-only", action="store_true")
     parser.add_argument("--learning-rate", type=float, default=None)
+    parser.add_argument(
+        "--initial-adapter",
+        default=None,
+        help="Explicit parent adapter; required when the parent run is stored elsewhere.",
+    )
     parser.add_argument("--max-train-samples", type=int, default=None)
     parser.add_argument("--max-eval-samples", type=int, default=None)
     parser.add_argument("--data-config", default=str(DEFAULT_DATA_CONFIG))
@@ -52,6 +57,144 @@ def _adapter_valid(path: Path) -> bool:
     return (path / "adapter_config.json").is_file() and any(
         (path / name).is_file() for name in ("adapter_model.safetensors", "adapter_model.bin")
     )
+
+
+def _model_fingerprint_from_config(model_dir: Path) -> dict[str, Any]:
+    """从本地 Qwen 配置提取可区分 2B/4B 的结构指纹。"""
+
+    config_path = model_dir / "config.json"
+    if not config_path.is_file():
+        raise FileNotFoundError(f"Base model config.json is missing: {config_path}")
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    text_config = payload.get("text_config") or payload
+    vision_config = payload.get("vision_config") or {}
+    return {
+        "model_type": payload.get("model_type"),
+        "architectures": list(payload.get("architectures") or []),
+        "hidden_size": text_config.get("hidden_size"),
+        "num_hidden_layers": text_config.get("num_hidden_layers"),
+        "num_attention_heads": text_config.get("num_attention_heads"),
+        "vocab_size": text_config.get("vocab_size"),
+        "vision_hidden_size": vision_config.get("hidden_size"),
+        "vision_depth": vision_config.get("depth"),
+    }
+
+
+def _validate_initial_adapter(
+    adapter_dir: Path,
+    model_dir: Path,
+    *,
+    require_fingerprint: bool,
+) -> dict[str, Any]:
+    """在加载模型前验证 parent adapter 的类型、来源和 2B/4B 结构一致性。"""
+
+    if not _adapter_valid(adapter_dir):
+        raise FileNotFoundError(
+            "Initial adapter must contain adapter_config.json and adapter weights: "
+            f"{adapter_dir}"
+        )
+    adapter_config = json.loads(
+        (adapter_dir / "adapter_config.json").read_text(encoding="utf-8")
+    )
+    if str(adapter_config.get("peft_type", "")).upper() != "LORA":
+        raise ValueError(
+            f"Round transition requires a LoRA adapter, got {adapter_config.get('peft_type')}: "
+            f"{adapter_dir}"
+        )
+    manifest_path = adapter_dir / "strategy_manifest.json"
+    if not manifest_path.is_file():
+        if require_fingerprint:
+            raise ValueError(
+                "Round transition requires strategy_manifest.json with a base fingerprint: "
+                f"{adapter_dir}"
+            )
+        return {"verified": False, "adapter_dir": str(adapter_dir)}
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("strategy") not in {None, "lora"}:
+        raise ValueError(
+            "Round 1 cannot start from a non-LoRA strategy adapter: "
+            f"{manifest.get('strategy')} at {adapter_dir}"
+        )
+    if manifest.get("training_stage"):
+        raise ValueError(
+            "Round 1 cannot start from a specialized training-stage adapter: "
+            f"{manifest.get('training_stage')} at {adapter_dir}"
+        )
+    training_config_path = adapter_dir / "training_config.yaml"
+    if training_config_path.is_file():
+        training_config = yaml.safe_load(training_config_path.read_text(encoding="utf-8")) or {}
+        if (
+            (training_config.get("hard_adaptation") or {}).get("enabled")
+            or (training_config.get("h2_refinement") or {}).get("enabled")
+        ):
+            raise ValueError(
+                "Round 1 cannot start from an H1/H2 refinement adapter: "
+                f"{adapter_dir}"
+            )
+    adapter_fingerprint = manifest.get("base_model_fingerprint")
+    current_fingerprint = _model_fingerprint_from_config(model_dir)
+    if not isinstance(adapter_fingerprint, dict):
+        if require_fingerprint:
+            raise ValueError(
+                "Initial adapter lacks base_model_fingerprint; refusing an unverified "
+                f"2B/4B adapter chain: {adapter_dir}"
+            )
+        return {"verified": False, "adapter_dir": str(adapter_dir)}
+    comparable = (
+        "model_type",
+        "hidden_size",
+        "num_hidden_layers",
+        "num_attention_heads",
+        "vocab_size",
+        "vision_hidden_size",
+        "vision_depth",
+    )
+    mismatches = {
+        key: {"model": current_fingerprint.get(key), "adapter": adapter_fingerprint.get(key)}
+        for key in comparable
+        if current_fingerprint.get(key) != adapter_fingerprint.get(key)
+    }
+    if mismatches:
+        raise ValueError(
+            "Initial adapter is incompatible with the current base model (likely 2B/4B "
+            f"mismatch): {mismatches}"
+        )
+    return {
+        "verified": True,
+        "adapter_dir": str(adapter_dir),
+        "adapter_fingerprint": adapter_fingerprint,
+        "model_fingerprint": current_fingerprint,
+    }
+
+
+def _resolve_round_plan(
+    round_entry: dict[str, Any],
+    training_profile: dict[str, Any],
+    *,
+    world_size: int | None = None,
+) -> dict[str, int]:
+    """根据真实 bucket 大小解析 effective batch、半轮保存点和整轮步数。"""
+
+    sample_count = int(round_entry["sample_count"])
+    per_device_batch = int(training_profile["per_device_train_batch_size"])
+    gradient_accumulation = int(training_profile["gradient_accumulation_steps"])
+    resolved_world_size = int(
+        world_size if world_size is not None else os.environ.get("WORLD_SIZE", "1")
+    )
+    if sample_count <= 0 or per_device_batch <= 0 or gradient_accumulation <= 0:
+        raise ValueError("Round sample count and batch parameters must be positive")
+    if resolved_world_size <= 0:
+        raise ValueError("WORLD_SIZE must be positive")
+    effective_batch = per_device_batch * gradient_accumulation * resolved_world_size
+    steps_per_epoch = math.ceil(sample_count / effective_batch)
+    return {
+        "sample_count": sample_count,
+        "world_size": resolved_world_size,
+        "effective_batch": effective_batch,
+        "steps_per_epoch": steps_per_epoch,
+        "mid_round_save_step": max(1, round(steps_per_epoch * 0.5)),
+        "final_step": steps_per_epoch,
+    }
 
 
 def _latest_checkpoint(adapter_dir: Path) -> Path | None:
@@ -132,6 +275,7 @@ def _training_command(
     initial_adapter: Path | None,
     learning_rate: float,
     mode: str | None,
+    save_steps: int | None = None,
     resume_checkpoint: Path | None = None,
 ) -> list[str]:
     command = [
@@ -154,6 +298,8 @@ def _training_command(
         command.extend(["--max-train-samples", str(args.max_train_samples)])
     if args.max_eval_samples is not None:
         command.extend(["--max-eval-samples", str(args.max_eval_samples)])
+    if save_steps is not None:
+        command.extend(["--save-steps", str(save_steps)])
     if resume_checkpoint is not None:
         command.extend(["--resume-from-checkpoint", str(resume_checkpoint)])
     if mode:
@@ -199,9 +345,6 @@ def main() -> int:
         return 0
     train_config_payload = yaml.safe_load(Path(args.train_config).read_text(encoding="utf-8"))
     training_profile = dict(train_config_payload["training"])
-    effective_batch = int(training_profile["per_device_train_batch_size"]) * int(
-        training_profile["gradient_accumulation_steps"]
-    )
 
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     run_root = Path(
@@ -221,10 +364,21 @@ def main() -> int:
         end_round=end_round,
     )
 
-    initial_adapter = _previous_round_adapter(run_root, args.start_round)
+    initial_adapter = (
+        Path(args.initial_adapter)
+        if args.initial_adapter is not None
+        else _previous_round_adapter(run_root, args.start_round)
+    )
     if initial_adapter is not None:
-        if not _adapter_valid(initial_adapter):
-            raise FileNotFoundError(f"Previous round adapter is required: {initial_adapter}")
+        _validate_initial_adapter(
+            initial_adapter,
+            model_dir,
+            require_fingerprint=bool(
+                train_config_payload.get("cycle_training", {}).get(
+                    "require_adapter_fingerprint", True
+                )
+            ),
+        )
     results: list[dict[str, Any]] = []
     for previous_index in range(args.start_round):
         previous_result = run_root / f"round_{previous_index:03d}" / "round_result.json"
@@ -237,6 +391,16 @@ def main() -> int:
         train_file = Path(round_entry["train_file"])
         round_root = run_root / f"round_{round_index:03d}"
         adapter_dir = round_root / "adapter"
+        existing_round_files = (
+            {path.name for path in round_root.iterdir() if path.name != "round_plan.json"}
+            if round_root.exists()
+            else set()
+        )
+        if existing_round_files and not args.resume:
+            raise FileExistsError(
+                f"Refusing to overwrite existing round output: {round_root}. "
+                "Use a new --run-root or --resume for an interrupted round."
+            )
         if args.resume and _adapter_valid(adapter_dir):
             initial_adapter = adapter_dir
             result_path = round_root / "round_result.json"
@@ -247,7 +411,28 @@ def main() -> int:
             )
             continue
         lr = _learning_rate(args.train_config, round_index, args.learning_rate)
+        round_plan = _resolve_round_plan(round_entry, training_profile)
         resume_checkpoint = _latest_checkpoint(adapter_dir) if args.resume else None
+        round_root.mkdir(parents=True, exist_ok=True)
+        (round_root / "round_plan.json").write_text(
+            json.dumps(
+                {
+                    "round_index": round_index,
+                    "train_file": str(train_file),
+                    "train_file_sha256": round_entry["sha256"],
+                    "learning_rate": lr,
+                    "num_train_epochs": training_profile.get("num_train_epochs"),
+                    "resume_from_checkpoint": str(resume_checkpoint)
+                    if resume_checkpoint is not None
+                    else None,
+                    **round_plan,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
         def round_command(
             mode: str | None,
             resume_path: Path | None = None,
@@ -264,6 +449,7 @@ def main() -> int:
                 output_dir=bound_adapter_dir,
                 initial_adapter=bound_initial_adapter,
                 learning_rate=bound_learning_rate,
+                save_steps=round_plan["mid_round_save_step"],
                 mode=mode,
                 resume_checkpoint=resume_path,
             )
@@ -285,17 +471,38 @@ def main() -> int:
             )
         train_report_path = adapter_dir / "smoke_train_report.json"
         train_report = json.loads(train_report_path.read_text(encoding="utf-8"))
+        output_manifest_path = adapter_dir / "strategy_manifest.json"
+        output_manifest = json.loads(output_manifest_path.read_text(encoding="utf-8"))
         result = {
             "round_index": round_index,
             "status": "completed",
             "train_file": str(train_file),
             "train_file_sha256": round_entry["sha256"],
+            "cycle_manifest_sha256": sha256_file(manifest_path),
             "initial_adapter": str(initial_adapter) if initial_adapter else None,
+            "parent_adapter_fingerprint": (
+                json.loads(
+                    (initial_adapter / "strategy_manifest.json").read_text(encoding="utf-8")
+                ).get("base_model_fingerprint")
+                if initial_adapter is not None
+                else None
+            ),
+            "output_adapter_fingerprint": output_manifest.get("base_model_fingerprint"),
+            "lora_trainable_parameters": output_manifest.get("trainable_parameters"),
+            "lora_trainable_ratio": output_manifest.get("trainable_ratio"),
             "output_adapter": str(adapter_dir),
             "learning_rate": lr,
             "samples": round_entry["sample_count"],
+            "source_distribution": round_entry.get("source_distribution", {}),
+            "task_distribution": round_entry.get("task_distribution", {}),
+            "effective_batch": round_plan["effective_batch"],
+            "steps_per_epoch": round_plan["steps_per_epoch"],
+            "mid_round_save_step": round_plan["mid_round_save_step"],
+            "final_step": round_plan["final_step"],
+            "resume_from_checkpoint": str(resume_checkpoint)
+            if resume_checkpoint is not None
+            else None,
             "optimizer_steps": train_report.get("global_step"),
-            "effective_batch": effective_batch,
             "runtime": train_report.get("train_runtime_seconds", time.perf_counter() - started),
             "peak_vram_mb": train_report.get("peak_memory_mb"),
         }

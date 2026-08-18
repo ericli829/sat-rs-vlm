@@ -115,3 +115,55 @@ bash scripts/training/run_autodl_qwen3vl_4b_stage_a.sh \
 循环分桶避免一次性组织超大 epoch，同时提供独立 checkpoint、中断恢复、LEVIR caption
 variant 轮换以及逐轮漂移分析。Stage-A 追求完整代表性 task alignment；H2 则根据已有模型
 错误做 hardness-aware refinement，两者的数据选择假设和实验问题不同。
+
+## Round 1：低学习率收敛轮
+
+Round 0 完成后，Round 1 只改变两个因素：使用同一个 full-coverage cycle 的
+`round_001_train.jsonl`，并将学习率从 `2e-5` 降为 `1e-5`。它不是新的 Stage-A、H1、H2
+或 hard-example 实验。LoRA rank、target modules、task weights、assistant-only mask、
+视觉冻结策略、序列长度和 VRSBench/LEVIR-CC 调度都保持不变。
+
+Round 0 adapter 只作为 LoRA 权重初始化：Round 1 会重新创建 optimizer、scheduler 和
+dataloader，因此普通 round transition 必须保持 `training.resume_from_checkpoint: null`。
+`--resume` 只用于 Round 1 自身被中断后的恢复，不能用来替代 parent adapter 初始化。
+
+Runner 会读取 `round_001` 的真实样本数，按
+`ceil(N / (per_device_batch_size * gradient_accumulation_steps * world_size))` 计算整轮步数，
+并把 `save_steps` 动态设置为整轮约 50% 的位置。中间 checkpoint 和 final adapter 都会保留，
+不执行训练期间的 Unified E2 generation evaluation。模型选择应结合 Round 0、Round 1 半轮和
+Round 1 final 的 E1/E2 指标，特别检查 LEVIR F1/Recall 是否退化，以及 Detection、Counting、
+VQA 是否继续提升。
+
+Round 1 专用配置：
+
+```text
+configs/train/qwen3vl_4b_stage_a_round1_4090.yaml
+```
+
+如果 Round 0 与 Round 1 位于同一 run root，可以使用 runner 自动解析紧邻的
+`round_000/adapter`。已有完整 Stage-A 结果时，建议使用新的输出根目录，并显式传入
+Round 0 adapter，以免覆盖历史 `round_001`：
+
+```bash
+cd /root/autodl-tmp/sat-rs-vlm
+export QWEN3VL_4B_MODEL_DIR=/root/autodl-tmp/models/Qwen3-VL-4B-Instruct
+export DATA_ROOT=/root/autodl-tmp/datasets
+export OUTPUT_ROOT=/root/autodl-tmp/outputs
+export ROUND_0_FINAL_ADAPTER=/root/autodl-tmp/outputs/qwen3vl_4b_stage_a_<round0>/round_000/adapter
+export ROUND1_RUN_ROOT=/root/autodl-tmp/outputs/qwen3vl_4b_stage_a_round1_<timestamp>
+
+bash scripts/training/run_autodl_qwen3vl_4b_stage_a.sh \
+  --train-config configs/train/qwen3vl_4b_stage_a_round1_4090.yaml \
+  --start-round 1 \
+  --end-round 1 \
+  --initial-adapter "$ROUND_0_FINAL_ADAPTER" \
+  --run-root "$ROUND1_RUN_ROOT" \
+  --skip-e2-eval
+```
+
+正式训练完成后，使用 Round 1 中间 checkpoint 做 E1 快速评测、final adapter 做 E2 标准
+评测；不要把已有结果目录中的 `final_adapter` 自动当作 Round 0，因为它可能已经是后续
+cyclic round 的产物。Round transition 的 runner 会校验 adapter 权重、LoRA 类型、base
+model fingerprint，并拒绝 2B、H1 或 H2 adapter。输出的 `round_plan.json` 和
+`round_result.json` 会记录样本数、source/task 分布、effective batch、整轮步数、中间保存点、
+父 adapter 指纹、学习率以及 `resume_from_checkpoint` 状态。

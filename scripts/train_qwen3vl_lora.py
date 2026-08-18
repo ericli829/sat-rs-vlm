@@ -104,6 +104,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-train-samples", type=int, default=None)
     parser.add_argument("--max-eval-samples", type=int, default=None)
     parser.add_argument("--max-steps", type=int, default=None)
+    parser.add_argument("--save-steps", type=int, default=None)
     parser.add_argument("--max-seq-length", type=int, default=None)
     parser.add_argument("--method", choices=("lora", "qlora"), default=None)
     parser.add_argument("--initial-adapter", default=None)
@@ -133,6 +134,7 @@ def build_overrides(args: argparse.Namespace) -> TrainingPathOverrides:
         max_train_samples=args.max_train_samples,
         max_eval_samples=args.max_eval_samples,
         max_steps=args.max_steps,
+        save_steps=args.save_steps,
         local_files_only=args.local_files_only,
         method=args.method,
         max_seq_length=args.max_seq_length,
