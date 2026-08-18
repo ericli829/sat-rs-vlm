@@ -24,6 +24,17 @@ generation:
   temperature: 0.0
   num_beams: 1
 
+# Performance statistics are measured on the real generation path after the
+# warmup samples. The generated performance_report.json records scope and
+# environment so that baseline/quantization comparisons stay reproducible.
+performance:
+  enabled: true
+  # This evaluation entry point uses one independent sample per generation.
+  batch_size: 1
+  repeats: 1
+  warmup_samples: 2
+  continue_on_error: true
+
 output:
   summary_file: "reports/eval/qwen3vl_eval_summary.json"
   predictions_file: "reports/eval/qwen3vl_predictions.jsonl"
