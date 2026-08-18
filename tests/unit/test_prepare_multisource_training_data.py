@@ -344,6 +344,100 @@ def test_full_cycle_manifest_proves_coverage_and_is_reproducible(tmp_path: Path)
     ]
 
 
+def test_full_cycle_spreads_and_replays_short_source_to_match_pattern(
+    tmp_path: Path,
+) -> None:
+    module = load_script_module()
+    common_root = tmp_path / "datasets"
+    vrs_root = common_root / "VRSBench"
+    levir_root = common_root / "LEVIR-CC"
+    vrs_image = vrs_root / "images/vrs.png"
+    vrs_image.parent.mkdir(parents=True)
+    vrs_image.write_bytes(b"png")
+    pair_images: list[str] = []
+    val_pair_images: list[str] = []
+    for split, destination in (("train", pair_images), ("val", val_pair_images)):
+        for period in ("A", "B"):
+            image = levir_root / "images" / split / period / "pair.png"
+            image.parent.mkdir(parents=True, exist_ok=True)
+            image.write_bytes(b"png")
+            destination.append(f"images/{split}/{period}/pair.png")
+
+    vrs_train = vrs_root / "train.jsonl"
+    vrs_val = vrs_root / "val.jsonl"
+    write_jsonl(
+        vrs_train,
+        [
+            internal_row(f"vrs-{index}", ["images/vrs.png"], task_type="detection")
+            for index in range(8)
+        ],
+    )
+    write_jsonl(vrs_val, [internal_row("vrs-val", ["images/vrs.png"], task_type="vqa")])
+    levir_train = levir_root / "train.jsonl"
+    levir_val = levir_root / "val.jsonl"
+    write_jsonl(
+        levir_train,
+        [internal_row(f"levir-{index}", pair_images) for index in range(4)],
+    )
+    write_jsonl(levir_val, [internal_row("levir-val", val_pair_images)])
+    protected = tmp_path / "evaluation_manifest.json"
+    protected.write_text('{"tiers":{"E3":{"sample_ids":["protected-only"]}}}', "utf-8")
+    config = {
+        "common_image_root": str(common_root),
+        "seed": 42,
+        "training_selection_mode": "cyclic_full_coverage",
+        "cycle": {
+            "protected_evaluation_manifest": str(protected),
+            "source_batch_pattern": ["VRSBench", "VRSBench", "VRSBench", "LEVIR-CC"],
+            "replay_short_source": {
+                "enabled": True,
+                "source": "LEVIR-CC",
+                "reference_source": "VRSBench",
+            },
+        },
+        "sources": [
+            {
+                "name": "VRSBench",
+                "image_root": str(vrs_root),
+                "train_file": str(vrs_train),
+                "validation_file": str(vrs_val),
+                "training_task_quotas": {"detection": 2},
+            },
+            {
+                "name": "LEVIR-CC",
+                "image_root": str(levir_root),
+                "train_file": str(levir_train),
+                "validation_file": str(levir_val),
+                "training_samples_per_image_group": 2,
+            },
+        ],
+    }
+
+    report = module.prepare_training_cycle(config, cycle_output_dir=tmp_path / "cycle")
+
+    assert report["num_rounds"] == 4
+    assert report["global"]["valid"] is True
+    assert report["global"]["population_samples"] == 12
+    assert report["global"]["duplicate_count"] == 0
+    assert report["source_scheduling"]["replay"]["replay_exposures_added"] == 2
+    assert report["source_scheduling"]["expected_exposure_counts"] == {
+        "LEVIR-CC": 6,
+        "VRSBench": 8,
+    }
+    for round_report in report["rounds"]:
+        assert round_report["source_distribution"]["VRSBench"] == 2
+        assert round_report["source_distribution"]["LEVIR-CC"] >= 1
+    replay_rows = [
+        row
+        for round_report in report["rounds"]
+        for row in read_jsonl(round_report["train_file"])
+        if row["metadata"].get("cycle_replay")
+    ]
+    assert len(replay_rows) == 2
+    assert all("replay_original_id" in row["metadata"] for row in replay_rows)
+    assert len({row["id"] for row in replay_rows}) == 2
+
+
 def test_stage_a_prompt_profile_strengthens_existing_messages() -> None:
     module = load_script_module()
     sample = {

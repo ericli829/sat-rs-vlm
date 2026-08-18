@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import shutil
 import subprocess
 import sys
 import time
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -76,6 +78,49 @@ def _learning_rate(config_path: str | Path, round_index: int, override: float | 
     config = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
     rates = [float(value) for value in config["cycle_training"]["learning_rates"]]
     return rates[min(round_index, len(rates) - 1)]
+
+
+def _validate_round_source_contract(
+    rounds: list[dict[str, Any]],
+    config_path: str | Path,
+    *,
+    start_round: int,
+    end_round: int,
+) -> None:
+    config = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
+    pattern = [str(source) for source in config["data"]["source_batch_pattern"]]
+    pattern_counts = Counter(pattern)
+    for round_index in range(start_round, end_round + 1):
+        distribution = {
+            str(source): int(count)
+            for source, count in dict(rounds[round_index]["source_distribution"]).items()
+        }
+        missing = sorted(set(pattern_counts).difference(distribution))
+        if missing:
+            raise ValueError(
+                f"Round {round_index} violates source batch contract; missing: {missing}"
+            )
+        reference_source = max(pattern_counts, key=lambda source: pattern_counts[source])
+        reference_count = distribution[reference_source]
+        for source, weight in pattern_counts.items():
+            required = math.ceil(reference_count * weight / pattern_counts[reference_source])
+            if distribution[source] < required:
+                raise ValueError(
+                    f"Round {round_index} violates source batch ratio: "
+                    f"{source} has {distribution[source]}, requires at least {required}"
+                )
+
+
+def _store_cycle_manifest(manifest_path: Path, run_root: Path) -> list[str]:
+    destination = run_root / "cycle_manifest.json"
+    archive_dir = run_root / "reports" / "cycle_manifests"
+    if destination.is_file() and sha256_file(destination) != sha256_file(manifest_path):
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        archive_path = archive_dir / f"cycle_manifest_{sha256_file(destination)[:12]}.json"
+        if not archive_path.exists():
+            shutil.copy2(destination, archive_path)
+    shutil.copy2(manifest_path, destination)
+    return [str(path) for path in sorted(archive_dir.glob("cycle_manifest_*.json"))]
 
 
 def _training_command(
@@ -164,11 +209,17 @@ def main() -> int:
         or Path(os.environ["OUTPUT_ROOT"]) / f"qwen3vl_4b_stage_a_{timestamp}"
     )
     run_root.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(manifest_path, run_root / "cycle_manifest.json")
+    archived_cycle_manifests = _store_cycle_manifest(manifest_path, run_root)
     rounds = list(manifest["rounds"])
     end_round = len(rounds) - 1 if args.end_round is None else args.end_round
     if end_round >= len(rounds) or args.start_round > end_round:
         raise ValueError(f"Round range must be within 0..{len(rounds) - 1}")
+    _validate_round_source_contract(
+        rounds,
+        args.train_config,
+        start_round=args.start_round,
+        end_round=end_round,
+    )
 
     initial_adapter = _previous_round_adapter(run_root, args.start_round)
     if initial_adapter is not None:
@@ -197,14 +248,22 @@ def main() -> int:
             continue
         lr = _learning_rate(args.train_config, round_index, args.learning_rate)
         resume_checkpoint = _latest_checkpoint(adapter_dir) if args.resume else None
-        def round_command(mode: str | None, resume_path: Path | None = None) -> list[str]:
+        def round_command(
+            mode: str | None,
+            resume_path: Path | None = None,
+            *,
+            bound_train_file: Path = train_file,
+            bound_adapter_dir: Path = adapter_dir,
+            bound_initial_adapter: Path | None = initial_adapter,
+            bound_learning_rate: float = lr,
+        ) -> list[str]:
             return _training_command(
                 args,
-                train_file=train_file,
+                train_file=bound_train_file,
                 validation_file=validation_file,
-                output_dir=adapter_dir,
-                initial_adapter=initial_adapter,
-                learning_rate=lr,
+                output_dir=bound_adapter_dir,
+                initial_adapter=bound_initial_adapter,
+                learning_rate=bound_learning_rate,
                 mode=mode,
                 resume_checkpoint=resume_path,
             )
@@ -267,6 +326,7 @@ def main() -> int:
         "base_model_fingerprint": final_strategy_manifest.get("base_model_fingerprint"),
         "processor": str(model_dir),
         "cycle_manifest_sha256": sha256_file(manifest_path),
+        "archived_cycle_manifests": archived_cycle_manifests,
         "round_count": len(results),
         "rounds": results,
         "lora_target_audit": final_strategy_manifest.get("lora_target_audit"),

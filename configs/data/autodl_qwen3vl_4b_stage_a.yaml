@@ -10,6 +10,12 @@ cycle:
     - "VRSBench"
     - "VRSBench"
     - "LEVIR-CC"
+  # Spread unique LEVIR-CC variants across all VRSBench rounds, then replay
+  # deterministic LEVIR-CC exposures only where the 3:1 batch ratio is short.
+  replay_short_source:
+    enabled: true
+    source: "LEVIR-CC"
+    reference_source: "VRSBench"
 
 output:
   # Historical single-round fields remain present for compatibility; --build-cycle ignores them.

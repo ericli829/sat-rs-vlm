@@ -20,6 +20,7 @@ from sat_rs_vlm.data.cyclic_training import (
     partition_group_variants,
     partition_task_population,
     sha256_file,
+    top_up_source_to_pattern,
     validate_cycle_coverage,
 )
 from sat_rs_vlm.data.prompt_templates import strengthen_answer, strengthen_instruction
@@ -686,6 +687,8 @@ def prepare_training_cycle(
 
     source_rounds: dict[str, list[list[dict[str, Any]]]] = {}
     source_population: dict[str, list[dict[str, Any]]] = {}
+    source_configs: dict[str, dict[str, Any]] = {}
+    source_seeds: dict[str, int] = {}
     validation_rows: list[dict[str, Any]] = []
     levir_report: dict[str, Any] = {}
     for source_index, source_value in enumerate(list(config.get("sources", []))):
@@ -694,6 +697,8 @@ def prepare_training_cycle(
         population = _load_source_split(source, "train_file", common_root)
         source_population[name] = population
         source_seed = seed + source_index
+        source_configs[name] = source
+        source_seeds[name] = source_seed
         if source.get("training_task_quotas"):
             source_rounds[name] = partition_task_population(
                 population,
@@ -728,6 +733,23 @@ def prepare_training_cycle(
             )
         )
 
+    target_round_count = max((len(rounds) for rounds in source_rounds.values()), default=0)
+    for name, source in source_configs.items():
+        if source.get("training_samples_per_image_group") is None:
+            continue
+        if len(source_rounds[name]) == target_round_count:
+            continue
+        spread_rounds, variant_report = partition_group_variants(
+            source_population[name],
+            variants_per_round=int(source["training_samples_per_image_group"]),
+            seed=source_seeds[name],
+            cycle_index=cycle_index,
+            image_key=lambda row: tuple(_message_images(row)),
+            target_rounds=target_round_count,
+        )
+        source_rounds[name] = spread_rounds
+        levir_report[name] = variant_report
+
     population = [row for name in sorted(source_population) for row in source_population[name]]
     _assert_unique_ids(population, "cyclic training population")
     _assert_unique_ids(validation_rows, "cyclic validation")
@@ -739,14 +761,33 @@ def prepare_training_cycle(
         load_protected_e3_ids(str(protected_path)),
     )
 
-    rounds = combine_source_rounds(
+    base_rounds = combine_source_rounds(
         source_rounds,
         seed=seed,
         cycle_index=cycle_index,
     )
-    coverage = validate_cycle_coverage(population, rounds)
+    coverage = validate_cycle_coverage(population, base_rounds)
     if not coverage["valid"]:
         raise ValueError(f"Full-cycle coverage validation failed: {coverage}")
+    rounds = base_rounds
+    replay_report: dict[str, Any] = {"enabled": False, "replay_exposures_added": 0}
+    replay_config = dict(cycle_config.get("replay_short_source", {}))
+    if bool(replay_config.get("enabled", False)):
+        replay_source = str(replay_config["source"])
+        reference_source = str(replay_config["reference_source"])
+        if replay_source not in source_population:
+            raise ValueError(f"Unknown replay source: {replay_source}")
+        if reference_source not in source_population:
+            raise ValueError(f"Unknown replay reference source: {reference_source}")
+        rounds, replay_report = top_up_source_to_pattern(
+            base_rounds,
+            source_population[replay_source],
+            list(cycle_config.get("source_batch_pattern", [])),
+            replay_source=replay_source,
+            reference_source=reference_source,
+            seed=seed,
+            cycle_index=cycle_index,
+        )
     validation_rows.sort(key=lambda row: str(row["id"]))
     validation_path = output_dir / "validation.jsonl"
     write_jsonl(validation_path, validation_rows)
@@ -756,11 +797,16 @@ def prepare_training_cycle(
         train_path = output_dir / f"round_{round_index:03d}_train.jsonl"
         report_path = output_dir / f"round_{round_index:03d}_report.json"
         write_jsonl(train_path, rows)
+        replay_rows = [
+            row for row in rows if bool(dict(row.get("metadata", {})).get("cycle_replay"))
+        ]
         report = {
             "schema_version": "1.0",
             "cycle_index": cycle_index,
             "round_index": round_index,
             "sample_count": len(rows),
+            "base_sample_count": len(rows) - len(replay_rows),
+            "replay_exposure_count": len(replay_rows),
             "unique_id_count": len({str(row["id"]) for row in rows}),
             "source_distribution": _distribution(rows, "source"),
             "task_distribution": _distribution(rows, "task"),
@@ -772,6 +818,8 @@ def prepare_training_cycle(
         )
         round_entries.append({**report, "report_file": str(report_path)})
 
+    scheduled_population = [row for round_rows in rounds for row in round_rows]
+    scheduled_source_distribution = _distribution(scheduled_population, "source")
     manifest = {
         "schema_version": "1.0",
         "training_selection_mode": "cyclic_full_coverage",
@@ -787,12 +835,14 @@ def prepare_training_cycle(
             "level": "batch",
             "preference_pattern": list(cycle_config.get("source_batch_pattern", [])),
             "exhaustion_policy": "coverage_first",
-            "expected_exposure_counts": _distribution(population, "source"),
+            "base_population_counts": _distribution(population, "source"),
+            "expected_exposure_counts": scheduled_source_distribution,
             "expected_exposure_ratio": {
-                source: count / max(1, len(population))
-                for source, count in _distribution(population, "source").items()
+                source: count / max(1, len(scheduled_population))
+                for source, count in scheduled_source_distribution.items()
             },
             "tail_may_deviate_from_pattern": True,
+            "replay": replay_report,
         },
         "task_population_counts": _distribution(population, "task"),
         "rounds": round_entries,
@@ -806,7 +856,7 @@ def prepare_training_cycle(
                         for row in round_rows
                         if dict(row.get("metadata", {})).get("training_source") == name
                     ]
-                    for round_rows in rounds
+                    for round_rows in base_rounds
                 ],
             )
             for name, rows in sorted(source_population.items())
@@ -816,7 +866,7 @@ def prepare_training_cycle(
                 [row for row in population if row.get("task_type") == task],
                 [
                     [row for row in round_rows if row.get("task_type") == task]
-                    for round_rows in rounds
+                    for round_rows in base_rounds
                 ],
             )
             for task in sorted({str(row.get("task_type")) for row in population})

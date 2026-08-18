@@ -42,6 +42,7 @@ def test_shell_scripts_exist_and_parse_when_bash_is_available() -> None:
         PROJECT_ROOT / "scripts/training/run_autodl_full_pipeline.sh",
         PROJECT_ROOT / "scripts/training/run_autodl_levircc_train.sh",
         PROJECT_ROOT / "scripts/training/run_autodl_levircc_replay.sh",
+        PROJECT_ROOT / "scripts/training/run_autodl_qwen3vl_4b_stage_a.sh",
         PROJECT_ROOT / "scripts/evaluation/run_autodl_replay_eval.sh",
         PROJECT_ROOT / "scripts/storage/sync_to_local_disk.sh",
         PROJECT_ROOT / "scripts/storage/backup_results.sh",

@@ -5,6 +5,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+
 ROOT = Path(__file__).parents[3]
 SCRIPT = ROOT / "scripts/training/run_qwen3vl_4b_stage_a.py"
 
@@ -55,3 +57,59 @@ def test_round_learning_rate_reuses_last_configured_value(tmp_path: Path) -> Non
     assert module._learning_rate(config, 0, None) == 2.0e-5
     assert module._learning_rate(config, 4, None) == 1.0e-5
     assert module._learning_rate(config, 4, 3.0e-6) == 3.0e-6
+
+
+def test_round_source_contract_accepts_replay_top_up(tmp_path: Path) -> None:
+    module = load_runner()
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        "data:\n"
+        "  source_batch_pattern: [VRSBench, VRSBench, VRSBench, LEVIR-CC]\n",
+        encoding="utf-8",
+    )
+    rounds = [
+        {"source_distribution": {"VRSBench": 12, "LEVIR-CC": 4}},
+        {"source_distribution": {"VRSBench": 10, "LEVIR-CC": 4}},
+    ]
+
+    module._validate_round_source_contract(
+        rounds,
+        config,
+        start_round=0,
+        end_round=1,
+    )
+
+
+def test_round_source_contract_rejects_missing_short_source(tmp_path: Path) -> None:
+    module = load_runner()
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        "data:\n"
+        "  source_batch_pattern: [VRSBench, VRSBench, VRSBench, LEVIR-CC]\n",
+        encoding="utf-8",
+    )
+    rounds = [{"source_distribution": {"VRSBench": 12}}]
+
+    with pytest.raises(ValueError, match="missing.*LEVIR-CC"):
+        module._validate_round_source_contract(
+            rounds,
+            config,
+            start_round=0,
+            end_round=0,
+        )
+
+
+def test_changed_cycle_manifest_is_archived_before_resume(tmp_path: Path) -> None:
+    module = load_runner()
+    run_root = tmp_path / "run"
+    run_root.mkdir()
+    destination = run_root / "cycle_manifest.json"
+    destination.write_text('{"version":"old"}\n', encoding="utf-8")
+    new_manifest = tmp_path / "new_manifest.json"
+    new_manifest.write_text('{"version":"new"}\n', encoding="utf-8")
+
+    archived = module._store_cycle_manifest(new_manifest, run_root)
+
+    assert len(archived) == 1
+    assert Path(archived[0]).read_text(encoding="utf-8") == '{"version":"old"}\n'
+    assert destination.read_text(encoding="utf-8") == '{"version":"new"}\n'
