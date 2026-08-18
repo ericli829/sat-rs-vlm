@@ -1,0 +1,131 @@
+# Qwen3-VL-4B Stage-A Round1 final adapter 上的受控视觉 ablation。
+# 只改变 ViT 最后 2 个 block 的 requires_grad；LoRA、loss、prompt、E1 和生成参数不变。
+model:
+  model_dir: "${QWEN3VL_4B_MODEL_DIR}"
+  processor_dir: "${QWEN3VL_4B_MODEL_DIR}"
+  local_files_only: true
+  trust_remote_code: true
+  torch_dtype: "bfloat16"
+  attn_implementation: "sdpa"
+  device_map: "auto"
+
+data:
+  train_file: "data/processed/experiments/qwen3vl_4b_vit_probe/train.jsonl"
+  val_file: "data/processed/multisource/qwen3vl_4b_stage_a/validation.jsonl"
+  image_root: "${DATA_ROOT}"
+  max_seq_length: 1024
+  max_train_samples: null
+  max_eval_samples: null
+  skip_bad_samples: false
+  data_composition: "full"
+  sampling_mode: "uniform"
+  task_sampling_weights: {}
+  source_batch_pattern: []
+
+training:
+  output_dir: "${OUTPUT_ROOT}/experiments/qwen3vl_4b_vit_probe_last2"
+  method: "lora"
+  freeze_vision_encoder: true
+  freeze_projector: true
+  num_train_epochs: null
+  max_steps: 200
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 2
+  gradient_accumulation_steps: 4
+  learning_rate: 0.000005
+  weight_decay: 0.01
+  warmup_ratio: 0.03
+  lr_scheduler_type: "cosine"
+  logging_steps: 10
+  save_steps: 100
+  eval_steps: 100
+  save_total_limit: 3
+  bf16: true
+  fp16: false
+  gradient_checkpointing: true
+  dataloader_num_workers: 8
+  dataloader_pin_memory: true
+  dataloader_persistent_workers: true
+  max_grad_norm: 1.0
+  seed: 42
+  resume_from_checkpoint: null
+
+lora:
+  initial_adapter_dir: null
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+qlora:
+  load_in_4bit: false
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_compute_dtype: "bfloat16"
+  bnb_4bit_use_double_quant: true
+
+loss:
+  mode: "task_weighted"
+  task_weights:
+    captioning: 1.0
+    detection: 1.0
+    counting: 1.0
+    scene_classification: 1.0
+    vqa: 1.0
+    change_detection: 1.0
+  unknown_task_weight: 1.0
+  strict_task_metadata: true
+
+vision_tuning:
+  enabled: true
+  unfreeze_last_n_blocks: 2
+  train_main_merger: false
+  train_deepstack_mergers: false
+  train_patch_embed: false
+
+optimization:
+  lora_lr: 0.000005
+  # 当前 schema 要求 vision_lr < visual_merger_lr < lora_lr；merger 未启用，此值不会产生参数组。
+  visual_merger_lr: 0.000002
+  vision_lr: 0.000001
+
+trainable_audit:
+  fail_on_unexpected_trainable: true
+  report_dir: "reports/training"
+
+vit_probe:
+  enabled: true
+  source_train_files:
+    - "data/processed/multisource/qwen3vl_4b_stage_a/round_001_train.jsonl"
+  protected_evaluation_manifest: "data/evaluation/tiers_v2/evaluation_tiers_manifest.json"
+  output_dir: "data/processed/experiments/qwen3vl_4b_vit_probe"
+  target_samples: 6000
+  seed: 42
+  source_targets:
+    VRSBench: 4500
+    LEVIR-CC: 1500
+  task_targets:
+    captioning: 900
+    detection: 900
+    counting: 900
+    scene_classification: 900
+    vqa: 900
+    change_detection: 1500
+  max_steps_limit: 250
+
+evaluation:
+  do_eval: false
+  predict_with_generate: false
+  max_new_tokens: 256
+  num_beams: 1
+
+logging:
+  report_to: "none"
+  experiment_name: "qwen3vl_4b_vit_probe_last2"
+

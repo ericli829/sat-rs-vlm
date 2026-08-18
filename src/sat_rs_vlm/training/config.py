@@ -277,6 +277,38 @@ class TrainableAuditConfig(StrictTrainingModel):
     report_dir: str = "reports/training"
 
 
+class VitProbeConfig(StrictTrainingModel):
+    """4B 少量视觉适配 probe 的确定性数据与保护边界配置。
+
+    该配置只描述数据构建约束，不改变正式训练的 LoRA、loss 或 bbox 协议。
+    ``source_train_files`` 可以包含一个或多个已经通过数据校验的训练 JSONL；
+    评测层级 manifest 用于过滤全部 E1/E2/E3 样本，防止训练泄漏。
+    """
+
+    enabled: bool = False
+    source_train_files: list[str] = Field(default_factory=list)
+    protected_evaluation_manifest: str = (
+        "data/evaluation/tiers_v2/evaluation_tiers_manifest.json"
+    )
+    output_dir: str = "data/processed/experiments/qwen3vl_4b_vit_probe"
+    target_samples: int = Field(default=6000, ge=1)
+    seed: int = 42
+    source_targets: dict[str, int] = Field(
+        default_factory=lambda: {"VRSBench": 4500, "LEVIR-CC": 1500}
+    )
+    task_targets: dict[str, int] = Field(
+        default_factory=lambda: {
+            "captioning": 900,
+            "detection": 900,
+            "counting": 900,
+            "scene_classification": 900,
+            "vqa": 900,
+            "change_detection": 1500,
+        }
+    )
+    max_steps_limit: int = Field(default=250, ge=1)
+
+
 class HardScoreWeightsConfig(StrictTrainingModel):
     """Evaluation 指标到困难度分数的可审计权重。"""
 
@@ -436,6 +468,7 @@ class Qwen3VLTrainingConfig(StrictTrainingModel):
     vision_tuning: VisionTuningConfig = Field(default_factory=VisionTuningConfig)
     optimization: OptimizationGroupConfig = Field(default_factory=OptimizationGroupConfig)
     trainable_audit: TrainableAuditConfig = Field(default_factory=TrainableAuditConfig)
+    vit_probe: VitProbeConfig = Field(default_factory=VitProbeConfig)
     hard_adaptation: HardAdaptationConfig = Field(default_factory=HardAdaptationConfig)
     h2_refinement: H2RefinementConfig = Field(default_factory=H2RefinementConfig)
     cycle_training: CycleTrainingConfig = Field(default_factory=CycleTrainingConfig)

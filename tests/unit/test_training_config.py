@@ -147,3 +147,22 @@ def test_qwen3vl_4b_stage_a_uses_strict_full_coverage_contract() -> None:
     assert config.vision_tuning.enabled is False
     assert config.loss.mode == "task_weighted"
     assert set(config.loss.task_weights.values()) == {1.0}
+
+
+def test_qwen3vl_4b_vit_probe_config_is_single_variable_last2() -> None:
+    config = load_training_config(
+        "configs/train/qwen3vl_4b_vit_probe_last2_4090.yaml",
+        allow_unresolved_env=True,
+    )
+
+    assert config.vit_probe.enabled is True
+    assert config.vit_probe.seed == 42
+    assert config.vit_probe.target_samples == 6000
+    assert config.vision_tuning.enabled is True
+    assert config.vision_tuning.unfreeze_last_n_blocks == 2
+    assert config.vision_tuning.train_main_merger is False
+    assert config.vision_tuning.train_deepstack_mergers is False
+    assert config.vision_tuning.train_patch_embed is False
+    assert config.optimization.lora_lr == pytest.approx(5e-6)
+    assert config.optimization.vision_lr == pytest.approx(1e-6)
+    assert config.lora.r == 16

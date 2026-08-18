@@ -407,6 +407,7 @@ pytest -q
 - [实验工作流](docs/experiment_workflow.md)
 - [故障排查](docs/troubleshooting.md)
 - [原 LoRA 训练说明](docs/training_qwen3vl.md)
+- [Qwen3-VL-4B ViT Last-2 Probe](docs/experiments/QWEN3VL_4B_VIT_PROBE.md)
 - [外部实验插件](docs/external_plugins.md)
 - [Bit Flip 可靠性](docs/reliability/README.md)
 - [可靠性命令](docs/reliability/commands.md)
