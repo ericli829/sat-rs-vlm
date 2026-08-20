@@ -170,23 +170,29 @@ python scripts/train_qwen3vl_lora.py \
   --config configs/train/qwen3vl_autodl_4090.yaml
 ```
 
-### Qwen3-VL-4B Stage-A 多源对齐
+### Qwen3-VL-4B Stage-A v2
 
-4B Stage-A 从 4B base 开始，将 VRSBench 各 task 与 LEVIR-CC caption variants 组织成
-可证明无遗漏、无重复的多个 cycle bucket。每轮训练 1 epoch 并把上一轮 adapter 作为下一轮
-起点；训练完成后默认运行 Unified E2 v2。历史 2B round sampling 语义保持不变。
+新的 4B 正式入口先构建排除 Unified E1/E2/E3 的 canonical legal population，再执行两阶段
+训练：R0 使用完整 legal VRSBench 做 fresh LoRA 一轮训练；R1 从 R0 final adapter 继续，使用
+完整 VRSBench 加完整/必要 replay 的 LEVIR-CC，并仅额外解冻 main merger 与最后两个 ViT
+blocks。R0/R1 都自动运行相同 SHA 的 Unified E1 v2，默认 batch 4，首次 OOM 后整轮固定为 2。
 
 ```bash
 export QWEN3VL_4B_MODEL_DIR=/root/autodl-tmp/models/Qwen3-VL-4B-Instruct
 export DATA_ROOT=/root/autodl-tmp/datasets
 export OUTPUT_ROOT=/root/autodl-tmp/outputs
-bash scripts/training/run_autodl_qwen3vl_4b_stage_a.sh --prepare-only
-bash scripts/training/run_autodl_qwen3vl_4b_stage_a.sh --dry-run
-bash scripts/training/run_autodl_qwen3vl_4b_stage_a.sh --forward-only
+bash scripts/training/run_autodl_qwen3vl_4b_stage_a_v2.sh --prepare-only
+bash scripts/training/run_autodl_qwen3vl_4b_stage_a_v2.sh --dry-run
+bash scripts/training/run_autodl_qwen3vl_4b_stage_a_v2.sh --forward-only \
+  --r0-adapter /path/to/formal-r0-adapter
 ```
 
-正式后台训练、resume、coverage manifest 与 adapter 兼容审计见
-[Qwen3-VL-4B Stage-A 多源训练](docs/training/qwen3vl_4b_stage_a_multisource.md)。
+严格 balanced probe 从同一个 canonical population 抽样，quota 不足默认报错，不再从某个
+cyclic round 静默补齐。完整命令和契约见
+[Stage-A v2](docs/training/QWEN3VL_4B_STAGE_A_V2.md) 与
+[Balanced Probe](docs/training/BALANCED_PROBE_DATASET.md)。旧入口
+`run_autodl_qwen3vl_4b_stage_a.sh` 及其配置保留为 legacy/historical reproduction，说明仍见
+[旧多源训练文档](docs/training/qwen3vl_4b_stage_a_multisource.md)。
 
 ### H1 困难样本视觉适配
 

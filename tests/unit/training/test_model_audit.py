@@ -11,6 +11,7 @@ from sat_rs_vlm.training.model_audit import (
     finalize_lora_trainable_audit,
     model_fingerprint,
     validate_adapter_architecture,
+    validate_stage_a_v2_parent_adapter,
 )
 
 
@@ -82,3 +83,49 @@ def test_adapter_hidden_size_mismatch_fails_before_peft_load(tmp_path: Path) -> 
 def test_strict_cycle_rejects_legacy_adapter_without_fingerprint(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="lacks base_model_fingerprint"):
         validate_adapter_architecture(FakeModel(), tmp_path, require_fingerprint=True)
+
+
+def test_stage_a_v2_r1_accepts_only_formal_r0_lora_parent(tmp_path: Path) -> None:
+    adapter = tmp_path / "adapter"
+    adapter.mkdir()
+    targets = ["q_proj", "k_proj", "v_proj", "o_proj"]
+    (adapter / "adapter_model.safetensors").write_bytes(b"formal-r0")
+    (adapter / "adapter_config.json").write_text(
+        json.dumps(
+            {
+                "peft_type": "LORA",
+                "r": 16,
+                "lora_alpha": 32,
+                "target_modules": targets,
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest = {
+        "strategy": "lora",
+        "training_stage": "qwen3vl_4b_stage_a_v2_r0",
+        "base_model_fingerprint": model_fingerprint(FakeModel()),
+    }
+    manifest_path = adapter / "strategy_manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    report = validate_stage_a_v2_parent_adapter(
+        FakeModel(),
+        adapter,
+        expected_r=16,
+        expected_alpha=32,
+        expected_target_modules=targets,
+    )
+    assert report["verified"] is True
+    assert len(report["adapter_sha256"]) == 64
+
+    manifest["training_stage"] = "h1_hard_example_visual_adaptation"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(ValueError, match="training_stage=qwen3vl_4b_stage_a_v2_r0"):
+        validate_stage_a_v2_parent_adapter(
+            FakeModel(),
+            adapter,
+            expected_r=16,
+            expected_alpha=32,
+            expected_target_modules=targets,
+        )

@@ -19,11 +19,13 @@ from sat_rs_vlm.data.cyclic_training import (
     load_protected_e3_ids,
     partition_group_variants,
     partition_task_population,
+    partition_task_population_evenly,
     sha256_file,
     top_up_source_to_pattern,
     validate_cycle_coverage,
 )
 from sat_rs_vlm.data.prompt_templates import strengthen_answer, strengthen_instruction
+from sat_rs_vlm.data.stage_a_v2 import build_canonical_training_population
 from sat_rs_vlm.utils.jsonl import read_jsonl, write_jsonl
 
 
@@ -58,6 +60,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--evaluation-output", default=None)
     parser.add_argument("--evaluation-report-output", default=None)
     parser.add_argument("--build-cycle", action="store_true")
+    parser.add_argument(
+        "--build-population",
+        action="store_true",
+        help="Build the Stage-A v2 canonical legal training population.",
+    )
+    parser.add_argument("--population-output-dir", default=None)
     parser.add_argument("--cycle-index", type=int, default=0)
     parser.add_argument("--cycle-output-dir", default=None)
     return parser.parse_args()
@@ -557,9 +565,7 @@ def prepare_full_evaluation_population(
         )
         raw_train_path = Path(str(source["train_file"])).expanduser()
         train_ids.update(str(row.get("id", "")) for row in read_jsonl(raw_train_path))
-        available_image_groups = {
-            tuple(_message_images(row)) for row in validation_rows
-        }
+        available_image_groups = {tuple(_message_images(row)) for row in validation_rows}
         population.extend(selected)
         source_report[name] = {
             "validation_rows_available": len(validation_rows),
@@ -594,9 +600,7 @@ def prepare_full_evaluation_population(
         "evaluation_samples": len(population),
         "unique_ids": len(population_ids),
         "train_evaluation_overlap": 0,
-        "task_distribution": dict(
-            sorted(Counter(row["task_type"] for row in population).items())
-        ),
+        "task_distribution": dict(sorted(Counter(row["task_type"] for row in population).items())),
         "dataset_distribution": dict(
             sorted(
                 Counter(
@@ -631,9 +635,7 @@ def _strengthen_existing_messages(
                 )
             copied["content"] = items
         elif role == "user" and isinstance(content, str):
-            copied["content"] = strengthen_instruction(
-                task_type, content, profile=prompt_profile
-            )
+            copied["content"] = strengthen_instruction(task_type, content, profile=prompt_profile)
         elif role == "assistant" and isinstance(content, str):
             copied["content"] = strengthen_answer(task_type, content, profile=prompt_profile)
         elif role == "assistant" and isinstance(content, list):
@@ -651,12 +653,68 @@ def _strengthen_existing_messages(
 def _distribution(rows: list[dict[str, Any]], field: str) -> dict[str, int]:
     if field == "source":
         values = (
-            str(dict(row.get("metadata", {})).get("training_source", "unknown"))
-            for row in rows
+            str(dict(row.get("metadata", {})).get("training_source", "unknown")) for row in rows
         )
     else:
         values = (str(row.get("task_type", "unknown")) for row in rows)
     return dict(sorted(Counter(values).items()))
+
+
+def prepare_canonical_population(
+    config: dict[str, Any],
+    *,
+    population_output_dir: str | Path | None = None,
+) -> dict[str, Any]:
+    """复用正式 normalization 链路构建 Stage-A v2 canonical population。"""
+
+    common_root = Path(str(config["common_image_root"])).expanduser().resolve()
+    if not common_root.is_dir():
+        raise FileNotFoundError(f"common_image_root does not exist: {common_root}")
+    population_config = dict(config.get("population", {}))
+    output_value = population_output_dir or population_config.get("output_dir")
+    if not output_value:
+        raise ValueError(
+            "Population preparation requires population.output_dir or " "--population-output-dir"
+        )
+    protected_manifest = population_config.get("protected_evaluation_manifest")
+    if not protected_manifest:
+        raise ValueError("population.protected_evaluation_manifest is required")
+
+    seed = int(config.get("seed", 42))
+    source_rows: dict[str, list[dict[str, Any]]] = {}
+    source_inputs: dict[str, dict[str, Any]] = {}
+    prompt_profiles: dict[str, str] = {}
+    validation_rows: list[dict[str, Any]] = []
+    for source_index, source_value in enumerate(list(config.get("sources", []))):
+        source = dict(source_value)
+        name = str(source["name"])
+        source_rows[name] = _load_source_split(source, "train_file", common_root)
+        train_file = Path(str(source["train_file"])).expanduser()
+        source_inputs[name] = {
+            "train_file": str(train_file),
+            "train_file_sha256": sha256_file(train_file),
+            "image_root": str(Path(str(source["image_root"])).expanduser()),
+        }
+        prompt_profiles[name] = str(source.get("prompt_profile", "canonical"))
+        validation_all = _load_source_split(source, "validation_file", common_root)
+        validation_limit = source.get("validation_samples")
+        validation_rows.extend(
+            _sample_validation_rows(
+                validation_all,
+                limit=int(validation_limit) if validation_limit is not None else None,
+                group_by_images=bool(source.get("validation_group_by_images", False)),
+                seed=seed + source_index,
+            )
+        )
+    return build_canonical_training_population(
+        source_rows,
+        validation_rows,
+        output_dir=str(output_value),
+        protected_evaluation_manifest=str(protected_manifest),
+        seed=seed,
+        source_inputs=source_inputs,
+        prompt_profiles=prompt_profiles,
+    )
 
 
 def prepare_training_cycle(
@@ -667,9 +725,13 @@ def prepare_training_cycle(
 ) -> dict[str, Any]:
     """构建一个可审计的 full-coverage cycle，并一次性写出所有 round。"""
 
-    if config.get("training_selection_mode") != "cyclic_full_coverage":
+    selection_mode = str(config.get("training_selection_mode", ""))
+    if selection_mode not in {
+        "cyclic_full_coverage",
+        "balanced_cyclic_full_coverage",
+    }:
         raise ValueError(
-            "--build-cycle requires training_selection_mode='cyclic_full_coverage'; "
+            "--build-cycle requires a full-coverage cyclic selection mode; "
             "legacy_round_sampling remains available through the historical command"
         )
     if cycle_index < 0:
@@ -699,7 +761,17 @@ def prepare_training_cycle(
         source_seed = seed + source_index
         source_configs[name] = source
         source_seeds[name] = source_seed
-        if source.get("training_task_quotas"):
+        if selection_mode == "balanced_cyclic_full_coverage":
+            num_rounds = int(cycle_config.get("num_rounds", 0))
+            if num_rounds < 1:
+                raise ValueError("balanced_cyclic_full_coverage requires cycle.num_rounds")
+            source_rounds[name] = partition_task_population_evenly(
+                population,
+                num_rounds,
+                seed=source_seed,
+                cycle_index=cycle_index,
+            )
+        elif source.get("training_task_quotas"):
             source_rounds[name] = partition_task_population(
                 population,
                 {
@@ -822,7 +894,7 @@ def prepare_training_cycle(
     scheduled_source_distribution = _distribution(scheduled_population, "source")
     manifest = {
         "schema_version": "1.0",
-        "training_selection_mode": "cyclic_full_coverage",
+        "training_selection_mode": selection_mode,
         "seed": seed,
         "cycle_index": cycle_index,
         "num_rounds": len(rounds),
@@ -888,7 +960,22 @@ def main() -> int:
     args = parse_args()
     config = load_config(args.config)
     include_sources = {name.lower() for name in args.include_source} or None
-    if args.build_cycle:
+    selected_modes = sum(
+        bool(value)
+        for value in (args.build_cycle, args.build_population, args.full_evaluation_only)
+    )
+    if selected_modes > 1:
+        raise ValueError(
+            "--build-cycle, --build-population, and --full-evaluation-only are exclusive"
+        )
+    if args.build_population:
+        if include_sources:
+            raise ValueError("--include-source is not supported by population preparation")
+        report = prepare_canonical_population(
+            config,
+            population_output_dir=args.population_output_dir,
+        )
+    elif args.build_cycle:
         if include_sources:
             raise ValueError("--include-source is not supported by full-cycle preparation")
         report = prepare_training_cycle(

@@ -20,6 +20,7 @@ from sat_rs_vlm.data.task_sampler import (
     build_weighted_sampler,
 )
 from sat_rs_vlm.models.qwen3vl_loader import compatible_model_class
+from sat_rs_vlm.models.reliability.checksum import file_sha256
 from sat_rs_vlm.training.config import (
     MultitaskLossConfig,
     Qwen3VLTrainingConfig,
@@ -37,6 +38,7 @@ from sat_rs_vlm.training.model_audit import (
     finalize_lora_trainable_audit,
     model_fingerprint,
     validate_adapter_architecture,
+    validate_stage_a_v2_parent_adapter,
 )
 from sat_rs_vlm.training.optimizer import (
     build_training_parameter_groups,
@@ -60,6 +62,7 @@ from sat_rs_vlm.training.utils import (
 )
 from sat_rs_vlm.training.vision_tuning import (
     VISUAL_SIDECAR_FILENAME,
+    audit_trainable_parameters,
     configure_h1_trainable_parameters,
     save_visual_sidecar,
     write_trainable_audit,
@@ -226,8 +229,7 @@ def apply_lora(
     if targets and hasattr(model, "named_modules"):
         target_audit = audit_lora_targets(model, targets)
         print(
-            "LoRA target audit: "
-            + json.dumps(target_audit["target_match_counts"], sort_keys=True)
+            "LoRA target audit: " + json.dumps(target_audit["target_match_counts"], sort_keys=True)
         )
         setattr(model, "_sat_rs_lora_target_audit", target_audit)
     if paths.initial_adapter_dir is not None:
@@ -248,12 +250,23 @@ def apply_lora(
                 )
             ),
         )
+        if getattr(config, "training_stage", None) == "qwen3vl_4b_stage_a_v2_r1":
+            adapter_audit = validate_stage_a_v2_parent_adapter(
+                model,
+                paths.initial_adapter_dir,
+                expected_r=config.lora.r,
+                expected_alpha=config.lora.alpha,
+                expected_target_modules=config.lora.target_modules,
+            )
+            setattr(model, "_sat_rs_stage_a_v2_parent_audit", adapter_audit)
         print("Adapter architecture audit: " + json.dumps(adapter_audit, sort_keys=True))
         prepared = peft.PeftModel.from_pretrained(
             model,
             str(paths.initial_adapter_dir),
             is_trainable=True,
         )
+        if getattr(config, "training_stage", None) == "qwen3vl_4b_stage_a_v2_r1":
+            setattr(prepared, "_sat_rs_stage_a_v2_parent_audit", adapter_audit)
     else:
         lora_config = peft.LoraConfig(
             r=config.lora.r,
@@ -271,9 +284,7 @@ def apply_lora(
         "LoRA trainable audit: "
         + json.dumps(
             {
-                "trainable_parameters_by_target": final_audit[
-                    "trainable_parameters_by_target"
-                ],
+                "trainable_parameters_by_target": final_audit["trainable_parameters_by_target"],
                 "trainable_parameters": final_audit["trainable_parameters"],
                 "trainable_ratio": final_audit["trainable_ratio"],
             },
@@ -340,6 +351,14 @@ def validate_h1_configuration(
 ) -> None:
     """在加载模型前拒绝会偏离历史 H1 语义的配置。"""
 
+    if config.training_stage == "qwen3vl_4b_stage_a_v2_r0":
+        if paths.initial_adapter_dir is not None:
+            raise ValueError("Stage-A v2 R0 must start from a fresh LoRA adapter")
+        return
+    if config.training_stage == "qwen3vl_4b_stage_a_v2_r1":
+        if paths.initial_adapter_dir is None:
+            raise ValueError("Stage-A v2 R1 must start from the R0 LoRA adapter")
+        return
     if not config.vision_tuning.enabled:
         return
     if config.training.method != "lora":
@@ -351,9 +370,7 @@ def validate_h1_configuration(
             "H1 is step-budgeted; set training.num_train_epochs=null when vision_tuning is enabled"
         )
     if config.training.max_steps is None and config.training.target_effective_epochs is None:
-        raise ValueError(
-            "H1 requires training.max_steps or training.target_effective_epochs"
-        )
+        raise ValueError("H1 requires training.max_steps or training.target_effective_epochs")
 
 
 def resolve_configured_training_plan(
@@ -525,6 +542,23 @@ def build_strategy_manifest(
         "train_loss and eval_loss are comparable only between runs using the same loss mode; "
         "compare model quality with the canonical Evaluation task metrics"
     )
+    training_stage = getattr(config, "training_stage", None)
+    stage_a_v2_config = getattr(config, "stage_a_v2", None)
+    train_file_sha256 = file_sha256(paths.train_file) if paths.train_file.is_file() else None
+    training_plan_path = paths.output_dir / "training_plan.json"
+    training_plan_manifest = (
+        json.loads(training_plan_path.read_text(encoding="utf-8"))
+        if training_plan_path.is_file()
+        else None
+    )
+    per_device_batch = getattr(config.training, "per_device_train_batch_size", None)
+    accumulation = getattr(config.training, "gradient_accumulation_steps", None)
+    world_size = detected_world_size()
+    effective_batch = (
+        int(per_device_batch) * int(accumulation) * world_size
+        if per_device_batch is not None and accumulation is not None
+        else None
+    )
     manifest = {
         "schema_version": "1.0",
         "strategy": config.training.method,
@@ -551,12 +585,61 @@ def build_strategy_manifest(
         ),
         "device": device,
         "loss": loss_manifest,
+        "training_stage": training_stage,
+        "lora": {
+            "r": getattr(config.lora, "r", None),
+            "alpha": getattr(config.lora, "alpha", None),
+            "dropout": getattr(config.lora, "dropout", None),
+            "target_modules": list(config.lora.target_modules),
+        },
+        "train_file": str(paths.train_file),
+        "train_file_sha256": train_file_sha256,
+        "training_contract": {
+            "learning_rate": getattr(config.training, "learning_rate", None),
+            "per_device_train_batch_size": per_device_batch,
+            "gradient_accumulation_steps": accumulation,
+            "world_size": world_size,
+            "effective_batch_size": effective_batch,
+            "num_train_epochs": getattr(config.training, "num_train_epochs", None),
+            "max_steps": getattr(config.training, "max_steps", None),
+            "save_steps": getattr(config.training, "save_steps", None),
+        },
+        "training_plan": training_plan_manifest,
+        "trainable_parameter_audit": trainable_audit,
+        "optimizer_groups": optimizer_groups or [],
     }
+
+    if stage_a_v2_config is not None and stage_a_v2_config.enabled:
+        population_path = Path(str(stage_a_v2_config.population_manifest))
+        stage2_path = (
+            Path(str(stage_a_v2_config.stage2_manifest))
+            if stage_a_v2_config.stage2_manifest
+            else None
+        )
+        manifest["stage_a_v2"] = {
+            "population_manifest": str(population_path),
+            "population_manifest_sha256": (
+                file_sha256(population_path) if population_path.is_file() else None
+            ),
+            "stage2_manifest": str(stage2_path) if stage2_path is not None else None,
+            "stage2_manifest_sha256": (
+                file_sha256(stage2_path)
+                if stage2_path is not None and stage2_path.is_file()
+                else None
+            ),
+            "expected_parent_stage": stage_a_v2_config.expected_parent_stage,
+            "parent_adapter_audit": getattr(model, "_sat_rs_stage_a_v2_parent_audit", None),
+            "stage2_data": (
+                json.loads(stage2_path.read_text(encoding="utf-8"))
+                if stage2_path is not None and stage2_path.is_file()
+                else None
+            ),
+        }
 
     if vision_config.enabled:
         manifest.update(
             {
-                "training_stage": "h1_hard_example_visual_adaptation",
+                "training_stage": training_stage or "h1_hard_example_visual_adaptation",
                 "checkpoint_type": "adapter_with_visual_sidecar",
                 "visual_sidecar": VISUAL_SIDECAR_FILENAME,
                 "vision_tuning": vision_config.model_dump(mode="json"),
@@ -663,8 +746,7 @@ def forward_only(config: Qwen3VLTrainingConfig, paths: ResolvedTrainingPaths) ->
             probe_samples.append(match)
     if config.cycle_training.enabled and len(probe_samples) != len(required_sources):
         found = {
-            str(dict(row.get("metadata", {})).get("training_source", ""))
-            for row in probe_samples
+            str(dict(row.get("metadata", {})).get("training_source", "")) for row in probe_samples
         }
         raise ValueError(
             "Cycle forward probe must include every configured source; missing: "
@@ -727,7 +809,23 @@ def train(
     optimizer_groups: list[dict[str, Any]] | None = None
     grouped_optimizer = None
     checkpoint_artifact_saver = None
-    if config.vision_tuning.enabled:
+    if config.training_stage == "qwen3vl_4b_stage_a_v2_r0":
+        trainable_audit = audit_trainable_parameters(
+            model,
+            selected_block_ids=set(),
+            selected_block_indices=[],
+            merger_ids=set(),
+        )
+        if not trainable_audit["lora"]["parameter_count"]:
+            raise ValueError("Stage-A v2 R0 has no trainable LoRA parameters")
+        if trainable_audit["other_trainable"]:
+            raise ValueError(
+                "Stage-A v2 R0 unexpectedly exposes base parameters: "
+                f"{trainable_audit['other_trainable']}"
+            )
+        paths.output_dir.mkdir(parents=True, exist_ok=True)
+        write_trainable_audit(trainable_audit, paths.output_dir / "trainable_parameters.json")
+    elif config.vision_tuning.enabled:
         trainable_audit = configure_h1_trainable_parameters(
             model,
             config.vision_tuning,
@@ -908,9 +1006,8 @@ def train(
         "train_runtime_seconds": train_metrics.get("train_runtime"),
         "train_samples_per_second": train_metrics.get("train_samples_per_second"),
         "train_steps_per_second": train_metrics.get("train_steps_per_second"),
-        "training_stage": (
-            "h1_hard_example_visual_adaptation" if config.vision_tuning.enabled else None
-        ),
+        "training_stage": config.training_stage
+        or ("h1_hard_example_visual_adaptation" if config.vision_tuning.enabled else None),
         "trainable_parameter_audit": trainable_audit,
         "optimizer_groups": optimizer_groups,
     }

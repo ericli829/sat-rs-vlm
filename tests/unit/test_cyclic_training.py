@@ -11,6 +11,7 @@ from sat_rs_vlm.data.cyclic_training import (
     load_protected_e3_ids,
     partition_group_variants,
     partition_task_population,
+    partition_task_population_evenly,
     validate_cycle_coverage,
 )
 
@@ -44,12 +45,35 @@ def test_task_buckets_are_deterministic_complete_and_keep_partial_bucket() -> No
 
 def test_different_cycle_changes_order_without_changing_coverage() -> None:
     population = [row(f"d-{index}", "detection") for index in range(20)]
-    first = partition_task_population(
-        population, {"detection": 4}, seed=42, cycle_index=0
+    first = partition_task_population(population, {"detection": 4}, seed=42, cycle_index=0)
+    second = partition_task_population(population, {"detection": 4}, seed=42, cycle_index=1)
+
+    assert [[item["id"] for item in bucket] for bucket in first] != [
+        [item["id"] for item in bucket] for bucket in second
+    ]
+    assert validate_cycle_coverage(population, first)["valid"] is True
+    assert validate_cycle_coverage(population, second)["valid"] is True
+
+
+def test_balanced_task_partition_spreads_scene_across_six_rounds() -> None:
+    population = [row(f"scene-{index}", "scene_classification") for index in range(1222)]
+    rounds = partition_task_population_evenly(
+        population,
+        num_rounds=6,
+        seed=42,
+        cycle_index=0,
     )
-    second = partition_task_population(
-        population, {"detection": 4}, seed=42, cycle_index=1
-    )
+
+    counts = [len(bucket) for bucket in rounds]
+    assert counts == [204, 204, 204, 204, 203, 203]
+    assert max(counts) - min(counts) <= 1
+    assert validate_cycle_coverage(population, rounds)["valid"] is True
+
+
+def test_balanced_partition_seed_changes_membership_but_not_coverage() -> None:
+    population = [row(f"count-{index}", "counting") for index in range(60)]
+    first = partition_task_population_evenly(population, num_rounds=6, seed=42, cycle_index=0)
+    second = partition_task_population_evenly(population, num_rounds=6, seed=43, cycle_index=0)
 
     assert [[item["id"] for item in bucket] for bucket in first] != [
         [item["id"] for item in bucket] for bucket in second

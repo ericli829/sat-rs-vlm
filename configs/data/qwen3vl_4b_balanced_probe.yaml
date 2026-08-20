@@ -1,0 +1,17 @@
+population_manifest: >-
+  data/processed/multisource/qwen3vl_4b_stage_a_v2/population_manifest.json
+seed: 42
+total_samples: 6000
+quota_shortfall_policy: "error"
+duplicate_policy: "error"
+output_dir: "data/processed/experiments/qwen3vl_4b_balanced_probe_v2"
+
+targets:
+  VRSBench:
+    captioning: 900
+    detection: 900
+    counting: 900
+    scene_classification: 900
+    vqa: 900
+  LEVIR-CC:
+    change_detection: 1500

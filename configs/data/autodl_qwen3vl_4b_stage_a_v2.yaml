@@ -1,0 +1,36 @@
+common_image_root: "/root/autodl-tmp/datasets"
+seed: 42
+training_selection_mode: "canonical_population"
+
+population:
+  output_dir: "data/processed/multisource/qwen3vl_4b_stage_a_v2"
+  protected_evaluation_manifest: "data/evaluation/tiers_v2/evaluation_tiers_manifest.json"
+
+stage2:
+  output_file: >-
+    data/processed/multisource/qwen3vl_4b_stage_a_v2/stage2_vrs_levir_3to1_train.jsonl
+  manifest_file: "data/processed/multisource/qwen3vl_4b_stage_a_v2/stage2_manifest.json"
+  vrs_per_levir: 3
+
+sources:
+  - name: "VRSBench"
+    image_root: "/root/autodl-tmp/datasets/VRSBench"
+    train_file: "data/processed/qwen3vl_train.jsonl"
+    validation_file: "data/processed/qwen3vl_val.jsonl"
+    validation_samples: 1024
+    validation_group_by_images: false
+    prompt_profile: "qwen3vl_4b_stage_a"
+    strengthen_existing_messages: true
+
+  - name: "LEVIR-CC"
+    image_root: "/root/autodl-tmp/datasets/LEVIR-CC"
+    train_file: "/root/autodl-tmp/datasets/LEVIR-CC/annotations/levircc_train.jsonl"
+    validation_file: "/root/autodl-tmp/datasets/LEVIR-CC/annotations/levircc_val.jsonl"
+    validation_samples: 1333
+    validation_group_by_images: true
+    prompt_profile: "qwen3vl_4b_stage_a"
+    strengthen_existing_messages: true
+    instruction_override: >-
+      The first image is before the change and the second image is after the
+      change. Describe all visible changes concisely. If there is no change,
+      state that clearly.

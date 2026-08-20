@@ -328,6 +328,15 @@ class VitProbeConfig(StrictTrainingModel):
     max_steps_limit: int = Field(default=250, ge=1)
 
 
+class StageAV2ProvenanceConfig(StrictTrainingModel):
+    """Stage-A v2 冻结数据资产及 parent contract 的 provenance。"""
+
+    enabled: bool = False
+    population_manifest: str | None = None
+    stage2_manifest: str | None = None
+    expected_parent_stage: str | None = None
+
+
 class HardScoreWeightsConfig(StrictTrainingModel):
     """Evaluation 指标到困难度分数的可审计权重。"""
 
@@ -442,9 +451,11 @@ class CycleTrainingConfig(StrictTrainingModel):
     """连续 bucket 训练的串联、学习率和泄漏保护配置。"""
 
     enabled: bool = False
-    selection_mode: Literal["legacy_round_sampling", "cyclic_full_coverage"] = (
-        "legacy_round_sampling"
-    )
+    selection_mode: Literal[
+        "legacy_round_sampling",
+        "cyclic_full_coverage",
+        "balanced_cyclic_full_coverage",
+    ] = "legacy_round_sampling"
     cycle_manifest: str | None = None
     protected_evaluation_manifest: str | None = None
     learning_rates: list[float] = Field(default_factory=lambda: [2.0e-5, 1.0e-5])
@@ -455,8 +466,11 @@ class CycleTrainingConfig(StrictTrainingModel):
         if any(rate <= 0.0 for rate in self.learning_rates):
             raise ValueError("cycle_training.learning_rates must be positive")
         if self.enabled:
-            if self.selection_mode != "cyclic_full_coverage":
-                raise ValueError("Enabled cycle training requires cyclic_full_coverage")
+            if self.selection_mode not in {
+                "cyclic_full_coverage",
+                "balanced_cyclic_full_coverage",
+            }:
+                raise ValueError("Enabled cycle training requires a full-coverage mode")
             if not self.cycle_manifest:
                 raise ValueError("cycle_training.cycle_manifest is required")
             if not self.protected_evaluation_manifest:
@@ -468,6 +482,13 @@ class Qwen3VLTrainingConfig(StrictTrainingModel):
     """完整 Qwen3-VL 微调配置。"""
 
     model: TrainModelConfig
+    training_stage: (
+        Literal[
+            "qwen3vl_4b_stage_a_v2_r0",
+            "qwen3vl_4b_stage_a_v2_r1",
+        ]
+        | None
+    ) = None
     data: TrainDataConfig
     training: TrainConfig
     lora: LoRAConfig
@@ -480,9 +501,124 @@ class Qwen3VLTrainingConfig(StrictTrainingModel):
     optimization: OptimizationGroupConfig = Field(default_factory=OptimizationGroupConfig)
     trainable_audit: TrainableAuditConfig = Field(default_factory=TrainableAuditConfig)
     vit_probe: VitProbeConfig = Field(default_factory=VitProbeConfig)
+    stage_a_v2: StageAV2ProvenanceConfig = Field(default_factory=StageAV2ProvenanceConfig)
     hard_adaptation: HardAdaptationConfig = Field(default_factory=HardAdaptationConfig)
     h2_refinement: H2RefinementConfig = Field(default_factory=H2RefinementConfig)
     cycle_training: CycleTrainingConfig = Field(default_factory=CycleTrainingConfig)
+
+    @model_validator(mode="after")
+    def validate_stage_a_v2(self) -> Qwen3VLTrainingConfig:
+        """严格限定 R0/R1 的单变量训练契约，旧配置在未启用时完全不受影响。"""
+
+        if self.training_stage is None:
+            if self.stage_a_v2.enabled:
+                raise ValueError("stage_a_v2.enabled requires training_stage")
+            return self
+        errors: list[str] = []
+        if not self.stage_a_v2.enabled:
+            errors.append("stage_a_v2.enabled must be true")
+        if not self.stage_a_v2.population_manifest:
+            errors.append("stage_a_v2.population_manifest is required")
+        if self.training.method != "lora":
+            errors.append("training.method must be 'lora'")
+        if self.training.num_train_epochs != 1 or self.training.max_steps is not None:
+            errors.append("formal Stage-A v2 uses one epoch and max_steps=null")
+        if self.loss.mode != "task_weighted":
+            errors.append("loss.mode must be task_weighted")
+        if set(self.loss.task_weights) != set(DEFAULT_MULTITASK_LOSS_WEIGHTS):
+            errors.append("all canonical task loss weights must be present")
+        elif set(self.loss.task_weights.values()) != {1.0}:
+            errors.append("all task loss weights must equal 1.0")
+        if self.loss.unknown_task_weight != 1.0 or not self.loss.strict_task_metadata:
+            errors.append("strict unit-weight unknown task handling is required")
+        expected_targets = {
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj",
+            "gate_proj",
+            "up_proj",
+            "down_proj",
+        }
+        if (
+            self.lora.r != 16
+            or self.lora.alpha != 32
+            or self.lora.dropout != 0.05
+            or set(self.lora.target_modules) != expected_targets
+        ):
+            errors.append("formal Stage-A v2 requires the fixed r16/alpha32 LoRA contract")
+        if self.data.max_seq_length != 1024:
+            errors.append("formal Stage-A v2 requires max_seq_length=1024")
+        if (
+            self.training.per_device_train_batch_size != 4
+            or self.training.gradient_accumulation_steps != 4
+        ):
+            errors.append("formal Stage-A v2 requires batch=4 and accumulation=4")
+        if not self.training.bf16 or self.training.fp16:
+            errors.append("formal Stage-A v2 requires BF16 without FP16")
+        if (
+            self.training.weight_decay != 0.01
+            or self.training.warmup_ratio != 0.03
+            or self.training.lr_scheduler_type != "cosine"
+            or self.training.max_grad_norm != 1.0
+        ):
+            errors.append("formal Stage-A v2 optimizer schedule contract was changed")
+        if self.model.torch_dtype != "bfloat16" or self.model.attn_implementation != "sdpa":
+            errors.append("formal Stage-A v2 requires bfloat16 and SDPA")
+
+        if self.training_stage == "qwen3vl_4b_stage_a_v2_r0":
+            if self.lora.initial_adapter_dir:
+                errors.append("R0 must start with a fresh LoRA adapter")
+            if self.vision_tuning.enabled:
+                errors.append("R0 vision_tuning must be disabled")
+            if not self.training.freeze_vision_encoder or not self.training.freeze_projector:
+                errors.append("R0 must freeze the vision encoder and projector")
+            if self.data.sampling_mode != "uniform":
+                errors.append("R0 must use the complete VRS population with uniform sampling")
+            if self.training.learning_rate != 1.0e-4:
+                errors.append("R0 learning_rate must be 1e-4")
+        else:
+            if not self.lora.initial_adapter_dir:
+                errors.append("R1 requires the R0 initial adapter")
+            if self.stage_a_v2.expected_parent_stage != "qwen3vl_4b_stage_a_v2_r0":
+                errors.append("R1 expected_parent_stage must be the Stage-A v2 R0 stage")
+            if not self.stage_a_v2.stage2_manifest:
+                errors.append("R1 stage_a_v2.stage2_manifest is required")
+            if not self.vision_tuning.enabled:
+                errors.append("R1 vision_tuning must be enabled")
+            if (
+                self.vision_tuning.unfreeze_last_n_blocks != 2
+                or not self.vision_tuning.train_main_merger
+                or self.vision_tuning.train_deepstack_mergers
+                or self.vision_tuning.train_patch_embed
+            ):
+                errors.append("R1 must train only main merger and the last two ViT blocks")
+            if not self.training.freeze_vision_encoder or not self.training.freeze_projector:
+                errors.append("R1 must start from frozen base vision/projector parameters")
+            if self.data.sampling_mode != "alternating_source":
+                errors.append("R1 must use alternating_source sampling")
+            if self.data.source_exhaustion_policy != "coverage_first":
+                errors.append("R1 source_exhaustion_policy must be coverage_first")
+            if self.data.source_batch_pattern != [
+                "VRSBench",
+                "VRSBench",
+                "VRSBench",
+                "LEVIR-CC",
+            ]:
+                errors.append("R1 source batch pattern must be VRS,VRS,VRS,LEVIR")
+            expected_rates = (2.0e-5, 1.0e-5, 2.0e-6)
+            actual_rates = (
+                self.optimization.lora_lr,
+                self.optimization.visual_merger_lr,
+                self.optimization.vision_lr,
+            )
+            if actual_rates != expected_rates:
+                errors.append("R1 grouped LRs must be 2e-5/1e-5/2e-6")
+            if self.training.learning_rate != 2.0e-5:
+                errors.append("R1 Trainer learning_rate must equal the LoRA LR 2e-5")
+        if errors:
+            raise ValueError("Invalid Stage-A v2 configuration: " + "; ".join(errors))
+        return self
 
     @model_validator(mode="after")
     def validate_cycle_stage(self) -> Qwen3VLTrainingConfig:

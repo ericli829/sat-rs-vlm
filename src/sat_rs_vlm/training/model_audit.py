@@ -35,9 +35,7 @@ def audit_lora_targets(model: Any, targets: Sequence[str]) -> dict[str, Any]:
 
     names = [name for name, _ in model.named_modules()]
     counts = {
-        str(target): sum(
-            name == str(target) or name.endswith(f".{target}") for name in names
-        )
+        str(target): sum(name == str(target) or name.endswith(f".{target}") for name in names)
         for target in targets
     }
     missing = sorted(target for target, count in counts.items() if count == 0)
@@ -56,9 +54,7 @@ def audit_lora_targets(model: Any, targets: Sequence[str]) -> dict[str, Any]:
     }
 
 
-def finalize_lora_trainable_audit(
-    model: Any, target_audit: Mapping[str, Any]
-) -> dict[str, Any]:
+def finalize_lora_trainable_audit(model: Any, target_audit: Mapping[str, Any]) -> dict[str, Any]:
     """在 PEFT 注入后补充每个 target 的可训练参数量和全模型占比。"""
 
     targets = list(dict(target_audit["target_match_counts"]))
@@ -130,3 +126,80 @@ def validate_adapter_architecture(
             f"Initial adapter is incompatible with the loaded base model: {mismatches}"
         )
     return {"verified": True, "model": current, "adapter": dict(adapter)}
+
+
+def validate_stage_a_v2_parent_adapter(
+    model: Any,
+    adapter_dir: str | Path,
+    *,
+    expected_r: int,
+    expected_alpha: int,
+    expected_target_modules: Sequence[str],
+) -> dict[str, Any]:
+    """验证 R1 parent 是同一 4B base 上产生的正式 Stage-A v2 R0 LoRA。"""
+
+    path = Path(adapter_dir)
+    adapter_config_path = path / "adapter_config.json"
+    manifest_path = path / "strategy_manifest.json"
+    if not adapter_config_path.is_file() or not manifest_path.is_file():
+        raise ValueError(
+            "Stage-A v2 R1 parent requires adapter_config.json and "
+            f"strategy_manifest.json: {path}"
+        )
+    weights = next(
+        (
+            candidate
+            for candidate in (
+                path / "adapter_model.safetensors",
+                path / "adapter_model.bin",
+            )
+            if candidate.is_file()
+        ),
+        None,
+    )
+    if weights is None:
+        raise ValueError(f"Stage-A v2 R1 parent adapter weights are missing: {path}")
+    adapter_config = json.loads(adapter_config_path.read_text(encoding="utf-8"))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if str(adapter_config.get("peft_type", "")).upper() != "LORA":
+        raise ValueError("Stage-A v2 R1 parent must be a LoRA adapter")
+    if manifest.get("strategy") != "lora":
+        raise ValueError("Stage-A v2 R1 parent strategy must be lora")
+    if manifest.get("training_stage") != "qwen3vl_4b_stage_a_v2_r0":
+        raise ValueError(
+            "Stage-A v2 R1 parent must have " "training_stage=qwen3vl_4b_stage_a_v2_r0"
+        )
+    actual_r = int(adapter_config.get("r", -1))
+    actual_alpha = int(adapter_config.get("lora_alpha", -1))
+    actual_targets = sorted(str(value) for value in adapter_config.get("target_modules", []))
+    expected_targets = sorted(str(value) for value in expected_target_modules)
+    mismatches: dict[str, Any] = {}
+    if actual_r != int(expected_r):
+        mismatches["r"] = {"expected": expected_r, "actual": actual_r}
+    if actual_alpha != int(expected_alpha):
+        mismatches["alpha"] = {"expected": expected_alpha, "actual": actual_alpha}
+    if actual_targets != expected_targets:
+        mismatches["target_modules"] = {
+            "expected": expected_targets,
+            "actual": actual_targets,
+        }
+    if mismatches:
+        raise ValueError(f"Stage-A v2 R0 LoRA contract mismatch: {mismatches}")
+    architecture = validate_adapter_architecture(model, path, require_fingerprint=True)
+    digest = hashlib.sha256()
+    with weights.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return {
+        "verified": True,
+        "adapter_dir": str(path),
+        "adapter_weights": weights.name,
+        "adapter_sha256": digest.hexdigest(),
+        "training_stage": manifest["training_stage"],
+        "lora": {
+            "r": actual_r,
+            "alpha": actual_alpha,
+            "target_modules": actual_targets,
+        },
+        "architecture": architecture,
+    }

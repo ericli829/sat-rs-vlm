@@ -1,0 +1,120 @@
+training_stage: "qwen3vl_4b_stage_a_v2_r1"
+
+model:
+  model_dir: "${QWEN3VL_4B_MODEL_DIR}"
+  processor_dir: "${QWEN3VL_4B_MODEL_DIR}"
+  local_files_only: true
+  trust_remote_code: true
+  torch_dtype: "bfloat16"
+  attn_implementation: "sdpa"
+  device_map: "auto"
+
+data:
+  train_file: >-
+    data/processed/multisource/qwen3vl_4b_stage_a_v2/stage2_vrs_levir_3to1_train.jsonl
+  val_file: "data/processed/multisource/qwen3vl_4b_stage_a_v2/validation.jsonl"
+  image_root: "${DATA_ROOT}"
+  max_seq_length: 1024
+  max_train_samples: null
+  max_eval_samples: null
+  skip_bad_samples: false
+  data_composition: "full"
+  sampling_mode: "alternating_source"
+  source_exhaustion_policy: "coverage_first"
+  task_sampling_weights: {}
+  source_batch_pattern: [VRSBench, VRSBench, VRSBench, LEVIR-CC]
+
+training:
+  output_dir: "${OUTPUT_ROOT}/qwen3vl_4b_stage_a_v2/pending/r1/adapter"
+  method: "lora"
+  freeze_vision_encoder: true
+  freeze_projector: true
+  num_train_epochs: 1
+  max_steps: null
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 2
+  gradient_accumulation_steps: 4
+  learning_rate: 0.00002
+  weight_decay: 0.01
+  warmup_ratio: 0.03
+  lr_scheduler_type: "cosine"
+  logging_steps: 20
+  save_steps: 1
+  eval_steps: 1
+  save_total_limit: 2
+  bf16: true
+  fp16: false
+  gradient_checkpointing: true
+  dataloader_num_workers: 8
+  dataloader_pin_memory: true
+  dataloader_persistent_workers: true
+  max_grad_norm: 1.0
+  seed: 42
+  resume_from_checkpoint: null
+
+lora:
+  initial_adapter_dir: "${OUTPUT_ROOT}/qwen3vl_4b_stage_a_v2/pending/r0/adapter"
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+
+qlora:
+  load_in_4bit: false
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_compute_dtype: "bfloat16"
+  bnb_4bit_use_double_quant: true
+
+loss:
+  mode: "task_weighted"
+  task_weights:
+    captioning: 1.0
+    detection: 1.0
+    counting: 1.0
+    scene_classification: 1.0
+    vqa: 1.0
+    change_detection: 1.0
+  unknown_task_weight: 1.0
+  strict_task_metadata: true
+
+vision_tuning:
+  enabled: true
+  unfreeze_last_n_blocks: 2
+  train_main_merger: true
+  train_deepstack_mergers: false
+  train_patch_embed: false
+
+optimization:
+  lora_lr: 0.00002
+  visual_merger_lr: 0.00001
+  vision_lr: 0.000002
+
+trainable_audit:
+  fail_on_unexpected_trainable: true
+  report_dir: "reports/training"
+
+stage_a_v2:
+  enabled: true
+  population_manifest: >-
+    data/processed/multisource/qwen3vl_4b_stage_a_v2/population_manifest.json
+  stage2_manifest: >-
+    data/processed/multisource/qwen3vl_4b_stage_a_v2/stage2_manifest.json
+  expected_parent_stage: "qwen3vl_4b_stage_a_v2_r0"
+
+cycle_training:
+  enabled: false
+  selection_mode: "legacy_round_sampling"
+  cycle_manifest: null
+  protected_evaluation_manifest: null
+  learning_rates: [0.00002]
+  require_adapter_fingerprint: true
+
+evaluation:
+  do_eval: false
+  predict_with_generate: false
+  max_new_tokens: 256
+  num_beams: 1
+
+logging:
+  report_to: "none"
+  experiment_name: "qwen3vl_4b_stage_a_v2_r1_visual_reinforce_4090"

@@ -78,13 +78,50 @@ def partition_task_population(
             row
             for task in sorted(task_chunks)
             for row in (
-                task_chunks[task][round_index]
-                if round_index < len(task_chunks[task])
-                else []
+                task_chunks[task][round_index] if round_index < len(task_chunks[task]) else []
             )
         ]
         for round_index in range(num_rounds)
     ]
+
+
+def partition_task_population_evenly(
+    rows: Sequence[dict[str, Any]],
+    num_rounds: int,
+    *,
+    seed: int,
+    cycle_index: int,
+) -> list[list[dict[str, Any]]]:
+    """将每个 task 的完整 population 均匀分散到固定数量的 round。
+
+    算法先按 sample ID 稳定排序，再使用 ``seed/cycle_index/task`` 派生种子打乱，
+    最后按商和余数切成 ``num_rounds`` 份。每个 task 的任意两个 round 之间样本数
+    最多相差 1；成员无重复、无遗漏。历史 ``partition_task_population`` 的固定
+    bucket 语义保持不变，旧实验 SHA 因而不会受到影响。
+    """
+
+    if num_rounds < 1:
+        raise ValueError("num_rounds must be positive")
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        grouped.setdefault(str(row.get("task_type", "unknown")), []).append(row)
+
+    rounds: list[list[dict[str, Any]]] = [[] for _ in range(num_rounds)]
+    for task in sorted(grouped):
+        shuffled = sorted(grouped[task], key=_sample_id)
+        random.Random(_stable_seed(seed, cycle_index, "balanced", task)).shuffle(shuffled)
+        quotient, remainder = divmod(len(shuffled), num_rounds)
+        cursor = 0
+        for round_index in range(num_rounds):
+            size = quotient + (1 if round_index < remainder else 0)
+            rounds[round_index].extend(shuffled[cursor : cursor + size])
+            cursor += size
+
+    for round_index, round_rows in enumerate(rounds):
+        random.Random(_stable_seed(seed, cycle_index, "balanced-round", round_index)).shuffle(
+            round_rows
+        )
+    return rounds
 
 
 def partition_group_variants(
@@ -124,11 +161,7 @@ def partition_group_variants(
             [
                 row
                 for key in sorted(chunks)
-                for row in (
-                    chunks[key][round_index]
-                    if round_index < len(chunks[key])
-                    else []
-                )
+                for row in (chunks[key][round_index] if round_index < len(chunks[key]) else [])
             ]
             for round_index in range(num_rounds)
         ]
@@ -141,9 +174,7 @@ def partition_group_variants(
             for chunk_index, chunk in enumerate(chunks[key])
         ]
         records.sort(
-            key=lambda item: _stable_seed(
-                seed, cycle_index, "group-chunk", *item[0], item[1]
-            )
+            key=lambda item: _stable_seed(seed, cycle_index, "group-chunk", *item[0], item[1])
         )
         for key, chunk_index, chunk in records:
             unused = [index for index in range(num_rounds) if index not in assignments[key]]
@@ -200,9 +231,9 @@ def top_up_source_to_pattern(
         raise ValueError(f"Replay source population is empty: {replay_source}")
 
     ordered_population = sorted(source_population, key=_sample_id)
-    random.Random(
-        _stable_seed(seed, cycle_index, "source-replay", replay_source)
-    ).shuffle(ordered_population)
+    random.Random(_stable_seed(seed, cycle_index, "source-replay", replay_source)).shuffle(
+        ordered_population
+    )
     population_ids = {_sample_id(row) for row in ordered_population}
     cursor = 0
     replay_original_counts: Counter[str] = Counter()
@@ -217,9 +248,7 @@ def top_up_source_to_pattern(
         )
         reference_count = source_counts[reference_source]
         target_count = math.ceil(
-            reference_count
-            * pattern_counts[replay_source]
-            / pattern_counts[reference_source]
+            reference_count * pattern_counts[replay_source] / pattern_counts[reference_source]
         )
         replay_needed = max(0, target_count - source_counts[replay_source])
         originals_in_round = {
@@ -257,18 +286,16 @@ def top_up_source_to_pattern(
             replay_original_counts[original_id] += 1
 
         round_rows.extend(added_rows)
-        random.Random(
-            _stable_seed(seed, cycle_index, "scheduled-round", round_index)
-        ).shuffle(round_rows)
+        random.Random(_stable_seed(seed, cycle_index, "scheduled-round", round_index)).shuffle(
+            round_rows
+        )
         final_counts = Counter(
             str(dict(row.get("metadata", {})).get("training_source", "unknown"))
             for row in round_rows
         )
         missing = sorted(set(pattern_counts).difference(final_counts))
         if missing:
-            raise ValueError(
-                f"Scheduled round {round_index} is missing pattern sources: {missing}"
-            )
+            raise ValueError(f"Scheduled round {round_index} is missing pattern sources: {missing}")
         scheduled.append(round_rows)
         per_round.append(
             {
@@ -330,9 +357,7 @@ def validate_cycle_coverage(
     population_ids = [_sample_id(row) for row in population]
     if len(population_ids) != len(set(population_ids)):
         duplicates = sorted(
-            sample_id
-            for sample_id, count in Counter(population_ids).items()
-            if count > 1
+            sample_id for sample_id, count in Counter(population_ids).items() if count > 1
         )
         raise ValueError(f"Training population contains duplicate ids: {duplicates[:5]}")
     exposure_ids = [_sample_id(row) for round_rows in rounds for row in round_rows]
@@ -393,6 +418,33 @@ def load_protected_e3_ids(manifest_path: str | Path) -> set[str]:
                 if ids:
                     return ids
     raise ValueError(f"Cannot resolve protected E3 sample IDs from manifest: {path}")
+
+
+def load_protected_evaluation_ids(manifest_path: str | Path) -> set[str]:
+    """读取 manifest 中所有受保护 tier 的 ID，而不是依赖 E3 命名约定。
+
+    Unified tiers 通常满足 E1 subset E2 subset E3，但 canonical training population
+    需要从实际 manifest 证明保护边界。该函数会合并顶层显式 ID 字段以及 ``tiers``
+    下每个 tier 的内联 ``sample_ids`` 或其 JSONL 文件。
+    """
+
+    path = Path(manifest_path)
+    if not path.is_file():
+        raise FileNotFoundError(f"Protected evaluation manifest does not exist: {path}")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    protected: set[str] = set()
+    for key in ("protected_evaluation_ids", "evaluation_ids", "all_tier_ids"):
+        values = payload.get(key)
+        if isinstance(values, list):
+            protected.update(str(value) for value in values)
+    tiers = payload.get("tiers", {})
+    if isinstance(tiers, Mapping):
+        for tier in tiers.values():
+            if isinstance(tier, Mapping):
+                protected.update(_ids_from_tier(tier, path))
+    if not protected:
+        raise ValueError(f"Cannot resolve protected evaluation sample IDs from manifest: {path}")
+    return protected
 
 
 def assert_no_evaluation_leakage(
