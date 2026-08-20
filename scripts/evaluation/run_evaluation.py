@@ -16,6 +16,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--checkpoint", type=Path)
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        required=True,
+        help="Required new empty directory for this exact model/checkpoint evaluation run.",
+    )
     return parser.parse_args()
 
 
@@ -28,6 +34,8 @@ def main() -> int:
         str(PROJECT_ROOT / "scripts/evaluate_rs_vlm.py"),
         "--config",
         str(args.config),
+        "--output-dir",
+        str(args.output_dir),
     ]
     if args.checkpoint:
         command.extend(["--checkpoint", str(args.checkpoint)])

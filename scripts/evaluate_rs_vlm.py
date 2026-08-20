@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import platform
 import time
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -96,8 +100,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output-dir",
-        default=None,
-        help="Optional output directory; keeps the evaluated checkpoint read-only.",
+        required=True,
+        help=(
+            "Required, new and empty run directory. Each model/checkpoint must use its own "
+            "directory so predictions cannot be overwritten."
+        ),
     )
     parser.add_argument(
         "--performance-monitor",
@@ -137,6 +144,170 @@ def resolve_model_source(value: str) -> str:
         return str(path)
     project_path = PROJECT_ROOT / path
     return str(project_path) if project_path.exists() else value
+
+
+def sha256_file(path: Path) -> str:
+    """Return a streaming SHA256 without loading an artifact into memory."""
+
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        for block in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def sha256_if_file(path: Path) -> str | None:
+    """Return ``None`` for an in-memory/test configuration with no backing file."""
+
+    return sha256_file(path) if path.is_file() else None
+
+
+def validate_run_output_directory(output_dir: Path) -> Path:
+    """Refuse an existing non-empty inference directory before loading a model."""
+
+    destination = output_dir.expanduser().resolve()
+    if destination.exists():
+        if not destination.is_dir():
+            raise ValueError(f"output directory path exists and is not a directory: {destination}")
+        if any(destination.iterdir()):
+            raise ValueError(
+                "output directory already exists and is not empty; choose a new model/run "
+                f"directory: {destination}"
+            )
+    return destination
+
+
+def _local_artifact_fingerprint(source: str | None, *, role: str) -> dict[str, Any] | None:
+    """Fingerprint reproducibility-critical local configuration/adapter files.
+
+    Base-model weight files can be several GB and are intentionally not re-hashed for every
+    evaluation. The manifest therefore records the resolved base path plus its configuration
+    fingerprint; adapter/checkpoint files are hashed when present.
+    """
+
+    if not source:
+        return None
+    path = Path(source).expanduser()
+    if not path.exists():
+        return {"role": role, "type": "model_identifier", "value": source}
+    if path.is_file():
+        return {
+            "role": role,
+            "type": "file",
+            "path": str(path.resolve()),
+            "size_bytes": path.stat().st_size,
+            "sha256": sha256_file(path),
+        }
+    names = ["config.json", "generation_config.json"]
+    if role in {"adapter", "checkpoint"}:
+        names.extend(
+            [
+                "adapter_config.json",
+                "adapter_model.safetensors",
+                "adapter_model.bin",
+                "strategy_manifest.json",
+            ]
+        )
+    files = [path / name for name in names if (path / name).is_file()]
+    return {
+        "role": role,
+        "type": "local_directory",
+        "path": str(path.resolve()),
+        "weight_hash_scope": (
+            "adapter_or_checkpoint_files_when_present"
+            if role in {"adapter", "checkpoint"}
+            else "base_configuration_only"
+        ),
+        "files": [
+            {
+                "relative_path": str(file.relative_to(path)),
+                "size_bytes": file.stat().st_size,
+                "sha256": sha256_file(file),
+            }
+            for file in files
+        ],
+    }
+
+
+def build_model_run_manifest(
+    *,
+    config_path: Path,
+    eval_file: Path,
+    output_dir: Path,
+    config: dict[str, Any],
+    checkpoint: Path | None,
+    predictions_file: Path,
+    summary_file: Path,
+    performance_file: Path,
+) -> dict[str, Any]:
+    """Build provenance for one concrete inference run, not an aggregate evaluation."""
+
+    model_cfg = dict(config.get("model", {}))
+    reproducibility = dict(config.get("prompt_reproducibility", {}))
+    unresolved_prompt_fields = [
+        field
+        for field in ("prompt_text", "image_input_order", "generation_profile_name")
+        if not str(reproducibility.get(field, "")).strip()
+    ]
+    return {
+        "schema_version": "model_run_manifest_v1",
+        "run_id": (
+            f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:12]}"
+        ),
+        "run_time_utc": datetime.now(timezone.utc).isoformat(),
+        "entrypoint": "scripts/evaluate_rs_vlm.py",
+        "python_version": platform.python_version(),
+        "output_directory": str(output_dir),
+        "inputs": {
+            "evaluation_jsonl": str(eval_file),
+            "evaluation_jsonl_sha256": sha256_file(eval_file),
+            "evaluation_config": str(config_path.resolve()),
+            "evaluation_config_sha256": sha256_if_file(config_path.resolve()),
+        },
+        "model": {
+            "base_model": _local_artifact_fingerprint(
+                resolve_model_source(str(model_cfg.get("base_model", ""))), role="base_model"
+            ),
+            "processor": _local_artifact_fingerprint(
+                resolve_model_source(
+                    str(model_cfg.get("processor_id", model_cfg.get("base_model", "")))
+                ),
+                role="processor",
+            ),
+            "adapter": _local_artifact_fingerprint(
+                resolve_model_source(str(model_cfg["adapter_path"]))
+                if model_cfg.get("adapter_path")
+                else None,
+                role="adapter",
+            ),
+            "checkpoint": _local_artifact_fingerprint(
+                str(checkpoint.resolve()) if checkpoint is not None else None,
+                role="checkpoint",
+            ),
+            "torch_dtype": model_cfg.get("torch_dtype"),
+            "device_map": model_cfg.get("device_map"),
+        },
+        "generation": dict(config.get("generation", {})),
+        "prompt_reproducibility": {
+            "source": "user messages in evaluation_jsonl",
+            "declared": reproducibility,
+            "status": "complete" if not unresolved_prompt_fields else "incomplete",
+            "missing_fields": unresolved_prompt_fields,
+            "note": (
+                "For formal LEVIR-CC reporting, declare the raw prompt, before/after image "
+                "order and generation profile in prompt_reproducibility."
+            ),
+        },
+        "outputs": {
+            "predictions_file": predictions_file.name,
+            "predictions_sha256": sha256_file(predictions_file),
+            "summary_file": summary_file.name,
+            "performance_report_file": (
+                performance_file.name if performance_file.is_file() else None
+            ),
+        },
+        "remote_write_performed": False,
+    }
 
 
 def load_model(config: dict[str, Any], modules: dict[str, Any]) -> tuple[Any, Any]:
@@ -188,6 +359,9 @@ def evaluate(
     """执行评测。"""
 
     startup_started = time.perf_counter()
+    if output_dir is None:
+        raise ValueError("--output-dir is required for every inference evaluation run")
+    destination = validate_run_output_directory(output_dir)
     config = load_yaml(config_path)
     data_cfg = dict(config["data"])
     eval_file = resolve_project_path(str(data_cfg["eval_file"]))
@@ -380,17 +554,8 @@ def evaluate(
         if index == 1 or index % 10 == 0 or index == len(dataset):
             print(f"Evaluated {index}/{len(dataset)} samples")
 
-    output_cfg = dict(config["output"])
-    if output_dir is not None:
-        summary_file = output_dir.resolve() / "summary.json"
-        predictions_file = output_dir.resolve() / "predictions.jsonl"
-    elif checkpoint is None:
-        summary_file = resolve_project_path(str(output_cfg["summary_file"]))
-        predictions_file = resolve_project_path(str(output_cfg["predictions_file"]))
-    else:
-        eval_output = checkpoint.resolve() / "evaluation"
-        summary_file = eval_output / "summary.json"
-        predictions_file = eval_output / "predictions.jsonl"
+    summary_file = destination / "summary.json"
+    predictions_file = destination / "predictions.jsonl"
     summary_file.parent.mkdir(parents=True, exist_ok=True)
     predictions_file.parent.mkdir(parents=True, exist_ok=True)
     summary = summarize(predictions)
@@ -439,8 +604,28 @@ def evaluate(
         encoding="utf-8",
     )
     write_jsonl(predictions_file, predictions)
+    run_manifest_file = summary_file.parent / "model_run_manifest.json"
+    run_manifest_file.write_text(
+        json.dumps(
+            build_model_run_manifest(
+                config_path=config_path,
+                eval_file=eval_file,
+                output_dir=destination,
+                config=config,
+                checkpoint=checkpoint,
+                predictions_file=predictions_file,
+                summary_file=summary_file,
+                performance_file=performance_file,
+            ),
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     print(f"Saved summary to {summary_file}")
     print(f"Saved predictions to {predictions_file}")
+    print(f"Saved model run manifest to {run_manifest_file}")
     if monitor is not None:
         print(f"Saved performance report to {performance_file}")
 

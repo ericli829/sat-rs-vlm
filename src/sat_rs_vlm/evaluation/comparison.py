@@ -277,6 +277,13 @@ def compare_evaluations(
             f"{input_versions['baseline']!r} != {input_versions['candidate']!r}"
         )
     contract_version = input_versions["baseline"]
+    baseline_input_sha256 = baseline_manifest.get("input_sha256")
+    candidate_input_sha256 = candidate_manifest.get("input_sha256")
+    identical_input_prediction_file = (
+        isinstance(baseline_input_sha256, str)
+        and bool(baseline_input_sha256)
+        and baseline_input_sha256 == candidate_input_sha256
+    )
 
     baseline_rows: dict[str, dict[str, Any]] = {}
     for raw in _iter_jsonl(baseline_files["evaluated_predictions.jsonl"]):
@@ -456,6 +463,25 @@ def compare_evaluations(
             "prediction_changed_rate": prediction_changed / total if total else None,
             "improvements": len(improvements),
             "regressions": len(regressions),
+        },
+        "input_integrity": {
+            "baseline_input_sha256": baseline_input_sha256,
+            "candidate_input_sha256": candidate_input_sha256,
+            "identical_input_prediction_file": identical_input_prediction_file,
+            "status": (
+                "warning_identical_prediction_file"
+                if identical_input_prediction_file
+                else "distinct_or_unavailable"
+            ),
+            "note": (
+                "Both evaluated directories were produced from byte-identical prediction "
+                "JSONL files; identical scores are expected."
+                if identical_input_prediction_file
+                else (
+                    "Inspect overall.prediction_changed_rate. A value of 0 means the paired "
+                    "captions are identical even when input files differ."
+                )
+            ),
         },
         "bootstrap": {
             "method": "paired percentile bootstrap",

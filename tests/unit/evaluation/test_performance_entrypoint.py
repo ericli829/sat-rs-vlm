@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import types
 from pathlib import Path
@@ -89,6 +90,10 @@ def test_evaluate_writes_performance_report(tmp_path: Path, monkeypatch: Any) ->
 
     report = (output_dir / "performance_report.json").read_text(encoding="utf-8")
     summary = (output_dir / "summary.json").read_text(encoding="utf-8")
+    manifest = json.loads((output_dir / "model_run_manifest.json").read_text(encoding="utf-8"))
     assert '"completed_samples": 1' in report
     assert '"ttft_ms"' in report
     assert '"performance"' in summary
+    assert manifest["schema_version"] == "model_run_manifest_v1"
+    assert manifest["inputs"]["evaluation_jsonl_sha256"]
+    assert manifest["outputs"]["predictions_sha256"]

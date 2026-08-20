@@ -59,6 +59,14 @@ SUPPORTED_CHANGE_DECISION_PROFILES = {
     CHANGE_DECISION_VERSION,
     LOCAL_TEXT_JUDGE_DECISION_VERSION,
 }
+LOCAL_TEXT_JUDGE_RESOLVED_SOURCES = frozenset(
+    {
+        "local_semantic_rule",
+        "local_semantic_positive_rule",
+        "local_semantic_non_target_rule",
+        "local_llm_judge",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -343,6 +351,7 @@ def _evaluate_change_caption(
     *,
     strict: bool,
     change_decision_profile: str,
+    local_judge_required: bool,
 ) -> EvaluatedRow:
     if not record.reference.strip() and strict:
         raise InputValidationError(f"sample {record.id}: change caption reference is empty")
@@ -357,11 +366,28 @@ def _evaluate_change_caption(
     binary_source = "caption_fallback"
     explicit_raw = record.raw.get("binary_prediction")
     requested_source = record.raw.get("binary_prediction_source")
+    local_judge_valid = (
+        type(record.raw.get("prediction_changeflag")) is int
+        and record.raw.get("prediction_changeflag") in {0, 1}
+        and str(requested_source) in LOCAL_TEXT_JUDGE_RESOLVED_SOURCES
+    )
     if change_decision_profile == LOCAL_TEXT_JUDGE_DECISION_VERSION and isinstance(
         requested_source, str
     ):
         binary_source = requested_source
-    if decision_priority and "prediction_changeflag" in record.raw:
+    if local_judge_required and not local_judge_valid:
+        message = (
+            f"sample {record.id}: v1.7 LEVIR-CC evaluation requires a resolved local text "
+            "judge decision (prediction_changeflag=0/1 plus a local_* "
+            "binary_prediction_source). Run judge_change_captions.py first."
+        )
+        if strict:
+            raise InputValidationError(message)
+        predicted_changeflag = None
+        binary_reason = "missing_required_local_judge_decision"
+        binary_mode = "unresolved"
+        binary_source = "missing_required_local_judge_decision"
+    elif decision_priority and "prediction_changeflag" in record.raw:
         explicit_flag = record.raw.get("prediction_changeflag")
         if type(explicit_flag) is int and explicit_flag in {0, 1}:
             predicted_changeflag = cast(int, explicit_flag)
@@ -412,6 +438,8 @@ def _evaluate_change_caption(
             "changeflag_valid": changeflag_valid,
             "binary_parse_success": predicted_changeflag is not None,
             "binary_correct": binary_correct,
+            "local_judge_decision_valid": local_judge_valid,
+            "local_judge_required": local_judge_required,
         }
     )
     output = _base_output(record, resolution)
@@ -486,6 +514,7 @@ def evaluate_record(
                 resolution,
                 strict=strict,
                 change_decision_profile=str(contract.get("change_decision_profile", "")),
+                local_judge_required=bool(contract.get("local_text_judge_required", False)),
             ),
             [],
         )
@@ -743,6 +772,9 @@ def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
         total = len(samples)
         valid_flags = sum(bool(sample.get("changeflag_valid")) for sample in samples)
         parsed = sum(bool(sample.get("binary_parse_success")) for sample in samples)
+        local_judge_valid = sum(
+            bool(sample.get("local_judge_decision_valid")) for sample in samples
+        )
         parse_modes = Counter(str(row.output.get("change_parse_mode", "unknown")) for row in rows)
         binary_sources = Counter(
             str(row.output["binary_prediction_source"])
@@ -913,6 +945,15 @@ def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
                 "false_negatives": metric_value(fn, num_samples=comparable),
             }
         )
+        if any(bool(sample.get("local_judge_required")) for sample in samples):
+            metrics["local_judge_decision_coverage"] = metric_value(
+                ratio(local_judge_valid, total),
+                num_samples=total,
+                note=(
+                    "Resolved local text-judge decisions (0/1 plus a local_* source). "
+                    "Required for the v1.7 LEVIR-CC strict profile."
+                ),
+            )
         if binary_sources:
             if any(
                 binary_sources[source]

@@ -41,6 +41,23 @@ python scripts/evaluation/evaluate_predictions.py `
   --contract configs/eval/evaluation_contract_v1.7.yaml
 ```
 
+v1.7严格模式会检查每条LEVIR-CC结果都具有本地评审器写入的
+`prediction_changeflag=0/1`及`binary_prediction_source=local_*`。直接把主模型的原始
+`predictions.jsonl`交给v1.7离线评测会停止并提示先运行本评审器，避免静默回退到旧的
+Caption关键词规则、导致不同模型被粗粒度地判为相同结果。
+
+主模型推理也必须为每个模型/检查点使用新的独立输出目录，例如：
+
+```powershell
+python scripts/evaluate_rs_vlm.py `
+  --config configs/eval/qwen3vl_eval.yaml `
+  --checkpoint E:\path\to\checkpoint `
+  --output-dir E:\太空智算\evaluation-results-local\model-a-run-001
+```
+
+该目录会产生`model_run_manifest.json`，记录评测数据、配置、适配器/检查点指纹、生成设置和
+预测文件SHA256。目录非空时推理会拒绝写入，防止后一次模型运行覆盖前一次预测。
+
 ## 输出
 
 - `judged_predictions.jsonl`：保留原始记录，增加评审结论、来源、模型版本和耗时；

@@ -2,6 +2,7 @@ contract_version: "1.7"
 contract_status: provisional
 implementation_version: sat-rs-vlm-evaluation-v1.7
 change_decision_profile: local_text_judge_priority_v1
+local_text_judge_required: true
 
 upstream_repository:
   url: https://github.com/ericli829/sat-rs-vlm

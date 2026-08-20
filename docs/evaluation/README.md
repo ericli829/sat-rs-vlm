@@ -1,4 +1,30 @@
-# 多任务离线评测 v1.6（P0变化二分类）
+# 多任务离线评测 v1.7
+
+## 每个模型的强制结果链路
+
+为避免不同模型误用同一份预测文件，v1.7将一次评测固定为以下链路：
+
+```text
+独立模型输出目录（推理 + model_run_manifest.json）
+→ LEVIR-CC本地文本评审（judged_predictions.jsonl）
+→ v1.7离线质量评测（evaluated_predictions.jsonl）
+→ 同集配对比较
+```
+
+推理入口`evaluate_rs_vlm.py`和包装入口`run_evaluation.py`都要求显式指定新的
+`--output-dir`；已有内容的目录会被拒绝。每次推理生成的`model_run_manifest.json`记录数据和
+配置SHA256、模型/适配器/检查点指纹、生成设置及预测文件SHA256。
+
+LEVIR-CC使用v1.7契约时，必须先执行`judge_change_captions.py`。严格模式要求每行存在由本地
+评审器生成的`prediction_changeflag=0/1`和`binary_prediction_source=local_*`，不会静默回退到
+旧的Caption规则解析。
+
+在`comparison_summary.json`中检查：
+
+- `input_integrity.identical_input_prediction_file=true`：两侧评测来自字节完全相同的输入预测文件；
+- `overall.prediction_changed_rate=0`：同一ID的预测文本完全相同，即使输入文件字节不同。
+
+两种情况都意味着相同分数是预期现象，不能据此声称两个模型性能相同。
 
 本模块读取仓库推理脚本生成的 `predictions.jsonl`，在不加载模型的情况下完成质量评测、逐样本扩展、结果追溯和同集配对比较。v1.6在冻结的v1.5基础上新增P0独立变化二分类；v1.5契约文件保持原有行为，仅用于历史结果复现。
 
