@@ -8,7 +8,6 @@ from sat_rs_vlm.evaluation.protocols import load_contract
 from sat_rs_vlm.evaluation.records import InputValidationError, PredictionRecord
 from sat_rs_vlm.evaluation.runner import evaluate_record
 
-
 ROOT = Path(__file__).resolve().parents[3]
 CONTRACT = load_contract(ROOT / "configs" / "eval" / "evaluation_contract_v1.7.yaml")
 
