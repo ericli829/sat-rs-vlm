@@ -125,3 +125,111 @@ def test_runner_evaluation_identity_accepts_e2_without_weakening_tier_check(
     assert identity["eval_batch_size"] == 4
     with pytest.raises(ValueError, match="Expected E1 evaluation"):
         module._evaluation_identity(root.parent, expected_tier="E1")
+
+
+def _make_promotion_fixture(tmp_path: Path, *, visual: bool) -> tuple[Path, Path]:
+    experiment = tmp_path / ("visual" if visual else "lora_only")
+    checkpoint = experiment / "checkpoint-10"
+    (experiment / "processor").mkdir(parents=True)
+    checkpoint.mkdir(parents=True)
+    (experiment / "processor" / "tokenizer.json").write_text("{}", encoding="utf-8")
+    (experiment / "strategy_manifest.json").write_text(
+        json.dumps({"strategy": "lora"}), encoding="utf-8"
+    )
+    (checkpoint / "adapter_model.safetensors").write_bytes(b"adapter")
+    (checkpoint / "adapter_config.json").write_text("{}", encoding="utf-8")
+    if visual:
+        (checkpoint / "visual_trainable_weights.safetensors").write_bytes(b"visual")
+    return experiment, checkpoint
+
+
+def test_r0_promotion_allows_lora_only_checkpoint_without_visual_sidecar(
+    tmp_path: Path,
+) -> None:
+    module = _runner_module()
+    experiment, _ = _make_promotion_fixture(tmp_path, visual=False)
+
+    promoted = module._promote_half_checkpoint(
+        experiment,
+        10,
+        require_visual_sidecar=False,
+    )
+
+    assert promoted.is_dir()
+    assert (promoted / "adapter_model.safetensors").is_file()
+    assert not (promoted / "visual_trainable_weights.safetensors").exists()
+
+
+def test_r1_promotion_rejects_checkpoint_without_visual_sidecar(
+    tmp_path: Path,
+) -> None:
+    module = _runner_module()
+    experiment, _ = _make_promotion_fixture(tmp_path, visual=False)
+
+    with pytest.raises(FileNotFoundError, match="visual sidecar is missing"):
+        module._promote_half_checkpoint(experiment, 10, require_visual_sidecar=True)
+
+
+def test_r1_promotion_accepts_checkpoint_with_visual_sidecar(tmp_path: Path) -> None:
+    module = _runner_module()
+    experiment, _ = _make_promotion_fixture(tmp_path, visual=True)
+
+    promoted = module._promote_half_checkpoint(experiment, 10, require_visual_sidecar=True)
+
+    assert (promoted / "visual_trainable_weights.safetensors").read_bytes() == b"visual"
+
+
+def test_stage2_rejects_population_manifest_sha_mismatch(tmp_path: Path) -> None:
+    module = _runner_module()
+    population_manifest = tmp_path / "population_manifest.json"
+    population_manifest.write_text("population-v1", encoding="utf-8")
+    train_file = tmp_path / "stage2_train.jsonl"
+    train_file.write_text("{}\n", encoding="utf-8")
+    stage2_manifest = tmp_path / "stage2_manifest.json"
+    stage2_manifest.write_text(
+        json.dumps(
+            {
+                "sha256": module.sha256_file(train_file),
+                "population_manifest_sha256": "stale-population-sha",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="population manifest SHA"):
+        module._ensure_stage2(
+            population_manifest,
+            {
+                "stage2": {
+                    "output_file": str(train_file),
+                    "manifest_file": str(stage2_manifest),
+                }
+            },
+        )
+
+
+def test_stage2_accepts_matching_population_manifest_sha(tmp_path: Path) -> None:
+    module = _runner_module()
+    population_manifest = tmp_path / "population_manifest.json"
+    population_manifest.write_text("population-v1", encoding="utf-8")
+    train_file = tmp_path / "stage2_train.jsonl"
+    train_file.write_text("{}\n", encoding="utf-8")
+    stage2_manifest = tmp_path / "stage2_manifest.json"
+    manifest = {
+        "sha256": module.sha256_file(train_file),
+        "population_manifest_sha256": module.sha256_file(population_manifest),
+    }
+    stage2_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+
+    _, returned_manifest, returned = module._ensure_stage2(
+        population_manifest,
+        {
+            "stage2": {
+                "output_file": str(train_file),
+                "manifest_file": str(stage2_manifest),
+            }
+        },
+    )
+
+    assert returned_manifest == stage2_manifest
+    assert returned["population_manifest_sha256"] == module.sha256_file(population_manifest)

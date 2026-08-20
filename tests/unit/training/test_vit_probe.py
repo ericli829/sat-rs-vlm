@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from sat_rs_vlm.training.vit_probe import build_probe_dataset, make_checkpoint_evaluable
 
 
@@ -83,3 +85,47 @@ def test_probe_checkpoint_promotion_preserves_sidecar(tmp_path: Path) -> None:
     assert (checkpoint / "visual_trainable_weights.safetensors").read_bytes() == b"visual"
     manifest = json.loads((checkpoint / "strategy_manifest.json").read_text(encoding="utf-8"))
     assert manifest["probe_checkpoint_step"] == 100
+
+
+def test_checkpoint_promotion_can_skip_sidecar_only_when_explicitly_requested(
+    tmp_path: Path,
+) -> None:
+    experiment = tmp_path / "lora_only_experiment"
+    checkpoint = experiment / "checkpoint-10"
+    (experiment / "processor").mkdir(parents=True)
+    checkpoint.mkdir(parents=True)
+    (experiment / "processor" / "tokenizer.json").write_text("{}", encoding="utf-8")
+    (experiment / "strategy_manifest.json").write_text(
+        json.dumps({"strategy": "lora", "training_stage": "r0"}), encoding="utf-8"
+    )
+    (checkpoint / "adapter_model.safetensors").write_bytes(b"adapter")
+    (checkpoint / "adapter_config.json").write_text("{}", encoding="utf-8")
+
+    make_checkpoint_evaluable(
+        experiment,
+        checkpoint,
+        checkpoint_step=10,
+        require_visual_sidecar=False,
+    )
+
+    assert (checkpoint / "strategy_manifest.json").is_file()
+    assert not (checkpoint / "visual_trainable_weights.safetensors").exists()
+
+
+def test_visual_checkpoint_promotion_still_requires_sidecar_by_default(
+    tmp_path: Path,
+) -> None:
+    experiment = tmp_path / "visual_experiment"
+    checkpoint = experiment / "checkpoint-10"
+    (experiment / "processor").mkdir(parents=True)
+    checkpoint.mkdir(parents=True)
+    (experiment / "processor" / "tokenizer.json").write_text("{}", encoding="utf-8")
+    (experiment / "strategy_manifest.json").write_text(
+        json.dumps({"strategy": "lora", "vision_tuning": {"enabled": True}}),
+        encoding="utf-8",
+    )
+    (checkpoint / "adapter_model.safetensors").write_bytes(b"adapter")
+    (checkpoint / "adapter_config.json").write_text("{}", encoding="utf-8")
+
+    with pytest.raises(FileNotFoundError, match="visual sidecar is missing"):
+        make_checkpoint_evaluable(experiment, checkpoint, checkpoint_step=10)

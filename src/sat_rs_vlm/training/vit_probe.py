@@ -274,8 +274,14 @@ def make_checkpoint_evaluable(
     checkpoint_dir: str | Path,
     *,
     checkpoint_step: int | None = None,
+    require_visual_sidecar: bool = True,
 ) -> Path:
-    """补齐中间 checkpoint 的 processor/manifest，保持 sidecar 原样不动。"""
+    """补齐中间 checkpoint 的 processor/manifest，保持 sidecar 原样不动。
+
+    ``require_visual_sidecar`` 默认保持 ``True``，兼容旧 ViT probe 和 visual-tuned
+    checkpoint 的完整性约束。LoRA-only 阶段可以显式传入 ``False``，因为这类
+    checkpoint 没有需要保存的视觉 sidecar。
+    """
 
     source = Path(experiment_dir)
     destination = Path(checkpoint_dir)
@@ -295,9 +301,10 @@ def make_checkpoint_evaluable(
         raise FileNotFoundError(
             f"Checkpoint adapter files are missing from {destination}: {missing_adapter_files}"
         )
-    sidecar = destination / "visual_trainable_weights.safetensors"
-    if not sidecar.is_file():
-        raise FileNotFoundError(f"Checkpoint visual sidecar is missing: {sidecar}")
+    if require_visual_sidecar:
+        sidecar = destination / "visual_trainable_weights.safetensors"
+        if not sidecar.is_file():
+            raise FileNotFoundError(f"Checkpoint visual sidecar is missing: {sidecar}")
     destination.mkdir(parents=True, exist_ok=True)
     shutil.copy2(required_manifest, destination / "strategy_manifest.json")
     shutil.copytree(source_processor, destination / "processor", dirs_exist_ok=True)

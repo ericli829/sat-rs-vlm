@@ -232,11 +232,23 @@ def _archive_evaluation(directory: Path, suffix: str) -> None:
     directory.rename(destination)
 
 
-def _promote_half_checkpoint(adapter_dir: Path, half_step: int) -> Path:
+def _promote_half_checkpoint(
+    adapter_dir: Path,
+    half_step: int,
+    *,
+    require_visual_sidecar: bool = True,
+) -> Path:
+    """Promote a Trainer checkpoint while enforcing its visual-artifact contract."""
+
     source = adapter_dir / f"checkpoint-{half_step}"
     if not source.is_dir():
         raise FileNotFoundError(f"Expected half-epoch Trainer checkpoint is missing: {source}")
-    make_checkpoint_evaluable(adapter_dir, source, checkpoint_step=half_step)
+    make_checkpoint_evaluable(
+        adapter_dir,
+        source,
+        checkpoint_step=half_step,
+        require_visual_sidecar=require_visual_sidecar,
+    )
     destination = adapter_dir.parent / "checkpoint-half"
     if destination.exists():
         return destination
@@ -290,6 +302,14 @@ def _ensure_stage2(
     manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
     if sha256_file(train_file) != manifest.get("sha256"):
         raise ValueError("Stage2 train file SHA does not match stage2_manifest.json")
+    current_population_sha = sha256_file(population_manifest)
+    recorded_population_sha = manifest.get("population_manifest_sha256")
+    if recorded_population_sha != current_population_sha:
+        raise ValueError(
+            "Stage2 population manifest SHA does not match the current canonical population: "
+            f"recorded={recorded_population_sha!r}, current={current_population_sha!r}. "
+            "Regenerate Stage2 data before training."
+        )
     return train_file, manifest_file, manifest
 
 
@@ -430,7 +450,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         return result
     if mode is None:
         if not args.r0_adapter:
-            _promote_half_checkpoint(r0_adapter, r0_plan.half_checkpoint_step)
+            _promote_half_checkpoint(
+                r0_adapter,
+                r0_plan.half_checkpoint_step,
+                require_visual_sidecar=False,
+            )
         _update_state(state_path, "R0_TRAINED", r0_adapter=str(r0_adapter))
 
     # 正式顺序要求先完成 R0 E1，再构建并训练 R1。诊断模式不做生成评测。
@@ -536,7 +560,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         )
         _write_json(run_root / "stage_a_v2_result.json", result)
         return result
-    _promote_half_checkpoint(r1_adapter, r1_plan.half_checkpoint_step)
+    _promote_half_checkpoint(
+        r1_adapter,
+        r1_plan.half_checkpoint_step,
+        require_visual_sidecar=True,
+    )
     _update_state(state_path, "R1_TRAINED", r1_adapter=str(r1_adapter))
 
     r1_eval_dir = r1_root / "evaluation_e1"
