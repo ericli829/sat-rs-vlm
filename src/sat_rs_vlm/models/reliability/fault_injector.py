@@ -103,7 +103,9 @@ def selector_for_fault_target(
         "language_model": {"module_names": ("model.layers",)},
         "attention": {"module_names": ("self_attn",)},
         "mlp": {"module_names": ("mlp",)},
-        "embeddings": {"name_regex": r"(?:embed|lm_head)"},
+        # Keep visual.patch_embed in the vision target; only language-token
+        # embeddings and a language-model lm_head belong to this target.
+        "embeddings": {"name_regex": r"(?:language_model\.(?:embed|lm_head)|(?:^|\.)lm_head)"},
     }
     key = str(target).lower()
     if key not in presets:
@@ -219,6 +221,8 @@ def inject_model_parameter_bitflips(
     seed: int,
     selector: ParameterSelector | None = None,
     bit_plane: BitPlane | str = "all",
+    bit_index: int | None = None,
+    flat_index: int | None = None,
 ) -> list[BitFlipRecord]:
     """Inject faults into loaded model parameters without cloning full weights.
 
@@ -230,17 +234,23 @@ def inject_model_parameter_bitflips(
     if num_bits < 0:
         raise ValueError("num_bits must be non-negative")
     selected = [
-        (name, parameter, bit_indices_for_tensor(parameter, bit_plane))
+        (name, parameter, ((bit_index,) if bit_index is not None else bit_indices_for_tensor(parameter, bit_plane)))
         for name, parameter in selectable_parameters(dict(model.named_parameters()), selector)
     ]
     selected = [item for item in selected if item[2]]
     if not selected:
         raise ValueError("No model parameters matched the fault selector and bit plane")
+    if flat_index is not None:
+        if len(selected) != 1 or flat_index < 0 or flat_index >= int(selected[0][1].numel()):
+            raise ValueError("flat_index requires exactly one matching parameter and a valid index")
     cumulative: list[int] = []
     total = 0
     for _, parameter, allowed_bits in selected:
         total += int(parameter.numel()) * len(allowed_bits)
         cumulative.append(total)
+    if flat_index is not None:
+        total = len(selected[0][2])
+        cumulative = [total]
     if num_bits > total:
         raise ValueError(f"num_bits={num_bits} exceeds candidate bits={total}")
 
@@ -251,18 +261,20 @@ def inject_model_parameter_bitflips(
             start = cumulative[parameter_index - 1] if parameter_index else 0
             local_address = address - start
             name, parameter, allowed_bits = selected[parameter_index]
-            flat_index, bit_rank = divmod(local_address, len(allowed_bits))
+            target_flat_index, bit_rank = divmod(local_address, len(allowed_bits))
+            if flat_index is not None:
+                target_flat_index = flat_index
             bit_index = allowed_bits[bit_rank]
             width = tensor_bit_width(parameter)
-            element = parameter.detach().reshape(-1)[flat_index : flat_index + 1].clone()
+            element = parameter.detach().reshape(-1)[target_flat_index : target_flat_index + 1].clone()
             changed, record = flip_tensor_bit(
                 element, flat_index=0, bit_index=bit_index, target_name=name, seed=seed
             )
-            parameter.reshape(-1)[flat_index].copy_(changed.reshape(-1)[0])
+            parameter.reshape(-1)[target_flat_index].copy_(changed.reshape(-1)[0])
             element_bytes = width // 8
             records.append(record.model_copy(update={
-                "flat_index": flat_index,
-                "byte_index": flat_index * element_bytes + bit_index // 8,
+                "flat_index": target_flat_index,
+                "byte_index": target_flat_index * element_bytes + bit_index // 8,
                 "shape": list(parameter.shape),
             }))
     return records

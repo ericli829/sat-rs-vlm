@@ -175,6 +175,31 @@ def test_bit_plane_indices_and_in_memory_exponent_injection() -> None:
     assert {record.bit_index for record in records}.issubset({10, 11, 12, 13, 14})
 
 
+def test_exact_parameter_bit_and_flat_index_injection() -> None:
+    torch = pytest.importorskip("torch")
+
+    class TinyModel(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.weight = torch.nn.Parameter(torch.zeros(3, dtype=torch.float32))
+
+    model = TinyModel()
+    records = inject_model_parameter_bitflips(
+        model,
+        num_bits=1,
+        seed=1,
+        selector=ParameterSelector(parameter_names=("weight",)),
+        bit_index=31,
+        flat_index=2,
+    )
+
+    assert len(records) == 1
+    assert records[0].target_name == "weight"
+    assert records[0].bit_index == 31
+    assert records[0].flat_index == 2
+    assert model.weight.detach().view(torch.int32)[2].item() == -(1 << 31)
+
+
 def test_fault_inventory_and_normalized_density() -> None:
     torch = pytest.importorskip("torch")
 
@@ -207,3 +232,13 @@ def test_fault_inventory_summary_groups_regions_and_layers() -> None:
     assert by_key[("mlp", 14)]["elements"] == 8
     assert by_key[("vision_encoder", 2)]["tensor_count"] == 1
     assert by_key[("lora_adapter", 14)]["candidate_bits"] == 32
+
+
+def test_embeddings_selector_does_not_capture_visual_patch_embed() -> None:
+    torch = pytest.importorskip("torch")
+    state = {
+        "model.language_model.embed_tokens.weight": torch.ones(2, dtype=torch.float32),
+        "model.visual.patch_embed.proj.weight": torch.ones(2, dtype=torch.float32),
+    }
+    selected = selectable_parameters(state, selector_for_fault_target("embeddings"))
+    assert [name for name, _ in selected] == ["model.language_model.embed_tokens.weight"]

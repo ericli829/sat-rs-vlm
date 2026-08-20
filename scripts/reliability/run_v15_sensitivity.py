@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import sys
+import re
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +20,7 @@ from sat_rs_vlm.configuration.paths import PathConfig
 from sat_rs_vlm.training.experiment import write_json
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-LAYERED_TARGETS = {"language_model", "attention", "mlp"}
+LAYERED_TARGETS = {"language_model", "attention", "mlp", "lora_adapter", "lora_a", "lora_b"}
 ALLOWED_TARGETS = {
     "all_parameters",
     "lora_adapter",
@@ -92,6 +93,23 @@ def load_config(args: argparse.Namespace) -> tuple[dict[str, Any], PathConfig]:
         ),
         environ=_environment(),
     )
+    fault = dict(config.get("fault", {}))
+    if str(fault.get("layer_indices", "")).lower() == "auto":
+        model_path = Path(str(config["model"]["base_model"])).expanduser()
+        discovered: set[int] = set()
+        try:
+            from safetensors import safe_open
+
+            files = sorted(model_path.glob("*.safetensors"))
+            for file_path in files:
+                with safe_open(str(file_path), framework="pt", device="cpu") as handle:
+                    for name in handle.keys():
+                        discovered.update(int(value) for value in re.findall(r"(?:layers?|blocks?)\.(\d+)", name))
+        except (ImportError, OSError):
+            discovered = set()
+        if not discovered:
+            raise ValueError("fault.layer_indices=auto could not discover layers from model safetensors")
+        config["fault"] = {**fault, "layer_indices": sorted(discovered)}
     paths = PathConfig.from_mapping(
         config.get("paths", {}),
         project_root=PROJECT_ROOT,
@@ -111,7 +129,12 @@ def build_conditions(
     bit_planes_override: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     fault = dict(config.get("fault", {}))
-    targets = targets_override or list(fault.get("sensitivity_targets", ["lora_adapter"]))
+    targets = targets_override or list(
+        fault.get(
+            "sensitivity_targets",
+            ["attention", "mlp", "vision_encoder", "embeddings", "lora_adapter"],
+        )
+    )
     layers = (
         layers_override if layers_override is not None else list(fault.get("layer_indices", []))
     )
@@ -150,6 +173,27 @@ def build_conditions(
                         )
                         ordinal += 1
     return conditions
+
+
+def validate_condition_plan(conditions: list[dict[str, Any]]) -> dict[str, Any]:
+    """Validate condition identity and reproducibility metadata."""
+    required = {"id", "target", "layers", "bit_plane", "num_bits", "repeat", "seed"}
+    missing = [row.get("id", "<unknown>") for row in conditions if not required.issubset(row)]
+    ids = [str(row.get("id")) for row in conditions]
+    seeds = [row.get("seed") for row in conditions]
+    duplicate_ids = sorted({item for item in ids if ids.count(item) > 1})
+    duplicate_seeds = sorted({item for item in seeds if seeds.count(item) > 1})
+    invalid_bits = [row.get("id") for row in conditions if not isinstance(row.get("num_bits"), int) or row["num_bits"] < 1]
+    invalid_planes = [row.get("id") for row in conditions if row.get("bit_plane") not in {"all", "sign", "exponent", "mantissa"}]
+    return {
+        "valid": not (missing or duplicate_ids or duplicate_seeds or invalid_bits or invalid_planes),
+        "num_conditions": len(conditions),
+        "missing_fields": missing,
+        "duplicate_ids": duplicate_ids,
+        "duplicate_seeds": duplicate_seeds,
+        "invalid_bit_counts": invalid_bits,
+        "invalid_bit_planes": invalid_planes,
+    }
 
 
 def _configured_paths(config: dict[str, Any]) -> dict[str, Path]:
@@ -253,10 +297,28 @@ def _run(command: list[str], log: Path) -> None:
         raise RuntimeError(f"subprocess failed ({result.returncode}); see {log}")
 
 
-def _condition_complete(directory: Path) -> bool:
-    return (directory / "fault_injection_summary.json").is_file() and (
-        directory / "comparison" / "comparison.json"
-    ).is_file()
+def _condition_complete(directory: Path, condition: dict[str, Any] | None = None) -> bool:
+    injection = directory / "fault_injection_summary.json"
+    comparison = directory / "comparison" / "comparison.json"
+    if not injection.is_file() or not comparison.is_file():
+        return False
+    try:
+        fault = json.loads(injection.read_text(encoding="utf-8"))
+        compare = json.loads(comparison.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(fault, dict) or not isinstance(compare, dict):
+        return False
+    if not fault.get("schema_version") or "actual_bit_flips" not in fault or "overall" not in compare:
+        return False
+    if condition is not None:
+        if fault.get("condition_id") not in {None, condition.get("id")}:
+            return False
+        if fault.get("planned_bit_flips") not in {None, condition.get("num_bits")}:
+            return False
+        if fault.get("actual_bit_flips") != len(fault.get("records", [])):
+            return False
+    return True
 
 
 def _load_condition_result(directory: Path, condition: dict[str, Any]) -> dict[str, Any]:
@@ -304,6 +366,9 @@ def main() -> int:
         repeats_override=args.repeats,
         bit_planes_override=args.bit_planes,
     )
+    plan_validation = validate_condition_plan(conditions)
+    if not plan_validation["valid"]:
+        raise ValueError(f"Invalid condition plan: {plan_validation}")
     report = preflight_report(config)
     if args.preflight:
         print(json.dumps(report, ensure_ascii=False, indent=2))
@@ -360,7 +425,7 @@ def main() -> int:
         summary: list[dict[str, Any]] = []
         for condition in conditions:
             directory = root / "conditions" / condition["id"]
-            if _condition_complete(directory):
+            if _condition_complete(directory, condition):
                 summary.append(_load_condition_result(directory, condition))
                 continue
             _write_progress(

@@ -25,6 +25,9 @@ def parse_args() -> argparse.Namespace:
         "--fault-bit-plane", choices=("all", "sign", "exponent", "mantissa"), default="all"
     )
     parser.add_argument("--fault-layers", nargs="*", type=int, default=[])
+    parser.add_argument("--fault-parameter-name")
+    parser.add_argument("--fault-bit-index", type=int)
+    parser.add_argument("--fault-flat-index", type=int)
     parser.add_argument("--activation-guard", action="store_true")
     parser.add_argument("--activation-patterns", nargs="+", default=["self_attn", "mlp"])
     parser.add_argument("--activation-max-abs", type=float, default=10000.0)
@@ -53,9 +56,16 @@ def main() -> int:
     records: list[Any] = []
     inventory: dict[str, Any] | None = None
     if is_fault:
-        selector = selector_for_fault_target(
-            args.fault_target, layer_indices=tuple(args.fault_layers)
-        )
+        selector = selector_for_fault_target(args.fault_target, layer_indices=tuple(args.fault_layers))
+        if args.fault_parameter_name:
+            selector = selector.__class__(
+                name_contains=selector.name_contains,
+                name_regex=selector.name_regex,
+                module_names=selector.module_names,
+                layer_indices=selector.layer_indices,
+                parameter_names=(args.fault_parameter_name,),
+                lora_scope=selector.lora_scope,
+            )
         inventory = model_fault_inventory(model, selector=selector, bit_plane=args.fault_bit_plane)
         records = inject_model_parameter_bitflips(
             model,
@@ -63,6 +73,8 @@ def main() -> int:
             seed=args.fault_seed,
             selector=selector,
             bit_plane=args.fault_bit_plane,
+            bit_index=args.fault_bit_index,
+            flat_index=args.fault_flat_index,
         )
     guard = None
     guard_report = None
@@ -95,6 +107,9 @@ def main() -> int:
             "target": args.fault_target,
             "layers": args.fault_layers,
             "bit_plane": args.fault_bit_plane if is_fault else None,
+            "parameter_name": args.fault_parameter_name,
+            "bit_index": args.fault_bit_index,
+            "flat_index": args.fault_flat_index,
             "requested_bit_flips": args.fault_num_bits if is_fault else 0,
             "actual_bit_flips": len(records),
             "seed": args.fault_seed,
