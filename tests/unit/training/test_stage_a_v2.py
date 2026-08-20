@@ -68,7 +68,7 @@ def test_stage2_coverage_first_sampler_keeps_every_exposure() -> None:
     rows = [*[_row(f"v-{i}", "VRSBench") for i in range(12)]]
     rows.extend(_row(f"l-{i}", "LEVIR-CC") for i in range(4))
     report = validate_stage2_sampler_coverage(
-        rows,
+        iter(rows),
         source_batch_pattern=["VRSBench", "VRSBench", "VRSBench", "LEVIR-CC"],
         batch_size=4,
         seed=42,

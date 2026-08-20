@@ -513,7 +513,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     stage2_file, stage2_manifest_file, stage2_manifest = _ensure_stage2(
         population_manifest, data_config
     )
-    frozen_stage2_rows = read_jsonl(stage2_file)
+    # The sampler audit and epoch planner need a reusable, sized sequence.
+    # read_jsonl() is intentionally lazy, so materialize the frozen Stage2
+    # file once at this boundary instead of consuming it inconsistently.
+    frozen_stage2_rows = list(read_jsonl(stage2_file))
     sampler_audit = validate_stage2_sampler_coverage(
         frozen_stage2_rows,
         source_batch_pattern=r1_config["data"]["source_batch_pattern"],

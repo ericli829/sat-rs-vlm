@@ -7,7 +7,7 @@ import math
 import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 from sat_rs_vlm.data.task_sampler import build_alternating_source_sampler
 from sat_rs_vlm.models.reliability.checksum import file_sha256
@@ -182,7 +182,7 @@ def validate_r0_adapter_contract(
 
 
 def validate_stage2_sampler_coverage(
-    rows: Sequence[Mapping[str, Any]],
+    rows: Iterable[Mapping[str, Any]],
     *,
     source_batch_pattern: Sequence[str],
     batch_size: int,
@@ -190,6 +190,9 @@ def validate_stage2_sampler_coverage(
 ) -> dict[str, Any]:
     """证明 coverage_first sampler 不截断 Stage2 尾部且不产生 source starvation。"""
 
+    # Keep this contract tolerant of read_jsonl()'s lazy iterator while making
+    # the rows reusable for sampler construction, length checks, and indexing.
+    rows = list(rows)
     sampler = build_alternating_source_sampler(
         rows,
         source_batch_pattern,
