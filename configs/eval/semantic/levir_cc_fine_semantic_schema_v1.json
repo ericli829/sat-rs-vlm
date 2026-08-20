@@ -1,0 +1,56 @@
+{
+  "schema_version": "1.0",
+  "protocol": "levir_cc_caption_semantics_v1",
+  "purpose": "caption_semantics_gold_for_local_judge_tuning_and_internal_fine_grained_evaluation",
+  "scope": "Annotate only what the English model caption explicitly states. This schema is not image-level ground truth.",
+  "fields": {
+    "human_change_label": {
+      "values": ["0", "1", "U"],
+      "meaning": {
+        "0": "No relevant permanent-structure change is expressed.",
+        "1": "At least one relevant permanent-structure change is expressed.",
+        "U": "Caption meaning is genuinely uncertain or contradictory."
+      }
+    },
+    "human_changed_objects": {
+      "separator": "|",
+      "values": [
+        "building",
+        "road",
+        "parking_area",
+        "bridge",
+        "sports_field",
+        "water_body",
+        "vegetation_landcover",
+        "other_permanent_structure",
+        "none",
+        "unknown"
+      ]
+    },
+    "human_change_directions": {
+      "separator": "|",
+      "values": [
+        "appearance_construction",
+        "disappearance_demolition",
+        "expansion",
+        "reduction",
+        "replacement_modification",
+        "count_change",
+        "state_change_unspecified",
+        "none",
+        "unknown"
+      ]
+    },
+    "human_annotation_confidence": {
+      "values": ["high", "medium", "low"]
+    }
+  },
+  "consistency_rules": [
+    "label_0_requires_objects_none_and_directions_none",
+    "label_1_requires_at_least_one_object_value_and_one_non_none_direction",
+    "label_U_requires_objects_unknown_and_directions_unknown",
+    "none_and_unknown_cannot_be_combined_with_other_values",
+    "all_multi_value_fields_must_use_the_pipe_separator"
+  ],
+  "evaluation_limit": "Object and direction scores derived from this schema measure agreement with caption semantics. They must not be reported as image-grounded factual accuracy without a separate visual audit."
+}

@@ -23,6 +23,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--predictions", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--model", type=Path, required=True)
+    parser.add_argument(
+        "--adapter",
+        type=Path,
+        help="Optional local LoRA adapter directory; the base model remains unchanged.",
+    )
     parser.add_argument("--model-revision")
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--max-new-tokens", type=int, default=4)
@@ -49,6 +54,7 @@ def main() -> int:
             max_new_tokens=args.max_new_tokens,
             local_files_only=not args.allow_download,
             model_revision=args.model_revision,
+            adapter_path=args.adapter,
         )
         outputs = run_local_change_judge(
             args.predictions,

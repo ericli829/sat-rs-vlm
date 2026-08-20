@@ -24,7 +24,7 @@ from typing import Any, Protocol
 from sat_rs_vlm.evaluation.parsers import parse_change_prediction
 from sat_rs_vlm.evaluation.records import EvaluationError, read_prediction_jsonl
 
-LOCAL_JUDGE_IMPLEMENTATION_VERSION = "levir-local-text-judge-v2.3-hybrid"
+LOCAL_JUDGE_IMPLEMENTATION_VERSION = "levir-local-text-judge-v2.4-lora"
 LOCAL_JUDGE_PROMPT_VERSION = "levir-caption-semantics-en-v3"
 LOCAL_JUDGE_DECISION_PROFILE = "local_text_judge_priority_v1.3"
 
@@ -289,6 +289,7 @@ class HuggingFaceQwenJudge:
         max_new_tokens: int = 4,
         local_files_only: bool = True,
         model_revision: str | None = None,
+        adapter_path: str | Path | None = None,
     ) -> None:
         if batch_size < 1:
             raise ValueError("batch_size must be positive")
@@ -306,6 +307,7 @@ class HuggingFaceQwenJudge:
         self.max_new_tokens = max_new_tokens
         self.model_id = str(model_path)
         self.model_revision = model_revision
+        self.adapter_path = str(Path(adapter_path).resolve()) if adapter_path is not None else None
         load_options: dict[str, Any] = {
             "local_files_only": local_files_only,
             "revision": model_revision,
@@ -322,6 +324,14 @@ class HuggingFaceQwenJudge:
             torch_dtype=torch_dtype,
             **load_options,
         )
+        if adapter_path is not None:
+            try:
+                from peft import PeftModel
+            except ImportError as exc:  # pragma: no cover - depends on optional runtime
+                raise EvaluationError(
+                    "Loading a local judge LoRA adapter requires the optional peft dependency."
+                ) from exc
+            self.model = PeftModel.from_pretrained(self.model, adapter_path, local_files_only=True)
         self.model.eval()
 
     def _model_device(self) -> Any:
@@ -558,6 +568,8 @@ def run_local_change_judge(
         and row["change_judge"].get("source") == "local_llm_judge"
     ]
     model_fingerprint = _model_fingerprint(backend.model_id)
+    adapter_path = getattr(backend, "adapter_path", None)
+    adapter_fingerprint = _model_fingerprint(adapter_path) if adapter_path else None
     summary = {
         "schema_version": "1.7",
         "implementation_version": LOCAL_JUDGE_IMPLEMENTATION_VERSION,
@@ -565,6 +577,8 @@ def run_local_change_judge(
         "model": backend.model_id,
         "model_revision": backend.model_revision,
         "model_fingerprint": model_fingerprint,
+        "adapter_path": adapter_path,
+        "adapter_fingerprint": adapter_fingerprint,
         "routing": routing,
         "num_input_rows": len(records),
         "num_eligible_rows": len(eligible),
@@ -601,6 +615,8 @@ def run_local_change_judge(
         "model": backend.model_id,
         "model_revision": backend.model_revision,
         "model_fingerprint": model_fingerprint,
+        "adapter_path": adapter_path,
+        "adapter_fingerprint": adapter_fingerprint,
         "prompt_version": LOCAL_JUDGE_PROMPT_VERSION,
         "routing": routing,
         "remote_write_performed": False,

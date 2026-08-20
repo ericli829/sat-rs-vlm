@@ -1,0 +1,2 @@
+{"id":"one","messages":[{"role":"system","content":"x"},{"role":"user","content":"Caption to classify:\n<caption>\nA road was built.\n</caption>"},{"role":"assistant","content":"1"}],"target_label":"1","quality_weight":0.8}
+{"id":"two","messages":[{"role":"system","content":"x"},{"role":"user","content":"Caption to classify:\n<caption>\nNo change.\n</caption>"},{"role":"assistant","content":"0"}],"target_label":"0","quality_weight":1.0}
