@@ -11,6 +11,7 @@ RUN_ROOT=""
 MAX_TRAIN_GROUPS=""
 MAX_STEPS=""
 MAX_VAL_GROUPS=""
+RESUME_OBJECT_ADAPTER_CHECKPOINT=""
 SKIP_DATA_BUILD=0
 SKIP_E1=0
 DRY_RUN=0
@@ -40,6 +41,8 @@ Options:
   --max-train-groups N       Limit groups for a smoke run
   --max-steps N              Limit optimizer steps for a smoke run
   --max-val-groups N         Limit internal validation groups for a smoke run
+  --resume-object-adapter-checkpoint PATH
+                              Resume from a completed Object Adapter checkpoint_epoch_N
   --skip-data-build          Reuse an existing audited dataset
   --skip-e1                  Save the trained checkpoint without running E1
   --dry-run                  Audit/load only; skip training, E1 and shutdown
@@ -69,6 +72,8 @@ while [[ $# -gt 0 ]]; do
     --max-steps=*) MAX_STEPS="${1#*=}"; shift ;;
     --max-val-groups) MAX_VAL_GROUPS="$2"; shift 2 ;;
     --max-val-groups=*) MAX_VAL_GROUPS="${1#*=}"; shift ;;
+    --resume-object-adapter-checkpoint) RESUME_OBJECT_ADAPTER_CHECKPOINT="$2"; shift 2 ;;
+    --resume-object-adapter-checkpoint=*) RESUME_OBJECT_ADAPTER_CHECKPOINT="${1#*=}"; shift ;;
     --skip-data-build) SKIP_DATA_BUILD=1; shift ;;
     --skip-e1) SKIP_E1=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
@@ -168,6 +173,13 @@ CONFIG_PATH="$(resolve_project_path "$CONFIG")"
 R1_CHECKPOINT_DIR="$(resolve_project_path "$R1_CHECKPOINT_DIR")"
 [[ -f "$CONFIG_PATH" ]] || { echo "Config is missing: $CONFIG_PATH" >&2; exit 1; }
 [[ -d "$R1_CHECKPOINT_DIR" ]] || { echo "R1 checkpoint is missing: $R1_CHECKPOINT_DIR" >&2; exit 1; }
+if [[ -n "$RESUME_OBJECT_ADAPTER_CHECKPOINT" ]]; then
+  RESUME_OBJECT_ADAPTER_CHECKPOINT="$(resolve_project_path "$RESUME_OBJECT_ADAPTER_CHECKPOINT")"
+  [[ -d "$RESUME_OBJECT_ADAPTER_CHECKPOINT" ]] || {
+    echo "Object Adapter resume checkpoint is missing: $RESUME_OBJECT_ADAPTER_CHECKPOINT" >&2
+    exit 1
+  }
+fi
 
 RUN_ROOT="${RUN_ROOT:-$OUTPUT_ROOT/rs_object_adapter_v0_e1_$(date +%Y%m%d_%H%M%S)}"
 TRAIN_OUTPUT="$RUN_ROOT/training"
@@ -190,6 +202,9 @@ echo "[ENV] PYTHON_BIN=$PYTHON_BIN"
 echo "[ENV] OMP_NUM_THREADS=$OMP_NUM_THREADS"
 echo "[RUN] RUN_ROOT=$RUN_ROOT"
 echo "[RUN] R1_CHECKPOINT_DIR=$R1_CHECKPOINT_DIR"
+if [[ -n "$RESUME_OBJECT_ADAPTER_CHECKPOINT" ]]; then
+  echo "[RUN] RESUME_OBJECT_ADAPTER_CHECKPOINT=$RESUME_OBJECT_ADAPTER_CHECKPOINT"
+fi
 
 if [[ "$DRY_RUN" == "1" ]]; then
   SHUTDOWN_AFTER_RUN=0
@@ -251,6 +266,9 @@ TRAIN_ARGS=(scripts/training/train_object_adapter_v0.py --config "$CONFIG_PATH" 
 if [[ -n "$MAX_TRAIN_GROUPS" ]]; then TRAIN_ARGS+=(--max-train-groups "$MAX_TRAIN_GROUPS"); fi
 if [[ -n "$MAX_STEPS" ]]; then TRAIN_ARGS+=(--max-steps "$MAX_STEPS"); fi
 if [[ -n "$MAX_VAL_GROUPS" ]]; then TRAIN_ARGS+=(--max-val-groups "$MAX_VAL_GROUPS"); fi
+if [[ -n "$RESUME_OBJECT_ADAPTER_CHECKPOINT" ]]; then
+  TRAIN_ARGS+=(--resume-object-adapter-checkpoint "$RESUME_OBJECT_ADAPTER_CHECKPOINT")
+fi
 if [[ "$DRY_RUN" == "1" ]]; then TRAIN_ARGS+=(--dry-run); fi
 "$PYTHON_BIN" "${TRAIN_ARGS[@]}"
 

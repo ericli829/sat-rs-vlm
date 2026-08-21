@@ -784,6 +784,108 @@ def test_epoch_checkpoint_is_saved_before_internal_validation() -> None:
     assert events == ["checkpoint", "validation"]
 
 
+def test_training_status_line_includes_progress_and_eta() -> None:
+    from sat_rs_vlm.training.object_adapter_v0 import _format_training_status
+
+    status = _format_training_status(
+        epoch=1,
+        epochs=2,
+        group_index=20,
+        group_count=100,
+        step=10,
+        total_steps=100,
+        loss=0.1234567,
+        learning_rate=2e-4,
+        elapsed_seconds=50.0,
+    )
+
+    assert "epoch=1/2" in status
+    assert "step=10/100" in status
+    assert "progress=10.0%" in status
+    assert "loss=0.123457" in status
+    assert "eta=450.0s" in status
+
+
+def test_count_metrics_support_all_bins_without_recursion() -> None:
+    from sat_rs_vlm.training.object_adapter_v0 import _metrics_from_count_pairs
+
+    metrics = _metrics_from_count_pairs(
+        predicted=[0.2, 3.4, 6.6, 11.3],
+        truth=[0, 3, 6, 11],
+    )
+
+    assert metrics["n"] == 4
+    assert set(metrics["by_count_bin"]) == {"0-2", "3-5", "6-10", "11+"}
+    assert all(
+        "by_count_bin" not in bucket_metrics
+        for bucket_metrics in metrics["by_count_bin"].values()
+    )
+
+
+def test_resume_checkpoint_manifest_validates_assets(tmp_path: Path) -> None:
+    from sat_rs_vlm.training.object_adapter_v0 import _validate_object_adapter_resume_checkpoint
+
+    source_manifest = tmp_path / "source_r1_manifest.json"
+    source_manifest.write_text('{"strategy":"lora"}\n', encoding="utf-8")
+    data_manifest = tmp_path / "data_manifest.json"
+    data_manifest.write_text('{"builder_version":"1.1"}\n', encoding="utf-8")
+    checkpoint_dir = tmp_path / "checkpoint_epoch_1"
+    checkpoint_dir.mkdir()
+    weights_path = checkpoint_dir / "adapter_model.safetensors"
+    weights_path.write_bytes(b"test-weights")
+    class_vocab = {"classes": ["ship"], "class_to_id": {"ship": 0}}
+    (checkpoint_dir / "class_vocab.json").write_text(
+        json.dumps(class_vocab),
+        encoding="utf-8",
+    )
+    architecture = {
+        "d_model": 256,
+        "num_queries": 64,
+        "num_classes": 1,
+        "vit_hidden_size": 1024,
+        "nhead": 8,
+        "decoder_layers": 2,
+        "dim_feedforward": 1024,
+        "dropout": 0.1,
+    }
+    (checkpoint_dir / "adapter_manifest.json").write_text(
+        json.dumps(
+            {
+                "experiment": "rs_object_adapter_v0",
+                "architecture": architecture,
+                "selected_vit_blocks": [5, 11, 17, 23],
+                "source_r1_manifest_sha256": file_sha256(source_manifest),
+                "training_data_manifest_sha256": file_sha256(data_manifest),
+                "weights": weights_path.name,
+                "weights_sha256": file_sha256(weights_path),
+                "epoch": 1,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    resolved_weights, completed_epoch = _validate_object_adapter_resume_checkpoint(
+        checkpoint_dir,
+        expected_architecture=architecture,
+        expected_class_vocab=class_vocab,
+        selected_blocks=(5, 11, 17, 23),
+        source_r1_manifest=source_manifest,
+        data_manifest=data_manifest,
+    )
+
+    assert resolved_weights == weights_path
+    assert completed_epoch == 1
+    with pytest.raises(ValueError, match="selected ViT blocks"):
+        _validate_object_adapter_resume_checkpoint(
+            checkpoint_dir,
+            expected_architecture=architecture,
+            expected_class_vocab=class_vocab,
+            selected_blocks=(23, 17, 11, 5),
+            source_r1_manifest=source_manifest,
+            data_manifest=data_manifest,
+        )
+
+
 def test_evaluator_adapter_forward_uses_cuda_bf16_autocast() -> None:
     evaluator = _load_object_adapter_evaluator_module()
 

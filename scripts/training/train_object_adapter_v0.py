@@ -52,6 +52,12 @@ def parse_args() -> argparse.Namespace:
         help="Override model.checkpoint_dir with the existing Qwen3-VL-4B R1 adapter.",
     )
     parser.add_argument("--output-dir", type=Path, default=None)
+    parser.add_argument(
+        "--resume-object-adapter-checkpoint",
+        type=Path,
+        default=None,
+        help="Resume from a completed checkpoint_epoch_N using Adapter weights only.",
+    )
     parser.add_argument("--max-train-groups", type=int, default=None)
     parser.add_argument("--max-steps", type=int, default=None)
     parser.add_argument(
@@ -81,6 +87,11 @@ def main() -> int:
             max_train_groups=args.max_train_groups,
             max_steps=args.max_steps,
             max_val_groups=args.max_val_groups,
+            resume_object_adapter_checkpoint=(
+                _project_path(args.resume_object_adapter_checkpoint)
+                if args.resume_object_adapter_checkpoint is not None
+                else None
+            ),
             dry_run=args.dry_run,
         )
     except (

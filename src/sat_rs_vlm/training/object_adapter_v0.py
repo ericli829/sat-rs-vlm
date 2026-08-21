@@ -87,6 +87,31 @@ def _save_epoch_checkpoint_before_validation(
     return checkpoint_path, validate()
 
 
+def _format_training_status(
+    *,
+    epoch: int,
+    epochs: int,
+    group_index: int,
+    group_count: int,
+    step: int,
+    total_steps: int,
+    loss: float,
+    learning_rate: float,
+    elapsed_seconds: float,
+) -> str:
+    """生成适合 ``tail -f`` 观察的单行训练状态。"""
+
+    progress = 100.0 * float(step) / float(total_steps)
+    eta_seconds = max(0.0, elapsed_seconds / float(step) * float(total_steps - step))
+    return (
+        "[TRAIN] "
+        f"epoch={epoch}/{epochs} group={group_index}/{group_count} "
+        f"step={step}/{total_steps} progress={progress:.1f}% "
+        f"loss={loss:.6f} lr={learning_rate:.3e} "
+        f"elapsed={elapsed_seconds:.1f}s eta={eta_seconds:.1f}s"
+    )
+
+
 class ObjectAdapterDataset(Dataset[dict[str, Any]]):
     """读取 builder 产生的 pair JSONL；图片仍保持 portable relative path。"""
 
@@ -508,11 +533,16 @@ def compute_object_adapter_loss(
     return means
 
 
-def _metrics_from_count_pairs(predicted: list[float], truth: list[int]) -> dict[str, Any]:
-    """聚合 internal/E2 counting 指标，rounded 使用 floor(x+0.5) 并 clip [0,64]。"""
+def _basic_count_metrics(predicted: Sequence[float], truth: Sequence[int]) -> dict[str, Any]:
+    """计算不再分桶的基础 counting 指标，避免分桶统计递归进入自身。"""
 
     if not truth:
         return {"n": 0, "continuous_mae": None, "rounded_exact": None, "rounded_within_1": None}
+    if len(predicted) != len(truth):
+        raise ValueError(
+            "Counting metric prediction/truth length mismatch: "
+            f"predicted={len(predicted)}, truth={len(truth)}"
+        )
     errors = [pred - target for pred, target in zip(predicted, truth, strict=False)]
     rounded = [min(64, max(0, math.floor(pred + 0.5))) for pred in predicted]
     abs_errors = [abs(value) for value in errors]
@@ -531,19 +561,27 @@ def _metrics_from_count_pairs(predicted: list[float], truth: list[int]) -> dict[
         / len(truth),
         "rmse": math.sqrt(sum(value * value for value in errors) / len(errors)),
         "bias": sum(errors) / len(errors),
-        "by_count_bin": {
-            bucket: _metrics_from_count_pairs(
-                [
-                    pred
-                    for pred, target in zip(predicted, truth, strict=False)
-                    if count_bin(target) == bucket
-                ],
-                [target for target in truth if count_bin(target) == bucket],
-            )
-            for bucket in ("0-2", "3-5", "6-10", "11+")
-            if any(count_bin(target) == bucket for target in truth)
-        },
     }
+
+
+def _metrics_from_count_pairs(predicted: list[float], truth: list[int]) -> dict[str, Any]:
+    """聚合 overall 及一次性 count-bin 指标，rounded 使用 floor(x+0.5)。"""
+
+    metrics = _basic_count_metrics(predicted, truth)
+    metrics["by_count_bin"] = {}
+    for bucket in ("0-2", "3-5", "6-10", "11+"):
+        pairs = [
+            (pred, target)
+            for pred, target in zip(predicted, truth, strict=False)
+            if count_bin(target) == bucket
+        ]
+        if pairs:
+            bucket_predicted, bucket_truth = zip(*pairs, strict=False)
+            metrics["by_count_bin"][bucket] = _basic_count_metrics(
+                bucket_predicted,
+                bucket_truth,
+            )
+    return metrics
 
 
 def _box_metrics(
@@ -627,6 +665,74 @@ def _cast_features_for_adapter(
     return [feature.to(device=parameter.device, dtype=parameter.dtype) for feature in layer_batch]
 
 
+def _adapter_architecture(adapter: RSObjectAdapter) -> dict[str, int | float]:
+    """返回 checkpoint 兼容性校验所需的确定性 Adapter 架构描述。"""
+
+    return {
+        "d_model": adapter.d_model,
+        "num_queries": adapter.num_queries,
+        "num_classes": adapter.num_classes,
+        "vit_hidden_size": adapter.vit_hidden_size,
+        "nhead": adapter.decoder.layers[0].self_attn.num_heads,
+        "decoder_layers": len(adapter.decoder.layers),
+        "dim_feedforward": adapter.decoder.layers[0].linear1.out_features,
+        "dropout": float(adapter.decoder.layers[0].dropout.p),
+    }
+
+
+def _validate_object_adapter_resume_checkpoint(
+    checkpoint_dir: str | Path,
+    *,
+    expected_architecture: Mapping[str, int | float],
+    expected_class_vocab: Mapping[str, Any],
+    selected_blocks: Sequence[int],
+    source_r1_manifest: str | Path,
+    data_manifest: str | Path,
+) -> tuple[Path, int]:
+    """校验 weights-only epoch checkpoint，返回权重文件与已完成 epoch。"""
+
+    directory = Path(checkpoint_dir).expanduser()
+    if not directory.is_dir():
+        raise FileNotFoundError(f"Object Adapter resume checkpoint is missing: {directory}")
+    manifest_path = directory / "adapter_manifest.json"
+    vocab_path = directory / "class_vocab.json"
+    if not manifest_path.is_file() or not vocab_path.is_file():
+        raise FileNotFoundError(
+            "Object Adapter resume checkpoint requires adapter_manifest.json and class_vocab.json: "
+            f"{directory}"
+        )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(manifest, dict):
+        raise ValueError(f"Object Adapter resume manifest must be a mapping: {manifest_path}")
+    if manifest.get("experiment") != "rs_object_adapter_v0":
+        raise ValueError(f"Not an RS Object Adapter v0 checkpoint: {directory}")
+    if dict(manifest.get("architecture", {})) != dict(expected_architecture):
+        raise ValueError("Object Adapter resume architecture does not match the current configuration")
+    saved_vocab = json.loads(vocab_path.read_text(encoding="utf-8"))
+    if saved_vocab != dict(expected_class_vocab):
+        raise ValueError("Object Adapter resume class vocabulary does not match current training data")
+    if list(manifest.get("selected_vit_blocks", [])) != [int(index) for index in selected_blocks]:
+        raise ValueError("Object Adapter resume selected ViT blocks do not match current configuration")
+    expected_source_sha = manifest.get("source_r1_manifest_sha256")
+    actual_source_sha = file_sha256(source_r1_manifest)
+    if not expected_source_sha or str(expected_source_sha) != actual_source_sha:
+        raise ValueError("Object Adapter resume source R1 manifest SHA256 does not match")
+    expected_data_sha = manifest.get("training_data_manifest_sha256")
+    actual_data_sha = file_sha256(data_manifest)
+    if not expected_data_sha or str(expected_data_sha) != actual_data_sha:
+        raise ValueError("Object Adapter resume training data manifest SHA256 does not match")
+    weights_path = directory / str(manifest.get("weights", "adapter_model.safetensors"))
+    if not weights_path.is_file():
+        raise FileNotFoundError(f"Object Adapter resume weights are missing: {weights_path}")
+    expected_weights_sha = manifest.get("weights_sha256")
+    if expected_weights_sha and str(expected_weights_sha) != file_sha256(weights_path):
+        raise ValueError("Object Adapter resume weights SHA256 does not match manifest")
+    completed_epoch = int(manifest.get("epoch", 0))
+    if completed_epoch < 1:
+        raise ValueError("Object Adapter resume manifest has no completed positive epoch")
+    return weights_path, completed_epoch
+
+
 def run_object_adapter_training(
     config: Mapping[str, Any],
     *,
@@ -634,6 +740,7 @@ def run_object_adapter_training(
     max_train_groups: int | None = None,
     max_steps: int | None = None,
     max_val_groups: int | None = None,
+    resume_object_adapter_checkpoint: str | Path | None = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
     """执行 v0 训练；真实模型加载和计算只发生在显式调用脚本时。"""
@@ -711,6 +818,26 @@ def run_object_adapter_training(
         dropout=float(adapter_cfg.get("dropout", 0.1)),
     )
     visual_device = next(visual.parameters()).device
+    resume_checkpoint_path: Path | None = None
+    resume_epoch = 0
+    resume_mode = "fresh"
+    if resume_object_adapter_checkpoint is not None:
+        source_manifest = checkpoint / "strategy_manifest.json"
+        resume_weights_path, resume_epoch = _validate_object_adapter_resume_checkpoint(
+            resume_object_adapter_checkpoint,
+            expected_architecture=_adapter_architecture(adapter),
+            expected_class_vocab=class_vocab,
+            selected_blocks=selected_blocks,
+            source_r1_manifest=source_manifest,
+            data_manifest=manifest_path,
+        )
+        try:
+            from safetensors.torch import load_file
+        except ImportError as exc:  # pragma: no cover - model dependency environment
+            raise ImportError("safetensors is required for Object Adapter checkpoint resume") from exc
+        adapter.load_state_dict(load_file(str(resume_weights_path), device="cpu"), strict=True)
+        resume_checkpoint_path = Path(resume_object_adapter_checkpoint).expanduser()
+        resume_mode = "weights_only_epoch_resume"
     adapter.to(visual_device)
     summary = adapter_parameter_summary(adapter)
     training_cfg = dict(config.get("training", {}))
@@ -721,6 +848,16 @@ def run_object_adapter_training(
         raise ValueError("training.batch_size must be positive")
     if accumulation < 1:
         raise ValueError("training.gradient_accumulation_steps must be positive")
+    start_epoch = resume_epoch + 1
+    if start_epoch > epochs:
+        raise ValueError(
+            "Object Adapter resume checkpoint already completed the configured training: "
+            f"checkpoint_epoch={resume_epoch}, configured_epochs={epochs}"
+        )
+    remaining_epochs = epochs - resume_epoch
+    status_steps = int(training_cfg.get("status_steps", 10))
+    if status_steps < 1:
+        raise ValueError("training.status_steps must be positive")
     if max_train_groups is not None:
         if max_train_groups < 1:
             raise ValueError("max_train_groups must be positive")
@@ -734,7 +871,7 @@ def run_object_adapter_training(
     total_steps = (
         int(configured_steps)
         if configured_steps is not None
-        else max(1, math.ceil(loader_batches / accumulation) * epochs)
+        else max(1, math.ceil(loader_batches / accumulation) * remaining_epochs)
     )
     if total_steps < 1:
         raise ValueError("total optimizer steps must be positive")
@@ -753,8 +890,13 @@ def run_object_adapter_training(
     print(f"batch_size={batch_size}")
     print(f"gradient_accumulation_steps={accumulation}")
     print(f"epochs={epochs}")
+    print(f"start_epoch={start_epoch}")
+    print(f"remaining_epochs={remaining_epochs}")
+    print(f"resume_mode={resume_mode}")
+    print(f"resume_checkpoint={resume_checkpoint_path}")
     print(f"total_optimizer_steps={total_steps}")
     print(f"warmup_steps={warmup_steps}")
+    print(f"status_steps={status_steps}")
     print(f"selected_blocks={list(selected_blocks)}")
     print(f"adapter_dtype={adapter_parameter.dtype}")
     print(f"visual_dtype={visual_parameter.dtype}")
@@ -773,6 +915,12 @@ def run_object_adapter_training(
                 "batch_size": batch_size,
                 "gradient_accumulation_steps": accumulation,
                 "epochs": epochs,
+                "start_epoch": start_epoch,
+                "remaining_epochs": remaining_epochs,
+                "resume_mode": resume_mode,
+                "resume_checkpoint": str(resume_checkpoint_path)
+                if resume_checkpoint_path is not None
+                else None,
                 "total_optimizer_steps": total_steps,
                 "warmup_steps": warmup_steps,
                 "selected_blocks": list(selected_blocks),
@@ -801,7 +949,7 @@ def run_object_adapter_training(
         ObjectAdapterDataset(train_rows),
         batch_size=batch_size,
         shuffle=True,
-        generator=torch_module.Generator().manual_seed(seed),
+        generator=torch_module.Generator().manual_seed(seed + resume_epoch),
         num_workers=int(training_cfg.get("num_workers", 0)),
         pin_memory=bool(training_cfg.get("pin_memory", False)),
         persistent_workers=bool(training_cfg.get("persistent_workers", False))
@@ -839,7 +987,7 @@ def run_object_adapter_training(
         torch_module.cuda.is_available()
     )
     autocast_dtype = torch_module.bfloat16 if autocast_enabled else torch_module.float32
-    for epoch in range(1, epochs + 1):
+    for epoch in range(start_epoch, epochs + 1):
         adapter.train()
         optimizer.zero_grad(set_to_none=True)
         for group_index, rows in enumerate(loader, 1):
@@ -928,11 +1076,29 @@ def run_object_adapter_training(
                         float(value.detach().cpu().item()) if isinstance(value, Tensor) else value
                     )
                 metrics["count_abs_error"] = metrics["mean_count_abs_error"]
+                metrics["eta_seconds"] = max(
+                    0.0,
+                    float(metrics["elapsed_seconds"])
+                    / float(optimizer_steps)
+                    * float(total_steps - optimizer_steps),
+                )
                 last_metrics = dict(metrics)
                 with log_path.open("a", encoding="utf-8") as handle:
                     handle.write(json.dumps(metrics, ensure_ascii=False) + "\n")
-                if optimizer_steps % 100 == 0 or optimizer_steps == 1:
-                    print(json.dumps(metrics, ensure_ascii=False))
+                if optimizer_steps % status_steps == 0 or optimizer_steps in {1, total_steps}:
+                    print(
+                        _format_training_status(
+                            epoch=epoch,
+                            epochs=epochs,
+                            group_index=group_index,
+                            group_count=len(loader),
+                            step=optimizer_steps,
+                            total_steps=total_steps,
+                            loss=float(metrics["loss_total"]),
+                            learning_rate=step_lr,
+                            elapsed_seconds=float(metrics["elapsed_seconds"]),
+                        )
+                    )
                 if optimizer_steps >= total_steps:
                     break
         last_checkpoint, validation = _save_epoch_checkpoint_before_validation(
@@ -946,6 +1112,8 @@ def run_object_adapter_training(
                 data_manifest=manifest_path,
                 selected_blocks=selected_blocks,
                 seed=seed,
+                resume_mode=resume_mode,
+                resumed_from_checkpoint=resume_checkpoint_path,
             ),
             lambda: evaluate_object_adapter_rows(
                 adapter,
@@ -958,6 +1126,10 @@ def run_object_adapter_training(
             ),
         )
         _write_json(output_dir / f"val_epoch_{epoch}.json", validation)
+        print(
+            f"[EPOCH] epoch={epoch}/{epochs} checkpoint={last_checkpoint} "
+            f"validation_status={validation.get('status', 'completed')}"
+        )
         if optimizer_steps >= total_steps:
             break
     parameter_delta = float(
@@ -979,6 +1151,12 @@ def run_object_adapter_training(
     training_summary = {
         "optimizer_steps": optimizer_steps,
         "total_optimizer_steps": total_steps,
+        "start_epoch": start_epoch,
+        "remaining_epochs": remaining_epochs,
+        "resume_mode": resume_mode,
+        "resumed_from_checkpoint": str(resume_checkpoint_path)
+        if resume_checkpoint_path is not None
+        else None,
         "warmup_steps": warmup_steps,
         "first_lr": first_lr,
         "last_lr": last_lr,
@@ -1014,6 +1192,8 @@ def save_object_adapter_checkpoint(
     data_manifest: str | Path,
     selected_blocks: Sequence[int],
     seed: int,
+    resume_mode: str = "fresh",
+    resumed_from_checkpoint: str | Path | None = None,
 ) -> Path:
     """只保存 Adapter safetensors、manifest 和 class vocabulary。"""
 
@@ -1036,16 +1216,7 @@ def save_object_adapter_checkpoint(
     manifest = {
         "schema_version": "1.0",
         "experiment": "rs_object_adapter_v0",
-        "architecture": {
-            "d_model": adapter.d_model,
-            "num_queries": adapter.num_queries,
-            "num_classes": adapter.num_classes,
-            "vit_hidden_size": adapter.vit_hidden_size,
-            "nhead": adapter.decoder.layers[0].self_attn.num_heads,
-            "decoder_layers": len(adapter.decoder.layers),
-            "dim_feedforward": adapter.decoder.layers[0].linear1.out_features,
-            "dropout": float(adapter.decoder.layers[0].dropout.p),
-        },
+        "architecture": _adapter_architecture(adapter),
         "source_r1_checkpoint": str(source_checkpoint),
         "source_r1_manifest": str(source_manifest),
         "source_r1_manifest_sha256": file_sha256(source_manifest)
@@ -1057,6 +1228,10 @@ def save_object_adapter_checkpoint(
         "trainable_parameter_count": summary["trainable_parameter_count"],
         "epoch": int(epoch),
         "seed": int(seed),
+        "resume_mode": resume_mode,
+        "resumed_from_checkpoint": str(resumed_from_checkpoint)
+        if resumed_from_checkpoint is not None
+        else None,
         "weights": weights_path.name,
         "weights_sha256": file_sha256(weights_path),
     }
