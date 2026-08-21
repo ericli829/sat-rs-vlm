@@ -52,3 +52,5 @@ data/evaluation/tiers/e3_full.jsonl
 data/evaluation/tiers_v2/e1_quick.jsonl
 data/evaluation/tiers_v2/e2_standard.jsonl
 data/evaluation/tiers_v2/e3_full.jsonl
+scripts/training/run_autodl_qwen3vl_4b_stage_a_v2.sh
+tests/unit/training/test_stage_a_v2_launcher.py

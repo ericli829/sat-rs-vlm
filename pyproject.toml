@@ -33,6 +33,7 @@ model = [
     "peft>=0.13,<1",
     "safetensors>=0.4,<1",
     "qwen-vl-utils>=0.0.8,<1",
+    "scipy>=1.10,<2",
 ]
 cloud = [
     "tensorboard>=2.14,<3",

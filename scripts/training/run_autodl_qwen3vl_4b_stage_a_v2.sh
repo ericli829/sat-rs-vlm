@@ -4,6 +4,10 @@ set -Eeuo pipefail
 ENV_NAME="rs-vlm"
 PROJECT_ROOT_DEFAULT="/root/autodl-tmp/sat-rs-vlm"
 RUN_ROOT=""
+MODEL_DIR=""
+MODEL_ROOT_OVERRIDE=""
+DATA_ROOT_OVERRIDE=""
+OUTPUT_ROOT_OVERRIDE=""
 SHUTDOWN_AFTER_RUN=0
 DIAGNOSTIC_MODE=0
 TEST_SHUTDOWN=0
@@ -25,6 +29,38 @@ while [[ $# -gt 0 ]]; do
     --run-root=*)
       RUN_ROOT="${1#*=}"
       ARGS+=("$1")
+      shift
+      ;;
+    --model-dir)
+      MODEL_DIR="$2"
+      shift 2
+      ;;
+    --model-dir=*)
+      MODEL_DIR="${1#*=}"
+      shift
+      ;;
+    --model-root)
+      MODEL_ROOT_OVERRIDE="$2"
+      shift 2
+      ;;
+    --model-root=*)
+      MODEL_ROOT_OVERRIDE="${1#*=}"
+      shift
+      ;;
+    --data-root)
+      DATA_ROOT_OVERRIDE="$2"
+      shift 2
+      ;;
+    --data-root=*)
+      DATA_ROOT_OVERRIDE="${1#*=}"
+      shift
+      ;;
+    --output-root)
+      OUTPUT_ROOT_OVERRIDE="$2"
+      shift 2
+      ;;
+    --output-root=*)
+      OUTPUT_ROOT_OVERRIDE="${1#*=}"
       shift
       ;;
     --shutdown|--shutdown-after-run)
@@ -53,6 +89,12 @@ shutdown_host() {
     return 0
   fi
   sync || true
+  local shutdown_python="${AUTODL_PYTHON:-$(command -v python3 || true)}"
+  if [[ -x /usr/bin/shutdown ]] && [[ -n "$shutdown_python" ]] && \
+    "$shutdown_python" -c 'import os; raise SystemExit(os.system("/usr/bin/shutdown"))'; then
+    return 0
+  fi
+  echo "[WARN] Python os.system(\"/usr/bin/shutdown\") was refused; trying compatibility fallbacks." >&2
   if [[ -x /usr/sbin/shutdown ]] && /usr/sbin/shutdown -h now; then
     return 0
   fi
@@ -77,13 +119,6 @@ if [[ "$TEST_SHUTDOWN" == "1" ]]; then
   shutdown_host
   exit 0
 fi
-
-if [[ -z "$RUN_ROOT" ]]; then
-  RUN_ROOT="/root/autodl-tmp/outputs/qwen3vl_4b_stage_a_v2_$(date +%Y%m%d_%H%M%S)"
-  ARGS+=("--run-root" "$RUN_ROOT")
-fi
-REPORT_DIR="$RUN_ROOT/reports"
-LOG_DIR="$RUN_ROOT/logs"
 
 on_error() {
   local exit_code=$?
@@ -115,6 +150,29 @@ if [[ ! -f /root/autodl_env.sh ]]; then
 fi
 source /root/autodl_env.sh
 PROJECT_ROOT="${PROJECT_ROOT:-$PROJECT_ROOT_DEFAULT}"
+MODEL_ROOT="${MODEL_ROOT_OVERRIDE:-${MODEL_ROOT:-/root/autodl-tmp/models}}"
+DATA_ROOT="${DATA_ROOT_OVERRIDE:-${DATA_ROOT:-/root/autodl-tmp/datasets}}"
+OUTPUT_ROOT="${OUTPUT_ROOT_OVERRIDE:-${OUTPUT_ROOT:-/root/autodl-tmp/outputs}}"
+QWEN3VL_4B_MODEL_DIR="${MODEL_DIR:-${QWEN3VL_4B_MODEL_DIR:-$MODEL_ROOT/Qwen3-VL-4B-Instruct}}"
+
+[[ -d "$QWEN3VL_4B_MODEL_DIR" ]] || {
+  echo "Missing Qwen3-VL-4B model directory: $QWEN3VL_4B_MODEL_DIR" >&2
+  echo "Pass --model-dir PATH or set QWEN3VL_4B_MODEL_DIR." >&2
+  exit 1
+}
+[[ -f "$QWEN3VL_4B_MODEL_DIR/config.json" ]] || {
+  echo "Qwen3-VL-4B model directory has no config.json: $QWEN3VL_4B_MODEL_DIR" >&2
+  exit 1
+}
+export MODEL_ROOT DATA_ROOT OUTPUT_ROOT QWEN3VL_4B_MODEL_DIR
+
+if [[ -z "$RUN_ROOT" ]]; then
+  RUN_ROOT="$OUTPUT_ROOT/qwen3vl_4b_stage_a_v2_$(date +%Y%m%d_%H%M%S)"
+  ARGS+=("--run-root" "$RUN_ROOT")
+fi
+REPORT_DIR="$RUN_ROOT/reports"
+LOG_DIR="$RUN_ROOT/logs"
+
 source "$PROJECT_ROOT/scripts/environment/activate_autodl_python.sh"
 activate_autodl_python "$ENV_NAME"
 cd "$PROJECT_ROOT"
@@ -127,6 +185,11 @@ export PYTHONPATH="$PROJECT_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 mkdir -p "$REPORT_DIR" "$LOG_DIR"
 STAGE_LOG="$LOG_DIR/stage_a_v2_$(date +%Y%m%d_%H%M%S).log"
 exec > >(tee -a "$STAGE_LOG") 2>&1
+
+echo "[ENV] QWEN3VL_4B_MODEL_DIR=$QWEN3VL_4B_MODEL_DIR"
+echo "[ENV] DATA_ROOT=$DATA_ROOT"
+echo "[ENV] OUTPUT_ROOT=$OUTPUT_ROOT"
+echo "[RUN] RUN_ROOT=$RUN_ROOT"
 
 if [[ "$SHUTDOWN_AFTER_RUN" == "1" && "$DIAGNOSTIC_MODE" == "1" ]]; then
   echo "[SAFE] Shutdown is disabled for prepare-only/dry-run/forward-only."
