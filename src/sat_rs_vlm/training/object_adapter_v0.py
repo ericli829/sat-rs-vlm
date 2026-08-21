@@ -23,6 +23,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from sat_rs_vlm.data.object_adapter_v0 import count_bin, validate_data_manifest
 from sat_rs_vlm.data.qwen3vl_collator import Qwen3VLDataCollator
+from sat_rs_vlm.models.reliability.checksum import file_sha256
 from sat_rs_vlm.models.rs_object_adapter import (
     RSObjectAdapter,
     adapter_parameter_summary,
@@ -31,13 +32,49 @@ from sat_rs_vlm.models.rs_object_adapter import (
     pairwise_iou_xyxy,
     xyxy_to_cxcywh,
 )
-from sat_rs_vlm.models.reliability.checksum import file_sha256
 from sat_rs_vlm.training.utils import safe_import_model_dependencies, set_seed
 from sat_rs_vlm.training.vision_tuning import load_visual_sidecar, resolve_visual_module
 from sat_rs_vlm.utils.jsonl import read_jsonl
 
-
 SELECTED_BLOCKS = (5, 11, 17, 23)
+
+
+def _require_scipy() -> str:
+    """在加载 4B checkpoint 前验证 Hungarian matching 依赖。"""
+
+    try:
+        import scipy
+        from scipy.optimize import linear_sum_assignment as _linear_sum_assignment
+    except ImportError as exc:
+        raise ImportError(
+            "scipy>=1.10,<2 is required for RS Object Adapter Hungarian matching. "
+            'Install model dependencies with: pip install -e ".[model]"'
+        ) from exc
+    del _linear_sum_assignment
+    return str(scipy.__version__)
+
+
+def _constant_after_warmup_lambda(current_step: int, warmup_steps: int) -> float:
+    """返回与 optimizer.step -> scheduler.step 顺序匹配的非零线性 warmup。"""
+
+    if warmup_steps <= 0:
+        return 1.0
+    return min(1.0, float(current_step + 1) / float(warmup_steps))
+
+
+def _accumulation_window_size(
+    batch_index: int,
+    total_batches: int,
+    accumulation_steps: int,
+) -> int:
+    """返回当前 microbatch 所属窗口的真实大小，尾窗口不会被多除。"""
+
+    if accumulation_steps < 1:
+        raise ValueError("gradient_accumulation_steps must be positive")
+    if batch_index < 1 or batch_index > total_batches:
+        raise ValueError(f"batch_index must be within [1, {total_batches}], got {batch_index}")
+    window_start = ((batch_index - 1) // accumulation_steps) * accumulation_steps
+    return min(accumulation_steps, total_batches - window_start)
 
 
 class ObjectAdapterDataset(Dataset[dict[str, Any]]):
@@ -69,7 +106,10 @@ def object_messages(row: Mapping[str, Any]) -> dict[str, Any]:
                 "role": "user",
                 "content": [
                     {"type": "image", "image": str(row["image"])},
-                    {"type": "text", "text": f"Find all {row['class_name']} objects in this image."},
+                    {
+                        "type": "text",
+                        "text": f"Find all {row['class_name']} objects in this image.",
+                    },
                 ],
             }
         ],
@@ -146,7 +186,8 @@ class FrozenVisualFeatureExtractor:
         blocks = list(getattr(visual, "blocks", []))
         if len(blocks) != self.expected_num_blocks:
             raise ValueError(
-                f"Qwen visual blocks mismatch: expected {self.expected_num_blocks}, got {len(blocks)}"
+                "Qwen visual blocks mismatch: "
+                f"expected {self.expected_num_blocks}, got {len(blocks)}"
             )
         if tuple(sorted(self.selected_blocks)) != SELECTED_BLOCKS:
             raise ValueError(f"v0 selected blocks are fixed to {SELECTED_BLOCKS}")
@@ -213,7 +254,7 @@ class FrozenVisualFeatureExtractor:
                     try:
                         self.visual(pixel_values=visual_inputs, grid_thw=visual_grid)
                     except TypeError:
-                        raise first_error
+                        raise first_error from None
         if set(self._captured) != set(self.selected_blocks):
             raise RuntimeError(
                 f"Visual hooks did not capture all blocks: expected {self.selected_blocks}, "
@@ -225,7 +266,8 @@ class FrozenVisualFeatureExtractor:
             if output.ndim == 3:
                 if int(output.shape[0]) != batch_size:
                     raise ValueError(
-                        f"Block {index} 3D output first dimension must be batch, got {tuple(output.shape)}"
+                        f"Block {index} 3D output first dimension must be batch, "
+                        f"got {tuple(output.shape)}"
                     )
                 if any(int(output.shape[1]) != count for count in expected_counts):
                     raise ValueError(
@@ -241,7 +283,9 @@ class FrozenVisualFeatureExtractor:
                     )
                 chunks = list(torch.split(output, expected_counts, dim=0))
             else:
-                raise ValueError(f"Block {index} output must be 2D or 3D, got {tuple(output.shape)}")
+                raise ValueError(
+                    f"Block {index} output must be 2D or 3D, got {tuple(output.shape)}"
+                )
             if int(output.shape[-1]) != self.expected_hidden_size:
                 raise ValueError(
                     f"Block {index} hidden size mismatch: expected={self.expected_hidden_size}, "
@@ -275,7 +319,8 @@ def pad_visual_features(
     for layer_index in range(4):
         hidden = int(features[0][layer_index].shape[-1])
         output = torch.zeros(
-            (len(features), max_tokens, hidden), dtype=features[0][layer_index].dtype,
+            (len(features), max_tokens, hidden),
+            dtype=features[0][layer_index].dtype,
             device=features[0][layer_index].device,
         )
         for sample_index, sample_layers in enumerate(features):
@@ -312,18 +357,19 @@ def hungarian_match(
         from scipy.optimize import linear_sum_assignment
     except ImportError as exc:  # pragma: no cover - dependency guard
         raise ImportError("scipy>=1.10,<2 is required for Hungarian matching") from exc
-    target_boxes = xyxy_to_cxcywh(target_boxes_xyxy)
-    l1 = (pred_boxes_cxcywh[:, None, :] - target_boxes[None, :, :]).abs().mean(dim=-1)
-    giou = generalized_iou_xyxy(
-        cxcywh_to_xyxy(pred_boxes_cxcywh), target_boxes_xyxy
-    )
+    pred_logits_fp32 = pred_logits.float()
+    pred_boxes_fp32 = pred_boxes_cxcywh.float()
+    target_boxes_fp32 = target_boxes_xyxy.float()
+    target_boxes = xyxy_to_cxcywh(target_boxes_fp32)
+    l1 = (pred_boxes_fp32[:, None, :] - target_boxes[None, :, :]).abs().mean(dim=-1)
+    giou = generalized_iou_xyxy(cxcywh_to_xyxy(pred_boxes_fp32), target_boxes_fp32)
     positive_bce = F.binary_cross_entropy_with_logits(
-        pred_logits[:, None].expand(-1, target_boxes.shape[0]),
-        torch.ones_like(pred_logits[:, None].expand(-1, target_boxes.shape[0])),
+        pred_logits_fp32[:, None].expand(-1, target_boxes.shape[0]),
+        torch.ones_like(pred_logits_fp32[:, None].expand(-1, target_boxes.shape[0])),
         reduction="none",
     )
     cost = 5.0 * l1 + 2.0 * (1.0 - giou) + positive_bce
-    rows, columns = linear_sum_assignment(cost.detach().float().cpu().numpy())
+    rows, columns = linear_sum_assignment(cost.detach().cpu().numpy())
     return (
         torch.as_tensor(rows, dtype=torch.long, device=pred_logits.device),
         torch.as_tensor(columns, dtype=torch.long, device=pred_logits.device),
@@ -331,7 +377,7 @@ def hungarian_match(
 
 
 def _zero(reference: Tensor) -> Tensor:
-    return reference.sum() * 0.0
+    return reference.float().sum() * 0.0
 
 
 def compute_object_adapter_loss(
@@ -352,20 +398,27 @@ def compute_object_adapter_loss(
     boxes = outputs["boxes_cxcywh"]
     if int(logits.shape[0]) != len(targets):
         raise ValueError("outputs batch and targets length differ")
-    components: dict[str, list[Tensor]] = {name: [] for name in (
-        "loss_objectness", "loss_bbox_l1", "loss_giou", "loss_count", "loss_binarization"
-    )}
+    components: dict[str, list[Tensor]] = {
+        name: []
+        for name in (
+            "loss_objectness",
+            "loss_bbox_l1",
+            "loss_giou",
+            "loss_count",
+            "loss_binarization",
+        )
+    }
     matched_objects = 0
     predicted_counts: list[Tensor] = []
     true_counts: list[float] = []
     count_errors: list[Tensor] = []
     for sample_index, target in enumerate(targets):
-        sample_logits = logits[sample_index]
-        sample_boxes = boxes[sample_index]
+        sample_logits = logits[sample_index].float()
+        sample_boxes = boxes[sample_index].float()
         supervision = str(target.get("supervision_type", "")).strip()
         raw_boxes = target.get("boxes_xyxy", [])
         target_boxes = torch.as_tensor(
-            raw_boxes, dtype=sample_boxes.dtype, device=sample_boxes.device
+            raw_boxes, dtype=torch.float32, device=sample_boxes.device
         ).reshape(-1, 4)
         matched_rows, matched_columns = hungarian_match(sample_logits, sample_boxes, target_boxes)
         matched_objects += int(matched_rows.numel())
@@ -378,7 +431,8 @@ def compute_object_adapter_loss(
             components["loss_objectness"].append(
                 F.binary_cross_entropy_with_logits(
                     sample_logits, object_target, weight=object_weight, reduction="sum"
-                ) / object_weight.sum().clamp_min(torch.finfo(sample_logits.dtype).eps)
+                )
+                / object_weight.sum().clamp_min(1e-7)
             )
         elif supervision in {"partial_set", "detection_only"}:
             if matched_rows.numel():
@@ -393,10 +447,17 @@ def compute_object_adapter_loss(
             pred_matched = sample_boxes[matched_rows]
             gt_matched = xyxy_to_cxcywh(target_boxes[matched_columns])
             components["loss_bbox_l1"].append(F.l1_loss(pred_matched, gt_matched))
-            giou = generalized_iou_xyxy(
+            giou_matrix = generalized_iou_xyxy(
                 cxcywh_to_xyxy(pred_matched), target_boxes[matched_columns]
             )
-            components["loss_giou"].append((1.0 - giou).mean())
+            match_count = int(matched_rows.numel())
+            if tuple(giou_matrix.shape) != (match_count, match_count):
+                raise ValueError(
+                    "Matched GIoU matrix shape mismatch: "
+                    f"expected={(match_count, match_count)}, actual={tuple(giou_matrix.shape)}"
+                )
+            matched_giou = torch.diagonal(giou_matrix)
+            components["loss_giou"].append((1.0 - matched_giou).mean())
         count_value = target.get("count")
         if count_value is not None:
             true_count = float(count_value)
@@ -404,7 +465,9 @@ def compute_object_adapter_loss(
             components["loss_count"].append(
                 F.smooth_l1_loss(
                     predicted_count,
-                    torch.as_tensor(true_count, dtype=predicted_count.dtype, device=predicted_count.device),
+                    torch.as_tensor(
+                        true_count, dtype=predicted_count.dtype, device=predicted_count.device
+                    ),
                     beta=smooth_l1_beta,
                 )
             )
@@ -428,9 +491,7 @@ def compute_object_adapter_loss(
     means["mean_predicted_count"] = (
         torch.stack(predicted_counts).mean() if predicted_counts else _zero(logits)
     )
-    means["mean_true_count"] = (
-        float(sum(true_counts) / len(true_counts)) if true_counts else 0.0
-    )
+    means["mean_true_count"] = float(sum(true_counts) / len(true_counts)) if true_counts else 0.0
     means["mean_count_abs_error"] = (
         torch.stack(count_errors).mean() if count_errors else _zero(logits)
     )
@@ -442,20 +503,31 @@ def _metrics_from_count_pairs(predicted: list[float], truth: list[int]) -> dict[
 
     if not truth:
         return {"n": 0, "continuous_mae": None, "rounded_exact": None, "rounded_within_1": None}
-    errors = [pred - target for pred, target in zip(predicted, truth)]
+    errors = [pred - target for pred, target in zip(predicted, truth, strict=False)]
     rounded = [min(64, max(0, math.floor(pred + 0.5))) for pred in predicted]
     abs_errors = [abs(value) for value in errors]
     return {
         "n": len(truth),
         "continuous_mae": sum(abs_errors) / len(abs_errors),
-        "rounded_exact": sum(int(pred == target) for pred, target in zip(rounded, truth)) / len(truth),
-        "rounded_within_1": sum(int(abs(pred - target) <= 1) for pred, target in zip(rounded, truth)) / len(truth),
-        "rounded_mae": sum(abs(pred - target) for pred, target in zip(rounded, truth)) / len(truth),
+        "rounded_exact": sum(
+            int(pred == target) for pred, target in zip(rounded, truth, strict=False)
+        )
+        / len(truth),
+        "rounded_within_1": sum(
+            int(abs(pred - target) <= 1) for pred, target in zip(rounded, truth, strict=False)
+        )
+        / len(truth),
+        "rounded_mae": sum(abs(pred - target) for pred, target in zip(rounded, truth, strict=False))
+        / len(truth),
         "rmse": math.sqrt(sum(value * value for value in errors) / len(errors)),
         "bias": sum(errors) / len(errors),
         "by_count_bin": {
             bucket: _metrics_from_count_pairs(
-                [pred for pred, target in zip(predicted, truth) if count_bin(target) == bucket],
+                [
+                    pred
+                    for pred, target in zip(predicted, truth, strict=False)
+                    if count_bin(target) == bucket
+                ],
                 [target for target in truth if count_bin(target) == bucket],
             )
             for bucket in ("0-2", "3-5", "6-10", "11+")
@@ -464,19 +536,25 @@ def _metrics_from_count_pairs(predicted: list[float], truth: list[int]) -> dict[
     }
 
 
-def _box_metrics(predicted_boxes: list[Tensor], targets: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+def _box_metrics(
+    predicted_boxes: list[Tensor], targets: Sequence[Mapping[str, Any]]
+) -> dict[str, Any]:
     """计算 top-1、best-of-K、confident proposal coverage。"""
 
     top1: list[float] = []
     best: list[float] = []
     confident: list[float] = []
     by_area: dict[str, list[float]] = {"small": [], "medium": [], "large": []}
-    for prediction, target in zip(predicted_boxes, targets):
-        gt = torch.as_tensor(target.get("boxes_xyxy", []), dtype=prediction.dtype, device=prediction.device).reshape(-1, 4)
+    for prediction, target in zip(predicted_boxes, targets, strict=False):
+        gt = torch.as_tensor(
+            target.get("boxes_xyxy", []),
+            dtype=torch.float32,
+            device=prediction.device,
+        ).reshape(-1, 4)
         if gt.numel() == 0:
             continue
-        pred_xyxy = cxcywh_to_xyxy(prediction[:, 1:])
-        probabilities = prediction[:, 0].sigmoid()
+        pred_xyxy = cxcywh_to_xyxy(prediction[:, 1:].float())
+        probabilities = prediction[:, 0].float().sigmoid()
         top = int(probabilities.argmax().item())
         top_ious = pairwise_iou_xyxy(pred_xyxy[top], gt).reshape(-1)
         top1.extend(float(value) for value in top_ious)
@@ -484,25 +562,43 @@ def _box_metrics(predicted_boxes: list[Tensor], targets: Sequence[Mapping[str, A
         best.extend(float(value) for value in all_ious.max(dim=0).values)
         selected = all_ious[probabilities >= 0.5]
         confident.extend(
-            float(value) for value in (selected.max(dim=0).values if selected.numel() else torch.zeros(gt.shape[0], device=gt.device))
+            float(value)
+            for value in (
+                selected.max(dim=0).values
+                if selected.numel()
+                else torch.zeros(gt.shape[0], device=gt.device)
+            )
         )
         areas = ((gt[:, 2] - gt[:, 0]) * (gt[:, 3] - gt[:, 1])).tolist()
         best_values = all_ious.max(dim=0).values.tolist()
-        for area, value in zip(areas, best_values):
+        for area, value in zip(areas, best_values, strict=False):
             bucket = "small" if area < 0.01 else "medium" if area < 0.10 else "large"
             by_area[bucket].append(float(value))
+
     def summary(values: Sequence[float]) -> dict[str, Any]:
         return {
             "n": len(values),
             "mean_iou": sum(values) / len(values) if values else None,
-            "recall_at_0_5": sum(value >= 0.5 for value in values) / len(values) if values else None,
-            "recall_at_0_7": sum(value >= 0.7 for value in values) / len(values) if values else None,
+            "recall_at_0_5": sum(value >= 0.5 for value in values) / len(values)
+            if values
+            else None,
+            "recall_at_0_7": sum(value >= 0.7 for value in values) / len(values)
+            if values
+            else None,
         }
-    return {"top1": summary(top1), "best_of_k": summary(best), "confident": summary(confident), "by_area": {key: summary(value) for key, value in by_area.items()}}
+
+    return {
+        "top1": summary(top1),
+        "best_of_k": summary(best),
+        "confident": summary(confident),
+        "by_area": {key: summary(value) for key, value in by_area.items()},
+    }
 
 
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
-    path.write_text(json.dumps(dict(payload), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(dict(payload), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
 
 
 def _resolve_project_path(value: str | Path, project_root: Path) -> Path:
@@ -510,7 +606,9 @@ def _resolve_project_path(value: str | Path, project_root: Path) -> Path:
     return path if path.is_absolute() else project_root / path
 
 
-def _cast_features_for_adapter(layer_batch: Sequence[Tensor], adapter: RSObjectAdapter) -> list[Tensor]:
+def _cast_features_for_adapter(
+    layer_batch: Sequence[Tensor], adapter: RSObjectAdapter
+) -> list[Tensor]:
     """把 frozen visual features 转成 Adapter 权重 dtype，避免 bf16/fp32 混算报错。"""
 
     parameter = next(adapter.parameters(), None)
@@ -525,6 +623,7 @@ def run_object_adapter_training(
     project_root: str | Path = ".",
     max_train_groups: int | None = None,
     max_steps: int | None = None,
+    max_val_groups: int | None = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
     """执行 v0 训练；真实模型加载和计算只发生在显式调用脚本时。"""
@@ -534,16 +633,23 @@ def run_object_adapter_training(
     set_seed(seed)
     data_cfg = dict(config.get("data", {}))
     output_dir = _resolve_project_path(
-        str(config.get("training", {}).get("output_dir", "outputs/experiments/rs_object_adapter_v0")), root
+        str(
+            config.get("training", {}).get("output_dir", "outputs/experiments/rs_object_adapter_v0")
+        ),
+        root,
     )
+    output_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = output_dir.parent / "data_manifest.json"
-    configured_manifest = data_cfg.get("manifest") or "data/processed/rs_object_adapter_v0/manifest.json"
+    configured_manifest = (
+        data_cfg.get("manifest") or "data/processed/rs_object_adapter_v0/manifest.json"
+    )
     manifest_path = _resolve_project_path(str(configured_manifest), root)
     data_manifest = validate_data_manifest(manifest_path)
     data_dir = manifest_path.parent
     train_rows = list(read_jsonl(data_dir / "train.jsonl"))
     val_rows = list(read_jsonl(data_dir / "val.jsonl"))
     class_vocab = json.loads((data_dir / "class_vocab.json").read_text(encoding="utf-8"))
+    scipy_version = _require_scipy()
     model_cfg = dict(config.get("model", {}))
     checkpoint = _resolve_project_path(str(model_cfg["checkpoint_dir"]), root)
     modules = safe_import_model_dependencies()
@@ -576,9 +682,10 @@ def run_object_adapter_training(
         parameter.requires_grad = False
     visual.eval()
     visual_parameter_count = sum(int(parameter.numel()) for parameter in visual.parameters())
+    selected_blocks = tuple(model_cfg.get("selected_blocks", SELECTED_BLOCKS))
     extractor = FrozenVisualFeatureExtractor(
         visual,
-        selected_blocks=tuple(model_cfg.get("selected_blocks", SELECTED_BLOCKS)),
+        selected_blocks=selected_blocks,
         expected_num_blocks=int(model_cfg.get("expected_num_blocks", 24)),
         expected_hidden_size=int(model_cfg.get("expected_hidden_size", 1024)),
     )
@@ -596,26 +703,90 @@ def run_object_adapter_training(
     visual_device = next(visual.parameters()).device
     adapter.to(visual_device)
     summary = adapter_parameter_summary(adapter)
-    print(f"visual_parameter_count={visual_parameter_count}")
-    print(f"adapter_parameter_count={summary['parameter_count']}")
-    print(f"trainable_parameter_count={summary['trainable_parameter_count']}")
-    print("trainable_parameter_names=" + json.dumps(summary["names"], ensure_ascii=False))
-    if any(parameter.requires_grad for parameter in visual.parameters()):
-        raise AssertionError("Qwen visual trainable parameters must be zero")
-    if dry_run:
-        _write_json(output_dir / "dry_run_summary.json", {"data_manifest": data_manifest, "visual_parameter_count": visual_parameter_count, "adapter": summary})
-        extractor.close()
-        return {"status": "dry_run", "visual_parameter_count": visual_parameter_count, "adapter": summary}
-    del model
-    if bool(torch_module.cuda.is_available()):
-        torch_module.cuda.empty_cache()
-    output_dir.mkdir(parents=True, exist_ok=True)
-    _write_json(output_dir / "trainable_parameters.json", {"visual": {"parameter_count": visual_parameter_count, "trainable": 0}, "adapter": summary, "total_trainable": summary["trainable_parameter_count"]})
     training_cfg = dict(config.get("training", {}))
     batch_size = int(training_cfg.get("batch_size", 4))
     accumulation = int(training_cfg.get("gradient_accumulation_steps", 4))
+    epochs = int(training_cfg.get("epochs", 2))
+    if batch_size < 1:
+        raise ValueError("training.batch_size must be positive")
+    if accumulation < 1:
+        raise ValueError("training.gradient_accumulation_steps must be positive")
     if max_train_groups is not None:
+        if max_train_groups < 1:
+            raise ValueError("max_train_groups must be positive")
         train_rows = train_rows[: int(max_train_groups) * batch_size]
+    if max_val_groups is not None:
+        if max_val_groups < 1:
+            raise ValueError("max_val_groups must be positive")
+        val_rows = val_rows[: int(max_val_groups) * batch_size]
+    loader_batches = math.ceil(len(train_rows) / batch_size)
+    configured_steps = max_steps if max_steps is not None else training_cfg.get("max_steps")
+    total_steps = (
+        int(configured_steps)
+        if configured_steps is not None
+        else max(1, math.ceil(loader_batches / accumulation) * epochs)
+    )
+    if total_steps < 1:
+        raise ValueError("total optimizer steps must be positive")
+    warmup_steps = int(round(total_steps * float(training_cfg.get("warmup_ratio", 0.05))))
+    warmup_steps = max(1, warmup_steps)
+    visual_parameter = next(visual.parameters())
+    adapter_parameter = next(adapter.parameters())
+    print(f"scipy_version={scipy_version}")
+    print(f"visual_parameter_count={visual_parameter_count}")
+    print(f"adapter_parameter_count={summary['parameter_count']}")
+    print(f"trainable_parameter_count={summary['trainable_parameter_count']}")
+    print(f"trainable_parameter_name_count={len(summary['names'])}")
+    print("trainable_parameter_names=" + json.dumps(summary["names"], ensure_ascii=False))
+    print(f"train_size={len(train_rows)}")
+    print(f"val_size={len(val_rows)}")
+    print(f"batch_size={batch_size}")
+    print(f"gradient_accumulation_steps={accumulation}")
+    print(f"epochs={epochs}")
+    print(f"total_optimizer_steps={total_steps}")
+    print(f"warmup_steps={warmup_steps}")
+    print(f"selected_blocks={list(selected_blocks)}")
+    print(f"adapter_dtype={adapter_parameter.dtype}")
+    print(f"visual_dtype={visual_parameter.dtype}")
+    if any(parameter.requires_grad for parameter in visual.parameters()):
+        raise AssertionError("Qwen visual trainable parameters must be zero")
+    if dry_run:
+        _write_json(
+            output_dir / "dry_run_summary.json",
+            {
+                "data_manifest": data_manifest,
+                "scipy_version": scipy_version,
+                "visual_parameter_count": visual_parameter_count,
+                "adapter": summary,
+                "train_size": len(train_rows),
+                "val_size": len(val_rows),
+                "batch_size": batch_size,
+                "gradient_accumulation_steps": accumulation,
+                "epochs": epochs,
+                "total_optimizer_steps": total_steps,
+                "warmup_steps": warmup_steps,
+                "selected_blocks": list(selected_blocks),
+            },
+        )
+        extractor.close()
+        return {
+            "status": "dry_run",
+            "visual_parameter_count": visual_parameter_count,
+            "adapter": summary,
+        }
+    del model
+    if bool(torch_module.cuda.is_available()):
+        torch_module.cuda.empty_cache()
+        # 从这里开始的 peak 只表示 frozen visual + Object Adapter 训练。
+        torch_module.cuda.reset_peak_memory_stats()
+    _write_json(
+        output_dir / "trainable_parameters.json",
+        {
+            "visual": {"parameter_count": visual_parameter_count, "trainable": 0},
+            "adapter": summary,
+            "total_trainable": summary["trainable_parameter_count"],
+        },
+    )
     loader = DataLoader(
         ObjectAdapterDataset(train_rows),
         batch_size=batch_size,
@@ -623,17 +794,13 @@ def run_object_adapter_training(
         generator=torch_module.Generator().manual_seed(seed),
         num_workers=int(training_cfg.get("num_workers", 0)),
         pin_memory=bool(training_cfg.get("pin_memory", False)),
-        persistent_workers=bool(training_cfg.get("persistent_workers", False)) and int(training_cfg.get("num_workers", 0)) > 0,
+        persistent_workers=bool(training_cfg.get("persistent_workers", False))
+        and int(training_cfg.get("num_workers", 0)) > 0,
         collate_fn=object_adapter_collate,
     )
-    epochs = int(training_cfg.get("epochs", 2))
-    configured_steps = max_steps if max_steps is not None else training_cfg.get("max_steps")
-    total_steps = int(configured_steps) if configured_steps is not None else max(1, math.ceil(len(loader) / accumulation) * epochs)
     scheduler_name = str(training_cfg.get("scheduler", "constant_after_warmup"))
     if scheduler_name != "constant_after_warmup":
-        raise ValueError(
-            "RS Object Adapter v0 only supports scheduler='constant_after_warmup'"
-        )
+        raise ValueError("RS Object Adapter v0 only supports scheduler='constant_after_warmup'")
     optimizer = torch.optim.AdamW(
         adapter.parameters(),
         lr=float(training_cfg.get("learning_rate", 2e-4)),
@@ -641,33 +808,74 @@ def run_object_adapter_training(
         betas=(0.9, 0.999),
         eps=1e-8,
     )
-    warmup_steps = int(round(total_steps * float(training_cfg.get("warmup_ratio", 0.05))))
-    warmup_steps = max(1, warmup_steps) if total_steps else 0
     scheduler = torch.optim.lr_scheduler.LambdaLR(
-        optimizer, lambda step: min(1.0, step / warmup_steps) if warmup_steps and step <= warmup_steps else 1.0
+        optimizer,
+        lambda step: _constant_after_warmup_lambda(step, warmup_steps),
     )
     weights = dict(config.get("loss", {}))
-    image_root = _resolve_project_path(str(data_cfg.get("image_root", os.environ.get("DATA_ROOT", "."))), root)
+    image_root = _resolve_project_path(
+        str(data_cfg.get("image_root", os.environ.get("DATA_ROOT", "."))), root
+    )
     log_path = output_dir / "train_metrics.jsonl"
     optimizer_steps = 0
     started = time.perf_counter()
-    autocast_enabled = bool(training_cfg.get("bf16", True)) and bool(torch_module.cuda.is_available())
+    audit_parameter_name = "query_embeddings"
+    initial_audit_parameter = adapter.query_embeddings.detach().float().clone()
+    first_lr: float | None = None
+    last_lr: float | None = None
+    last_metrics: dict[str, Any] = {}
+    last_checkpoint: Path | None = None
+    autocast_enabled = bool(training_cfg.get("bf16", True)) and bool(
+        torch_module.cuda.is_available()
+    )
     autocast_dtype = torch_module.bfloat16 if autocast_enabled else torch_module.float32
     for epoch in range(1, epochs + 1):
         adapter.train()
         optimizer.zero_grad(set_to_none=True)
         for group_index, rows in enumerate(loader, 1):
+            current_window_size = _accumulation_window_size(
+                group_index,
+                len(loader),
+                accumulation,
+            )
             encoded = visual_processor_batch(processor, rows, image_root=image_root)
             features, positions = extractor.extract(encoded)
             layer_batch, position_batch, padding_mask = pad_visual_features(features, positions)
             layer_batch = _cast_features_for_adapter(layer_batch, adapter)
-            class_ids = torch.as_tensor([int(row["class_id"]) for row in rows], dtype=torch.long, device=visual_device)
-            with torch.autocast(device_type=visual_device.type, dtype=autocast_dtype, enabled=autocast_enabled):
-                outputs = adapter(layer_batch, position_batch.to(visual_device), class_ids, memory_key_padding_mask=padding_mask.to(visual_device))
-                losses = compute_object_adapter_loss(outputs, rows, **{key: float(weights[key]) for key in ("objectness_weight", "bbox_l1_weight", "giou_weight", "count_weight", "binarization_weight", "negative_query_weight", "smooth_l1_beta") if key in weights})
-                loss = losses["loss_total"] / accumulation
+            class_ids = torch.as_tensor(
+                [int(row["class_id"]) for row in rows], dtype=torch.long, device=visual_device
+            )
+            with torch.autocast(
+                device_type=visual_device.type, dtype=autocast_dtype, enabled=autocast_enabled
+            ):
+                outputs = adapter(
+                    layer_batch,
+                    position_batch.to(visual_device),
+                    class_ids,
+                    memory_key_padding_mask=padding_mask.to(visual_device),
+                )
+                losses = compute_object_adapter_loss(
+                    outputs,
+                    rows,
+                    **{
+                        key: float(weights[key])
+                        for key in (
+                            "objectness_weight",
+                            "bbox_l1_weight",
+                            "giou_weight",
+                            "count_weight",
+                            "binarization_weight",
+                            "negative_query_weight",
+                            "smooth_l1_beta",
+                        )
+                        if key in weights
+                    },
+                )
+                loss = losses["loss_total"] / current_window_size
             if not bool(torch_module.isfinite(loss).item()):
-                raise FloatingPointError(f"Non-finite Object Adapter loss at epoch={epoch}, group={group_index}")
+                raise FloatingPointError(
+                    f"Non-finite Object Adapter loss at epoch={epoch}, group={group_index}"
+                )
             loss.backward()
             should_step = group_index % accumulation == 0 or group_index == len(loader)
             if should_step:
@@ -679,28 +887,55 @@ def run_object_adapter_training(
                     raise FloatingPointError(
                         f"Non-finite Object Adapter gradient at epoch={epoch}, group={group_index}"
                     )
-                grad_norm = float(torch.nn.utils.clip_grad_norm_(adapter.parameters(), float(training_cfg.get("max_grad_norm", 1.0))).item())
+                grad_norm = float(
+                    torch.nn.utils.clip_grad_norm_(
+                        adapter.parameters(), float(training_cfg.get("max_grad_norm", 1.0))
+                    ).item()
+                )
                 if not math.isfinite(grad_norm):
                     raise FloatingPointError(
                         f"Non-finite Object Adapter grad norm at epoch={epoch}, group={group_index}"
                     )
+                step_lr = float(optimizer.param_groups[0]["lr"])
                 optimizer.step()
                 optimizer.zero_grad(set_to_none=True)
                 scheduler.step()
                 optimizer_steps += 1
-                metrics = {"epoch": epoch, "step": optimizer_steps, "lr": optimizer.param_groups[0]["lr"], "grad_norm": grad_norm, "elapsed_seconds": time.perf_counter() - started}
+                if first_lr is None:
+                    first_lr = step_lr
+                last_lr = step_lr
+                metrics = {
+                    "epoch": epoch,
+                    "step": optimizer_steps,
+                    "lr": step_lr,
+                    "next_lr": float(optimizer.param_groups[0]["lr"]),
+                    "grad_norm": grad_norm,
+                    "accumulation_window_size": current_window_size,
+                    "elapsed_seconds": time.perf_counter() - started,
+                }
                 for key, value in losses.items():
-                    metrics[key] = float(value.detach().cpu().item()) if isinstance(value, Tensor) else value
+                    metrics[key] = (
+                        float(value.detach().cpu().item()) if isinstance(value, Tensor) else value
+                    )
                 metrics["count_abs_error"] = metrics["mean_count_abs_error"]
+                last_metrics = dict(metrics)
                 with log_path.open("a", encoding="utf-8") as handle:
                     handle.write(json.dumps(metrics, ensure_ascii=False) + "\n")
                 if optimizer_steps % 100 == 0 or optimizer_steps == 1:
                     print(json.dumps(metrics, ensure_ascii=False))
                 if optimizer_steps >= total_steps:
                     break
-        validation = evaluate_object_adapter_rows(adapter, extractor, processor, val_rows, image_root=image_root, device=visual_device, batch_size=batch_size)
+        validation = evaluate_object_adapter_rows(
+            adapter,
+            extractor,
+            processor,
+            val_rows,
+            image_root=image_root,
+            device=visual_device,
+            batch_size=batch_size,
+        )
         _write_json(output_dir / f"val_epoch_{epoch}.json", validation)
-        save_object_adapter_checkpoint(
+        last_checkpoint = save_object_adapter_checkpoint(
             adapter,
             class_vocab,
             output_dir / f"checkpoint_epoch_{epoch}",
@@ -708,15 +943,52 @@ def run_object_adapter_training(
             source_checkpoint=checkpoint,
             source_manifest=checkpoint / "strategy_manifest.json",
             data_manifest=manifest_path,
-            selected_blocks=tuple(model_cfg.get("selected_blocks", SELECTED_BLOCKS)),
+            selected_blocks=selected_blocks,
             seed=seed,
         )
         if optimizer_steps >= total_steps:
             break
-    peak_vram_mb = float(torch.cuda.max_memory_allocated() / (1024 * 1024)) if torch.cuda.is_available() else None
-    _write_json(output_dir / "e2_metrics.json", {"status": "not_run", "note": "Run evaluate_object_adapter_v0.py against the frozen E2 tier.", "peak_vram_mb": peak_vram_mb})
+    parameter_delta = float(
+        (adapter.query_embeddings.detach().float() - initial_audit_parameter).abs().max().item()
+    )
+    parameter_update_audit = {
+        "parameter": audit_parameter_name,
+        "max_abs_delta": parameter_delta,
+        "updated": parameter_delta > 0.0,
+    }
+    if optimizer_steps > 0 and not parameter_update_audit["updated"]:
+        raise RuntimeError(f"Object Adapter parameter did not update: {audit_parameter_name}")
+    elapsed_seconds = time.perf_counter() - started
+    peak_vram_mb = (
+        float(torch_module.cuda.max_memory_allocated() / (1024 * 1024))
+        if torch_module.cuda.is_available()
+        else None
+    )
+    training_summary = {
+        "optimizer_steps": optimizer_steps,
+        "total_optimizer_steps": total_steps,
+        "warmup_steps": warmup_steps,
+        "first_lr": first_lr,
+        "last_lr": last_lr,
+        "peak_vram_mb": peak_vram_mb,
+        "elapsed_seconds": elapsed_seconds,
+        "parameter_update_audit": parameter_update_audit,
+        "last_metrics": last_metrics,
+        "train_size": len(train_rows),
+        "val_size": len(val_rows),
+        "checkpoint": str(last_checkpoint) if last_checkpoint else None,
+    }
+    _write_json(output_dir / "training_summary.json", training_summary)
+    _write_json(
+        output_dir / "e2_metrics.json",
+        {
+            "status": "not_run",
+            "note": "Run evaluate_object_adapter_v0.py against the frozen E2 tier.",
+            "peak_vram_mb": peak_vram_mb,
+        },
+    )
     extractor.close()
-    return {"status": "completed", "optimizer_steps": optimizer_steps, "peak_vram_mb": peak_vram_mb, "output_dir": str(output_dir)}
+    return {"status": "completed", "output_dir": str(output_dir), **training_summary}
 
 
 def save_object_adapter_checkpoint(
@@ -740,9 +1012,14 @@ def save_object_adapter_checkpoint(
     except ImportError as exc:  # pragma: no cover - model dependency environment
         raise ImportError("safetensors is required for Object Adapter checkpoints") from exc
     weights_path = destination / "adapter_model.safetensors"
-    save_file({name: value.detach().cpu().contiguous() for name, value in adapter.state_dict().items()}, str(weights_path))
+    save_file(
+        {name: value.detach().cpu().contiguous() for name, value in adapter.state_dict().items()},
+        str(weights_path),
+    )
     vocab_path = destination / "class_vocab.json"
-    vocab_path.write_text(json.dumps(dict(class_vocab), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    vocab_path.write_text(
+        json.dumps(dict(class_vocab), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     summary = adapter_parameter_summary(adapter)
     manifest = {
         "schema_version": "1.0",
@@ -759,7 +1036,9 @@ def save_object_adapter_checkpoint(
         },
         "source_r1_checkpoint": str(source_checkpoint),
         "source_r1_manifest": str(source_manifest),
-        "source_r1_manifest_sha256": file_sha256(source_manifest) if Path(source_manifest).is_file() else None,
+        "source_r1_manifest_sha256": file_sha256(source_manifest)
+        if Path(source_manifest).is_file()
+        else None,
         "training_data_manifest": str(data_manifest),
         "training_data_manifest_sha256": file_sha256(data_manifest),
         "selected_vit_blocks": list(selected_blocks),
@@ -769,7 +1048,9 @@ def save_object_adapter_checkpoint(
         "weights": weights_path.name,
         "weights_sha256": file_sha256(weights_path),
     }
-    (destination / "adapter_manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (destination / "adapter_manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     return destination
 
 
@@ -796,17 +1077,30 @@ def evaluate_object_adapter_rows(
         features, positions = extractor.extract(encoded)
         layer_batch, position_batch, padding_mask = pad_visual_features(features, positions)
         layer_batch = _cast_features_for_adapter(layer_batch, adapter)
-        class_ids = torch.as_tensor([int(row["class_id"]) for row in group], dtype=torch.long, device=device)
+        class_ids = torch.as_tensor(
+            [int(row["class_id"]) for row in group], dtype=torch.long, device=device
+        )
         with torch.no_grad():
-            outputs = adapter(layer_batch, position_batch.to(device), class_ids, memory_key_padding_mask=padding_mask.to(device))
+            outputs = adapter(
+                layer_batch,
+                position_batch.to(device),
+                class_ids,
+                memory_key_padding_mask=padding_mask.to(device),
+            )
         for index, row in enumerate(group):
             logits = outputs["object_logits"][index]
             predicted_count = float(torch.sigmoid(logits).sum().item())
             if row.get("count") is not None:
                 predicted_counts.append(predicted_count)
                 true_counts.append(int(row["count"]))
-            predicted_boxes.append(torch.cat((logits[:, None], outputs["boxes_cxcywh"][index]), dim=-1).detach().cpu())
+            predicted_boxes.append(
+                torch.cat((logits[:, None], outputs["boxes_cxcywh"][index]), dim=-1).detach().cpu()
+            )
             detection_targets.append(row)
     count_metrics = _metrics_from_count_pairs(predicted_counts, true_counts)
     box_metrics = _box_metrics(predicted_boxes, detection_targets)
-    return {"counting": count_metrics, "detection_proposals": box_metrics, "sample_count": len(rows)}
+    return {
+        "counting": count_metrics,
+        "detection_proposals": box_metrics,
+        "sample_count": len(rows),
+    }

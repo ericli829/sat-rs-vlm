@@ -1,3 +1,4 @@
+import importlib.util
 import shutil
 import subprocess
 import sys
@@ -43,6 +44,7 @@ def test_shell_scripts_exist_and_parse_when_bash_is_available() -> None:
         PROJECT_ROOT / "scripts/training/run_autodl_levircc_train.sh",
         PROJECT_ROOT / "scripts/training/run_autodl_levircc_replay.sh",
         PROJECT_ROOT / "scripts/training/run_autodl_qwen3vl_4b_stage_a.sh",
+        PROJECT_ROOT / "scripts/training/run_autodl_rs_object_adapter_v0_e1.sh",
         PROJECT_ROOT / "scripts/evaluation/run_autodl_replay_eval.sh",
         PROJECT_ROOT / "scripts/storage/sync_to_local_disk.sh",
         PROJECT_ROOT / "scripts/storage/backup_results.sh",
@@ -59,3 +61,24 @@ def test_shell_scripts_exist_and_parse_when_bash_is_available() -> None:
             check=False,
         )
         assert completed.returncode == 0, f"{script}: {completed.stderr}"
+
+
+def test_model_environment_check_includes_scipy() -> None:
+    script = PROJECT_ROOT / "scripts/environment/check_environment.py"
+    spec = importlib.util.spec_from_file_location("environment_check_test", script)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert "scipy" in module.MODEL_MODULES
+
+
+def test_object_adapter_launcher_exposes_bounded_smoke_controls() -> None:
+    script = (PROJECT_ROOT / "scripts/training/run_autodl_rs_object_adapter_v0_e1.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "--max-val-groups)" in script
+    assert "--skip-e1)" in script
+    assert '[[ "${OMP_NUM_THREADS:-}" =~ ^[1-9][0-9]*$ ]]' in script
+    assert "export OMP_NUM_THREADS=8" in script

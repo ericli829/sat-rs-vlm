@@ -22,6 +22,7 @@ MODEL_MODULES = (
     "accelerate",
     "safetensors",
     "qwen_vl_utils",
+    "scipy",
 )
 PATH_NAMES = (
     "PROJECT_ROOT",

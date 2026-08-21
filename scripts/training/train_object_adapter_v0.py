@@ -54,6 +54,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, default=None)
     parser.add_argument("--max-train-groups", type=int, default=None)
     parser.add_argument("--max-steps", type=int, default=None)
+    parser.add_argument(
+        "--max-val-groups",
+        type=int,
+        default=None,
+        help="Limit internal validation batches; intended for real-model smoke tests.",
+    )
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
 
@@ -63,9 +69,7 @@ def main() -> int:
     config_path = _project_path(args.config)
     config = _load_config(config_path)
     if args.checkpoint_dir is not None:
-        config.setdefault("model", {})["checkpoint_dir"] = str(
-            _project_path(args.checkpoint_dir)
-        )
+        config.setdefault("model", {})["checkpoint_dir"] = str(_project_path(args.checkpoint_dir))
     if args.output_dir is not None:
         config.setdefault("training", {})["output_dir"] = str(_project_path(args.output_dir))
     try:
@@ -76,6 +80,7 @@ def main() -> int:
             project_root=PROJECT_ROOT,
             max_train_groups=args.max_train_groups,
             max_steps=args.max_steps,
+            max_val_groups=args.max_val_groups,
             dry_run=args.dry_run,
         )
     except (DataAuditBlocked, FileNotFoundError, ImportError, ValueError, OSError) as exc:

@@ -12,8 +12,8 @@ from sat_rs_vlm.data.object_adapter_v0 import (
     BUILDER_VERSION,
     DataAuditBlocked,
     DetectionBox,
-    build_object_adapter_dataset_from_rows,
     build_class_vocab,
+    build_object_adapter_dataset_from_rows,
     construct_object_pairs,
     deduplicate_detection_boxes,
     resolve_cardinality_prompt_class,
@@ -120,7 +120,14 @@ def test_counting_cardinality_target_prefix_resolution(prompt: str, expected: st
 
 def test_counting_plural_aliases_use_regular_rules() -> None:
     aliases = build_class_vocab(
-        ["overpass", "ship", "vehicle", "baseball diamond", "tennis court", "expressway service area"]
+        [
+            "overpass",
+            "ship",
+            "vehicle",
+            "baseball diamond",
+            "tennis court",
+            "expressway service area",
+        ]
     )["aliases"]
     assert "overpasses" in aliases["overpass"]
     assert "overpasss" not in aliases["overpass"]
@@ -152,7 +159,9 @@ def test_counting_plural_aliases_use_regular_rules() -> None:
 )
 def test_counting_attribute_and_unknown_targets_are_eligible_but_unsupported(prompt: str) -> None:
     row = _row("count", "a.png", "counting", "1", prompt=prompt)
-    assert resolve_cardinality_prompt_class(prompt, _counting_vocab()).status == "unsupported_target"
+    assert (
+        resolve_cardinality_prompt_class(prompt, _counting_vocab()).status == "unsupported_target"
+    )
     assert resolve_counting_class(row, _counting_vocab()).status == "unsupported_target"
 
 
@@ -181,12 +190,48 @@ def test_dedup_and_supervision_types() -> None:
     assert [box.sample_id for box in retained] == ["a"]
     vocab = build_class_vocab(["car"])
     records = [
-        {"kind": "detection", "sample_id": "d1", "image": "full.png", "class_name": "car", "bbox_xyxy": (0.0, 0.0, 0.2, 0.2)},
-        {"kind": "counting", "sample_id": "c1", "image": "full.png", "class_name": "car", "count": 1},
-        {"kind": "detection", "sample_id": "d2", "image": "partial.png", "class_name": "car", "bbox_xyxy": (0.0, 0.0, 0.2, 0.2)},
-        {"kind": "counting", "sample_id": "c2", "image": "partial.png", "class_name": "car", "count": 2},
-        {"kind": "counting", "sample_id": "count.png", "image": "count.png", "class_name": "car", "count": 3},
-        {"kind": "detection", "sample_id": "d3", "image": "det.png", "class_name": "car", "bbox_xyxy": (0.0, 0.0, 0.2, 0.2)},
+        {
+            "kind": "detection",
+            "sample_id": "d1",
+            "image": "full.png",
+            "class_name": "car",
+            "bbox_xyxy": (0.0, 0.0, 0.2, 0.2),
+        },
+        {
+            "kind": "counting",
+            "sample_id": "c1",
+            "image": "full.png",
+            "class_name": "car",
+            "count": 1,
+        },
+        {
+            "kind": "detection",
+            "sample_id": "d2",
+            "image": "partial.png",
+            "class_name": "car",
+            "bbox_xyxy": (0.0, 0.0, 0.2, 0.2),
+        },
+        {
+            "kind": "counting",
+            "sample_id": "c2",
+            "image": "partial.png",
+            "class_name": "car",
+            "count": 2,
+        },
+        {
+            "kind": "counting",
+            "sample_id": "count.png",
+            "image": "count.png",
+            "class_name": "car",
+            "count": 3,
+        },
+        {
+            "kind": "detection",
+            "sample_id": "d3",
+            "image": "det.png",
+            "class_name": "car",
+            "bbox_xyxy": (0.0, 0.0, 0.2, 0.2),
+        },
     ]
     pairs = construct_object_pairs(records, vocab)
     assert {row["supervision_type"] for row in pairs} == {
@@ -199,14 +244,24 @@ def test_dedup_and_supervision_types() -> None:
 
 def test_builder_removes_eval_images_and_split_is_reproducible(tmp_path: Path) -> None:
     train_rows = [
-        _row("d1", "Images/Images_train/a.png", "detection", '{"label":"car","bbox":[0,0,0.2,0.2]}'),
+        _row(
+            "d1", "Images/Images_train/a.png", "detection", '{"label":"car","bbox":[0,0,0.2,0.2]}'
+        ),
         _row("c1", "Images/Images_train/a.png", "counting", "1", target_class="car"),
-        _row("d2", "Images/Images_train/b.png", "detection", '{"label":"car","bbox":[0,0,0.2,0.2]}'),
+        _row(
+            "d2", "Images/Images_train/b.png", "detection", '{"label":"car","bbox":[0,0,0.2,0.2]}'
+        ),
         _row("c2", "Images/Images_train/b.png", "counting", "2", target_class="car"),
         _row("c3", "Images/Images_train/c.png", "counting", "3", target_class="car"),
-        _row("d4", "Images/Images_train/d.png", "detection", '{"label":"car","bbox":[0,0,0.2,0.2]}'),
+        _row(
+            "d4", "Images/Images_train/d.png", "detection", '{"label":"car","bbox":[0,0,0.2,0.2]}'
+        ),
     ]
-    eval_rows = [_row("eval", "Images/Images_train/d.png", "detection", '{"label":"car","bbox":[0,0,0.2,0.2]}')]
+    eval_rows = [
+        _row(
+            "eval", "Images/Images_train/d.png", "detection", '{"label":"car","bbox":[0,0,0.2,0.2]}'
+        )
+    ]
     manifest = build_object_adapter_dataset_from_rows(
         train_rows,
         eval_rows,
@@ -221,21 +276,37 @@ def test_builder_removes_eval_images_and_split_is_reproducible(tmp_path: Path) -
     first = stable_image_split(train + validation, seed=42, val_fraction=0.5)
     second = stable_image_split(train + validation, seed=42, val_fraction=0.5)
     assert first == second
-    assert manifest["output_files"]["train.jsonl"]["sha256"] == file_sha256(tmp_path / "train.jsonl")
+    assert manifest["output_files"]["train.jsonl"]["sha256"] == file_sha256(
+        tmp_path / "train.jsonl"
+    )
     audit = json.loads((tmp_path / "audit.json").read_text(encoding="utf-8"))
     assert audit["train_val_image_overlap"] == 0
     assert audit["train_images"] > 0
     assert audit["val_images"] > 0
 
 
-def test_builder_counting_audit_distinguishes_target_coverage_from_correctness(tmp_path: Path) -> None:
+def test_builder_counting_audit_distinguishes_target_coverage_from_correctness(
+    tmp_path: Path,
+) -> None:
     train_rows = [
         _row("d-ship", "ship.png", "detection", '{"label":"ship","bbox":[0,0,0.2,0.2]}'),
         _row("d-ships", "ships.png", "detection", '{"label":"ships","bbox":[0,0,0.2,0.2]}'),
         _row("resolved", "resolved.png", "counting", "1", prompt="How many ship are visible?"),
         _row("ambiguous", "ambiguous.png", "counting", "2", prompt="How many ships are visible?"),
-        _row("unresolved", "unresolved.png", "counting", "3", prompt="How many buildings are visible?"),
-        _row("unsupported", "unsupported.png", "counting", "1", prompt="Is there more than one ship visible?"),
+        _row(
+            "unresolved",
+            "unresolved.png",
+            "counting",
+            "3",
+            prompt="How many buildings are visible?",
+        ),
+        _row(
+            "unsupported",
+            "unsupported.png",
+            "counting",
+            "1",
+            prompt="Is there more than one ship visible?",
+        ),
     ]
     build_object_adapter_dataset_from_rows(
         train_rows,
@@ -274,8 +345,14 @@ def test_builder_counting_audit_distinguishes_target_coverage_from_correctness(t
     assert len(audit["ambiguous_prompt_examples"]) == 1
     assert audit["unsupported_target_prefix_top50"] == [{"target_prefix": "buildings", "count": 1}]
     assert "counting_class_ambiguous=1 != 0" in audit["hard_blockers"]
-    pairs = [json.loads(line) for line in (tmp_path / "train.jsonl").read_text(encoding="utf-8").splitlines()]
-    pairs += [json.loads(line) for line in (tmp_path / "val.jsonl").read_text(encoding="utf-8").splitlines()]
+    pairs = [
+        json.loads(line)
+        for line in (tmp_path / "train.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    pairs += [
+        json.loads(line)
+        for line in (tmp_path / "val.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
     assert all(pair["class_name"] != "buildings" for pair in pairs)
 
 
@@ -283,17 +360,23 @@ def test_low_target_coverage_is_not_a_hard_blocker(tmp_path: Path) -> None:
     rows = [
         _row("d-ship", "ship.png", "detection", '{"label":"ship","bbox":[0,0,0.2,0.2]}'),
         _row("resolved", "resolved.png", "counting", "1", prompt="How many ships are visible?"),
-        _row("unsupported", "building.png", "counting", "2", prompt="How many buildings are visible?"),
+        _row(
+            "unsupported", "building.png", "counting", "2", prompt="How many buildings are visible?"
+        ),
     ]
     build_object_adapter_dataset_from_rows(rows, [], output_dir=tmp_path, enforce_blockers=False)
     audit = json.loads((tmp_path / "audit.json").read_text(encoding="utf-8"))
     assert audit["counting_target_coverage"] == pytest.approx(0.5)
     assert all("counting_target_coverage" not in blocker for blocker in audit["hard_blockers"])
-    assert all("counting_class_resolution_rate" not in blocker for blocker in audit["hard_blockers"])
+    assert all(
+        "counting_class_resolution_rate" not in blocker for blocker in audit["hard_blockers"]
+    )
 
 
 def test_evaluator_skips_non_cardinality_counting_and_reports_eligible_support() -> None:
-    evaluator_path = Path(__file__).parents[2] / "scripts" / "evaluation" / "evaluate_object_adapter_v0.py"
+    evaluator_path = (
+        Path(__file__).parents[2] / "scripts" / "evaluation" / "evaluate_object_adapter_v0.py"
+    )
     spec = importlib.util.spec_from_file_location("object_adapter_evaluator_test", evaluator_path)
     assert spec is not None and spec.loader is not None
     evaluator = importlib.util.module_from_spec(spec)
@@ -301,7 +384,9 @@ def test_evaluator_skips_non_cardinality_counting_and_reports_eligible_support()
     rows = [
         _row("supported", "ship.png", "counting", "1", prompt="How many ships are visible?"),
         _row("unknown", "building.png", "counting", "2", prompt="How many buildings are visible?"),
-        _row("binary", "plane.png", "counting", "1", prompt="Is there more than one plane visible?"),
+        _row(
+            "binary", "plane.png", "counting", "1", prompt="Is there more than one plane visible?"
+        ),
     ]
     prepared, skipped, counting_statistics = evaluator._prepare_rows(rows, _counting_vocab())
     assert [row["id"] for row in prepared] == ["supported"]
@@ -387,7 +472,9 @@ def test_visual_processor_batch_disables_text_truncation(
 def test_blocked_audit_is_explicit(tmp_path: Path) -> None:
     row = _row("d", "a.png", "detection", '{"label":"car","bbox":[0,0,0.2,0.2]}')
     with pytest.raises(DataAuditBlocked) as exc_info:
-        build_object_adapter_dataset_from_rows([row], [], output_dir=tmp_path, enforce_blockers=True)
+        build_object_adapter_dataset_from_rows(
+            [row], [], output_dir=tmp_path, enforce_blockers=True
+        )
     assert all("counting_class_resolution_rate" not in item for item in exc_info.value.blockers)
 
 
@@ -397,12 +484,17 @@ def test_hungarian_permutation_and_loss_behaviour() -> None:
     from sat_rs_vlm.models.rs_object_adapter import RSObjectAdapter
     from sat_rs_vlm.training.object_adapter_v0 import compute_object_adapter_loss, hungarian_match
 
-    pred_boxes = torch.tensor([[0.75, 0.75, 0.2, 0.2], [0.25, 0.25, 0.2, 0.2]] + [[0.5, 0.5, 0.1, 0.1]] * 62)
+    pred_boxes = torch.tensor(
+        [[0.75, 0.75, 0.2, 0.2], [0.25, 0.25, 0.2, 0.2]] + [[0.5, 0.5, 0.1, 0.1]] * 62
+    )
     target_boxes = torch.tensor([[0.0, 0.0, 0.2, 0.2], [0.65, 0.65, 0.85, 0.85]])
     rows, columns = hungarian_match(torch.zeros(64), pred_boxes, target_boxes)
     assert rows.numel() == columns.numel() == 2
     assert set(rows.tolist()) == {0, 1}
-    outputs = {"object_logits": torch.zeros(4, 64, requires_grad=True), "boxes_cxcywh": pred_boxes.unsqueeze(0).repeat(4, 1, 1).requires_grad_()}
+    outputs = {
+        "object_logits": torch.zeros(4, 64, requires_grad=True),
+        "boxes_cxcywh": pred_boxes.unsqueeze(0).repeat(4, 1, 1).requires_grad_(),
+    }
     targets = [
         {"supervision_type": "full_set", "boxes_xyxy": [[0.0, 0.0, 0.2, 0.2]], "count": 1},
         {"supervision_type": "partial_set", "boxes_xyxy": [[0.0, 0.0, 0.2, 0.2]], "count": 2},
@@ -418,7 +510,11 @@ def test_hungarian_permutation_and_loss_behaviour() -> None:
         for parameter in (outputs["object_logits"], outputs["boxes_cxcywh"])
     )
 
-    target = {"supervision_type": "full_set", "boxes_xyxy": [[0.15, 0.15, 0.35, 0.35]], "count": None}
+    target = {
+        "supervision_type": "full_set",
+        "boxes_xyxy": [[0.15, 0.15, 0.35, 0.35]],
+        "count": None,
+    }
     exact_boxes = torch.tensor([[0.25, 0.25, 0.20, 0.20]] + [[0.8, 0.8, 0.1, 0.1]] * 63)
     offset_boxes = torch.tensor([[0.75, 0.75, 0.20, 0.20]] + [[0.8, 0.8, 0.1, 0.1]] * 63)
     exact_logits = torch.full((1, 64), -4.0)
@@ -438,22 +534,40 @@ def test_hungarian_permutation_and_loss_behaviour() -> None:
     full_negative_high[0, 0] = 4.0
     full_negative_low[0, 1] = -8.0
     full_negative_high[0, 1] = 8.0
-    full_target = {"supervision_type": "full_set", "boxes_xyxy": [[0.15, 0.15, 0.35, 0.35]], "count": None}
+    full_target = {
+        "supervision_type": "full_set",
+        "boxes_xyxy": [[0.15, 0.15, 0.35, 0.35]],
+        "count": None,
+    }
     full_low = compute_object_adapter_loss(
-        {"object_logits": full_negative_low, "boxes_cxcywh": exact_boxes.unsqueeze(0)}, [full_target]
+        {"object_logits": full_negative_low, "boxes_cxcywh": exact_boxes.unsqueeze(0)},
+        [full_target],
     )
     full_high = compute_object_adapter_loss(
-        {"object_logits": full_negative_high, "boxes_cxcywh": exact_boxes.unsqueeze(0)}, [full_target]
+        {"object_logits": full_negative_high, "boxes_cxcywh": exact_boxes.unsqueeze(0)},
+        [full_target],
     )
     assert float(full_high["loss_objectness"]) > float(full_low["loss_objectness"])
 
     partial_low = compute_object_adapter_loss(
         {"object_logits": full_negative_low, "boxes_cxcywh": exact_boxes.unsqueeze(0)},
-        [{"supervision_type": "partial_set", "boxes_xyxy": [[0.15, 0.15, 0.35, 0.35]], "count": None}],
+        [
+            {
+                "supervision_type": "partial_set",
+                "boxes_xyxy": [[0.15, 0.15, 0.35, 0.35]],
+                "count": None,
+            }
+        ],
     )
     partial_high = compute_object_adapter_loss(
         {"object_logits": full_negative_high, "boxes_cxcywh": exact_boxes.unsqueeze(0)},
-        [{"supervision_type": "partial_set", "boxes_xyxy": [[0.15, 0.15, 0.35, 0.35]], "count": None}],
+        [
+            {
+                "supervision_type": "partial_set",
+                "boxes_xyxy": [[0.15, 0.15, 0.35, 0.35]],
+                "count": None,
+            }
+        ],
     )
     assert float(partial_low["loss_objectness"]) == pytest.approx(
         float(partial_high["loss_objectness"])
@@ -479,6 +593,143 @@ def test_hungarian_permutation_and_loss_behaviour() -> None:
     assert tuple(result["boxes_cxcywh"].shape) == (2, 64, 4)
     visual = torch.nn.Linear(4, 4)
     optimizer = torch.optim.AdamW(adapter.parameters(), lr=1e-3)
-    optimizer_ids = {id(parameter) for group in optimizer.param_groups for parameter in group["params"]}
+    optimizer_ids = {
+        id(parameter) for group in optimizer.param_groups for parameter in group["params"]
+    }
     assert optimizer_ids == {id(parameter) for parameter in adapter.parameters()}
     assert not optimizer_ids.intersection({id(parameter) for parameter in visual.parameters()})
+
+
+def test_aligned_multi_object_giou_uses_only_hungarian_pairs() -> None:
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("scipy")
+    from sat_rs_vlm.models.rs_object_adapter import xyxy_to_cxcywh
+    from sat_rs_vlm.training.object_adapter_v0 import compute_object_adapter_loss
+
+    target_boxes = torch.tensor(
+        [[0.10, 0.10, 0.20, 0.20], [0.70, 0.70, 0.80, 0.80]],
+        dtype=torch.float32,
+    )
+    predictions = torch.full((64, 4), 0.5, dtype=torch.float32)
+    predictions[:, 2:] = 0.05
+    predictions[:2] = xyxy_to_cxcywh(target_boxes)
+    losses = compute_object_adapter_loss(
+        {
+            "object_logits": torch.zeros(1, 64),
+            "boxes_cxcywh": predictions.unsqueeze(0),
+        },
+        [
+            {
+                "supervision_type": "detection_only",
+                "boxes_xyxy": target_boxes.tolist(),
+                "count": None,
+            }
+        ],
+    )
+
+    assert float(losses["loss_bbox_l1"]) < 1e-5
+    assert float(losses["loss_giou"]) < 1e-5
+
+
+def test_small_bbox_iou_and_giou_are_stable_for_bfloat16_inputs() -> None:
+    torch = pytest.importorskip("torch")
+    from sat_rs_vlm.models.rs_object_adapter import (
+        generalized_iou_xyxy,
+        pairwise_iou_xyxy,
+    )
+
+    box = torch.tensor(
+        [[0.100, 0.100, 0.110, 0.110]],
+        dtype=torch.bfloat16,
+    )
+    iou = pairwise_iou_xyxy(box, box)
+    giou = generalized_iou_xyxy(box, box)
+
+    assert iou.dtype == torch.float32
+    assert giou.dtype == torch.float32
+    assert float(iou.item()) == pytest.approx(1.0, abs=1e-5)
+    assert float(giou.item()) == pytest.approx(1.0, abs=1e-5)
+
+
+def test_hungarian_matches_swapped_small_boxes() -> None:
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("scipy")
+    from sat_rs_vlm.models.rs_object_adapter import xyxy_to_cxcywh
+    from sat_rs_vlm.training.object_adapter_v0 import hungarian_match
+
+    targets = torch.tensor(
+        [[0.100, 0.100, 0.110, 0.110], [0.700, 0.700, 0.710, 0.710]],
+        dtype=torch.bfloat16,
+    )
+    predictions = xyxy_to_cxcywh(targets.float()).flip(0).to(torch.bfloat16)
+    rows, columns = hungarian_match(torch.zeros(2, dtype=torch.bfloat16), predictions, targets)
+
+    assert rows.tolist() == [0, 1]
+    assert columns.tolist() == [1, 0]
+
+
+def test_object_adapter_loss_is_finite_for_bfloat16_predictions() -> None:
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("scipy")
+    from sat_rs_vlm.training.object_adapter_v0 import compute_object_adapter_loss
+
+    boxes = torch.full((1, 64, 4), 0.5, dtype=torch.bfloat16)
+    boxes[..., 2:] = 0.01
+    losses = compute_object_adapter_loss(
+        {
+            "object_logits": torch.zeros(1, 64, dtype=torch.bfloat16),
+            "boxes_cxcywh": boxes,
+        },
+        [
+            {
+                "supervision_type": "full_set",
+                "boxes_xyxy": [[0.100, 0.100, 0.110, 0.110]],
+                "count": 1,
+            }
+        ],
+    )
+
+    for name in ("loss_total", "loss_bbox_l1", "loss_giou", "loss_count"):
+        assert losses[name].dtype == torch.float32
+        assert bool(torch.isfinite(losses[name]).item())
+
+
+def test_constant_after_warmup_uses_nonzero_first_optimizer_lr() -> None:
+    torch = pytest.importorskip("torch")
+    from sat_rs_vlm.training.object_adapter_v0 import _constant_after_warmup_lambda
+
+    parameter = torch.nn.Parameter(torch.tensor(0.0))
+    optimizer = torch.optim.SGD([parameter], lr=1e-3)
+    scheduler = torch.optim.lr_scheduler.LambdaLR(
+        optimizer,
+        lambda step: _constant_after_warmup_lambda(step, 4),
+    )
+    used_lrs: list[float] = []
+    for _ in range(6):
+        parameter.grad = torch.ones_like(parameter)
+        used_lrs.append(float(optimizer.param_groups[0]["lr"]))
+        optimizer.step()
+        scheduler.step()
+
+    assert used_lrs[0] == pytest.approx(2.5e-4)
+    assert used_lrs[3] == pytest.approx(1e-3)
+    assert used_lrs[4] == pytest.approx(1e-3)
+
+
+def test_accumulation_tail_window_uses_its_actual_size() -> None:
+    torch = pytest.importorskip("torch")
+    from sat_rs_vlm.training.object_adapter_v0 import _accumulation_window_size
+
+    parameter = torch.nn.Parameter(torch.tensor(0.0))
+    optimizer = torch.optim.SGD([parameter], lr=1.0)
+    window_sizes: list[int] = []
+    for batch_index in range(1, 4):
+        window_size = _accumulation_window_size(batch_index, 3, 2)
+        window_sizes.append(window_size)
+        (parameter / window_size).backward()
+        if batch_index % 2 == 0 or batch_index == 3:
+            optimizer.step()
+            optimizer.zero_grad(set_to_none=True)
+
+    assert window_sizes == [2, 2, 1]
+    assert float(parameter.item()) == pytest.approx(-2.0)

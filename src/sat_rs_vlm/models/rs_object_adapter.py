@@ -32,14 +32,14 @@ def cxcywh_to_xyxy(boxes: Tensor) -> Tensor:
     """将 ``[..., cx,cy,w,h]`` 转为 ``[..., x_min,y_min,x_max,y_max]``。"""
 
     cx, cy, width, height = boxes.unbind(dim=-1)
-    return torch.stack(
-        (cx - width / 2, cy - height / 2, cx + width / 2, cy + height / 2), dim=-1
-    )
+    return torch.stack((cx - width / 2, cy - height / 2, cx + width / 2, cy + height / 2), dim=-1)
 
 
 def pairwise_iou_xyxy(first: Tensor, second: Tensor) -> Tensor:
-    """计算两个 ``[...,4]`` 集合的两两 IoU，返回 ``[...,N,M]``。"""
+    """以 FP32 计算两个 ``[...,4]`` 集合的两两 IoU，返回 ``[...,N,M]``。"""
 
+    first = first.float()
+    second = second.float()
     first = first.unsqueeze(-2)
     second = second.unsqueeze(-3)
     left_top = torch.maximum(first[..., :2], second[..., :2])
@@ -48,12 +48,14 @@ def pairwise_iou_xyxy(first: Tensor, second: Tensor) -> Tensor:
     first_area = (first[..., 2:] - first[..., :2]).clamp_min(0).prod(dim=-1)
     second_area = (second[..., 2:] - second[..., :2]).clamp_min(0).prod(dim=-1)
     union = first_area + second_area - intersection
-    return intersection / union.clamp_min(torch.finfo(first.dtype).eps)
+    return intersection / union.clamp_min(1e-7)
 
 
 def generalized_iou_xyxy(first: Tensor, second: Tensor) -> Tensor:
-    """计算两组 xyxy 框的两两 Generalized IoU。"""
+    """以 FP32 计算两组 xyxy 框的两两 Generalized IoU。"""
 
+    first = first.float()
+    second = second.float()
     first = first.unsqueeze(-2)
     second = second.unsqueeze(-3)
     left_top = torch.maximum(first[..., :2], second[..., :2])
@@ -62,11 +64,11 @@ def generalized_iou_xyxy(first: Tensor, second: Tensor) -> Tensor:
     first_area = (first[..., 2:] - first[..., :2]).clamp_min(0).prod(dim=-1)
     second_area = (second[..., 2:] - second[..., :2]).clamp_min(0).prod(dim=-1)
     union = first_area + second_area - intersection
-    iou = intersection / union.clamp_min(torch.finfo(first.dtype).eps)
+    iou = intersection / union.clamp_min(1e-7)
     enclosing_left_top = torch.minimum(first[..., :2], second[..., :2])
     enclosing_right_bottom = torch.maximum(first[..., 2:], second[..., 2:])
     enclosing_area = (enclosing_right_bottom - enclosing_left_top).clamp_min(0).prod(dim=-1)
-    return iou - (enclosing_area - union) / enclosing_area.clamp_min(torch.finfo(first.dtype).eps)
+    return iou - (enclosing_area - union) / enclosing_area.clamp_min(1e-7)
 
 
 class RSObjectAdapter(nn.Module):
@@ -160,7 +162,7 @@ class RSObjectAdapter(nn.Module):
                 raise ValueError("All visual layers and positions must share [B,T]")
             projected.append(self.layer_projections[index](self.layer_norms[index](feature)))
         alpha = torch.softmax(self.layer_fusion_logits, dim=0)
-        memory = sum(weight * value for weight, value in zip(alpha, projected))
+        memory = sum(weight * value for weight, value in zip(alpha, projected, strict=False))
         memory = memory + self.position_projection(
             positions.to(device=memory.device, dtype=memory.dtype)
         )

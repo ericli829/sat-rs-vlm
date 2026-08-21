@@ -10,7 +10,9 @@ OUTPUT_ROOT_OVERRIDE=""
 RUN_ROOT=""
 MAX_TRAIN_GROUPS=""
 MAX_STEPS=""
+MAX_VAL_GROUPS=""
 SKIP_DATA_BUILD=0
+SKIP_E1=0
 DRY_RUN=0
 SHUTDOWN_AFTER_RUN=0
 TEST_SHUTDOWN=0
@@ -37,7 +39,9 @@ Options:
   --env-name NAME            AutoDL environment (default: rs-vlm)
   --max-train-groups N       Limit groups for a smoke run
   --max-steps N              Limit optimizer steps for a smoke run
+  --max-val-groups N         Limit internal validation groups for a smoke run
   --skip-data-build          Reuse an existing audited dataset
+  --skip-e1                  Save the trained checkpoint without running E1
   --dry-run                  Audit/load only; skip training, E1 and shutdown
   --shutdown-after-run       Shutdown after success or failure
   --test-shutdown             Use RS_OBJECT_ADAPTER_SHUTDOWN_MOCK_FILE
@@ -63,7 +67,10 @@ while [[ $# -gt 0 ]]; do
     --max-train-groups=*) MAX_TRAIN_GROUPS="${1#*=}"; shift ;;
     --max-steps) MAX_STEPS="$2"; shift 2 ;;
     --max-steps=*) MAX_STEPS="${1#*=}"; shift ;;
+    --max-val-groups) MAX_VAL_GROUPS="$2"; shift 2 ;;
+    --max-val-groups=*) MAX_VAL_GROUPS="${1#*=}"; shift ;;
     --skip-data-build) SKIP_DATA_BUILD=1; shift ;;
+    --skip-e1) SKIP_E1=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --shutdown-after-run|--shutdown) SHUTDOWN_AFTER_RUN=1; shift ;;
     --test-shutdown) TEST_SHUTDOWN=1; shift ;;
@@ -132,6 +139,9 @@ trap on_error ERR
   exit 1
 }
 source /root/autodl_env.sh
+if ! [[ "${OMP_NUM_THREADS:-}" =~ ^[1-9][0-9]*$ ]]; then
+  export OMP_NUM_THREADS=8
+fi
 PROJECT_ROOT="${PROJECT_ROOT:-$PROJECT_ROOT_DEFAULT}"
 DATA_ROOT="${DATA_ROOT_OVERRIDE:-${DATA_ROOT:-/root/autodl-tmp/datasets}}"
 OUTPUT_ROOT="${OUTPUT_ROOT_OVERRIDE:-${OUTPUT_ROOT:-/root/autodl-tmp/outputs}}"
@@ -177,6 +187,7 @@ echo "[ENV] PROJECT_ROOT=$PROJECT_ROOT"
 echo "[ENV] DATA_ROOT=$DATA_ROOT"
 echo "[ENV] OUTPUT_ROOT=$OUTPUT_ROOT"
 echo "[ENV] PYTHON_BIN=$PYTHON_BIN"
+echo "[ENV] OMP_NUM_THREADS=$OMP_NUM_THREADS"
 echo "[RUN] RUN_ROOT=$RUN_ROOT"
 echo "[RUN] R1_CHECKPOINT_DIR=$R1_CHECKPOINT_DIR"
 
@@ -239,6 +250,7 @@ CURRENT_STAGE="Object Adapter v0 training"
 TRAIN_ARGS=(scripts/training/train_object_adapter_v0.py --config "$CONFIG_PATH" --checkpoint-dir "$R1_CHECKPOINT_DIR" --output-dir "$TRAIN_OUTPUT")
 if [[ -n "$MAX_TRAIN_GROUPS" ]]; then TRAIN_ARGS+=(--max-train-groups "$MAX_TRAIN_GROUPS"); fi
 if [[ -n "$MAX_STEPS" ]]; then TRAIN_ARGS+=(--max-steps "$MAX_STEPS"); fi
+if [[ -n "$MAX_VAL_GROUPS" ]]; then TRAIN_ARGS+=(--max-val-groups "$MAX_VAL_GROUPS"); fi
 if [[ "$DRY_RUN" == "1" ]]; then TRAIN_ARGS+=(--dry-run); fi
 "$PYTHON_BIN" "${TRAIN_ARGS[@]}"
 
@@ -253,6 +265,21 @@ FINAL_CHECKPOINT="$(find "$TRAIN_OUTPUT" -mindepth 1 -maxdepth 1 -type d -name '
 [[ -n "$FINAL_CHECKPOINT" ]] || { echo "No checkpoint_epoch_* directory under: $TRAIN_OUTPUT" >&2; exit 1; }
 [[ -s "$FINAL_CHECKPOINT/adapter_manifest.json" ]] || { echo "Adapter manifest missing: $FINAL_CHECKPOINT" >&2; exit 1; }
 [[ -s "$FINAL_CHECKPOINT/adapter_model.safetensors" ]] || { echo "Adapter weights missing: $FINAL_CHECKPOINT" >&2; exit 1; }
+
+if [[ "$SKIP_E1" == "1" ]]; then
+  printf 'success=training_only\nrun_root=%s\ncheckpoint=%s\nlog=%s\n' \
+    "$RUN_ROOT" "$FINAL_CHECKPOINT" "$LOG_FILE" > "$REPORT_DIR/completion.txt"
+  sync
+  if [[ "$SHUTDOWN_AFTER_RUN" == "1" ]]; then
+    CURRENT_STAGE="shutdown"
+    echo '[ACTION] Training completed with E1 skipped; shutting down AutoDL.'
+    trap - ERR
+    shutdown_host
+  else
+    echo '[DONE] Training completed; E1 and shutdown were not requested.'
+  fi
+  exit 0
+fi
 
 CURRENT_STAGE="E1 evaluation"
 "$PYTHON_BIN" scripts/evaluation/evaluate_object_adapter_v0.py \
