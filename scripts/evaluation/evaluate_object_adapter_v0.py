@@ -201,6 +201,49 @@ def _prepare_rows(
     return prepared, skipped, counting_statistics
 
 
+def _object_adapter_autocast_enabled(
+    torch_module: Any,
+    device: Any,
+    *,
+    bf16_enabled: bool,
+) -> bool:
+    """Keep the adapter forward dtype aligned with the bf16 training setting."""
+
+    return bool(bf16_enabled and device.type == "cuda" and torch_module.cuda.is_available())
+
+
+def _run_object_adapter_forward(
+    adapter: Any,
+    layer_batch: Any,
+    position_batch: Any,
+    class_ids: Any,
+    padding_mask: Any,
+    *,
+    torch_module: Any,
+    device: Any,
+    bf16_enabled: bool,
+) -> Any:
+    """Run the Object Adapter under the same CUDA bf16 policy as training."""
+
+    autocast_enabled = _object_adapter_autocast_enabled(
+        torch_module,
+        device,
+        bf16_enabled=bf16_enabled,
+    )
+    with torch_module.no_grad():
+        with torch_module.autocast(
+            device_type=device.type,
+            dtype=torch_module.bfloat16,
+            enabled=autocast_enabled,
+        ):
+            return adapter(
+                layer_batch,
+                position_batch.to(device),
+                class_ids,
+                memory_key_padding_mask=padding_mask.to(device),
+            )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -333,6 +376,10 @@ def main() -> int:
         if sidecar_name:
             load_visual_sidecar(model, source_r1_checkpoint / str(sidecar_name))
         visual = resolve_visual_module(model)
+        # The Object Adapter evaluator needs only the visual tower after this point.
+        del model
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         for parameter in visual.parameters():
             parameter.requires_grad = False
         visual.eval()
@@ -370,6 +417,7 @@ def main() -> int:
         true_counts: list[int] = []
         proposal_tensors: list[Any] = []
         detection_rows: list[dict[str, Any]] = []
+        bf16_enabled = bool(dict(config.get("training", {})).get("bf16", False))
         started = time.perf_counter()
         for start in range(0, len(eval_rows), batch_size):
             group = eval_rows[start : start + batch_size]
@@ -380,18 +428,24 @@ def main() -> int:
             class_ids = torch.as_tensor(
                 [int(row["class_id"]) for row in group], dtype=torch.long, device=device
             )
-            with torch.no_grad():
-                outputs = adapter(
-                    layer_batch,
-                    position_batch.to(device),
-                    class_ids,
-                    memory_key_padding_mask=padding_mask.to(device),
-                )
+            outputs = _run_object_adapter_forward(
+                adapter,
+                layer_batch,
+                position_batch,
+                class_ids,
+                padding_mask,
+                torch_module=torch,
+                device=device,
+                bf16_enabled=bf16_enabled,
+            )
             for index, row in enumerate(group):
-                logits = outputs["object_logits"][index]
+                logits = outputs["object_logits"][index].float()
                 probabilities = torch.sigmoid(logits)
                 predicted_count = float(probabilities.sum().item())
-                proposal = torch.cat((logits[:, None], outputs["boxes_cxcywh"][index]), dim=-1)
+                proposal = torch.cat(
+                    (logits[:, None], outputs["boxes_cxcywh"][index].float()),
+                    dim=-1,
+                )
                 proposal_tensors.append(proposal.detach().cpu())
                 if row["task_type"] == "counting":
                     predicted_counts.append(predicted_count)

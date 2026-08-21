@@ -14,7 +14,7 @@ import os
 import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import torch
 from torch import Tensor
@@ -75,6 +75,16 @@ def _accumulation_window_size(
         raise ValueError(f"batch_index must be within [1, {total_batches}], got {batch_index}")
     window_start = ((batch_index - 1) // accumulation_steps) * accumulation_steps
     return min(accumulation_steps, total_batches - window_start)
+
+
+def _save_epoch_checkpoint_before_validation(
+    save_checkpoint: Callable[[], Path],
+    validate: Callable[[], dict[str, Any]],
+) -> tuple[Path, dict[str, Any]]:
+    """Persist a completed epoch before validation can consume additional VRAM."""
+
+    checkpoint_path = save_checkpoint()
+    return checkpoint_path, validate()
 
 
 class ObjectAdapterDataset(Dataset[dict[str, Any]]):
@@ -189,7 +199,7 @@ class FrozenVisualFeatureExtractor:
                 "Qwen visual blocks mismatch: "
                 f"expected {self.expected_num_blocks}, got {len(blocks)}"
             )
-        if tuple(sorted(self.selected_blocks)) != SELECTED_BLOCKS:
+        if self.selected_blocks != SELECTED_BLOCKS:
             raise ValueError(f"v0 selected blocks are fixed to {SELECTED_BLOCKS}")
         self._captured: dict[int, Any] = {}
         self._handles = [
@@ -925,27 +935,29 @@ def run_object_adapter_training(
                     print(json.dumps(metrics, ensure_ascii=False))
                 if optimizer_steps >= total_steps:
                     break
-        validation = evaluate_object_adapter_rows(
-            adapter,
-            extractor,
-            processor,
-            val_rows,
-            image_root=image_root,
-            device=visual_device,
-            batch_size=batch_size,
+        last_checkpoint, validation = _save_epoch_checkpoint_before_validation(
+            lambda: save_object_adapter_checkpoint(
+                adapter,
+                class_vocab,
+                output_dir / f"checkpoint_epoch_{epoch}",
+                epoch=epoch,
+                source_checkpoint=checkpoint,
+                source_manifest=checkpoint / "strategy_manifest.json",
+                data_manifest=manifest_path,
+                selected_blocks=selected_blocks,
+                seed=seed,
+            ),
+            lambda: evaluate_object_adapter_rows(
+                adapter,
+                extractor,
+                processor,
+                val_rows,
+                image_root=image_root,
+                device=visual_device,
+                batch_size=batch_size,
+            ),
         )
         _write_json(output_dir / f"val_epoch_{epoch}.json", validation)
-        last_checkpoint = save_object_adapter_checkpoint(
-            adapter,
-            class_vocab,
-            output_dir / f"checkpoint_epoch_{epoch}",
-            epoch=epoch,
-            source_checkpoint=checkpoint,
-            source_manifest=checkpoint / "strategy_manifest.json",
-            data_manifest=manifest_path,
-            selected_blocks=selected_blocks,
-            seed=seed,
-        )
         if optimizer_steps >= total_steps:
             break
     parameter_delta = float(

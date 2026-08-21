@@ -25,6 +25,17 @@ from sat_rs_vlm.data.object_adapter_v0 import (
 from sat_rs_vlm.models.reliability.checksum import file_sha256
 
 
+def _load_object_adapter_evaluator_module():
+    evaluator_path = (
+        Path(__file__).parents[2] / "scripts" / "evaluation" / "evaluate_object_adapter_v0.py"
+    )
+    spec = importlib.util.spec_from_file_location("object_adapter_evaluator_test", evaluator_path)
+    assert spec is not None and spec.loader is not None
+    evaluator = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(evaluator)
+    return evaluator
+
+
 def _row(
     sample_id: str,
     image: str,
@@ -733,3 +744,114 @@ def test_accumulation_tail_window_uses_its_actual_size() -> None:
 
     assert window_sizes == [2, 2, 1]
     assert float(parameter.item()) == pytest.approx(-2.0)
+
+
+def test_frozen_visual_feature_extractor_rejects_reversed_selected_blocks() -> None:
+    torch = pytest.importorskip("torch")
+    from sat_rs_vlm.training.object_adapter_v0 import FrozenVisualFeatureExtractor
+
+    class FakeVisual(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.blocks = torch.nn.ModuleList(torch.nn.Identity() for _ in range(24))
+
+    with pytest.raises(ValueError, match="fixed"):
+        FrozenVisualFeatureExtractor(
+            FakeVisual(),
+            selected_blocks=(23, 17, 11, 5),
+        )
+
+
+def test_epoch_checkpoint_is_saved_before_internal_validation() -> None:
+    from sat_rs_vlm.training.object_adapter_v0 import _save_epoch_checkpoint_before_validation
+
+    events: list[str] = []
+
+    def save_checkpoint() -> Path:
+        events.append("checkpoint")
+        return Path("checkpoint_epoch_1")
+
+    def validate() -> dict[str, str]:
+        events.append("validation")
+        return {"status": "ok"}
+
+    checkpoint, validation = _save_epoch_checkpoint_before_validation(
+        save_checkpoint,
+        validate,
+    )
+    assert checkpoint == Path("checkpoint_epoch_1")
+    assert validation == {"status": "ok"}
+    assert events == ["checkpoint", "validation"]
+
+
+def test_evaluator_adapter_forward_uses_cuda_bf16_autocast() -> None:
+    evaluator = _load_object_adapter_evaluator_module()
+
+    class FakeContext:
+        def __enter__(self) -> None:
+            return None
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    class FakeCuda:
+        @staticmethod
+        def is_available() -> bool:
+            return True
+
+    class FakeTorch:
+        bfloat16 = "bf16"
+        cuda = FakeCuda()
+
+        def __init__(self) -> None:
+            self.autocast_calls: list[dict[str, object]] = []
+
+        @staticmethod
+        def no_grad() -> FakeContext:
+            return FakeContext()
+
+        def autocast(self, **kwargs: object) -> FakeContext:
+            self.autocast_calls.append(kwargs)
+            return FakeContext()
+
+    class FakeTensor:
+        def __init__(self) -> None:
+            self.devices: list[object] = []
+
+        def to(self, device: object) -> "FakeTensor":
+            self.devices.append(device)
+            return self
+
+    class FakeAdapter:
+        def __init__(self) -> None:
+            self.called = False
+
+        def __call__(self, *_args: object, **_kwargs: object) -> dict[str, str]:
+            self.called = True
+            return {"status": "ok"}
+
+    class FakeDevice:
+        type = "cuda"
+
+    fake_torch = FakeTorch()
+    adapter = FakeAdapter()
+    positions = FakeTensor()
+    padding_mask = FakeTensor()
+    output = evaluator._run_object_adapter_forward(
+        adapter,
+        object(),
+        positions,
+        object(),
+        padding_mask,
+        torch_module=fake_torch,
+        device=FakeDevice(),
+        bf16_enabled=True,
+    )
+
+    assert output == {"status": "ok"}
+    assert adapter.called
+    assert fake_torch.autocast_calls == [
+        {"device_type": "cuda", "dtype": "bf16", "enabled": True}
+    ]
+    assert len(positions.devices) == 1
+    assert len(padding_mask.devices) == 1

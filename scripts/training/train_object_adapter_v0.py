@@ -83,7 +83,15 @@ def main() -> int:
             max_val_groups=args.max_val_groups,
             dry_run=args.dry_run,
         )
-    except (DataAuditBlocked, FileNotFoundError, ImportError, ValueError, OSError) as exc:
+    except (
+        DataAuditBlocked,
+        FileNotFoundError,
+        FloatingPointError,
+        ImportError,
+        OSError,
+        RuntimeError,
+        ValueError,
+    ) as exc:
         print(f"Object Adapter v0 training failed: {exc}", file=sys.stderr)
         return 2
     print(json.dumps(result, ensure_ascii=False, indent=2))
