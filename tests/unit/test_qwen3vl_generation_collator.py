@@ -14,6 +14,7 @@ class FakeProcessor:
     def __init__(self) -> None:
         self.messages: list[list[dict[str, Any]]] = []
         self.generation_flags: list[bool] = []
+        self.processor_calls: list[dict[str, Any]] = []
 
     def apply_chat_template(
         self,
@@ -28,7 +29,7 @@ class FakeProcessor:
         return "templated prompt"
 
     def __call__(self, **kwargs: Any) -> dict[str, Any]:
-        del kwargs
+        self.processor_calls.append(dict(kwargs))
         return {"input_ids": object(), "pixel_values": object()}
 
 
@@ -69,3 +70,42 @@ def test_generation_collator_removes_answer_and_adds_generation_prompt(
     assert [message["role"] for message in processor.messages[0]] == ["user"]
     assert processor.generation_flags == [True]
     assert "labels" not in batch
+    assert processor.processor_calls[0]["truncation"] is True
+    assert processor.processor_calls[0]["max_length"] == 1024
+
+
+def test_generation_collator_can_disable_text_truncation_for_visual_only_workflows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    image = tmp_path / "image.png"
+    image.write_bytes(b"png")
+    processor = FakeProcessor()
+    collator = Qwen3VLDataCollator(
+        processor,
+        max_seq_length=128,
+        image_root=tmp_path,
+        for_generation=True,
+        truncation=False,
+    )
+    monkeypatch.setattr(collator, "_process_vision_info", lambda messages: ([["image"]], None))
+
+    collator(
+        [
+            {
+                "id": "visual-only",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "image", "image": image.name},
+                            {"type": "text", "text": "Find all ships."},
+                        ],
+                    }
+                ],
+            }
+        ]
+    )
+
+    assert processor.processor_calls[0]["truncation"] is False
+    assert "max_length" not in processor.processor_calls[0]

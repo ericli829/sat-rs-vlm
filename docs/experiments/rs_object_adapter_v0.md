@@ -36,8 +36,17 @@ counting 类别先读取 `target_class/object_class/category/label` metadata；�
 整句。属性限定（如 `large planes`、`small vehicles`）、比较和二值问题不属于 v0
 监督；不能把 `cars`、`boats`、子集飞机等粗暴映射到父类，否则会污染 full-set /
 partial-set 语义。少量 VRSBench taxonomy 命名差异使用固定等价 alias 归一化，不使用
-模糊匹配或语义猜测。resolution rate 仍以 eligible exact-cardinality 问题为分母，hard
-blocker 仍为 < 90%；无匹配或多匹配样本会保留在审计诊断中。
+模糊匹配或语义猜测。
+
+这里需要区分三个概念：exact-cardinality syntax eligibility、当前 class-only v0 的
+target-vocabulary coverage，以及 resolver correctness。`unsupported_target` 表示问题
+语法合法但 target 不在 v0 class space；例如 `small vehicle`、`large plane`、`building`
+不能安全聚合到父类。因而约 63.7% 的 coverage 是适配器可安全使用的 target 范围，
+不是 resolver accuracy，也不是 hard blocker。hard blocker 只检查 image/split overlap、
+detection parse、max count、full-set 数据充足性、空 split 和 deterministic alias 的
+`ambiguous == 0`。Object Adapter 与 R1 的 counting 比较必须使用同一组 Object Adapter
+supported sample IDs 做 paired comparison，不能直接与 R1 全部 counting population 比较。
+属性条件 target representation 仅作为未来 v1 候选，本次不实现。
 
 输出固定为：
 

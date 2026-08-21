@@ -90,6 +90,7 @@ def visual_processor_batch(
         max_seq_length=max_seq_length,
         image_root=image_root,
         for_generation=True,
+        truncation=False,
     )
     batch = collator([object_messages(row) for row in rows])
     if "pixel_values" not in batch or "image_grid_thw" not in batch:

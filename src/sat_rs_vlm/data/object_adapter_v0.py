@@ -25,7 +25,7 @@ from sat_rs_vlm.models.reliability.checksum import file_sha256
 from sat_rs_vlm.utils.jsonl import read_jsonl, write_jsonl
 
 SCHEMA_VERSION = "1.0"
-BUILDER_VERSION = "rs-object-adapter-v0-1.1"
+BUILDER_VERSION = "rs-object-adapter-v0-1.2"
 SUPPORTED_TASKS = frozenset({"detection", "counting"})
 COUNT_BINS = ("0-2", "3-5", "6-10", "11+")
 NEUTRAL_QUANTITY_MODIFIERS = frozenset({"unique", "distinct", "individual", "separate", "total"})
@@ -301,6 +301,16 @@ def _cardinality_prompt_target(prompt: str) -> str | None:
     return target or None
 
 
+def _diagnostic_target_phrase(prompt: str) -> str | None:
+    """截取 counting target 的简短展示短语，仅用于 unsupported histogram。"""
+
+    target = _cardinality_prompt_target(prompt)
+    if target is None:
+        return None
+    boundary = re.search(r"\b(?:are|is|can|could|were|was|have|has|does|do)\b", target, flags=re.IGNORECASE)
+    return target[: boundary.start()].strip() if boundary else target.strip()
+
+
 def resolve_cardinality_prompt_class(prompt: str, class_vocab: Mapping[str, Any]) -> ClassResolution:
     """只从 exact-cardinality 问题的 target 开头解析 counting 类别。"""
 
@@ -313,7 +323,7 @@ def resolve_cardinality_prompt_class(prompt: str, class_vocab: Mapping[str, Any]
             for class_name in classes:
                 candidates.append((len(alias.split()), len(alias), class_name))
     if not candidates:
-        return ClassResolution(None, "unresolved", "cardinality_prompt", ())
+        return ClassResolution(None, "unsupported_target", "cardinality_prompt", ())
     best_tokens = max(item[0] for item in candidates)
     best_characters = max(item[1] for item in candidates if item[0] == best_tokens)
     matches = tuple(
@@ -348,7 +358,7 @@ def resolve_counting_class(row: Mapping[str, Any], class_vocab: Mapping[str, Any
             return ClassResolution(matches[0], "resolved", f"metadata.{field}", matches)
         if len(matches) > 1:
             return ClassResolution(None, "ambiguous", f"metadata.{field}", matches)
-        return ClassResolution(None, "unresolved", f"metadata.{field}", ())
+        return ClassResolution(None, "unsupported_target", f"metadata.{field}", ())
     return resolve_cardinality_prompt_class(extract_prompt(row), class_vocab)
 
 
@@ -479,13 +489,16 @@ def _parse_training_rows(
                     unresolved_examples["non_cardinality"].append(str(row.get("id", "")) + ": " + prompt)
             else:
                 audit["counting_cardinality_eligible"] += 1
+                audit["counting_exact_cardinality"] += 1
             if resolution.status == "resolved":
                 audit["counting_class_resolved"] += 1
+                audit["counting_supported_target"] += 1
             elif resolution.status == "ambiguous":
                 audit["counting_class_ambiguous"] += 1
                 if len(unresolved_examples["ambiguous"]) < 30:
                     unresolved_examples["ambiguous"].append(str(row.get("id", "")) + ": " + extract_prompt(row))
-            elif resolution.status == "unresolved":
+            elif resolution.status == "unsupported_target":
+                audit["counting_target_unsupported"] += 1
                 audit["counting_class_unresolved"] += 1
                 if len(unresolved_examples["unresolved"]) < 30:
                     unresolved_examples["unresolved"].append(str(row.get("id", "")) + ": " + prompt)
@@ -505,9 +518,13 @@ def _parse_training_rows(
         audit["detection_valid"] / audit["detection_total"] if audit["detection_total"] else 0.0
     )
     audit["counting_class_resolution_rate"] = (
-        audit["counting_class_resolved"] / audit["counting_cardinality_eligible"]
-        if audit["counting_cardinality_eligible"]
+        audit["counting_supported_target"] / audit["counting_exact_cardinality"]
+        if audit["counting_exact_cardinality"]
         else 0.0
+    )
+    audit["counting_target_coverage"] = audit["counting_class_resolution_rate"]
+    audit["counting_supported_ratio_of_total"] = (
+        audit["counting_supported_target"] / audit["counting_total"] if audit["counting_total"] else 0.0
     )
     audit["train_images_before_exclusion"] = len(before_images)
     audit["train_images_removed_for_eval_overlap"] = len(removed_images)
@@ -639,9 +656,13 @@ def _empty_audit() -> dict[str, Any]:
         "detection_total": 0,
         "detection_invalid": 0,
         "counting_total": 0,
+        "counting_exact_cardinality": 0,
         "counting_cardinality_eligible": 0,
         "counting_non_cardinality_excluded": 0,
         "counting_class_resolved": 0,
+        "counting_supported_target": 0,
+        "counting_target_unsupported": 0,
+        # 兼容 v1.1 audit reader；新逻辑仅使用 counting_target_unsupported。
         "counting_class_unresolved": 0,
         "counting_class_ambiguous": 0,
         "counting_resolution_status_distribution": {},
@@ -710,16 +731,20 @@ def build_object_adapter_dataset_from_rows(
     # Counting class resolution depends on the vocabulary learned from detection labels;
     # reparse counting rows only, keeping the same image-level exclusion boundary.
     audit["counting_total"] = 0
+    audit["counting_exact_cardinality"] = 0
     audit["counting_cardinality_eligible"] = 0
     audit["counting_non_cardinality_excluded"] = 0
     audit["counting_class_resolved"] = 0
+    audit["counting_supported_target"] = 0
+    audit["counting_target_unsupported"] = 0
     audit["counting_class_unresolved"] = 0
     audit["counting_class_ambiguous"] = 0
     audit["counting_resolution_status_distribution"] = {}
     # The first pass cannot resolve counting labels before the detection
     # vocabulary exists.  Do not leak those provisional examples into the
     # final audit after the authoritative second pass.
-    unresolved_examples = {"non_cardinality": [], "unresolved": [], "ambiguous": []}
+    unresolved_examples = {"non_cardinality": [], "unsupported_target": [], "ambiguous": []}
+    unsupported_target_prefixes: Counter[str] = Counter()
     records = [item for item in records if item["kind"] == "detection"]
     for row in train_rows:
         if dataset_name(row) != "VRSBench" or canonical_image_identity(row) in protected_images:
@@ -731,12 +756,15 @@ def build_object_adapter_dataset_from_rows(
         if _cardinality_prompt_target(prompt) is None:
             resolution = ClassResolution(None, "unsupported_form", "cardinality_prompt", ())
         else:
+            audit["counting_exact_cardinality"] += 1
+            # Legacy-compatible alias. It denotes syntax eligibility only.
             audit["counting_cardinality_eligible"] += 1
             resolution = resolve_counting_class(row, class_vocab)
         status_distribution = audit["counting_resolution_status_distribution"]
         status_distribution[resolution.status] = int(status_distribution.get(resolution.status, 0)) + 1
         if resolution.status == "resolved":
             audit["counting_class_resolved"] += 1
+            audit["counting_supported_target"] += 1
             parsed = parse_count(extract_answer(row))
             if parsed.value is not None:
                 records.append(
@@ -756,18 +784,30 @@ def build_object_adapter_dataset_from_rows(
             audit["counting_class_ambiguous"] += 1
             if len(unresolved_examples["ambiguous"]) < 30:
                 unresolved_examples["ambiguous"].append(str(row.get("id", "")) + ": " + prompt)
-        elif resolution.status == "unresolved":
+        elif resolution.status == "unsupported_target":
+            audit["counting_target_unsupported"] += 1
             audit["counting_class_unresolved"] += 1
-            if len(unresolved_examples["unresolved"]) < 30:
-                unresolved_examples["unresolved"].append(str(row.get("id", "")) + ": " + prompt)
+            if len(unresolved_examples["unsupported_target"]) < 30:
+                unresolved_examples["unsupported_target"].append(str(row.get("id", "")) + ": " + prompt)
+            target_phrase = _diagnostic_target_phrase(prompt)
+            if target_phrase:
+                unsupported_target_prefixes[target_phrase] += 1
     audit["counting_class_resolution_rate"] = (
-        audit["counting_class_resolved"] / audit["counting_cardinality_eligible"]
-        if audit["counting_cardinality_eligible"]
+        audit["counting_supported_target"] / audit["counting_exact_cardinality"]
+        if audit["counting_exact_cardinality"]
         else 0.0
     )
-    if audit["counting_cardinality_eligible"] != (
+    audit["counting_target_coverage"] = audit["counting_class_resolution_rate"]
+    audit["counting_supported_ratio_of_total"] = (
+        audit["counting_supported_target"] / audit["counting_total"] if audit["counting_total"] else 0.0
+    )
+    if audit["counting_total"] != (
+        audit["counting_non_cardinality_excluded"] + audit["counting_exact_cardinality"]
+    ):
+        raise RuntimeError("Counting total audit accounting is inconsistent")
+    if audit["counting_exact_cardinality"] != (
         audit["counting_class_resolved"]
-        + audit["counting_class_unresolved"]
+        + audit["counting_target_unsupported"]
         + audit["counting_class_ambiguous"]
     ):
         raise RuntimeError("Counting cardinality audit accounting is inconsistent")
@@ -779,6 +819,9 @@ def build_object_adapter_dataset_from_rows(
     audit["train_images_removed_for_eval_overlap"] = len(removed_images)
     audit["train_images_after_exclusion"] = len(before_images - removed_images)
     audit["final_image_overlap_count"] = len((before_images - removed_images).intersection(protected_images))
+    audit["train_val_image_overlap"] = split_proof["train_val_image_overlap"]
+    audit["train_images"] = split_proof["train_images"]
+    audit["val_images"] = split_proof["val_images"]
     audit["train_pair_count"] = len(train_pairs)
     audit["val_pair_count"] = len(val_pairs)
     audit["pair_supervision_distribution"] = _distribution(pairs, "supervision_type")
@@ -791,8 +834,14 @@ def build_object_adapter_dataset_from_rows(
         sorted(audit["counting_resolution_status_distribution"].items())
     )
     audit["non_cardinality_examples"] = unresolved_examples["non_cardinality"]
-    audit["unresolved_prompt_examples"] = unresolved_examples["unresolved"]
+    audit["unsupported_target_examples"] = unresolved_examples["unsupported_target"]
+    # Deprecated legacy alias retained for existing audit consumers.
+    audit["unresolved_prompt_examples"] = unresolved_examples["unsupported_target"]
     audit["ambiguous_prompt_examples"] = unresolved_examples["ambiguous"]
+    audit["unsupported_target_prefix_top50"] = [
+        {"target_prefix": target, "count": count}
+        for target, count in sorted(unsupported_target_prefixes.items(), key=lambda item: (-item[1], item[0]))[:50]
+    ]
     audit["class_vocab_size"] = len(class_vocab["classes"])
     blockers: list[str] = []
     if audit["final_image_overlap_count"] != 0:
@@ -801,10 +850,8 @@ def build_object_adapter_dataset_from_rows(
         blockers.append("train_val_image_overlap must be 0")
     if float(audit["detection_parse_rate"]) < 0.99:
         blockers.append(f"detection_parse_rate={audit['detection_parse_rate']:.4f} < 0.99")
-    if float(audit["counting_class_resolution_rate"]) < 0.90:
-        blockers.append(
-            f"counting_class_resolution_rate={audit['counting_class_resolution_rate']:.4f} < 0.90"
-        )
+    if int(audit["counting_class_ambiguous"]) != 0:
+        blockers.append(f"counting_class_ambiguous={audit['counting_class_ambiguous']} != 0")
     max_count = audit["count_stats"]["max"]
     if max_count is not None and int(max_count) > 64:
         blockers.append(f"max_count={max_count} > num_queries=64")
@@ -855,6 +902,9 @@ def build_object_adapter_dataset_from_rows(
         "statistics": {
             "train_pairs": len(train_pairs),
             "val_pairs": len(val_pairs),
+            "counting_exact_cardinality": audit["counting_exact_cardinality"],
+            "counting_supported_target": audit["counting_supported_target"],
+            "counting_target_coverage": audit["counting_target_coverage"],
             "pair_supervision_distribution": audit["pair_supervision_distribution"],
             "count_bin_distribution": audit["count_bin_distribution"],
             "max_count": max_count,

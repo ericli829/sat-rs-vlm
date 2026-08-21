@@ -9,6 +9,7 @@ class. E2 remains the default tier.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -85,7 +86,7 @@ def _tier_rows(
 
 def _prepare_rows(
     rows: list[dict[str, Any]], class_vocab: dict[str, Any]
-) -> tuple[list[dict[str, Any]], dict[str, int], dict[str, int | float | None]]:
+) -> tuple[list[dict[str, Any]], dict[str, int], dict[str, int | float | str | None]]:
     """Prepare only supported rows; class resolution never inspects assistant text."""
 
     class_to_id = {str(key): int(value) for key, value in class_vocab["class_to_id"].items()}
@@ -94,14 +95,22 @@ def _prepare_rows(
         "non_vrsbench": 0,
         "unsupported_task": 0,
         "counting_non_cardinality": 0,
+        "counting_unsupported_target": 0,
+        "counting_ambiguous": 0,
         "class_unresolved": 0,
         "answer_unparsed": 0,
     }
-    counting_statistics: dict[str, int | float | None] = {
+    counting_statistics: dict[str, int | float | str | None] = {
         "counting_population_count": 0,
+        "counting_exact_cardinality_count": 0,
         "counting_cardinality_eligible_count": 0,
         "counting_supported_count": 0,
+        "counting_unsupported_target_count": 0,
+        "counting_non_cardinality_count": 0,
+        "counting_target_coverage": None,
         "counting_supported_ratio_of_eligible": None,
+        "counting_supported_prediction_count": 0,
+        "counting_supported_prediction_ids_sha256": None,
     }
     for row in rows:
         metadata = row.get("metadata", {})
@@ -120,7 +129,13 @@ def _prepare_rows(
             cardinality_resolution = resolve_cardinality_prompt_class(extract_prompt(row), class_vocab)
             if cardinality_resolution.status == "unsupported_form":
                 skipped["counting_non_cardinality"] += 1
+                counting_statistics["counting_non_cardinality_count"] = int(
+                    counting_statistics["counting_non_cardinality_count"] or 0
+                ) + 1
                 continue
+            counting_statistics["counting_exact_cardinality_count"] = int(
+                counting_statistics["counting_exact_cardinality_count"] or 0
+            ) + 1
             counting_statistics["counting_cardinality_eligible_count"] = int(
                 counting_statistics["counting_cardinality_eligible_count"] or 0
             ) + 1
@@ -129,9 +144,22 @@ def _prepare_rows(
             resolution = resolve_counting_class(row, class_vocab)
         else:
             resolution = resolve_prompt_class(extract_prompt(row), class_vocab)
+        if task == "counting" and resolution.status == "unsupported_target":
+            skipped["counting_unsupported_target"] += 1
+            counting_statistics["counting_unsupported_target_count"] = int(
+                counting_statistics["counting_unsupported_target_count"] or 0
+            ) + 1
+            continue
+        if task == "counting" and resolution.status == "ambiguous":
+            skipped["counting_ambiguous"] += 1
+            continue
         if resolution.status != "resolved" or resolution.class_name not in class_to_id:
             skipped["class_unresolved"] += 1
             continue
+        if task == "counting":
+            counting_statistics["counting_supported_count"] = int(
+                counting_statistics["counting_supported_count"] or 0
+            ) + 1
         answer = extract_answer(row)
         item: dict[str, Any] = {
             "id": str(row.get("id", "")),
@@ -160,14 +188,16 @@ def _prepare_rows(
             item["boxes_xyxy"] = []
             item["count"] = int(parsed_count.value)
         prepared.append(item)
-        if task == "counting":
-            counting_statistics["counting_supported_count"] = int(
-                counting_statistics["counting_supported_count"] or 0
-            ) + 1
     prepared.sort(key=lambda item: str(item["id"]))
-    eligible = int(counting_statistics["counting_cardinality_eligible_count"] or 0)
+    eligible = int(counting_statistics["counting_exact_cardinality_count"] or 0)
     supported = int(counting_statistics["counting_supported_count"] or 0)
-    counting_statistics["counting_supported_ratio_of_eligible"] = supported / eligible if eligible else None
+    counting_statistics["counting_target_coverage"] = supported / eligible if eligible else None
+    counting_statistics["counting_supported_ratio_of_eligible"] = counting_statistics["counting_target_coverage"]
+    supported_ids = sorted(str(row["id"]) for row in prepared if row["task_type"] == "counting")
+    counting_statistics["counting_supported_prediction_count"] = len(supported_ids)
+    counting_statistics["counting_supported_prediction_ids_sha256"] = hashlib.sha256(
+        "\n".join(supported_ids).encode("utf-8")
+    ).hexdigest()
     return prepared, skipped, counting_statistics
 
 

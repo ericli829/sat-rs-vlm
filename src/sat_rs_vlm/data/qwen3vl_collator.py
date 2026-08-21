@@ -27,6 +27,7 @@ class Qwen3VLDataCollator:
         debug_shapes: bool = False,
         for_generation: bool = False,
         include_task_metadata: bool = False,
+        truncation: bool = True,
     ) -> None:
         self.processor = processor
         self.max_seq_length = max_seq_length
@@ -34,6 +35,10 @@ class Qwen3VLDataCollator:
         self.debug_shapes = debug_shapes
         self.for_generation = for_generation
         self.include_task_metadata = include_task_metadata
+        # Qwen3-VL 的图像占位 token 数必须与 processor 生成的视觉特征数一致。
+        # 正式语言模型训练保持默认截断；仅视觉特征提取可显式关闭它，避免把
+        # 图像占位 token 截断后再与完整 pixel_values 配对。
+        self.truncation = truncation
 
     def __call__(self, batch: list[dict[str, Any]]) -> dict[str, Any]:
         """编码一个 batch 并生成 labels。"""
@@ -57,7 +62,12 @@ class Qwen3VLDataCollator:
                 for messages in prompt_messages
             ]
             image_inputs, video_inputs = self._process_vision_info(prompt_messages)
-            encoded = self._encode(texts, image_inputs, video_inputs)
+            encoded = self._encode(
+                texts,
+                image_inputs,
+                video_inputs,
+                truncation=self.truncation,
+            )
         else:
             full_texts = [
                 str(
@@ -80,8 +90,18 @@ class Qwen3VLDataCollator:
                 for messages in prompt_messages
             ]
             image_inputs, video_inputs = self._process_vision_info(normalized_messages)
-            encoded = self._encode(full_texts, image_inputs, video_inputs)
-            prompt_encoded = self._encode(prompt_texts, image_inputs, video_inputs)
+            encoded = self._encode(
+                full_texts,
+                image_inputs,
+                video_inputs,
+                truncation=self.truncation,
+            )
+            prompt_encoded = self._encode(
+                prompt_texts,
+                image_inputs,
+                video_inputs,
+                truncation=self.truncation,
+            )
             sample_ids = [str(sample.get("id", "<unknown>")) for sample in batch]
             encoded["labels"] = self._build_assistant_labels(
                 encoded,
@@ -149,8 +169,10 @@ class Qwen3VLDataCollator:
             )
         )
         image_inputs, video_inputs = self._process_vision_info([normalized])
-        capped = self._encode([full_text], image_inputs, video_inputs)
-        capped_prompt = self._encode([prompt_text], image_inputs, video_inputs)
+        capped = self._encode([full_text], image_inputs, video_inputs, truncation=True)
+        capped_prompt = self._encode(
+            [prompt_text], image_inputs, video_inputs, truncation=True
+        )
         labels = self._build_assistant_labels(
             capped,
             capped_prompt,

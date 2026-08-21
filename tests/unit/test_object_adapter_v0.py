@@ -146,13 +146,14 @@ def test_counting_plural_aliases_use_regular_rules() -> None:
         "How many tanks are visible?",
         "How many jet bridges are visible?",
         "How many buildings are visible?",
+        "How many aircraft are visible?",
         "How many unique objects are visible?",
     ],
 )
-def test_counting_attribute_and_unknown_targets_are_eligible_but_unresolved(prompt: str) -> None:
+def test_counting_attribute_and_unknown_targets_are_eligible_but_unsupported(prompt: str) -> None:
     row = _row("count", "a.png", "counting", "1", prompt=prompt)
-    assert resolve_cardinality_prompt_class(prompt, _counting_vocab()).status == "unresolved"
-    assert resolve_counting_class(row, _counting_vocab()).status == "unresolved"
+    assert resolve_cardinality_prompt_class(prompt, _counting_vocab()).status == "unsupported_target"
+    assert resolve_counting_class(row, _counting_vocab()).status == "unsupported_target"
 
 
 @pytest.mark.parametrize(
@@ -221,9 +222,13 @@ def test_builder_removes_eval_images_and_split_is_reproducible(tmp_path: Path) -
     second = stable_image_split(train + validation, seed=42, val_fraction=0.5)
     assert first == second
     assert manifest["output_files"]["train.jsonl"]["sha256"] == file_sha256(tmp_path / "train.jsonl")
+    audit = json.loads((tmp_path / "audit.json").read_text(encoding="utf-8"))
+    assert audit["train_val_image_overlap"] == 0
+    assert audit["train_images"] > 0
+    assert audit["val_images"] > 0
 
 
-def test_builder_counting_audit_uses_cardinality_eligible_denominator(tmp_path: Path) -> None:
+def test_builder_counting_audit_distinguishes_target_coverage_from_correctness(tmp_path: Path) -> None:
     train_rows = [
         _row("d-ship", "ship.png", "detection", '{"label":"ship","bbox":[0,0,0.2,0.2]}'),
         _row("d-ships", "ships.png", "detection", '{"label":"ships","bbox":[0,0,0.2,0.2]}'),
@@ -240,26 +245,51 @@ def test_builder_counting_audit_uses_cardinality_eligible_denominator(tmp_path: 
     )
     audit = json.loads((tmp_path / "audit.json").read_text(encoding="utf-8"))
     assert audit["counting_total"] == 4
+    assert audit["counting_exact_cardinality"] == 3
     assert audit["counting_cardinality_eligible"] == 3
     assert audit["counting_non_cardinality_excluded"] == 1
     assert audit["counting_class_resolved"] == 1
+    assert audit["counting_supported_target"] == 1
+    assert audit["counting_target_unsupported"] == 1
     assert audit["counting_class_unresolved"] == 1
     assert audit["counting_class_ambiguous"] == 1
-    assert audit["counting_cardinality_eligible"] == (
+    assert audit["counting_total"] == (
+        audit["counting_non_cardinality_excluded"] + audit["counting_exact_cardinality"]
+    )
+    assert audit["counting_exact_cardinality"] == (
         audit["counting_class_resolved"]
-        + audit["counting_class_unresolved"]
+        + audit["counting_target_unsupported"]
         + audit["counting_class_ambiguous"]
     )
+    assert audit["counting_target_coverage"] == pytest.approx(1 / 3)
     assert audit["counting_class_resolution_rate"] == pytest.approx(1 / 3)
     assert audit["counting_resolution_status_distribution"] == {
         "ambiguous": 1,
         "resolved": 1,
-        "unresolved": 1,
+        "unsupported_target": 1,
         "unsupported_form": 1,
     }
     assert len(audit["non_cardinality_examples"]) == 1
-    assert len(audit["unresolved_prompt_examples"]) == 1
+    assert len(audit["unsupported_target_examples"]) == 1
     assert len(audit["ambiguous_prompt_examples"]) == 1
+    assert audit["unsupported_target_prefix_top50"] == [{"target_prefix": "buildings", "count": 1}]
+    assert "counting_class_ambiguous=1 != 0" in audit["hard_blockers"]
+    pairs = [json.loads(line) for line in (tmp_path / "train.jsonl").read_text(encoding="utf-8").splitlines()]
+    pairs += [json.loads(line) for line in (tmp_path / "val.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert all(pair["class_name"] != "buildings" for pair in pairs)
+
+
+def test_low_target_coverage_is_not_a_hard_blocker(tmp_path: Path) -> None:
+    rows = [
+        _row("d-ship", "ship.png", "detection", '{"label":"ship","bbox":[0,0,0.2,0.2]}'),
+        _row("resolved", "resolved.png", "counting", "1", prompt="How many ships are visible?"),
+        _row("unsupported", "building.png", "counting", "2", prompt="How many buildings are visible?"),
+    ]
+    build_object_adapter_dataset_from_rows(rows, [], output_dir=tmp_path, enforce_blockers=False)
+    audit = json.loads((tmp_path / "audit.json").read_text(encoding="utf-8"))
+    assert audit["counting_target_coverage"] == pytest.approx(0.5)
+    assert all("counting_target_coverage" not in blocker for blocker in audit["hard_blockers"])
+    assert all("counting_class_resolution_rate" not in blocker for blocker in audit["hard_blockers"])
 
 
 def test_evaluator_skips_non_cardinality_counting_and_reports_eligible_support() -> None:
@@ -276,13 +306,17 @@ def test_evaluator_skips_non_cardinality_counting_and_reports_eligible_support()
     prepared, skipped, counting_statistics = evaluator._prepare_rows(rows, _counting_vocab())
     assert [row["id"] for row in prepared] == ["supported"]
     assert skipped["counting_non_cardinality"] == 1
-    assert skipped["class_unresolved"] == 1
-    assert counting_statistics == {
-        "counting_population_count": 3,
-        "counting_cardinality_eligible_count": 2,
-        "counting_supported_count": 1,
-        "counting_supported_ratio_of_eligible": 0.5,
-    }
+    assert skipped["counting_unsupported_target"] == 1
+    assert skipped["class_unresolved"] == 0
+    assert counting_statistics["counting_population_count"] == 3
+    assert counting_statistics["counting_exact_cardinality_count"] == 2
+    assert counting_statistics["counting_cardinality_eligible_count"] == 2
+    assert counting_statistics["counting_supported_count"] == 1
+    assert counting_statistics["counting_unsupported_target_count"] == 1
+    assert counting_statistics["counting_non_cardinality_count"] == 1
+    assert counting_statistics["counting_target_coverage"] == 0.5
+    assert counting_statistics["counting_supported_prediction_count"] == 1
+    assert isinstance(counting_statistics["counting_supported_prediction_ids_sha256"], str)
 
 
 def test_manifest_sha_mismatch_fails_fast(tmp_path: Path) -> None:
@@ -301,11 +335,60 @@ def test_manifest_sha_mismatch_fails_fast(tmp_path: Path) -> None:
         validate_data_manifest(manifest)
 
 
+def test_manifest_from_builder_v1_1_is_rejected(tmp_path: Path) -> None:
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "builder_version": "rs-object-adapter-v0-1.1",
+                "audit_status": "passed",
+                "final_image_overlap_count": 0,
+                "train_val_image_overlap": 0,
+                "output_files": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="Unsupported Object Adapter manifest builder"):
+        validate_data_manifest(manifest)
+
+
+def test_visual_processor_batch_disables_text_truncation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """视觉特征路径不能截断 Qwen 图像占位 token。"""
+
+    pytest.importorskip("torch")
+    from sat_rs_vlm.training import object_adapter_v0 as training_module
+
+    captured: dict[str, object] = {}
+
+    class FakeCollator:
+        def __init__(self, processor: object, **kwargs: object) -> None:
+            captured["processor"] = processor
+            captured.update(kwargs)
+
+        def __call__(self, batch: list[dict[str, object]]) -> dict[str, object]:
+            captured["batch"] = batch
+            return {"pixel_values": object(), "image_grid_thw": object()}
+
+    monkeypatch.setattr(training_module, "Qwen3VLDataCollator", FakeCollator)
+    batch = training_module.visual_processor_batch(
+        object(),
+        [{"image": "image.png", "class_name": "ship"}],
+        image_root=".",
+    )
+
+    assert captured["for_generation"] is True
+    assert captured["truncation"] is False
+    assert batch["pixel_values"] is not None
+
+
 def test_blocked_audit_is_explicit(tmp_path: Path) -> None:
     row = _row("d", "a.png", "detection", '{"label":"car","bbox":[0,0,0.2,0.2]}')
     with pytest.raises(DataAuditBlocked) as exc_info:
         build_object_adapter_dataset_from_rows([row], [], output_dir=tmp_path, enforce_blockers=True)
-    assert any("counting_class_resolution_rate=0.0000 < 0.90" in item for item in exc_info.value.blockers)
+    assert all("counting_class_resolution_rate" not in item for item in exc_info.value.blockers)
 
 
 def test_hungarian_permutation_and_loss_behaviour() -> None:
