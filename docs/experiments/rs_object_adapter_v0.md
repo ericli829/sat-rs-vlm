@@ -30,10 +30,14 @@ builder 先用完整 portable image identity 做集合差集，再按 `(image, c
 `sha256(seed + image)` 的 image-level 95/5 稳定划分，训练和内部验证不会共享图片。
 没有合法解析的数据不会被猜测修复。
 
-counting 类别先读取 `target_class/object_class/category/label` metadata，再在 prompt
-中对 detection vocabulary 做确定性的最长 alias 匹配。无匹配或多匹配样本排除；
-resolution rate < 90%、detection parse < 99%、max count > 64、full positive pair
-< 100、空 train/val 或任何 overlap 都是 hard blocker。
+counting 类别先读取 `target_class/object_class/category/label` metadata；没有 metadata
+时，只从 `How many <target> ...`、`What is the (total) number of <target> ...`
+这两类 single-class exact-cardinality 问题的 target 开头做确定性 alias 匹配，不再扫描
+整句。属性限定（如 `large planes`、`small vehicles`）、比较和二值问题不属于 v0
+监督；不能把 `cars`、`boats`、子集飞机等粗暴映射到父类，否则会污染 full-set /
+partial-set 语义。少量 VRSBench taxonomy 命名差异使用固定等价 alias 归一化，不使用
+模糊匹配或语义猜测。resolution rate 仍以 eligible exact-cardinality 问题为分母，hard
+blocker 仍为 < 90%；无匹配或多匹配样本会保留在审计诊断中。
 
 输出固定为：
 

@@ -25,9 +25,25 @@ from sat_rs_vlm.models.reliability.checksum import file_sha256
 from sat_rs_vlm.utils.jsonl import read_jsonl, write_jsonl
 
 SCHEMA_VERSION = "1.0"
-BUILDER_VERSION = "rs-object-adapter-v0-1.0"
+BUILDER_VERSION = "rs-object-adapter-v0-1.1"
 SUPPORTED_TASKS = frozenset({"detection", "counting"})
 COUNT_BINS = ("0-2", "3-5", "6-10", "11+")
+NEUTRAL_QUANTITY_MODIFIERS = frozenset({"unique", "distinct", "individual", "separate", "total"})
+
+# 仅用于 VRSBench counting QA 与 detection taxonomy 的已确认等价命名。
+# 这里故意不包含 car/vehicle、boat/ship 等上位或下位概念映射，因为 v0 的
+# class-conditioned adapter 无法表达这些问题中的属性和子集限定。
+VRSBENCH_COUNTING_EQUIVALENT_ALIASES = {
+    "airplane": ["plane", "planes"],
+    "baseball diamond": ["baseball field", "baseball fields"],
+    "trainstation": ["train station", "train stations"],
+    "soccer ball field": ["soccer field", "soccer fields"],
+    "golffield": ["golf course", "golf courses", "golf field", "golf fields"],
+    "ground track field": [
+        "ground track and field area",
+        "ground track and field areas",
+    ],
+}
 
 
 class DataAuditBlocked(ValueError):
@@ -153,11 +169,27 @@ def normalize_class(value: Any) -> str:
     return normalize_text(str(value)).replace("_", " ").replace("-", " ").strip()
 
 
+def _regular_plural(label: str) -> str:
+    """按小型英语规则生成类别标签复数，不引入词形库。"""
+
+    normalized = normalize_class(label)
+    if not normalized:
+        return ""
+    prefix, separator, last_word = normalized.rpartition(" ")
+    if last_word.endswith(("s", "x", "z", "ch", "sh")):
+        plural_last_word = f"{last_word}es"
+    elif len(last_word) > 1 and last_word.endswith("y") and last_word[-2] not in "aeiou":
+        plural_last_word = f"{last_word[:-1]}ies"
+    else:
+        plural_last_word = f"{last_word}s"
+    return f"{prefix}{separator}{plural_last_word}" if separator else plural_last_word
+
+
 def _class_aliases(class_name: str) -> list[str]:
-    """按 v0 规则生成 alias：规范标签和简单复数。"""
+    """生成 canonical 标签和确定性规则复数。"""
 
     normalized = normalize_class(class_name)
-    aliases = [normalized, f"{normalized}s"]
+    aliases = [normalized, _regular_plural(normalized)]
     return list(dict.fromkeys(alias for alias in aliases if alias))
 
 
@@ -193,6 +225,20 @@ def _vocab_alias_index(class_vocab: Mapping[str, Any]) -> dict[str, set[str]]:
     return index
 
 
+def _counting_alias_index(class_vocab: Mapping[str, Any]) -> dict[str, set[str]]:
+    """构建 counting 专用 alias 索引，不继承旧 vocab 中的宽松 prompt alias。"""
+
+    classes = {normalize_class(value) for value in class_vocab.get("classes", [])}
+    index: dict[str, set[str]] = defaultdict(set)
+    for class_name in classes:
+        aliases = [*_class_aliases(class_name), *VRSBENCH_COUNTING_EQUIVALENT_ALIASES.get(class_name, [])]
+        for alias in aliases:
+            normalized = normalize_class(alias)
+            if normalized:
+                index[normalized].add(class_name)
+    return index
+
+
 def _longest_prompt_matches(prompt: str, alias_index: Mapping[str, set[str]]) -> tuple[str, ...]:
     normalized_prompt = normalize_text(prompt).replace("_", " ").replace("-", " ")
     candidates: list[tuple[int, str, str]] = []
@@ -220,17 +266,81 @@ def resolve_prompt_class(prompt: str, class_vocab: Mapping[str, Any]) -> ClassRe
     return ClassResolution(None, "unresolved", None, ())
 
 
+def _strip_counting_output_protocol(prompt: str) -> str:
+    """移除训练 prompt 附加的输出协议，避免协议文本参与目标类别解析。"""
+
+    match = re.search(
+        r"\b(?:return\s+only\s+(?:a\s+json\s+object|the\s+integer)|"
+        r"do\s+not\s+include\s+any\s+other\s+text)\b",
+        prompt,
+        flags=re.IGNORECASE,
+    )
+    return prompt[: match.start()].strip() if match else prompt.strip()
+
+
+def _cardinality_prompt_target(prompt: str) -> str | None:
+    """提取 exact-cardinality 问题开头的 target remainder；其他形式返回 ``None``。"""
+
+    normalized = normalize_text(_strip_counting_output_protocol(prompt)).replace("_", " ").replace("-", " ")
+    normalized = normalized.strip()
+    match = re.match(r"^how\s+many\s+(?P<target>.+)$", normalized, flags=re.IGNORECASE)
+    if match is None:
+        match = re.match(
+            r"^what\s+is\s+(?:the\s+)?(?:total\s+)?number\s+of\s+(?P<target>.+)$",
+            normalized,
+            flags=re.IGNORECASE,
+        )
+    if match is None:
+        return None
+    target = match.group("target").strip()
+    while target:
+        modifier = re.match(r"^(unique|distinct|individual|separate|total)\b\s*", target, flags=re.IGNORECASE)
+        if modifier is None or modifier.group(1).lower() not in NEUTRAL_QUANTITY_MODIFIERS:
+            break
+        target = target[modifier.end() :].strip()
+    return target or None
+
+
+def resolve_cardinality_prompt_class(prompt: str, class_vocab: Mapping[str, Any]) -> ClassResolution:
+    """只从 exact-cardinality 问题的 target 开头解析 counting 类别。"""
+
+    target = _cardinality_prompt_target(prompt)
+    if target is None:
+        return ClassResolution(None, "unsupported_form", "cardinality_prompt", ())
+    candidates: list[tuple[int, int, str]] = []
+    for alias, classes in _counting_alias_index(class_vocab).items():
+        if re.match(rf"^{re.escape(alias)}(?!\w)", target, flags=re.IGNORECASE):
+            for class_name in classes:
+                candidates.append((len(alias.split()), len(alias), class_name))
+    if not candidates:
+        return ClassResolution(None, "unresolved", "cardinality_prompt", ())
+    best_tokens = max(item[0] for item in candidates)
+    best_characters = max(item[1] for item in candidates if item[0] == best_tokens)
+    matches = tuple(
+        sorted(
+            {
+                item[2]
+                for item in candidates
+                if item[0] == best_tokens and item[1] == best_characters
+            }
+        )
+    )
+    if len(matches) == 1:
+        return ClassResolution(matches[0], "resolved", "cardinality_prompt", matches)
+    return ClassResolution(None, "ambiguous", "cardinality_prompt", matches)
+
+
 def resolve_counting_class(row: Mapping[str, Any], class_vocab: Mapping[str, Any]) -> ClassResolution:
-    """按 metadata 优先、prompt longest-label 其次解析 counting 目标类别。
+    """按 metadata 优先、cardinality target-prefix 其次解析 counting 目标类别。
 
     不读取 counting answer 推断类别，也不引入 WordNet 或人工语义映射。
     """
 
-    aliases = _vocab_alias_index(class_vocab)
+    aliases = _counting_alias_index(class_vocab)
     metadata = _metadata(row)
     for field in ("target_class", "object_class", "category", "label"):
         value = metadata.get(field)
-        if not isinstance(value, str):
+        if not isinstance(value, str) or not value.strip():
             continue
         normalized = normalize_class(value)
         matches = tuple(sorted(aliases.get(normalized, set())))
@@ -238,7 +348,8 @@ def resolve_counting_class(row: Mapping[str, Any], class_vocab: Mapping[str, Any
             return ClassResolution(matches[0], "resolved", f"metadata.{field}", matches)
         if len(matches) > 1:
             return ClassResolution(None, "ambiguous", f"metadata.{field}", matches)
-    return resolve_prompt_class(extract_prompt(row), class_vocab)
+        return ClassResolution(None, "unresolved", f"metadata.{field}", ())
+    return resolve_cardinality_prompt_class(extract_prompt(row), class_vocab)
 
 
 def bbox_iou_xyxy(first: Sequence[float], second: Sequence[float]) -> float:
@@ -300,7 +411,11 @@ def _parse_training_rows(
     records: list[dict[str, Any]] = []
     before_images: set[str] = set()
     removed_images: set[str] = set()
-    unresolved_examples: dict[str, list[str]] = {"unresolved": [], "ambiguous": []}
+    unresolved_examples: dict[str, list[str]] = {
+        "non_cardinality": [],
+        "unresolved": [],
+        "ambiguous": [],
+    }
     for row in rows:
         if dataset_name(row) != "VRSBench":
             audit["non_vrs_rows_excluded"] = int(audit.get("non_vrs_rows_excluded", 0)) + 1
@@ -345,19 +460,35 @@ def _parse_training_rows(
                 }
             )
         else:
+            # 第一轮只收集 detection 标签来构造 vocabulary；counting 必须等
+            # vocabulary 确定后再做一次权威解析，不能使用空 vocabulary 记审计。
+            if class_vocab is None:
+                continue
             audit["counting_total"] += 1
             parsed_count = parse_count(answer)
-            resolution = resolve_counting_class(row, class_vocab or {"classes": [], "aliases": {}})
+            prompt = extract_prompt(row)
+            if _cardinality_prompt_target(prompt) is None:
+                resolution = ClassResolution(None, "unsupported_form", "cardinality_prompt", ())
+            else:
+                resolution = resolve_counting_class(row, class_vocab)
+            status_distribution = audit["counting_resolution_status_distribution"]
+            status_distribution[resolution.status] = int(status_distribution.get(resolution.status, 0)) + 1
+            if resolution.status == "unsupported_form":
+                audit["counting_non_cardinality_excluded"] += 1
+                if len(unresolved_examples["non_cardinality"]) < 30:
+                    unresolved_examples["non_cardinality"].append(str(row.get("id", "")) + ": " + prompt)
+            else:
+                audit["counting_cardinality_eligible"] += 1
             if resolution.status == "resolved":
                 audit["counting_class_resolved"] += 1
             elif resolution.status == "ambiguous":
                 audit["counting_class_ambiguous"] += 1
                 if len(unresolved_examples["ambiguous"]) < 30:
                     unresolved_examples["ambiguous"].append(str(row.get("id", "")) + ": " + extract_prompt(row))
-            else:
+            elif resolution.status == "unresolved":
                 audit["counting_class_unresolved"] += 1
                 if len(unresolved_examples["unresolved"]) < 30:
-                    unresolved_examples["unresolved"].append(str(row.get("id", "")) + ": " + extract_prompt(row))
+                    unresolved_examples["unresolved"].append(str(row.get("id", "")) + ": " + prompt)
             if parsed_count.value is None or resolution.class_name is None:
                 continue
             records.append(
@@ -374,7 +505,9 @@ def _parse_training_rows(
         audit["detection_valid"] / audit["detection_total"] if audit["detection_total"] else 0.0
     )
     audit["counting_class_resolution_rate"] = (
-        audit["counting_class_resolved"] / audit["counting_total"] if audit["counting_total"] else 0.0
+        audit["counting_class_resolved"] / audit["counting_cardinality_eligible"]
+        if audit["counting_cardinality_eligible"]
+        else 0.0
     )
     audit["train_images_before_exclusion"] = len(before_images)
     audit["train_images_removed_for_eval_overlap"] = len(removed_images)
@@ -506,9 +639,12 @@ def _empty_audit() -> dict[str, Any]:
         "detection_total": 0,
         "detection_invalid": 0,
         "counting_total": 0,
+        "counting_cardinality_eligible": 0,
+        "counting_non_cardinality_excluded": 0,
         "counting_class_resolved": 0,
         "counting_class_unresolved": 0,
         "counting_class_ambiguous": 0,
+        "counting_resolution_status_distribution": {},
         "non_vrs_rows_excluded": 0,
         "invalid_image_rows": 0,
         "unsupported_task_rows_excluded": 0,
@@ -574,13 +710,16 @@ def build_object_adapter_dataset_from_rows(
     # Counting class resolution depends on the vocabulary learned from detection labels;
     # reparse counting rows only, keeping the same image-level exclusion boundary.
     audit["counting_total"] = 0
+    audit["counting_cardinality_eligible"] = 0
+    audit["counting_non_cardinality_excluded"] = 0
     audit["counting_class_resolved"] = 0
     audit["counting_class_unresolved"] = 0
     audit["counting_class_ambiguous"] = 0
+    audit["counting_resolution_status_distribution"] = {}
     # The first pass cannot resolve counting labels before the detection
     # vocabulary exists.  Do not leak those provisional examples into the
     # final audit after the authoritative second pass.
-    unresolved_examples = {"unresolved": [], "ambiguous": []}
+    unresolved_examples = {"non_cardinality": [], "unresolved": [], "ambiguous": []}
     records = [item for item in records if item["kind"] == "detection"]
     for row in train_rows:
         if dataset_name(row) != "VRSBench" or canonical_image_identity(row) in protected_images:
@@ -588,7 +727,14 @@ def build_object_adapter_dataset_from_rows(
         if str(row.get("task_type", "")).strip().lower() != "counting":
             continue
         audit["counting_total"] += 1
-        resolution = resolve_counting_class(row, class_vocab)
+        prompt = extract_prompt(row)
+        if _cardinality_prompt_target(prompt) is None:
+            resolution = ClassResolution(None, "unsupported_form", "cardinality_prompt", ())
+        else:
+            audit["counting_cardinality_eligible"] += 1
+            resolution = resolve_counting_class(row, class_vocab)
+        status_distribution = audit["counting_resolution_status_distribution"]
+        status_distribution[resolution.status] = int(status_distribution.get(resolution.status, 0)) + 1
         if resolution.status == "resolved":
             audit["counting_class_resolved"] += 1
             parsed = parse_count(extract_answer(row))
@@ -602,17 +748,29 @@ def build_object_adapter_dataset_from_rows(
                         "count": int(parsed.value),
                     }
                 )
+        elif resolution.status == "unsupported_form":
+            audit["counting_non_cardinality_excluded"] += 1
+            if len(unresolved_examples["non_cardinality"]) < 30:
+                unresolved_examples["non_cardinality"].append(str(row.get("id", "")) + ": " + prompt)
         elif resolution.status == "ambiguous":
             audit["counting_class_ambiguous"] += 1
             if len(unresolved_examples["ambiguous"]) < 30:
-                unresolved_examples["ambiguous"].append(str(row.get("id", "")) + ": " + extract_prompt(row))
-        else:
+                unresolved_examples["ambiguous"].append(str(row.get("id", "")) + ": " + prompt)
+        elif resolution.status == "unresolved":
             audit["counting_class_unresolved"] += 1
             if len(unresolved_examples["unresolved"]) < 30:
-                unresolved_examples["unresolved"].append(str(row.get("id", "")) + ": " + extract_prompt(row))
+                unresolved_examples["unresolved"].append(str(row.get("id", "")) + ": " + prompt)
     audit["counting_class_resolution_rate"] = (
-        audit["counting_class_resolved"] / audit["counting_total"] if audit["counting_total"] else 0.0
+        audit["counting_class_resolved"] / audit["counting_cardinality_eligible"]
+        if audit["counting_cardinality_eligible"]
+        else 0.0
     )
+    if audit["counting_cardinality_eligible"] != (
+        audit["counting_class_resolved"]
+        + audit["counting_class_unresolved"]
+        + audit["counting_class_ambiguous"]
+    ):
+        raise RuntimeError("Counting cardinality audit accounting is inconsistent")
     pairs = construct_object_pairs(records, class_vocab, dedup_iou=dedup_iou, audit=audit)
     train_pairs, val_pairs, split_proof = stable_image_split(
         pairs, seed=seed, val_fraction=val_fraction
@@ -629,7 +787,12 @@ def build_object_adapter_dataset_from_rows(
     audit["count_bin_distribution"] = _count_distribution(pairs)
     audit["count_stats"] = _count_stats(pairs)
     audit["class_distribution"] = _distribution(pairs, "class_name")
-    audit["unresolved_prompt_examples"] = unresolved_examples
+    audit["counting_resolution_status_distribution"] = dict(
+        sorted(audit["counting_resolution_status_distribution"].items())
+    )
+    audit["non_cardinality_examples"] = unresolved_examples["non_cardinality"]
+    audit["unresolved_prompt_examples"] = unresolved_examples["unresolved"]
+    audit["ambiguous_prompt_examples"] = unresolved_examples["ambiguous"]
     audit["class_vocab_size"] = len(class_vocab["classes"])
     blockers: list[str] = []
     if audit["final_image_overlap_count"] != 0:

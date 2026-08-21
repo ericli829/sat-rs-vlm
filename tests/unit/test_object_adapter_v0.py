@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from sat_rs_vlm.data.object_adapter_v0 import (
     build_class_vocab,
     construct_object_pairs,
     deduplicate_detection_boxes,
+    resolve_cardinality_prompt_class,
     resolve_counting_class,
     resolve_prompt_class,
     stable_image_split,
@@ -48,25 +50,124 @@ def _row(
     }
 
 
-def test_class_resolution_prefers_metadata_and_rejects_ambiguous_alias() -> None:
-    vocab = {
+def _counting_vocab() -> dict[str, object]:
+    return build_class_vocab(
+        [
+            "airplane",
+            "baseball diamond",
+            "bridge",
+            "ground track field",
+            "golffield",
+            "helipad",
+            "overpass",
+            "ship",
+            "soccer ball field",
+            "trainstation",
+            "vehicle",
+        ]
+    )
+
+
+def test_class_resolution_prefers_metadata_and_keeps_detection_prompt_resolution() -> None:
+    vocab = _counting_vocab()
+    metadata_row = _row(
+        "count-1",
+        "a.png",
+        "counting",
+        '{"label":"ship"}',
+        prompt="How many ships are visible?",
+        target_class="vehicle",
+    )
+    assert resolve_counting_class(metadata_row, vocab).class_name == "vehicle"
+    detection_prompt = "Locate the car object and return its normalized bounding box."
+    detection_vocab = {
         "classes": ["car", "truck"],
         "class_to_id": {"car": 0, "truck": 1},
         "aliases": {"car": ["car"], "truck": ["truck", "vehicle"]},
     }
-    metadata_row = _row("count-1", "a.png", "counting", "2", target_class="car")
-    assert resolve_counting_class(metadata_row, vocab).class_name == "car"
-    prompt_row = _row("count-2", "a.png", "counting", "2", prompt="Count the truck objects.")
-    assert resolve_counting_class(prompt_row, vocab).class_name == "truck"
-    detection_prompt = "Locate the car object and return its normalized bounding box."
-    assert resolve_prompt_class(detection_prompt, vocab).class_name == "car"
-    ambiguous_vocab = {
-        "classes": ["car", "truck"],
-        "class_to_id": {"car": 0, "truck": 1},
-        "aliases": {"car": ["vehicle"], "truck": ["vehicle"]},
-    }
-    ambiguous = _row("count-3", "a.png", "counting", "2", prompt="Count each vehicle.")
-    assert resolve_counting_class(ambiguous, ambiguous_vocab).status == "ambiguous"
+    assert resolve_prompt_class(detection_prompt, detection_vocab).class_name == "car"
+
+
+@pytest.mark.parametrize(
+    ("prompt", "expected"),
+    [
+        ("How many ships are docked in the harbor?", "ship"),
+        ("How many vehicles are visible on the overpass?", "vehicle"),
+        ("How many vehicles are on the bridge?", "vehicle"),
+        ("How many airplanes are present at the airport?", "airplane"),
+        ("How many helipads are visible on the ship?", "helipad"),
+        ("How many planes are visible?", "airplane"),
+        ("How many unique planes are visible?", "airplane"),
+        ("What is the total number of planes visible in the image?", "airplane"),
+        ("What is the number of planes visible in the image?", "airplane"),
+        ("How many baseball fields are visible?", "baseball diamond"),
+        ("How many train stations are visible?", "trainstation"),
+        ("How many soccer fields are visible?", "soccer ball field"),
+        ("How many golf courses are visible?", "golffield"),
+        ("How many ground track and field areas are visible?", "ground track field"),
+        (
+            "How many planes are visible? Return ONLY the integer. Do not include any other text.",
+            "airplane",
+        ),
+    ],
+)
+def test_counting_cardinality_target_prefix_resolution(prompt: str, expected: str) -> None:
+    row = _row("count", "a.png", "counting", "999", prompt=prompt)
+    resolution = resolve_counting_class(row, _counting_vocab())
+    assert resolution.status == "resolved"
+    assert resolution.class_name == expected
+
+
+def test_counting_plural_aliases_use_regular_rules() -> None:
+    aliases = build_class_vocab(
+        ["overpass", "ship", "vehicle", "baseball diamond", "tennis court", "expressway service area"]
+    )["aliases"]
+    assert "overpasses" in aliases["overpass"]
+    assert "overpasss" not in aliases["overpass"]
+    assert "ships" in aliases["ship"]
+    assert "vehicles" in aliases["vehicle"]
+    assert "baseball diamonds" in aliases["baseball diamond"]
+    assert "tennis courts" in aliases["tennis court"]
+    assert "expressway service areas" in aliases["expressway service area"]
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "How many large planes are visible?",
+        "How many small planes are visible?",
+        "How many complete planes are visible?",
+        "How many small vehicles are visible?",
+        "How many large vehicles are visible?",
+        "How many service vehicles are visible?",
+        "How many cars are visible?",
+        "How many trucks are visible?",
+        "How many boats are visible?",
+        "How many tanks are visible?",
+        "How many jet bridges are visible?",
+        "How many buildings are visible?",
+        "How many unique objects are visible?",
+    ],
+)
+def test_counting_attribute_and_unknown_targets_are_eligible_but_unresolved(prompt: str) -> None:
+    row = _row("count", "a.png", "counting", "1", prompt=prompt)
+    assert resolve_cardinality_prompt_class(prompt, _counting_vocab()).status == "unresolved"
+    assert resolve_counting_class(row, _counting_vocab()).status == "unresolved"
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Is there more than one plane visible?",
+        "Are there multiple planes visible?",
+        "Does the image contain multiple train stations?",
+        "Are there more tennis courts than basketball courts?",
+        "Are there more ships or small vehicles in the image?",
+    ],
+)
+def test_counting_non_cardinality_questions_are_unsupported(prompt: str) -> None:
+    row = _row("count", "a.png", "counting", "1", prompt=prompt)
+    assert resolve_counting_class(row, _counting_vocab()).status == "unsupported_form"
 
 
 def test_dedup_and_supervision_types() -> None:
@@ -122,6 +223,68 @@ def test_builder_removes_eval_images_and_split_is_reproducible(tmp_path: Path) -
     assert manifest["output_files"]["train.jsonl"]["sha256"] == file_sha256(tmp_path / "train.jsonl")
 
 
+def test_builder_counting_audit_uses_cardinality_eligible_denominator(tmp_path: Path) -> None:
+    train_rows = [
+        _row("d-ship", "ship.png", "detection", '{"label":"ship","bbox":[0,0,0.2,0.2]}'),
+        _row("d-ships", "ships.png", "detection", '{"label":"ships","bbox":[0,0,0.2,0.2]}'),
+        _row("resolved", "resolved.png", "counting", "1", prompt="How many ship are visible?"),
+        _row("ambiguous", "ambiguous.png", "counting", "2", prompt="How many ships are visible?"),
+        _row("unresolved", "unresolved.png", "counting", "3", prompt="How many buildings are visible?"),
+        _row("unsupported", "unsupported.png", "counting", "1", prompt="Is there more than one ship visible?"),
+    ]
+    build_object_adapter_dataset_from_rows(
+        train_rows,
+        [],
+        output_dir=tmp_path,
+        enforce_blockers=False,
+    )
+    audit = json.loads((tmp_path / "audit.json").read_text(encoding="utf-8"))
+    assert audit["counting_total"] == 4
+    assert audit["counting_cardinality_eligible"] == 3
+    assert audit["counting_non_cardinality_excluded"] == 1
+    assert audit["counting_class_resolved"] == 1
+    assert audit["counting_class_unresolved"] == 1
+    assert audit["counting_class_ambiguous"] == 1
+    assert audit["counting_cardinality_eligible"] == (
+        audit["counting_class_resolved"]
+        + audit["counting_class_unresolved"]
+        + audit["counting_class_ambiguous"]
+    )
+    assert audit["counting_class_resolution_rate"] == pytest.approx(1 / 3)
+    assert audit["counting_resolution_status_distribution"] == {
+        "ambiguous": 1,
+        "resolved": 1,
+        "unresolved": 1,
+        "unsupported_form": 1,
+    }
+    assert len(audit["non_cardinality_examples"]) == 1
+    assert len(audit["unresolved_prompt_examples"]) == 1
+    assert len(audit["ambiguous_prompt_examples"]) == 1
+
+
+def test_evaluator_skips_non_cardinality_counting_and_reports_eligible_support() -> None:
+    evaluator_path = Path(__file__).parents[2] / "scripts" / "evaluation" / "evaluate_object_adapter_v0.py"
+    spec = importlib.util.spec_from_file_location("object_adapter_evaluator_test", evaluator_path)
+    assert spec is not None and spec.loader is not None
+    evaluator = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(evaluator)
+    rows = [
+        _row("supported", "ship.png", "counting", "1", prompt="How many ships are visible?"),
+        _row("unknown", "building.png", "counting", "2", prompt="How many buildings are visible?"),
+        _row("binary", "plane.png", "counting", "1", prompt="Is there more than one plane visible?"),
+    ]
+    prepared, skipped, counting_statistics = evaluator._prepare_rows(rows, _counting_vocab())
+    assert [row["id"] for row in prepared] == ["supported"]
+    assert skipped["counting_non_cardinality"] == 1
+    assert skipped["class_unresolved"] == 1
+    assert counting_statistics == {
+        "counting_population_count": 3,
+        "counting_cardinality_eligible_count": 2,
+        "counting_supported_count": 1,
+        "counting_supported_ratio_of_eligible": 0.5,
+    }
+
+
 def test_manifest_sha_mismatch_fails_fast(tmp_path: Path) -> None:
     asset = tmp_path / "train.jsonl"
     asset.write_text("{}\n", encoding="utf-8")
@@ -140,8 +303,9 @@ def test_manifest_sha_mismatch_fails_fast(tmp_path: Path) -> None:
 
 def test_blocked_audit_is_explicit(tmp_path: Path) -> None:
     row = _row("d", "a.png", "detection", '{"label":"car","bbox":[0,0,0.2,0.2]}')
-    with pytest.raises(DataAuditBlocked):
+    with pytest.raises(DataAuditBlocked) as exc_info:
         build_object_adapter_dataset_from_rows([row], [], output_dir=tmp_path, enforce_blockers=True)
+    assert any("counting_class_resolution_rate=0.0000 < 0.90" in item for item in exc_info.value.blockers)
 
 
 def test_hungarian_permutation_and_loss_behaviour() -> None:

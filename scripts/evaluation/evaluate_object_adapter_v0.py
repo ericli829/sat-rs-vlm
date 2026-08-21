@@ -28,6 +28,7 @@ from sat_rs_vlm.data.object_adapter_v0 import (  # noqa: E402
     canonical_image_identity,
     extract_answer,
     extract_prompt,
+    resolve_cardinality_prompt_class,
     resolve_counting_class,
     resolve_prompt_class,
 )
@@ -82,12 +83,26 @@ def _tier_rows(
     return list(read_jsonl(tier_path)), tier_path, actual_sha
 
 
-def _prepare_rows(rows: list[dict[str, Any]], class_vocab: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, int]]:
+def _prepare_rows(
+    rows: list[dict[str, Any]], class_vocab: dict[str, Any]
+) -> tuple[list[dict[str, Any]], dict[str, int], dict[str, int | float | None]]:
     """Prepare only supported rows; class resolution never inspects assistant text."""
 
     class_to_id = {str(key): int(value) for key, value in class_vocab["class_to_id"].items()}
     prepared: list[dict[str, Any]] = []
-    skipped = {"non_vrsbench": 0, "unsupported_task": 0, "class_unresolved": 0, "answer_unparsed": 0}
+    skipped = {
+        "non_vrsbench": 0,
+        "unsupported_task": 0,
+        "counting_non_cardinality": 0,
+        "class_unresolved": 0,
+        "answer_unparsed": 0,
+    }
+    counting_statistics: dict[str, int | float | None] = {
+        "counting_population_count": 0,
+        "counting_cardinality_eligible_count": 0,
+        "counting_supported_count": 0,
+        "counting_supported_ratio_of_eligible": None,
+    }
     for row in rows:
         metadata = row.get("metadata", {})
         dataset = str(metadata.get("dataset", row.get("dataset", ""))) if isinstance(metadata, dict) else ""
@@ -98,14 +113,22 @@ def _prepare_rows(rows: list[dict[str, Any]], class_vocab: dict[str, Any]) -> tu
         if task not in {"detection", "counting"}:
             skipped["unsupported_task"] += 1
             continue
-        # Detection queries must be resolved from the prompt only.  Counting
-        # keeps the builder's metadata-first rule, but neither path reads the
-        # assistant answer to choose a class.
-        resolution = (
-            resolve_prompt_class(extract_prompt(row), class_vocab)
-            if task == "detection"
-            else resolve_counting_class(row, class_vocab)
-        )
+        if task == "counting":
+            counting_statistics["counting_population_count"] = int(
+                counting_statistics["counting_population_count"] or 0
+            ) + 1
+            cardinality_resolution = resolve_cardinality_prompt_class(extract_prompt(row), class_vocab)
+            if cardinality_resolution.status == "unsupported_form":
+                skipped["counting_non_cardinality"] += 1
+                continue
+            counting_statistics["counting_cardinality_eligible_count"] = int(
+                counting_statistics["counting_cardinality_eligible_count"] or 0
+            ) + 1
+            # Metadata remains the authoritative source when present, but it
+            # cannot turn a comparative/binary question into count supervision.
+            resolution = resolve_counting_class(row, class_vocab)
+        else:
+            resolution = resolve_prompt_class(extract_prompt(row), class_vocab)
         if resolution.status != "resolved" or resolution.class_name not in class_to_id:
             skipped["class_unresolved"] += 1
             continue
@@ -137,8 +160,15 @@ def _prepare_rows(rows: list[dict[str, Any]], class_vocab: dict[str, Any]) -> tu
             item["boxes_xyxy"] = []
             item["count"] = int(parsed_count.value)
         prepared.append(item)
+        if task == "counting":
+            counting_statistics["counting_supported_count"] = int(
+                counting_statistics["counting_supported_count"] or 0
+            ) + 1
     prepared.sort(key=lambda item: str(item["id"]))
-    return prepared, skipped
+    eligible = int(counting_statistics["counting_cardinality_eligible_count"] or 0)
+    supported = int(counting_statistics["counting_supported_count"] or 0)
+    counting_statistics["counting_supported_ratio_of_eligible"] = supported / eligible if eligible else None
+    return prepared, skipped, counting_statistics
 
 
 def parse_args() -> argparse.Namespace:
@@ -207,7 +237,7 @@ def main() -> int:
         if not checkpoint_vocab_path.is_file():
             raise FileNotFoundError(f"Object Adapter checkpoint is missing class_vocab.json: {checkpoint}")
         class_vocab = json.loads(checkpoint_vocab_path.read_text(encoding="utf-8"))
-        eval_rows, skipped = _prepare_rows(rows, class_vocab)
+        eval_rows, skipped, counting_statistics = _prepare_rows(rows, class_vocab)
         if args.max_samples is not None:
             eval_rows = eval_rows[: args.max_samples]
         if not eval_rows:
@@ -372,6 +402,7 @@ def main() -> int:
             "supported_ratio": len(eval_rows) / len(rows) if rows else 0.0,
             "unsupported_ratio": (len(rows) - len(eval_rows)) / len(rows) if rows else 0.0,
             "skipped": skipped,
+            **counting_statistics,
             "counting": count_metrics,
             "detection_proposals": detection_metrics,
             "runtime_seconds": runtime,
