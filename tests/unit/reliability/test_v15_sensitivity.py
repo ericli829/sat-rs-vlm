@@ -72,3 +72,21 @@ def test_condition_complete_rejects_inconsistent_fault_records(tmp_path: Path) -
     (directory / "comparison" / "comparison.json").write_text(json.dumps({"overall": {}}), encoding="utf-8")
 
     assert not _condition_complete(directory, {"id": "c1", "num_bits": 2})
+
+
+def test_condition_complete_accepts_guarded_observation(tmp_path: Path) -> None:
+    import json
+    from scripts.reliability.run_v15_sensitivity import _condition_complete
+
+    directory = tmp_path / "condition"
+    (directory / "comparison").mkdir(parents=True)
+    (directory / "fault_injection_summary.json").write_text(
+        json.dumps({
+            "schema_version": "2.0", "condition_id": "c1", "planned_bit_flips": 1,
+            "actual_bit_flips": 1, "records": [{}], "execution_status": "completed_guarded",
+            "guard_triggered": True,
+        }), encoding="utf-8",
+    )
+    (directory / "comparison" / "comparison.json").write_text(json.dumps({"overall": {}}), encoding="utf-8")
+
+    assert _condition_complete(directory, {"id": "c1", "num_bits": 1})

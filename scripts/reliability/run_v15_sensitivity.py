@@ -318,6 +318,8 @@ def _condition_complete(directory: Path, condition: dict[str, Any] | None = None
             return False
         if fault.get("actual_bit_flips") != len(fault.get("records", [])):
             return False
+        if fault.get("execution_status") not in {None, "completed", "completed_guarded"}:
+            return False
     return True
 
 

@@ -97,12 +97,12 @@ def main() -> int:
             guard.close()
             guard_report = guard.report()
             write_json(args.output_dir / "activation_guard_report.json", guard_report)
-    if guard is not None:
-        guard.assert_healthy()
+    guard_triggered = bool(guard_report and guard_report.get("anomalies"))
     write_json(
         args.output_dir / "fault_injection_summary.json",
         {
             "schema_version": "2.0",
+            "condition_id": args.output_dir.name,
             "mode": "fault" if is_fault else "baseline",
             "target": args.fault_target,
             "layers": args.fault_layers,
@@ -112,6 +112,9 @@ def main() -> int:
             "flat_index": args.fault_flat_index,
             "requested_bit_flips": args.fault_num_bits if is_fault else 0,
             "actual_bit_flips": len(records),
+            "planned_bit_flips": args.fault_num_bits if is_fault else 0,
+            "execution_status": "completed_guarded" if guard_triggered else "completed",
+            "guard_triggered": guard_triggered,
             "seed": args.fault_seed,
             "candidate_bits": inventory["candidate_bits"] if inventory else 0,
             "inventory": inventory,
