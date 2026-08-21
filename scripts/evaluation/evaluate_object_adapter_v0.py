@@ -1,8 +1,9 @@
-"""Evaluate an RS Object Adapter v0 checkpoint on the frozen E2 tier.
+"""Evaluate an RS Object Adapter v0 checkpoint on a frozen evaluation tier.
 
 This evaluator deliberately covers only VRSBench detection and counting.  It
-loads E2 through the tier manifest, resolves the requested class from metadata
-or the prompt, and never reads a reference label to decide the query class.
+loads E1 or E2 through the tier manifest, resolves the requested class from
+metadata or the prompt, and never reads a reference label to decide the query
+class. E2 remains the default tier.
 """
 
 from __future__ import annotations
@@ -48,18 +49,23 @@ def _load_config(path: Path) -> dict[str, Any]:
     return dict(expanded)
 
 
-def _tier_rows(config: dict[str, Any]) -> tuple[list[dict[str, Any]], Path, str | None]:
+def _tier_rows(
+    config: dict[str, Any], tier: str
+) -> tuple[list[dict[str, Any]], Path, str | None]:
     data = dict(config.get("data", {}))
+    tier = str(tier).strip().upper()
+    if tier not in {"E1", "E2"}:
+        raise ValueError(f"Object Adapter evaluator supports E1 or E2, got: {tier}")
     manifest_value = data.get("evaluation_tier_manifest")
     if not manifest_value:
-        raise ValueError("data.evaluation_tier_manifest is required for E2 evaluation")
+        raise ValueError("data.evaluation_tier_manifest is required for tier evaluation")
     manifest_path = _project_path(str(manifest_value))
     if not manifest_path.is_file():
         raise FileNotFoundError(f"Fixed evaluation tier manifest is missing: {manifest_path}")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    record = dict(manifest.get("tiers", {}).get("E2", {}))
+    record = dict(manifest.get("tiers", {}).get(tier, {}))
     if not record:
-        raise ValueError(f"Evaluation tier manifest has no E2 record: {manifest_path}")
+        raise ValueError(f"Evaluation tier manifest has no {tier} record: {manifest_path}")
     tier_value = Path(str(record.get("path", ""))).expanduser()
     candidates = [
         tier_value,
@@ -68,11 +74,11 @@ def _tier_rows(config: dict[str, Any]) -> tuple[list[dict[str, Any]], Path, str 
     ]
     tier_path = next((candidate for candidate in candidates if candidate.is_file()), None)
     if tier_path is None:
-        raise FileNotFoundError(f"E2 JSONL is missing; checked {candidates}")
+        raise FileNotFoundError(f"{tier} JSONL is missing; checked {candidates}")
     expected_sha = record.get("sha256")
     actual_sha = file_sha256(tier_path)
     if expected_sha and str(expected_sha) != actual_sha:
-        raise ValueError(f"E2 tier SHA256 mismatch: expected={expected_sha}, actual={actual_sha}")
+        raise ValueError(f"{tier} tier SHA256 mismatch: expected={expected_sha}, actual={actual_sha}")
     return list(read_jsonl(tier_path)), tier_path, actual_sha
 
 
@@ -145,6 +151,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--checkpoint-dir", type=Path, default=None)
     parser.add_argument(
+        "--evaluation-tier",
+        "--tier",
+        dest="evaluation_tier",
+        default=None,
+        choices=("E1", "E2", "e1", "e2"),
+        help="Frozen evaluation tier; defaults to evaluation.tier or E2.",
+    )
+    parser.add_argument(
         "--r1-checkpoint-dir",
         type=Path,
         default=None,
@@ -159,11 +173,15 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     config = _load_config(_project_path(args.config))
+    evaluation_tier = str(
+        args.evaluation_tier
+        or dict(config.get("evaluation", {})).get("tier", "E2")
+    ).strip().upper()
     checkpoint = _project_path(args.checkpoint_dir or args.checkpoint)
     output_dir = _project_path(
         args.output_dir
         or dict(config.get("evaluation", {})).get(
-            "output_dir", str(checkpoint / "evaluation_e2")
+            "output_dir", str(checkpoint / f"evaluation_{evaluation_tier.lower()}")
         )
     )
     try:
@@ -184,7 +202,7 @@ def main() -> int:
         )
         from sat_rs_vlm.training.vision_tuning import load_visual_sidecar, resolve_visual_module
 
-        rows, tier_path, tier_sha = _tier_rows(config)
+        rows, tier_path, tier_sha = _tier_rows(config, evaluation_tier)
         checkpoint_vocab_path = checkpoint / "class_vocab.json"
         if not checkpoint_vocab_path.is_file():
             raise FileNotFoundError(f"Object Adapter checkpoint is missing class_vocab.json: {checkpoint}")
@@ -193,7 +211,10 @@ def main() -> int:
         if args.max_samples is not None:
             eval_rows = eval_rows[: args.max_samples]
         if not eval_rows:
-            raise ValueError("No supported, parseable VRSBench detection/counting rows remain in E2")
+            raise ValueError(
+                "No supported, parseable VRSBench detection/counting rows remain in "
+                f"{evaluation_tier}"
+            )
 
         adapter_manifest_path = checkpoint / "adapter_manifest.json"
         adapter_manifest = json.loads(adapter_manifest_path.read_text(encoding="utf-8"))
@@ -342,7 +363,7 @@ def main() -> int:
         metrics = {
             "schema_version": "1.0",
             "experiment": "rs_object_adapter_v0",
-            "evaluation_tier": "E2",
+            "evaluation_tier": evaluation_tier,
             "evaluation_tier_path": str(tier_path),
             "evaluation_tier_sha256": tier_sha,
             "population_sample_count": len(rows),
@@ -363,13 +384,13 @@ def main() -> int:
             "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in predictions),
             encoding="utf-8",
         )
-        (output_dir / "e2_metrics.json").write_text(
+        (output_dir / f"{evaluation_tier.lower()}_metrics.json").write_text(
             json.dumps(metrics, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
         (output_dir / "evaluation_metadata.json").write_text(
             json.dumps(
                 {
-                    "evaluation_tier": "E2",
+                    "evaluation_tier": evaluation_tier,
                     "evaluation_tier_sha256": tier_sha,
                     "sample_count": len(eval_rows),
                     "batch_size": batch_size,
@@ -386,7 +407,10 @@ def main() -> int:
         print(json.dumps(metrics, ensure_ascii=False, indent=2))
         return 0
     except (FileNotFoundError, ImportError, OSError, ValueError, RuntimeError) as exc:
-        print(f"Object Adapter v0 E2 evaluation failed: {exc}", file=sys.stderr)
+        print(
+            f"Object Adapter v0 {evaluation_tier} evaluation failed: {exc}",
+            file=sys.stderr,
+        )
         return 2
 
 

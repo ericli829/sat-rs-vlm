@@ -132,6 +132,28 @@ visual sidecar，也可以用 `--r1-checkpoint-dir` 显式覆盖路径。输出�
 SHA、样本数、运行时间和源 R1 manifest。内部 val 每 epoch 保存
 `val_epoch_1.json` / `val_epoch_2.json`。
 
+## AutoDL 训练后 E1 流程
+
+需要在 AutoDL 上执行正式训练并在训练完成后自动做一次 E1 时，使用独立
+launcher。它会先校验 E1 manifest 和 SHA，再执行数据审计、训练、最新
+`checkpoint_epoch_*` 选择和 E1 评测。只有显式传入 `--shutdown-after-run` 才会
+在成功或失败后尝试关机；关机实现优先执行 Python 的
+`os.system("/usr/bin/shutdown")`，再使用兼容性 fallback。
+
+```bash
+bash scripts/training/run_autodl_rs_object_adapter_v0_e1.sh \
+  --r1-checkpoint-dir /root/autodl-tmp/outputs/qwen3vl_4b_stage_a_round1/final_adapter \
+  --data-root /root/autodl-tmp/datasets \
+  --output-root /root/autodl-tmp/outputs \
+  --run-root /root/autodl-tmp/outputs/rs_object_adapter_v0_e1_$(date +%Y%m%d_%H%M%S) \
+  --shutdown-after-run
+```
+
+结果位于 run root 下的 `training/`、`evaluation_e1/`、`reports/` 和 `logs/`；
+E1 评测文件为 `e1_metrics.json`、`predictions.jsonl` 和
+`evaluation_metadata.json`。短 smoke 可加 `--max-train-groups 8 --max-steps 2`，
+正式训练不要使用这两个限制。
+
 ## 判定与后续实验
 
 只有总体/6-10 count 目标和 within-1 守住，并且 proposal 诊断没有显示明显退化时，
