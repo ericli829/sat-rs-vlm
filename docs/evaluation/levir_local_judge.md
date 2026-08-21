@@ -10,7 +10,19 @@ LEVIR-CC主模型继续自由生成变化描述，不再为了统计准确率进
 
 评审器不读取图片，也不能在作出判断时读取`metadata.changeflag`。`changeflag`只在评审结束后用于统计主模型变化检测性能。
 
-## 运行流程
+## v1.8 推荐流程：服务器与本地判定分离
+
+本文件以下的 v1.7 流程保留用于历史结果复现。新服务器评测不应先要求本地小模型。
+
+- 服务器先运行 `route_change_captions_rules.py` 和
+  `evaluation_contract_v1.8_server_rule_only.yaml`，只生成规则结果、传统文本指标和待补判队列；
+- 本地再使用 `judge_change_captions.py --only-unresolved`，只处理待补判 Caption；
+- 本地完整结果使用 `evaluation_contract_v1.8_local_complete.yaml` 评测。
+
+完整命令、分母规则和报告限制见
+[服务器规则评测与本地语言模型补全](levir_server_rule_local_judge_split.md)。
+
+## v1.7 历史复现流程
 
 主模型推理配置默认关闭历史二次0/1推理：
 

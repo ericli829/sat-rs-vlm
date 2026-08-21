@@ -55,9 +55,13 @@ DEFAULT_SEMANTIC_ONTOLOGY = (
     PROJECT_ROOT / "configs" / "eval" / "semantic" / "remote_sensing_ontology.json"
 )
 LOCAL_TEXT_JUDGE_DECISION_VERSION = "local_text_judge_priority_v1"
+SERVER_RULE_ONLY_DECISION_VERSION = "server_rule_only_v1"
+SERVER_RULE_THEN_LOCAL_DECISION_VERSION = "server_rule_then_local_judge_v1"
 SUPPORTED_CHANGE_DECISION_PROFILES = {
     CHANGE_DECISION_VERSION,
     LOCAL_TEXT_JUDGE_DECISION_VERSION,
+    SERVER_RULE_ONLY_DECISION_VERSION,
+    SERVER_RULE_THEN_LOCAL_DECISION_VERSION,
 }
 LOCAL_TEXT_JUDGE_RESOLVED_SOURCES = frozenset(
     {
@@ -65,6 +69,19 @@ LOCAL_TEXT_JUDGE_RESOLVED_SOURCES = frozenset(
         "local_semantic_positive_rule",
         "local_semantic_non_target_rule",
         "local_llm_judge",
+    }
+)
+SERVER_RULE_RESOLVED_SOURCES = frozenset(
+    {
+        "server_semantic_rule",
+        "server_semantic_positive_rule",
+        "server_semantic_non_target_rule",
+    }
+)
+SERVER_RULE_UNRESOLVED_SOURCES = frozenset(
+    {
+        "server_rule_unresolved",
+        "server_input_guard",
     }
 )
 
@@ -352,6 +369,8 @@ def _evaluate_change_caption(
     strict: bool,
     change_decision_profile: str,
     local_judge_required: bool,
+    server_rule_required: bool,
+    allow_local_judge_unresolved: bool,
 ) -> EvaluatedRow:
     if not record.reference.strip() and strict:
         raise InputValidationError(f"sample {record.id}: change caption reference is empty")
@@ -371,11 +390,29 @@ def _evaluate_change_caption(
         and record.raw.get("prediction_changeflag") in {0, 1}
         and str(requested_source) in LOCAL_TEXT_JUDGE_RESOLVED_SOURCES
     )
-    if change_decision_profile == LOCAL_TEXT_JUDGE_DECISION_VERSION and isinstance(
-        requested_source, str
-    ):
+    server_rule_valid = (
+        type(record.raw.get("prediction_changeflag")) is int
+        and record.raw.get("prediction_changeflag") in {0, 1}
+        and str(requested_source) in SERVER_RULE_RESOLVED_SOURCES
+    )
+    combined_judge_valid = local_judge_valid or server_rule_valid
+    if change_decision_profile in {
+        LOCAL_TEXT_JUDGE_DECISION_VERSION,
+        SERVER_RULE_ONLY_DECISION_VERSION,
+        SERVER_RULE_THEN_LOCAL_DECISION_VERSION,
+    } and isinstance(requested_source, str):
         binary_source = requested_source
-    if local_judge_required and not local_judge_valid:
+    required_decision_valid = (
+        combined_judge_valid
+        if change_decision_profile == SERVER_RULE_THEN_LOCAL_DECISION_VERSION
+        else local_judge_valid
+    )
+    locally_auditable_unresolved = allow_local_judge_unresolved and str(requested_source) in {
+        "local_llm_judge_uncertain",
+        "local_input_guard",
+        *SERVER_RULE_UNRESOLVED_SOURCES,
+    }
+    if local_judge_required and not required_decision_valid and not locally_auditable_unresolved:
         message = (
             f"sample {record.id}: v1.7 LEVIR-CC evaluation requires a resolved local text "
             "judge decision (prediction_changeflag=0/1 plus a local_* "
@@ -387,26 +424,55 @@ def _evaluate_change_caption(
         binary_reason = "missing_required_local_judge_decision"
         binary_mode = "unresolved"
         binary_source = "missing_required_local_judge_decision"
+    elif locally_auditable_unresolved:
+        predicted_changeflag = None
+        binary_reason = "local_judge_unresolved"
+        binary_mode = "unresolved"
+    elif server_rule_required and not (
+        server_rule_valid or requested_source in SERVER_RULE_UNRESOLVED_SOURCES
+    ):
+        message = (
+            f"sample {record.id}: server-rule evaluation requires route_change_captions_rules.py "
+            "output (a server_* decision or server_rule_unresolved)."
+        )
+        if strict:
+            raise InputValidationError(message)
+        predicted_changeflag = None
+        binary_reason = "missing_required_server_rule_decision"
+        binary_mode = "unresolved"
+        binary_source = "missing_required_server_rule_decision"
     elif decision_priority and "prediction_changeflag" in record.raw:
         explicit_flag = record.raw.get("prediction_changeflag")
         if type(explicit_flag) is int and explicit_flag in {0, 1}:
             predicted_changeflag = cast(int, explicit_flag)
             binary_reason = None
             binary_mode = "explicit_changeflag"
-            if change_decision_profile != LOCAL_TEXT_JUDGE_DECISION_VERSION:
+            if change_decision_profile not in {
+                LOCAL_TEXT_JUDGE_DECISION_VERSION,
+                SERVER_RULE_ONLY_DECISION_VERSION,
+                SERVER_RULE_THEN_LOCAL_DECISION_VERSION,
+            }:
                 binary_source = "explicit_changeflag"
         elif explicit_flag is None and isinstance(explicit_raw, str):
             explicit = parse_explicit_change_prediction(explicit_raw)
             predicted_changeflag = explicit.value
             binary_reason = explicit.reason
             binary_mode = explicit.match_type
-            if change_decision_profile != LOCAL_TEXT_JUDGE_DECISION_VERSION:
+            if change_decision_profile not in {
+                LOCAL_TEXT_JUDGE_DECISION_VERSION,
+                SERVER_RULE_ONLY_DECISION_VERSION,
+                SERVER_RULE_THEN_LOCAL_DECISION_VERSION,
+            }:
                 binary_source = "binary_prediction_text"
         else:
             predicted_changeflag = None
             binary_reason = "invalid_prediction_changeflag"
             binary_mode = "unresolved"
-            if change_decision_profile != LOCAL_TEXT_JUDGE_DECISION_VERSION:
+            if change_decision_profile not in {
+                LOCAL_TEXT_JUDGE_DECISION_VERSION,
+                SERVER_RULE_ONLY_DECISION_VERSION,
+                SERVER_RULE_THEN_LOCAL_DECISION_VERSION,
+            }:
                 binary_source = "invalid_explicit_changeflag"
     elif decision_priority and "binary_prediction" in record.raw:
         if isinstance(explicit_raw, str):
@@ -414,13 +480,21 @@ def _evaluate_change_caption(
             predicted_changeflag = explicit.value
             binary_reason = explicit.reason
             binary_mode = explicit.match_type
-            if change_decision_profile != LOCAL_TEXT_JUDGE_DECISION_VERSION:
+            if change_decision_profile not in {
+                LOCAL_TEXT_JUDGE_DECISION_VERSION,
+                SERVER_RULE_ONLY_DECISION_VERSION,
+                SERVER_RULE_THEN_LOCAL_DECISION_VERSION,
+            }:
                 binary_source = "binary_prediction_text"
         else:
             predicted_changeflag = None
             binary_reason = "binary_prediction_must_be_string"
             binary_mode = "unresolved"
-            if change_decision_profile != LOCAL_TEXT_JUDGE_DECISION_VERSION:
+            if change_decision_profile not in {
+                LOCAL_TEXT_JUDGE_DECISION_VERSION,
+                SERVER_RULE_ONLY_DECISION_VERSION,
+                SERVER_RULE_THEN_LOCAL_DECISION_VERSION,
+            }:
                 binary_source = "invalid_binary_prediction"
     else:
         parsed = parse_change_prediction(record.prediction)
@@ -440,6 +514,8 @@ def _evaluate_change_caption(
             "binary_correct": binary_correct,
             "local_judge_decision_valid": local_judge_valid,
             "local_judge_required": local_judge_required,
+            "server_rule_decision_valid": server_rule_valid,
+            "server_rule_required": server_rule_required,
         }
     )
     output = _base_output(record, resolution)
@@ -515,6 +591,10 @@ def evaluate_record(
                 strict=strict,
                 change_decision_profile=str(contract.get("change_decision_profile", "")),
                 local_judge_required=bool(contract.get("local_text_judge_required", False)),
+                server_rule_required=bool(contract.get("server_rule_required", False)),
+                allow_local_judge_unresolved=bool(
+                    contract.get("allow_local_judge_unresolved", False)
+                ),
             ),
             [],
         )
@@ -775,6 +855,13 @@ def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
         local_judge_valid = sum(
             bool(sample.get("local_judge_decision_valid")) for sample in samples
         )
+        server_rule_valid = sum(
+            bool(sample.get("server_rule_decision_valid")) for sample in samples
+        )
+        server_rule_only_profile = any(
+            row.output.get("change_decision_version") == SERVER_RULE_ONLY_DECISION_VERSION
+            for row in rows
+        )
         parse_modes = Counter(str(row.output.get("change_parse_mode", "unknown")) for row in rows)
         binary_sources = Counter(
             str(row.output["binary_prediction_source"])
@@ -830,10 +917,43 @@ def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
             if accuracy is not None and expected_accuracy is not None and expected_accuracy != 1
             else None
         )
+        local_complete_with_gaps = (
+            any(
+                row.output.get("change_decision_version") == SERVER_RULE_THEN_LOCAL_DECISION_VERSION
+                for row in rows
+            )
+            and parsed < total
+        )
+        partial_status = (
+            "partial_coverage" if server_rule_only_profile or local_complete_with_gaps else "ok"
+        )
+        partial_note = (
+            "Server-rule-only diagnostic: unresolved captions are excluded from this metric. "
+            "Do not use it as a full LEVIR-CC binary score."
+            if server_rule_only_profile
+            else (
+                "Local language-model stage retains unresolved captions for audit; this is not a "
+                "full-coverage binary score."
+                if local_complete_with_gaps
+                else None
+            )
+        )
         metrics.update(
             {
                 "changeflag_valid_rate": metric_value(ratio(valid_flags, total), num_samples=total),
                 "binary_parse_success_rate": metric_value(ratio(parsed, total), num_samples=total),
+                "binary_decision_coverage": metric_value(
+                    ratio(parsed, total),
+                    num_samples=total,
+                    status=partial_status,
+                    note=partial_note,
+                ),
+                "binary_unresolved_rate": metric_value(
+                    ratio(total - parsed, total),
+                    num_samples=total,
+                    status=partial_status,
+                    note=partial_note,
+                ),
                 "binary_literal_output_rate": metric_value(
                     ratio(parse_modes["binary_literal"], total),
                     num_samples=total,
@@ -881,47 +1001,64 @@ def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
                 "binary_accuracy": metric_value(
                     accuracy,
                     num_samples=comparable,
-                    status="ok" if comparable else "not_available",
+                    status=partial_status if comparable else "not_available",
+                    note=partial_note,
+                ),
+                "resolved_only_binary_accuracy": metric_value(
+                    accuracy,
+                    num_samples=comparable,
+                    status=partial_status if comparable else "not_available",
+                    note=partial_note,
                 ),
                 "balanced_accuracy": metric_value(
                     balanced_accuracy,
                     num_samples=comparable,
-                    status="ok" if balanced_accuracy is not None else "not_available",
+                    status=partial_status if balanced_accuracy is not None else "not_available",
+                    note=partial_note,
                 ),
                 "change_precision": metric_value(
                     change_precision,
                     num_samples=tp + fp,
-                    status="ok" if change_precision is not None else "not_available",
+                    status=partial_status if change_precision is not None else "not_available",
+                    note=partial_note,
                 ),
                 "change_recall": metric_value(
                     change_recall,
                     num_samples=tp + fn,
-                    status="ok" if change_recall is not None else "not_available",
+                    status=partial_status if change_recall is not None else "not_available",
+                    note=partial_note,
                 ),
                 "change_f1": metric_value(
                     change_f1,
                     num_samples=comparable,
-                    status="ok" if change_f1 is not None else "not_available",
+                    status=partial_status if change_f1 is not None else "not_available",
+                    note=partial_note,
                 ),
                 "no_change_recall_specificity": metric_value(
                     specificity,
                     num_samples=tn + fp,
-                    status="ok" if specificity is not None else "not_available",
+                    status=partial_status if specificity is not None else "not_available",
+                    note=partial_note,
                 ),
                 "negative_predictive_value": metric_value(
                     negative_predictive_value,
                     num_samples=tn + fn,
-                    status="ok" if negative_predictive_value is not None else "not_available",
+                    status=partial_status
+                    if negative_predictive_value is not None
+                    else "not_available",
+                    note=partial_note,
                 ),
                 "matthews_correlation_coefficient": metric_value(
                     matthews_correlation,
                     num_samples=comparable,
-                    status="ok" if matthews_correlation is not None else "not_available",
+                    status=partial_status if matthews_correlation is not None else "not_available",
+                    note=partial_note,
                 ),
                 "cohen_kappa": metric_value(
                     cohen_kappa,
                     num_samples=comparable,
-                    status="ok" if cohen_kappa is not None else "not_available",
+                    status=partial_status if cohen_kappa is not None else "not_available",
+                    note=partial_note,
                 ),
                 "change_prevalence": metric_value(
                     ratio(tp + fn, comparable), num_samples=comparable
@@ -932,12 +1069,14 @@ def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
                 "false_positive_rate": metric_value(
                     ratio(fp, fp + tn),
                     num_samples=fp + tn,
-                    status="ok" if fp + tn else "not_available",
+                    status=partial_status if fp + tn else "not_available",
+                    note=partial_note,
                 ),
                 "false_negative_rate": metric_value(
                     ratio(fn, fn + tp),
                     num_samples=fn + tp,
-                    status="ok" if fn + tp else "not_available",
+                    status=partial_status if fn + tp else "not_available",
+                    note=partial_note,
                 ),
                 "true_positives": metric_value(tp, num_samples=comparable),
                 "true_negatives": metric_value(tn, num_samples=comparable),
@@ -955,6 +1094,45 @@ def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
                 ),
             )
         if binary_sources:
+            if any(
+                binary_sources[source]
+                for source in (
+                    "server_semantic_rule",
+                    "server_semantic_positive_rule",
+                    "server_semantic_non_target_rule",
+                    "server_rule_unresolved",
+                    "server_input_guard",
+                )
+            ):
+                metrics.update(
+                    {
+                        "server_semantic_rule_decision_rate": metric_value(
+                            ratio(binary_sources["server_semantic_rule"], total),
+                            num_samples=total,
+                            note="Dependency-free complete no-change rule on the server.",
+                        ),
+                        "server_semantic_positive_rule_decision_rate": metric_value(
+                            ratio(binary_sources["server_semantic_positive_rule"], total),
+                            num_samples=total,
+                            note="Dependency-free permanent-structure change rule on the server.",
+                        ),
+                        "server_semantic_non_target_rule_decision_rate": metric_value(
+                            ratio(binary_sources["server_semantic_non_target_rule"], total),
+                            num_samples=total,
+                            note="Dependency-free non-target-difference rule on the server.",
+                        ),
+                        "server_rule_unresolved_rate": metric_value(
+                            ratio(binary_sources["server_rule_unresolved"], total),
+                            num_samples=total,
+                            status="partial_coverage" if server_rule_only_profile else "ok",
+                            note=(
+                                "Queued for the optional local language-model stage."
+                                if server_rule_only_profile
+                                else "Resolved by the subsequent local language-model stage."
+                            ),
+                        ),
+                    }
+                )
             if any(
                 binary_sources[source]
                 for source in (
@@ -984,51 +1162,58 @@ def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
                         ),
                     }
                 )
-            if any(
-                binary_sources[source]
-                for source in (
-                    "local_semantic_rule",
-                    "local_semantic_positive_rule",
-                    "local_semantic_non_target_rule",
-                    "local_llm_judge",
-                    "local_llm_judge_uncertain",
-                    "local_input_guard",
-                )
-            ):
-                metrics.update(
-                    {
-                        "local_semantic_rule_decision_rate": metric_value(
-                            ratio(binary_sources["local_semantic_rule"], total),
-                            num_samples=total,
-                            note=f"Decision profile: {LOCAL_TEXT_JUDGE_DECISION_VERSION}.",
-                        ),
-                        "local_semantic_positive_rule_decision_rate": metric_value(
-                            ratio(binary_sources["local_semantic_positive_rule"], total),
-                            num_samples=total,
-                            note="Explicit permanent-structure change resolved locally.",
-                        ),
-                        "local_semantic_non_target_rule_decision_rate": metric_value(
-                            ratio(binary_sources["local_semantic_non_target_rule"], total),
-                            num_samples=total,
-                            note="Explicit non-target-only difference resolved locally.",
-                        ),
-                        "local_llm_judge_decision_rate": metric_value(
-                            ratio(binary_sources["local_llm_judge"], total),
-                            num_samples=total,
-                            note=f"Decision profile: {LOCAL_TEXT_JUDGE_DECISION_VERSION}.",
-                        ),
-                        "local_llm_judge_uncertain_rate": metric_value(
-                            ratio(binary_sources["local_llm_judge_uncertain"], total),
-                            num_samples=total,
-                            note="Uncertain captions require human semantic audit.",
-                        ),
-                        "local_input_guard_rate": metric_value(
-                            ratio(binary_sources["local_input_guard"], total),
-                            num_samples=total,
-                            note="Instruction-like captions are withheld for human audit.",
-                        ),
-                    }
-                )
+        if server_rule_only_profile:
+            metrics["server_rule_decision_coverage"] = metric_value(
+                ratio(server_rule_valid, total),
+                num_samples=total,
+                status="partial_coverage",
+                note="Only server_* resolved rule decisions; local model decisions are absent.",
+            )
+        if any(
+            binary_sources[source]
+            for source in (
+                "local_semantic_rule",
+                "local_semantic_positive_rule",
+                "local_semantic_non_target_rule",
+                "local_llm_judge",
+                "local_llm_judge_uncertain",
+                "local_input_guard",
+            )
+        ):
+            metrics.update(
+                {
+                    "local_semantic_rule_decision_rate": metric_value(
+                        ratio(binary_sources["local_semantic_rule"], total),
+                        num_samples=total,
+                        note=f"Decision profile: {LOCAL_TEXT_JUDGE_DECISION_VERSION}.",
+                    ),
+                    "local_semantic_positive_rule_decision_rate": metric_value(
+                        ratio(binary_sources["local_semantic_positive_rule"], total),
+                        num_samples=total,
+                        note="Explicit permanent-structure change resolved locally.",
+                    ),
+                    "local_semantic_non_target_rule_decision_rate": metric_value(
+                        ratio(binary_sources["local_semantic_non_target_rule"], total),
+                        num_samples=total,
+                        note="Explicit non-target-only difference resolved locally.",
+                    ),
+                    "local_llm_judge_decision_rate": metric_value(
+                        ratio(binary_sources["local_llm_judge"], total),
+                        num_samples=total,
+                        note=f"Decision profile: {LOCAL_TEXT_JUDGE_DECISION_VERSION}.",
+                    ),
+                    "local_llm_judge_uncertain_rate": metric_value(
+                        ratio(binary_sources["local_llm_judge_uncertain"], total),
+                        num_samples=total,
+                        note="Uncertain captions require human semantic audit.",
+                    ),
+                    "local_input_guard_rate": metric_value(
+                        ratio(binary_sources["local_input_guard"], total),
+                        num_samples=total,
+                        note="Instruction-like captions are withheld for human audit.",
+                    ),
+                }
+            )
         for key in (
             "bleu_1_approx",
             "bleu_2_approx",

@@ -34,6 +34,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device-map", default="auto")
     parser.add_argument("--torch-dtype", default="auto")
     parser.add_argument("--routing", choices=("all", "cascade"), default="cascade")
+    parser.add_argument(
+        "--only-unresolved",
+        action="store_true",
+        help=(
+            "Judge only rows marked binary_prediction_source=server_rule_unresolved by "
+            "the dependency-free server rule router."
+        ),
+    )
     parser.add_argument("--strict", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument(
         "--allow-download",
@@ -62,6 +70,7 @@ def main() -> int:
             backend,
             routing=args.routing,
             strict=args.strict,
+            only_unresolved=args.only_unresolved,
         )
     except (EvaluationError, OSError, ValueError) as exc:
         print(f"Local judge failed: {exc}", file=sys.stderr)

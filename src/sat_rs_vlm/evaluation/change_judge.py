@@ -27,6 +27,14 @@ from sat_rs_vlm.evaluation.records import EvaluationError, read_prediction_jsonl
 LOCAL_JUDGE_IMPLEMENTATION_VERSION = "levir-local-text-judge-v2.4-lora"
 LOCAL_JUDGE_PROMPT_VERSION = "levir-caption-semantics-en-v3"
 LOCAL_JUDGE_DECISION_PROFILE = "local_text_judge_priority_v1.3"
+SERVER_RULE_ROUTER_VERSION = "levir-server-rule-router-v1.0"
+SERVER_RULE_UNRESOLVED_SOURCE = "server_rule_unresolved"
+_SERVER_RULE_SOURCE_MAP = {
+    "local_semantic_rule": "server_semantic_rule",
+    "local_semantic_positive_rule": "server_semantic_positive_rule",
+    "local_semantic_non_target_rule": "server_semantic_non_target_rule",
+    "local_input_guard": "server_input_guard",
+}
 
 LOCAL_JUDGE_SYSTEM_PROMPT = """You are a semantic classifier for LEVIR-CC change captions.
 
@@ -276,6 +284,36 @@ def conservative_rule_decision(caption: str) -> JudgeDecision | None:
     return None
 
 
+def server_rule_decision(caption: str) -> JudgeDecision:
+    """Run only dependency-free rules and mark all remaining captions unresolved.
+
+    This function is the server-safe boundary: it does not instantiate, import,
+    or require a language-model backend.  ``None`` never means no change; it
+    means that the final local language-model stage is still required.
+    """
+
+    decision = conservative_rule_decision(caption)
+    if decision is None:
+        return JudgeDecision(
+            value=None,
+            raw_output="U",
+            status="unresolved",
+            source=SERVER_RULE_UNRESOLVED_SOURCE,
+            confidence=None,
+            latency_ms=0.0,
+            reason="no_high_confidence_server_rule_match",
+        )
+    return JudgeDecision(
+        value=decision.value,
+        raw_output=decision.raw_output,
+        status=decision.status,
+        source=_SERVER_RULE_SOURCE_MAP[decision.source],
+        confidence=decision.confidence,
+        latency_ms=0.0,
+        reason=decision.reason,
+    )
+
+
 class HuggingFaceQwenJudge:
     """Local Qwen text judge loaded lazily from a local model directory."""
 
@@ -459,6 +497,122 @@ def _agreement_metrics(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def run_server_rule_router(
+    predictions_path: Path,
+    output_dir: Path,
+    *,
+    strict: bool = True,
+) -> dict[str, Path]:
+    """Apply dependency-free LEVIR rules without loading a language model.
+
+    Resolved ``0``/``1`` records are eligible only for a clearly labelled
+    partial-coverage diagnostic.  Unresolved records retain ``None`` and are
+    passed to the optional local language-model stage later.
+    """
+
+    predictions_path = predictions_path.resolve()
+    output_dir = output_dir.resolve()
+    if output_dir.exists() and any(output_dir.iterdir()):
+        raise EvaluationError(f"output directory must be empty or absent: {output_dir}")
+    records, input_errors = read_prediction_jsonl(predictions_path, strict=strict)
+    eligible = [record for record in records if _is_levir_change_row(record)]
+    decisions = {record.id: server_rule_decision(record.prediction) for record in eligible}
+
+    routed_rows: list[dict[str, Any]] = []
+    unresolved_rows: list[dict[str, Any]] = []
+    for record in records:
+        output = dict(record.raw)
+        decision = decisions.get(record.id)
+        if decision is None:
+            routed_rows.append(output)
+            continue
+        output.update(
+            {
+                "prediction_changeflag": decision.value,
+                "binary_prediction": str(decision.value) if decision.value in {0, 1} else "U",
+                "binary_prediction_parse_ok": decision.value in {0, 1},
+                "binary_prediction_source": decision.source,
+                "change_judge": {
+                    **asdict(decision),
+                    "model": None,
+                    "model_revision": None,
+                    "prompt_version": None,
+                    "implementation_version": SERVER_RULE_ROUTER_VERSION,
+                    "routing": "server_rule_only",
+                },
+            }
+        )
+        routed_rows.append(output)
+        if decision.value is None:
+            unresolved_rows.append(
+                {
+                    "id": record.id,
+                    "prediction": record.prediction,
+                    "binary_prediction_source": decision.source,
+                    "routing_reason": decision.reason,
+                }
+            )
+
+    source_distribution: Counter[str] = Counter()
+    for row in routed_rows:
+        judge_payload = row.get("change_judge")
+        if isinstance(judge_payload, dict) and (
+            judge_payload.get("implementation_version") == SERVER_RULE_ROUTER_VERSION
+        ):
+            source_distribution[str(row.get("binary_prediction_source"))] += 1
+    resolved = sum(decision.value in {0, 1} for decision in decisions.values())
+    outputs = {
+        "rule_routed_predictions": output_dir / "rule_routed_predictions.jsonl",
+        "rule_routing_summary": output_dir / "rule_routing_summary.json",
+        "rule_routing_manifest": output_dir / "rule_routing_manifest.json",
+        "local_judge_queue": output_dir / "local_judge_queue.jsonl",
+    }
+    summary = {
+        "schema_version": "1.0",
+        "implementation_version": SERVER_RULE_ROUTER_VERSION,
+        "decision_profile": "server_rule_only_v1",
+        "num_input_rows": len(records),
+        "num_eligible_rows": len(eligible),
+        "num_resolved_rows": resolved,
+        "num_unresolved_rows": len(eligible) - resolved,
+        "resolved_coverage": resolved / len(eligible) if eligible else None,
+        "source_distribution": dict(sorted(source_distribution.items())),
+        "input_errors": input_errors,
+        "note": (
+            "No local language model was loaded. Unresolved rows are excluded from any "
+            "partial binary diagnostic and must be completed locally before full scoring."
+        ),
+    }
+    manifest = {
+        "schema_version": "1.0",
+        "implementation_version": SERVER_RULE_ROUTER_VERSION,
+        "run_time_utc": datetime.now(timezone.utc).isoformat(),
+        "python_version": platform.python_version(),
+        "input_file": str(predictions_path),
+        "input_sha256": _sha256(predictions_path),
+        "input_num_rows": len(records),
+        "language_model_loaded": False,
+        "remote_write_performed": False,
+        "outputs": {name: path.name for name, path in outputs.items()},
+    }
+    output_dir.mkdir(parents=True, exist_ok=True)
+    with outputs["rule_routed_predictions"].open("w", encoding="utf-8", newline="\n") as file:
+        for row in routed_rows:
+            file.write(json.dumps(row, ensure_ascii=False) + "\n")
+    with outputs["local_judge_queue"].open("w", encoding="utf-8", newline="\n") as file:
+        for row in unresolved_rows:
+            file.write(json.dumps(row, ensure_ascii=False) + "\n")
+    outputs["rule_routing_summary"].write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    outputs["rule_routing_manifest"].write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    if _sha256(predictions_path) != manifest["input_sha256"]:
+        raise EvaluationError("input predictions changed while server rule router was running")
+    return outputs
+
+
 def run_local_change_judge(
     predictions_path: Path,
     output_dir: Path,
@@ -466,6 +620,7 @@ def run_local_change_judge(
     *,
     routing: str = "cascade",
     strict: bool = True,
+    only_unresolved: bool = False,
 ) -> dict[str, Path]:
     """Judge LEVIR captions and write a non-destructive, traceable result set."""
 
@@ -477,16 +632,25 @@ def run_local_change_judge(
         raise EvaluationError(f"output directory must be empty or absent: {output_dir}")
     records, input_errors = read_prediction_jsonl(predictions_path, strict=strict)
     eligible = [record for record in records if _is_levir_change_row(record)]
-    pending_records = []
-    rule_decisions: dict[str, JudgeDecision] = {}
-    for record in eligible:
-        rule = conservative_rule_decision(record.prediction)
-        if rule is not None and rule.source == "local_input_guard":
-            rule_decisions[record.id] = rule
-        elif routing == "cascade" and rule is not None:
-            rule_decisions[record.id] = rule
-        else:
-            pending_records.append(record)
+    if only_unresolved:
+        pending_records = [
+            record
+            for record in eligible
+            if record.raw.get("prediction_changeflag") is None
+            and record.raw.get("binary_prediction_source") == SERVER_RULE_UNRESOLVED_SOURCE
+        ]
+        rule_decisions: dict[str, JudgeDecision] = {}
+    else:
+        pending_records = []
+        rule_decisions = {}
+        for record in eligible:
+            rule = conservative_rule_decision(record.prediction)
+            if rule is not None and rule.source == "local_input_guard":
+                rule_decisions[record.id] = rule
+            elif routing == "cascade" and rule is not None:
+                rule_decisions[record.id] = rule
+            else:
+                pending_records.append(record)
     model_decisions = backend.judge([record.prediction for record in pending_records])
     if len(model_decisions) != len(pending_records):
         raise EvaluationError(
@@ -551,6 +715,11 @@ def run_local_change_judge(
                 }
             )
 
+    eligible_ids = {record.id for record in eligible}
+    resolved_eligible = sum(
+        row.get("id") in eligible_ids and row.get("prediction_changeflag") in {0, 1}
+        for row in judged_rows
+    )
     source_counts = Counter(
         str(row.get("binary_prediction_source"))
         for row in judged_rows
@@ -580,19 +749,16 @@ def run_local_change_judge(
         "adapter_path": adapter_path,
         "adapter_fingerprint": adapter_fingerprint,
         "routing": routing,
+        "only_unresolved": only_unresolved,
         "num_input_rows": len(records),
         "num_eligible_rows": len(eligible),
+        "num_local_input_rows": len(pending_records),
         "num_rule_rows": len(rule_decisions),
         "num_model_judge_rows": len(pending_records),
         "source_distribution": dict(sorted(source_counts.items())),
         "decision_distribution": dict(sorted(decision_counts.items())),
-        "coverage": (
-            sum(value in {0, 1} for value in (decisions[item.id].value for item in eligible))
-            / len(eligible)
-            if eligible
-            else None
-        ),
-        "uncertain_rate": len(audit_rows) / len(eligible) if eligible else None,
+        "coverage": resolved_eligible / len(eligible) if eligible else None,
+        "uncertain_rate": (len(eligible) - resolved_eligible) / len(eligible) if eligible else None,
         "judge_latency": _latency_summary(latencies),
         "image_label_agreement": _agreement_metrics(judged_rows),
         "semantic_validity_status": "requires_human_caption_audit",
@@ -619,6 +785,7 @@ def run_local_change_judge(
         "adapter_fingerprint": adapter_fingerprint,
         "prompt_version": LOCAL_JUDGE_PROMPT_VERSION,
         "routing": routing,
+        "only_unresolved": only_unresolved,
         "remote_write_performed": False,
         "outputs": {name: path.name for name, path in outputs.items()},
     }
