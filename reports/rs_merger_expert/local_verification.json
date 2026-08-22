@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0",
+  "runtime": {
+    "python": "3.11.9",
+    "torch": "2.6.0+cu126",
+    "transformers": "5.13.0",
+    "peft": "0.19.1",
+    "device": "NVIDIA GeForce RTX 4060 Laptop GPU"
+  },
+  "checks": {
+    "new_unit_tests": {
+      "passed": 19,
+      "skipped_by_default_gpu_marker": 1
+    },
+    "explicit_gpu_component_smoke": {
+      "passed": 1,
+      "steps": 2,
+      "loss": 0.5903159976005554,
+      "grad_norm": 1.1874496936798096,
+      "step_time_seconds": 0.24729075000504963,
+      "peak_allocated_vram_gb": 0.01702404022216797,
+      "scope": "toy component graph; not a 64-sample Qwen3-VL-4B smoke"
+    },
+    "existing_object_adapter_and_assistant_mask_regressions": {
+      "passed": 63
+    },
+    "ruff": "passed",
+    "compileall": "passed",
+    "git_diff_check": "passed"
+  },
+  "data_audit": "data/processed/rs_count_merger_v1/audit.json",
+  "architecture_audit": "blocked_missing_local_model_assets",
+  "formal_training_authorized": false
+}

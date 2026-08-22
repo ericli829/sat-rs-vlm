@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0",
+  "status": "blocked_missing_local_model_assets",
+  "runtime": {
+    "python": "3.11.9",
+    "torch": "2.6.0+cu126",
+    "transformers": "5.13.0",
+    "peft": "0.19.1",
+    "cuda_available": true,
+    "device": "NVIDIA GeForce RTX 4060 Laptop GPU"
+  },
+  "vision_block_count": null,
+  "vision_hidden_size": null,
+  "llm_hidden_size": null,
+  "spatial_merge_size": null,
+  "deepstack_visual_indexes": null,
+  "mergers": [],
+  "deepstack_injection_order": [],
+  "language_layer_attention_paths": {},
+  "source_only_evidence_not_runtime_audit": {
+    "installed_transformers_merger_class": "transformers.models.qwen3_vl.modeling_qwen3_vl.Qwen3VLVisionPatchMerger",
+    "main_merger_norm_policy": "pre-shuffle LayerNorm(1024) under expected 4B config",
+    "deepstack_merger_norm_policy": "post-shuffle LayerNorm(4096) under expected 4B config",
+    "deepstack_injection_policy": "decoder layer executes before _deepstack_process",
+    "official_4b_config": {
+      "vision_blocks": 24,
+      "vision_hidden_size": 1024,
+      "llm_hidden_size": 2560,
+      "spatial_merge_size": 2,
+      "deepstack_visual_indexes": [5, 11, 17],
+      "text_num_attention_heads": 32,
+      "text_num_key_value_heads": 8,
+      "text_head_dim": 128
+    },
+    "derived_trainable_parameter_counts": {
+      "c1_clone": 109105152,
+      "c2_rs_detail": 24160256,
+      "c3_rs_detail_lora": 25470976,
+      "c3_interface_lora_only": 1310720
+    }
+  },
+  "blockers": [
+    "No local Qwen3-VL-4B model directory was configured or found.",
+    "No formal R1 adapter/strategy_manifest.json was configured or found.",
+    "No formal R1 visual sidecar was configured or found.",
+    "Run scripts/training/audit_rs_merger_architecture.py on the exact AutoDL assets before any expert training."
+  ]
+}
