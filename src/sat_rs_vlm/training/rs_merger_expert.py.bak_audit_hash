@@ -514,24 +514,10 @@ def validate_expert_checkpoint_compatibility(
         "source_r1_checkpoint": source_r1_checkpoint,
         "r1_integration": r1_integration,
     }
-    # The architecture-audit JSON is a provenance/report artifact, not a
-    # canonical architecture fingerprint. Newer audit schemas may add runtime,
-    # data, loss, or diagnostic metadata without changing the actual model
-    # architecture.
-    #
-    # Structural compatibility is validated independently through the runtime
-    # architecture fields, expert structure, R1 manifest, visual sidecar, and
-    # R1 integration. Therefore byte-level audit JSON SHA drift is recorded for
-    # provenance, but must not by itself reject a compatible checkpoint.
-    checkpoint_audit_sha256 = manifest.get("architecture_audit_sha256")
-    architecture_audit_hash_match = (
-        checkpoint_audit_sha256 == architecture_audit_sha256
-    )
-
     mismatches = [
         f"{key}: checkpoint={manifest.get(key)!r}, runtime={value!r}"
         for key, value in expected.items()
-        if key != "architecture_audit_sha256" and manifest.get(key) != value
+        if manifest.get(key) != value
     ]
     legacy_inferred: list[str] = []
     expected_merger_parameter_count = len(expected["selected_vit_blocks"]) * (
@@ -585,12 +571,6 @@ def validate_expert_checkpoint_compatibility(
         "validated_detail_hidden_size": int(expected_detail_hidden_size),
         "validated_local_depth": int(expected_local_depth),
         "legacy_inferred_manifest_fields": legacy_inferred,
-        "architecture_audit_hash_match": architecture_audit_hash_match,
-        "checkpoint_architecture_audit_sha256": checkpoint_audit_sha256,
-        "runtime_architecture_audit_sha256": architecture_audit_sha256,
-        "architecture_audit_hash_policy": (
-            "provenance_drift_only; structural compatibility validated independently"
-        ),
     }
 
 
