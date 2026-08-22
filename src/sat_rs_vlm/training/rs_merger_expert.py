@@ -73,6 +73,21 @@ def resolve_effective_epoch_plan(
     )
 
 
+def _accumulation_window_size(
+    batch_index: int,
+    total_batches: int,
+    accumulation_steps: int,
+) -> int:
+    """Return the real size of the current window, including an epoch tail."""
+
+    if accumulation_steps < 1:
+        raise ValueError("gradient_accumulation_steps must be positive")
+    if batch_index < 1 or batch_index > total_batches:
+        raise ValueError(f"batch_index must be within [1, {total_batches}], got {batch_index}")
+    window_start = ((batch_index - 1) // accumulation_steps) * accumulation_steps
+    return min(accumulation_steps, total_batches - window_start)
+
+
 def _move_batch(batch: Mapping[str, Any], device: torch.device) -> dict[str, Any]:
     return {
         key: value.to(device) if isinstance(value, Tensor) else value
@@ -488,9 +503,9 @@ def run_training(
         enable = getattr(model, "gradient_checkpointing_enable", None)
         if callable(enable):
             enable()
-    model.train()
-    # Frozen operations remain differentiable so the LM loss reaches visual experts.
-    # Their parameters stay immutable even though the composite model is in train mode.
+    controller.set_training_mode(True)
+    # Eval mode does not disable autograd: frozen LLM operations remain in the graph, so
+    # assistant-only LM loss still reaches the visual expert without enabling foundation dropout.
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
     log_path = output / "train_log.jsonl"
@@ -499,14 +514,19 @@ def run_training(
         torch.cuda.reset_peak_memory_stats(device)
     start = time.perf_counter()
     optimizer_step = 0
-    micro_step = 0
     samples = 0
     last_loss = None
     initial_expert = {
         name: value.detach().cpu().clone() for name, value in controller.expert_state_dict().items()
     }
     while optimizer_step < plan.resolved_max_steps:
-        for batch in loader:
+        total_batches = len(loader)
+        for batch_index, batch in enumerate(loader, 1):
+            current_window_size = _accumulation_window_size(
+                batch_index,
+                total_batches,
+                accumulation,
+            )
             task_types = batch.pop("task_types")
             if set(task_types) != {"counting"}:
                 raise AssertionError(f"Training router received invalid tasks: {task_types}")
@@ -534,9 +554,9 @@ def run_training(
                     "plan": asdict(plan),
                     "trainable_audit": audit,
                 }
-            (loss / accumulation).backward()
-            micro_step += 1
-            if micro_step % accumulation != 0:
+            (loss / current_window_size).backward()
+            should_step = batch_index % accumulation == 0 or batch_index == total_batches
+            if not should_step:
                 continue
             all_trainable = merger_parameters + lora_parameters
             grad_norm = float(
@@ -568,6 +588,7 @@ def run_training(
                 ),
                 "samples_per_second": samples / max(elapsed, 1e-9),
                 "optimizer_step": optimizer_step,
+                "accumulation_window_size": current_window_size,
                 "elapsed_seconds": elapsed,
             }
             with log_path.open("a", encoding="utf-8") as handle:

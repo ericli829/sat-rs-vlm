@@ -214,11 +214,22 @@ class RoutedMerger(nn.Module):
         self.clone = copy.deepcopy(base) if variant == "clone" else None
         self.detail_branch = detail_branch
         self._grid_thw: Tensor | Sequence[Sequence[int]] | None = None
+        self._raw_features: Tensor | None = None
         if variant == "rs_detail" and detail_branch is None:
             raise ValueError("rs_detail merger requires a detail branch")
 
     def set_grid(self, grid_thw: Tensor | Sequence[Sequence[int]]) -> None:
         self._grid_thw = grid_thw
+
+    def clear_raw_features(self) -> None:
+        self._raw_features = None
+
+    def set_raw_features(self, raw_features: Tensor) -> None:
+        if raw_features.ndim != 2:
+            raise RuntimeError(
+                f"ViT tap must be a raw [tokens, hidden] tensor, got {tuple(raw_features.shape)}"
+            )
+        self._raw_features = raw_features
 
     def forward(self, hidden_states: Tensor) -> Tensor:
         if self.route_state.active_expert == BASE_EXPERT or self.variant == "base":
@@ -231,8 +242,18 @@ class RoutedMerger(nn.Module):
                 "RS detail route requires image_grid_thw captured by the visual wrapper"
             )
         assert self.detail_branch is not None
+        raw_features = self._raw_features
+        self._raw_features = None
+        if raw_features is None:
+            raise RuntimeError("RS detail route did not capture its raw ViT block output")
+        if raw_features.shape[-1] != self.detail_branch.visual_hidden_size:
+            raise RuntimeError(
+                "RS detail route received a non-raw ViT feature width: "
+                f"expected={self.detail_branch.visual_hidden_size}, "
+                f"actual={raw_features.shape[-1]}"
+            )
         base_output = self.base(hidden_states)
-        delta = self.detail_branch(hidden_states, self._grid_thw)
+        delta = self.detail_branch(raw_features, self._grid_thw)
         if delta.shape != base_output.shape:
             delta_shape = tuple(delta.shape)
             base_shape = tuple(base_output.shape)
@@ -371,6 +392,29 @@ class RSMergerExpertController:
         self.visual.deepstack_merger_list = nn.ModuleList(self.routed_mergers[:3])
         self.visual.merger = self.routed_mergers[3]
         self._pre_hook = self.visual.register_forward_pre_hook(self._capture_grid, with_kwargs=True)
+        self._tap_hooks: list[Any] = []
+        if variant == "rs_detail":
+            blocks = list(self.visual.blocks)
+            deepstack_indexes = list(
+                getattr(
+                    self.visual,
+                    "deepstack_visual_indexes",
+                    getattr(config, "deepstack_visual_indexes", []),
+                )
+            )
+            tap_indexes = [*deepstack_indexes, len(blocks) - 1]
+            if len(deepstack_indexes) != 3 or len(set(tap_indexes)) != 4:
+                raise ValueError(
+                    "RS detail route requires three distinct DeepStack taps plus the final block"
+                )
+            if min(tap_indexes) < 0 or max(tap_indexes) >= len(blocks):
+                raise ValueError(f"ViT tap indexes are out of range: {tap_indexes}")
+            for merger_index, block_index in enumerate(tap_indexes):
+                self._tap_hooks.append(
+                    blocks[block_index].register_forward_hook(
+                        self._capture_raw_tap(merger_index, block_index)
+                    )
+                )
         self.interface_paths: list[str] = []
         self.interface_modules: list[RoutedInterfaceLoRALinear] = []
         self._interface_bindings: list[tuple[nn.Module, str, nn.Module]] = []
@@ -387,6 +431,18 @@ class RSMergerExpertController:
             raise RuntimeError("Qwen visual forward did not provide grid_thw")
         for merger in self.routed_mergers:
             merger.set_grid(grid)
+            merger.clear_raw_features()
+
+    def _capture_raw_tap(self, merger_index: int, block_index: int):
+        def hook(_module: nn.Module, _args: tuple[Any, ...], output: Any) -> None:
+            raw_features = output[0] if isinstance(output, (tuple, list)) else output
+            if not isinstance(raw_features, Tensor):
+                raise RuntimeError(
+                    f"ViT block {block_index} did not return a tensor as its first output"
+                )
+            self.routed_mergers[merger_index].set_raw_features(raw_features)
+
+        return hook
 
     def _attach_interface_lora(self, rank: int, alpha: float, dropout: float) -> None:
         layer_root, layers = _find_language_layers(self.model)
@@ -481,6 +537,24 @@ class RSMergerExpertController:
             "unexpected_trainable": unexpected,
         }
 
+    def set_training_mode(self, training: bool = True) -> None:
+        """Keep the frozen foundation in eval while enabling only expert stochastic layers."""
+
+        self.model.eval()
+        if not training:
+            return
+        for merger in self.routed_mergers:
+            expert = merger.clone if self.variant == "clone" else merger.detail_branch
+            if expert is not None:
+                expert.train(True)
+        for module in self.interface_modules:
+            # Calling module.train() would recursively re-enable its frozen base projection.
+            module.training = True
+            module.base.eval()
+            module.dropout.train(True)
+            module.lora_A.train(True)
+            module.lora_B.train(True)
+
     def expert_state_dict(self) -> dict[str, Tensor]:
         state: dict[str, Tensor] = {}
         for index, merger in enumerate(self.routed_mergers):
@@ -524,6 +598,9 @@ class RSMergerExpertController:
         if self._pre_hook is not None:
             self._pre_hook.remove()
             self._pre_hook = None
+        for handle in self._tap_hooks:
+            handle.remove()
+        self._tap_hooks.clear()
         if restore_modules:
             self.visual.merger = self._base_main_merger
             self.visual.deepstack_merger_list = nn.ModuleList(self._base_deepstack_mergers)
@@ -531,18 +608,86 @@ class RSMergerExpertController:
                 setattr(parent, target, base)
 
 
-def merger_description(module: nn.Module, path: str) -> dict[str, Any]:
+def merger_description(
+    module: nn.Module,
+    path: str,
+    *,
+    visual_hidden_size: int,
+    llm_hidden_size: int,
+    spatial_merge_size: int,
+    expected_postshuffle_norm: bool,
+) -> dict[str, Any]:
+    if isinstance(module, RoutedMerger):
+        module = module.base
     norm = getattr(module, "norm", None)
     fc1 = getattr(module, "linear_fc1", getattr(module, "fc1", None))
     fc2 = getattr(module, "linear_fc2", getattr(module, "fc2", None))
     if norm is None or fc1 is None or fc2 is None:
         raise ValueError(f"Merger {path} does not expose norm/linear_fc1/linear_fc2")
+    packed_size = visual_hidden_size * spatial_merge_size**2
+    expected_norm_shape = [packed_size if expected_postshuffle_norm else visual_hidden_size]
+    actual_norm_shape = list(getattr(norm, "normalized_shape", ()))
+    actual_postshuffle_norm = bool(getattr(module, "use_postshuffle_norm", False))
+    expected_fc1_shape = [packed_size, packed_size]
+    expected_fc2_shape = [llm_hidden_size, packed_size]
+    mismatches = []
+    if actual_postshuffle_norm != expected_postshuffle_norm:
+        mismatches.append(
+            "use_postshuffle_norm: "
+            f"expected={expected_postshuffle_norm}, actual={actual_postshuffle_norm}"
+        )
+    if actual_norm_shape != expected_norm_shape:
+        mismatches.append(f"norm_shape: expected={expected_norm_shape}, actual={actual_norm_shape}")
+    if int(getattr(module, "hidden_size", -1)) != packed_size:
+        mismatches.append(
+            f"hidden_size: expected={packed_size}, actual={getattr(module, 'hidden_size', None)}"
+        )
+    if list(fc1.weight.shape) != expected_fc1_shape:
+        mismatches.append(
+            f"fc1_shape: expected={expected_fc1_shape}, actual={list(fc1.weight.shape)}"
+        )
+    if list(fc2.weight.shape) != expected_fc2_shape:
+        mismatches.append(
+            f"fc2_shape: expected={expected_fc2_shape}, actual={list(fc2.weight.shape)}"
+        )
+    if mismatches:
+        raise ValueError(f"Merger {path} architecture mismatch: " + "; ".join(mismatches))
+
+    reference = fc1.weight
+    raw_probe = torch.zeros(
+        spatial_merge_size**2,
+        visual_hidden_size,
+        device=reference.device,
+        dtype=reference.dtype,
+    )
+    was_training = module.training
+    module.eval()
+    try:
+        with torch.no_grad():
+            probe_output = module(raw_probe)
+    except Exception as exc:
+        raise ValueError(
+            f"Merger {path} rejected raw [{spatial_merge_size**2}, {visual_hidden_size}] input"
+        ) from exc
+    finally:
+        module.train(was_training)
+    expected_probe_shape = (1, llm_hidden_size)
+    if tuple(probe_output.shape) != expected_probe_shape:
+        raise ValueError(
+            f"Merger {path} raw-input probe output mismatch: "
+            f"expected={expected_probe_shape}, actual={tuple(probe_output.shape)}"
+        )
     return {
         "path": path,
         "class": f"{module.__class__.__module__}.{module.__class__.__qualname__}",
-        "norm_shape": list(getattr(norm, "normalized_shape", ())),
+        "forward_input_shape_probe": list(raw_probe.shape),
+        "forward_input_feature_size": visual_hidden_size,
+        "use_postshuffle_norm": actual_postshuffle_norm,
+        "norm_shape": actual_norm_shape,
         "fc1_shape": list(fc1.weight.shape),
         "fc2_shape": list(fc2.weight.shape),
+        "forward_output_shape_probe": list(probe_output.shape),
+        "raw_input_contract_passed": True,
         "parameter_count": sum(int(parameter.numel()) for parameter in module.parameters()),
     }
 
@@ -556,6 +701,9 @@ def source_architecture_audit(model: nn.Module) -> dict[str, Any]:
     if visual_path is None:
         raise ValueError("Resolved visual module is absent from model.named_modules()")
     config = getattr(visual, "config", None)
+    visual_hidden_size = int(config.hidden_size)
+    llm_hidden_size = int(config.out_hidden_size)
+    spatial_merge_size = int(visual.spatial_merge_size)
     deepstack_indexes = list(
         getattr(visual, "deepstack_visual_indexes", getattr(config, "deepstack_visual_indexes", []))
     )
@@ -572,9 +720,26 @@ def source_architecture_audit(model: nn.Module) -> dict[str, Any]:
     injection_position = source.find("_deepstack_process(")
     if decoder_position < 0 or injection_position < 0 or decoder_position >= injection_position:
         raise ValueError("Could not prove that DeepStack injection occurs after each decoder layer")
-    mergers = [merger_description(visual.merger, f"{visual_path}.merger")]
+    merger_kwargs = {
+        "visual_hidden_size": visual_hidden_size,
+        "llm_hidden_size": llm_hidden_size,
+        "spatial_merge_size": spatial_merge_size,
+    }
+    mergers = [
+        merger_description(
+            visual.merger,
+            f"{visual_path}.merger",
+            expected_postshuffle_norm=False,
+            **merger_kwargs,
+        )
+    ]
     mergers.extend(
-        merger_description(module, f"{visual_path}.deepstack_merger_list.{index}")
+        merger_description(
+            module,
+            f"{visual_path}.deepstack_merger_list.{index}",
+            expected_postshuffle_norm=True,
+            **merger_kwargs,
+        )
         for index, module in enumerate(deepstack)
     )
     attention_paths: dict[str, dict[str, str]] = {}
@@ -609,9 +774,9 @@ def source_architecture_audit(model: nn.Module) -> dict[str, Any]:
     return {
         "schema_version": "1.0",
         "vision_block_count": len(list(visual.blocks)),
-        "vision_hidden_size": int(config.hidden_size),
-        "llm_hidden_size": int(config.out_hidden_size),
-        "spatial_merge_size": int(visual.spatial_merge_size),
+        "vision_hidden_size": visual_hidden_size,
+        "llm_hidden_size": llm_hidden_size,
+        "spatial_merge_size": spatial_merge_size,
         "deepstack_visual_indexes": deepstack_indexes,
         "visual_module_path": visual_path,
         "visual_module_class": f"{visual.__class__.__module__}.{visual.__class__.__qualname__}",

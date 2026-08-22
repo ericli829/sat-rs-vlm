@@ -13,21 +13,34 @@ from sat_rs_vlm.models.rs_merger_expert import (  # noqa: E402
     COUNTING_EXPERT,
     RSDetailResidualBranch,
     RSMergerExpertController,
+    merger_description,
     repack_qwen_merge_order,
     unpack_to_spatial_grid,
 )
 
 
 class ToyMerger(nn.Module):
-    def __init__(self, hidden: int = 8, output: int = 12, merge: int = 2) -> None:
+    def __init__(
+        self,
+        hidden: int = 8,
+        output: int = 12,
+        merge: int = 2,
+        *,
+        use_postshuffle_norm: bool = False,
+    ) -> None:
         super().__init__()
         self.hidden_size = hidden * merge**2
-        self.norm = nn.LayerNorm(hidden)
+        self.use_postshuffle_norm = use_postshuffle_norm
+        self.norm = nn.LayerNorm(self.hidden_size if use_postshuffle_norm else hidden)
         self.linear_fc1 = nn.Linear(self.hidden_size, self.hidden_size)
         self.linear_fc2 = nn.Linear(self.hidden_size, output)
+        self.dropout = nn.Dropout(0.2)
 
     def forward(self, values):
-        values = self.norm(values).reshape(-1, self.hidden_size)
+        if self.use_postshuffle_norm:
+            values = self.norm(values.reshape(-1, self.hidden_size))
+        else:
+            values = self.norm(values).reshape(-1, self.hidden_size)
         return self.linear_fc2(torch.nn.functional.gelu(self.linear_fc1(values)))
 
 
@@ -50,6 +63,7 @@ class ToyLanguage(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.layers = nn.ModuleList([ToyLayer() for _ in range(6)])
+        self.dropout = nn.Dropout(0.2)
 
 
 class ToyVisionConfig:
@@ -66,11 +80,19 @@ class ToyVisual(nn.Module):
         self.spatial_merge_size = 2
         self.patch_embed = nn.Linear(8, 8)
         self.blocks = nn.ModuleList([nn.Identity() for _ in range(4)])
-        self.deepstack_merger_list = nn.ModuleList([ToyMerger() for _ in range(3)])
+        self.deepstack_visual_indexes = [0, 1, 2]
+        self.deepstack_merger_list = nn.ModuleList(
+            [ToyMerger(use_postshuffle_norm=True) for _ in range(3)]
+        )
         self.merger = ToyMerger()
 
     def forward(self, hidden_states, grid_thw=None):
-        deep = [merger(hidden_states) for merger in self.deepstack_merger_list]
+        deep = []
+        for block_index, block in enumerate(self.blocks):
+            hidden_states = block(hidden_states)
+            if block_index in self.deepstack_visual_indexes:
+                merger_index = self.deepstack_visual_indexes.index(block_index)
+                deep.append(self.deepstack_merger_list[merger_index](hidden_states))
         return self.merger(hidden_states), deep
 
 
@@ -134,6 +156,89 @@ def test_c2_step0_all_four_taps_equal_base():
     assert all(torch.equal(left, right) for left, right in zip(base_deep, expert_deep, strict=True))
 
 
+class PackedToyMerger(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.hidden_size = 32
+        self.use_postshuffle_norm = True
+        self.norm = nn.LayerNorm(32)
+        self.linear_fc1 = nn.Linear(32, 32)
+        self.linear_fc2 = nn.Linear(32, 12)
+
+    def forward(self, values):
+        assert values.shape[-1] == 32
+        return self.linear_fc2(torch.nn.functional.gelu(self.linear_fc1(self.norm(values))))
+
+
+class OffsetBlock(nn.Module):
+    def forward(self, values):
+        return values + 1
+
+
+class PackedToyVisual(ToyVisual):
+    def __init__(self) -> None:
+        super().__init__()
+        self.blocks = nn.ModuleList([OffsetBlock() for _ in range(4)])
+        self.deepstack_merger_list = nn.ModuleList([PackedToyMerger() for _ in range(3)])
+        self.merger = PackedToyMerger()
+
+    def forward(self, hidden_states, grid_thw=None):
+        deep = []
+        for block_index, block in enumerate(self.blocks):
+            hidden_states = block(hidden_states)
+            if block_index in self.deepstack_visual_indexes:
+                merger_index = self.deepstack_visual_indexes.index(block_index)
+                deep.append(self.deepstack_merger_list[merger_index](hidden_states.reshape(-1, 32)))
+        return self.merger(hidden_states.reshape(-1, 32)), deep
+
+
+def test_c2_detail_uses_raw_block_taps_even_when_merger_input_is_packed():
+    model = ToyModel()
+    model.visual = PackedToyVisual()
+    controller = RSMergerExpertController(model, variant="rs_detail", detail_hidden_size=4)
+    captured = []
+    handles = []
+    for merger in controller.routed_mergers:
+        handles.append(
+            merger.detail_branch.register_forward_pre_hook(
+                lambda _module, args: captured.append(args[0].detach().clone())
+            )
+        )
+    try:
+        controller.set_active_expert(COUNTING_EXPERT)
+        final, deep = model.visual(torch.zeros(24, 8), grid_thw=torch.tensor([[1, 4, 6]]))
+    finally:
+        for handle in handles:
+            handle.remove()
+    assert final.shape == (6, 12)
+    assert all(value.shape == (6, 12) for value in deep)
+    assert [tuple(value.shape) for value in captured] == [(24, 8)] * 4
+    assert [float(value[0, 0]) for value in captured] == [1.0, 2.0, 3.0, 4.0]
+
+
+def test_merger_audit_checks_raw_input_and_norm_contract():
+    report = merger_description(
+        ToyMerger(use_postshuffle_norm=True),
+        "deepstack.0",
+        visual_hidden_size=8,
+        llm_hidden_size=12,
+        spatial_merge_size=2,
+        expected_postshuffle_norm=True,
+    )
+    assert report["forward_input_shape_probe"] == [4, 8]
+    assert report["norm_shape"] == [32]
+    assert report["raw_input_contract_passed"] is True
+    with pytest.raises(ValueError, match="norm_shape"):
+        merger_description(
+            ToyMerger(),
+            "deepstack.bad",
+            visual_hidden_size=8,
+            llm_hidden_size=12,
+            spatial_merge_size=2,
+            expected_postshuffle_norm=True,
+        )
+
+
 @pytest.mark.parametrize(
     ("variant", "interface", "expected_prefixes"),
     [
@@ -189,6 +294,48 @@ def test_c3_zero_lora_delta_and_layer_four_is_frozen():
     assert not any(
         parameter.requires_grad for parameter in model.language_model.layers[4].parameters()
     )
+
+
+def test_training_mode_keeps_foundation_eval_and_enables_expert_dropout():
+    model = ToyModel()
+    controller = RSMergerExpertController(
+        model,
+        variant="rs_detail",
+        interface_lora_enabled=True,
+        detail_hidden_size=4,
+    )
+    controller.freeze_base_and_enable_expert()
+    controller.set_training_mode(True)
+    assert model.training is False
+    assert model.visual.training is False
+    assert model.language_model.training is False
+    assert model.language_model.dropout.training is False
+    assert all(merger.base.training is False for merger in controller.routed_mergers)
+    assert all(merger.base.dropout.training is False for merger in controller.routed_mergers)
+    assert all(merger.detail_branch.training is True for merger in controller.routed_mergers)
+    assert all(module.training is True for module in controller.interface_modules)
+    assert all(module.dropout.training is True for module in controller.interface_modules)
+    assert all(module.base.training is False for module in controller.interface_modules)
+
+    clone_model = ToyModel()
+    clone_controller = RSMergerExpertController(clone_model, variant="clone")
+    clone_controller.freeze_base_and_enable_expert()
+    clone_controller.set_training_mode(True)
+    assert all(merger.base.dropout.training is False for merger in clone_controller.routed_mergers)
+    assert all(merger.clone.dropout.training is True for merger in clone_controller.routed_mergers)
+
+
+def test_frozen_eval_language_keeps_graph_to_detail_branch():
+    model = ToyModel()
+    controller = RSMergerExpertController(model, variant="rs_detail", detail_hidden_size=4)
+    controller.freeze_base_and_enable_expert()
+    controller.set_training_mode(True)
+    controller.set_active_expert(COUNTING_EXPERT)
+    final, _ = model.visual(torch.randn(24, 8), grid_thw=torch.tensor([[1, 4, 6]]))
+    frozen_projection = model.language_model.layers[4].self_attn.q_proj
+    frozen_projection(final).square().mean().backward()
+    assert frozen_projection.weight.grad is None
+    assert controller.routed_mergers[-1].detail_branch.output.weight.grad is not None
 
 
 def test_controller_close_restores_original_modules():

@@ -40,11 +40,20 @@ consumes it first. Inside the language loop, a decoder layer runs before `_deeps
 
 The formal 4B contract expected by this experiment is 24 vision blocks, vision hidden size 1024,
 LLM hidden size 2560, merge size 2, and taps `[5, 11, 17]`. Any runtime difference blocks training
-and is written to `reports/rs_merger_expert/source_architecture_audit.*`.
+and is written to `reports/rs_merger_expert/source_architecture_audit.*`. The audit also executes a
+raw `[4,1024]` input probe through every base merger and requires main-merger norm shape `[1024]`,
+DeepStack norm shape `[4096]`, packed hidden/FC input width 4096, and output width 2560. A merger
+that only accepts an already packed input, or exposes inconsistent norm/linear shapes, fails closed.
 
 ## C2 architecture and Qwen ordering
 
 Each tap owns its complete branch; no weights are shared.
+
+The residual inputs are captured directly from ViT block outputs, before calling any merger:
+F5/F11/F17 feed residual branches 0/1/2 and F23 feeds the final residual branch. The merger wrapper
+input is used only by the frozen base merger. This separation is intentional: even if a runtime
+passes a 2x2-packed 4096-d tensor to a DeepStack merger wrapper, the detail branch still receives
+the corresponding raw 1024-d block output.
 
 ```text
 raw ViT [K,1024]
@@ -64,6 +73,20 @@ The Qwen processor orders patches as
 `T,H_block,W_block,H_inner,W_inner`; a plain H-major reshape is wrong. The implementation exposes
 `unpack_to_spatial_grid()` and `repack_qwen_merge_order()` and tests position-coded round trips and
 token counts across dynamic/multi-image grids.
+
+## Frozen foundation mode and accumulation
+
+Training keeps the frozen ViT, frozen language model, and frozen base mergers in evaluation mode.
+Only cloned/detail expert modules and Count Interface LoRA stochastic layers enter training mode,
+so foundation dropout stays disabled while Count LoRA dropout remains active. Evaluation mode does
+not disable PyTorch autograd; no `no_grad` boundary is placed around the frozen language model, and
+the assistant-only LM loss therefore still backpropagates through it into the merger expert.
+
+Gradient accumulation is bounded by each data-loader epoch. A full window divides each microbatch
+loss by the configured accumulation count; a short epoch-tail window divides by its actual size and
+always performs an optimizer step. Consequently a one-effective-epoch plan covers every sample and
+uses `ceil(number_of_microbatches / accumulation_steps)` optimizer steps, including non-divisible
+tails.
 
 ## C3 interface LoRA
 

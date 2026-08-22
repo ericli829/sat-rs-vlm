@@ -77,6 +77,7 @@ def main() -> int:
     if variant is None:
         raise ValueError(f"Unsupported composite variant: {raw_manifest.get('variant')!r}")
     interface = int(raw_manifest.get("interface_lora_parameter_count", 0)) > 0
+    architecture = source_architecture_audit(model)
     controller = RSMergerExpertController(
         model,
         variant=variant,
@@ -92,7 +93,6 @@ def main() -> int:
         source_r1_manifest_sha256=file_sha256(Path(args.r1_checkpoint) / "strategy_manifest.json"),
         source_visual_sidecar_sha256=file_sha256(args.visual_sidecar),
     )
-    architecture = source_architecture_audit(model)
     expected = {
         "spatial_merge_size": architecture["spatial_merge_size"],
         "visual_hidden_size": architecture["vision_hidden_size"],
