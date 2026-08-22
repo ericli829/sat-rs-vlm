@@ -18,7 +18,7 @@ def parse_args() -> argparse.Namespace:
         action="append",
         dest="protected_tiers",
         default=None,
-        help="Repeat for E1/E2/E3; defaults to the repository frozen tiers.",
+        help="Repeat for E1/E2/E3; defaults to the frozen unified-v2 tiers.",
     )
     return parser.parse_args()
 
@@ -26,9 +26,9 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     tiers = args.protected_tiers or [
-        "data/evaluation/tiers/e1_quick.jsonl",
-        "data/evaluation/tiers/e2_standard.jsonl",
-        "data/evaluation/tiers/e3_full.jsonl",
+        "data/evaluation/tiers_v2/e1_quick.jsonl",
+        "data/evaluation/tiers_v2/e2_standard.jsonl",
+        "data/evaluation/tiers_v2/e3_full.jsonl",
     ]
     result = build_counting_expert_data(
         args.source_train,

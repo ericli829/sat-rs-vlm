@@ -8,14 +8,66 @@ import pytest
 torch = pytest.importorskip("torch")
 nn = torch.nn
 
+from sat_rs_vlm.models.reliability.checksum import file_sha256  # noqa: E402
 from sat_rs_vlm.models.rs_merger_expert import (  # noqa: E402
     BASE_EXPERT,
     COUNTING_EXPERT,
+    ExpertRouteState,
+    RoutedInterfaceLoRALinear,
     RSDetailResidualBranch,
     RSMergerExpertController,
     merger_description,
     repack_qwen_merge_order,
+    rs_detail_parameter_count,
     unpack_to_spatial_grid,
+)
+
+
+class FakeNF4Linear(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.in_features = 12
+        self.out_features = 12
+        self.compute_dtype = torch.bfloat16
+        self.weight = nn.Parameter(
+            torch.zeros((72, 1), dtype=torch.uint8), requires_grad=False
+        )
+
+    def forward(self, values):
+        return values
+
+
+class FakePeftNF4Linear(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.in_features = 12
+        self.out_features = 12
+        self.compute_dtype = torch.uint8
+        self.base_layer = FakeNF4Linear()
+
+    def get_base_layer(self):
+        return self.base_layer
+
+    def forward(self, values):
+        return self.base_layer(values)
+
+
+def test_interface_lora_uses_nf4_compute_dtype_not_uint8_storage_dtype() -> None:
+    base = FakeNF4Linear()
+    wrapper = RoutedInterfaceLoRALinear(base, ExpertRouteState())
+    assert wrapper.lora_A.weight.dtype == torch.bfloat16
+    assert wrapper.lora_B.weight.dtype == torch.bfloat16
+    assert wrapper.base.weight.dtype == torch.uint8
+    assert wrapper.base.weight.requires_grad is False
+
+    peft_base = FakePeftNF4Linear()
+    peft_wrapper = RoutedInterfaceLoRALinear(peft_base, ExpertRouteState())
+    assert peft_wrapper.lora_A.weight.dtype == torch.bfloat16
+    assert peft_wrapper.lora_B.weight.dtype == torch.bfloat16
+from sat_rs_vlm.training.rs_merger_expert import (  # noqa: E402
+    inspect_expert_checkpoint,
+    load_expert_checkpoint,
+    validate_expert_checkpoint_compatibility,
 )
 
 
@@ -154,6 +206,56 @@ def test_c2_step0_all_four_taps_equal_base():
     expert_final, expert_deep = model.visual(values, grid_thw=grid)
     assert torch.equal(base_final, expert_final)
     assert all(torch.equal(left, right) for left, right in zip(base_deep, expert_deep, strict=True))
+
+
+def test_c4_step0_r1_parity_and_parameter_formula():
+    torch.manual_seed(12)
+    model = ToyModel()
+    controller = RSMergerExpertController(model, variant="rs_detail", detail_hidden_size=1024)
+    values = torch.randn(24, 8)
+    grid = torch.tensor([[1, 4, 6]])
+    controller.set_active_expert(BASE_EXPERT)
+    base_final, base_deep = model.visual(values, grid_thw=grid)
+    controller.set_active_expert(COUNTING_EXPERT)
+    expert_final, expert_deep = model.visual(values, grid_thw=grid)
+    assert torch.equal(base_final, expert_final)
+    assert all(torch.equal(left, right) for left, right in zip(base_deep, expert_deep, strict=True))
+    audit = controller.freeze_base_and_enable_expert()
+    expected = 4 * rs_detail_parameter_count(8, 12, 1024, spatial_merge_size=2)
+    assert audit["expert_parameter_count"] == expected
+    assert audit["expected_expert_parameter_count"] == expected
+
+
+def test_depth_two_adds_one_residual_local_block_without_changing_d1_keys():
+    d1 = RSDetailResidualBranch(8, 12, detail_hidden_size=4, local_depth=1)
+    d2 = RSDetailResidualBranch(8, 12, detail_hidden_size=4, local_depth=2)
+    d1_keys = set(d1.state_dict())
+    assert "local_mix.depthwise.weight" in d1_keys
+    assert not any(key.startswith("extra_local_mix.") for key in d1_keys)
+    assert any(key.startswith("extra_local_mix.0.") for key in d2.state_dict())
+    assert sum(parameter.numel() for parameter in d2.parameters()) == rs_detail_parameter_count(
+        8, 12, 4, local_depth=2
+    )
+
+
+def test_count_head_is_the_only_additional_trainable_group_and_is_sidecar_state():
+    model = ToyModel()
+    controller = RSMergerExpertController(model, variant="rs_detail", detail_hidden_size=4)
+    head = controller.configure_count_head(max_count=15, head_hidden_size=8)
+    audit = controller.freeze_base_and_enable_expert()
+    expected = sum(parameter.numel() for parameter in head.parameters())
+    assert audit["count_head_parameter_count"] == expected
+    assert audit["total_trainable_parameter_count"] == (audit["expert_parameter_count"] + expected)
+    assert any(key.startswith("count_head.") for key in controller.expert_state_dict())
+    assert audit["unexpected_trainable"] == []
+
+
+def test_formal_c2_c4_capacity_counts_are_width_only():
+    c2 = 4 * rs_detail_parameter_count(1024, 2560, 512, spatial_merge_size=2)
+    c4 = 4 * rs_detail_parameter_count(1024, 2560, 1024, spatial_merge_size=2)
+    assert c2 == 24_160_256
+    assert c4 == 50_399_232
+    assert c4 > 2 * c2
 
 
 class PackedToyMerger(nn.Module):
@@ -356,6 +458,100 @@ def test_controller_close_restores_original_modules():
         for current, expected in zip(model.visual.deepstack_merger_list, deepstack, strict=True)
     )
     assert model.language_model.layers[0].self_attn.q_proj is q_proj
+
+
+def test_sidecar_continuation_restores_exact_state_and_marks_fresh_optimizer(tmp_path):
+    safetensors = pytest.importorskip("safetensors.torch")
+    model = ToyModel()
+    controller = RSMergerExpertController(
+        model,
+        variant="rs_detail",
+        interface_lora_enabled=True,
+        detail_hidden_size=4,
+    )
+    checkpoint = tmp_path / "checkpoint"
+    checkpoint.mkdir()
+    expected_state = {
+        name: value.detach().cpu().contiguous().clone()
+        for name, value in controller.expert_state_dict().items()
+    }
+    for value in expected_state.values():
+        value.add_(0.25)
+    weights = checkpoint / "expert_model.safetensors"
+    safetensors.save_file(expected_state, str(weights))
+    manifest = {
+        "schema_version": "2.0",
+        "variant": "c3_rs_detail_lora",
+        "expert_variant": "rs_detail",
+        "detail_hidden_size": 4,
+        "local_depth": 1,
+        "selected_vit_blocks": [0, 1, 2, 3],
+        "spatial_merge_size": 2,
+        "visual_hidden_size": 8,
+        "llm_hidden_size": 12,
+        "architecture_audit_sha256": "audit",
+        "source_r1_manifest_sha256": "r1",
+        "source_visual_sidecar_sha256": "visual",
+        "source_r1_checkpoint": "r1/checkpoint",
+        "r1_integration": "frozen_peft_additive",
+        "interface_lora": {
+            "enabled": True,
+            "layers": [0, 1, 2, 3],
+            "targets": ["q_proj", "k_proj", "v_proj", "o_proj"],
+            "r": 16,
+            "alpha": 32,
+            "dropout": 0.05,
+        },
+        "expert_weights": weights.name,
+        "expert_weights_sha256": file_sha256(weights),
+    }
+    (checkpoint / "expert_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    resume = inspect_expert_checkpoint(checkpoint)
+    report = validate_expert_checkpoint_compatibility(
+        resume,
+        expected_variant="c3_rs_detail_lora",
+        expected_expert_variant="rs_detail",
+        expected_detail_hidden_size=4,
+        expected_local_depth=1,
+        expected_interface_lora=manifest["interface_lora"],
+        architecture={
+            "deepstack_visual_indexes": [0, 1, 2],
+            "vision_block_count": 4,
+            "spatial_merge_size": 2,
+            "vision_hidden_size": 8,
+            "llm_hidden_size": 12,
+        },
+        architecture_audit_sha256="audit",
+        source_r1_manifest_sha256="r1",
+        source_visual_sidecar_sha256="visual",
+        source_r1_checkpoint="r1/checkpoint",
+        r1_integration="frozen_peft_additive",
+    )
+    load_expert_checkpoint(controller, resume)
+    restored = controller.expert_state_dict()
+    assert set(restored) == set(expected_state)
+    assert all(torch.equal(restored[name].cpu(), value) for name, value in expected_state.items())
+    assert report["continuation_mode"] == "weight continuation with fresh optimizer"
+    assert report["optimizer_state_restored"] is False
+
+
+def test_continuation_rejects_variant_drift(tmp_path):
+    checkpoint = tmp_path / "checkpoint"
+    checkpoint.mkdir()
+    (checkpoint / "expert_model.safetensors").write_bytes(b"not-used")
+    # inspect_expert_checkpoint must fail on the declared hash before compatibility can be guessed.
+    (checkpoint / "expert_manifest.json").write_text(
+        json.dumps(
+            {
+                "variant": "wrong",
+                "expert_weights": "expert_model.safetensors",
+                "expert_weights_sha256": "wrong",
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="SHA256"):
+        inspect_expert_checkpoint(checkpoint)
 
 
 @pytest.mark.gpu

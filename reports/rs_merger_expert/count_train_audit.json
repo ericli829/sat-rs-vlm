@@ -1,0 +1,386 @@
+{
+  "schema_version": "1.0",
+  "train_file": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\data\\processed\\rs_count_merger_v1\\train.jsonl",
+  "train_file_sha256": "392840d5c44ae2cdb36d8e9e3f9269ce7160ef453c0d0e4d07350d6e3ffa2e7d",
+  "train_manifest": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\data\\processed\\rs_count_merger_v1\\manifest.json",
+  "train_manifest_sha256": "38e05842da0066d3576840ee0cadee4e17dc436d330a1029d35966e37c91db9b",
+  "source_train": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\data\\processed\\qwen3vl_train.jsonl",
+  "source_manifest": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\data\\evaluation\\tiers\\evaluation_tiers_manifest.json",
+  "raw_counting_rows_lm_supervision": 15428,
+  "exact_cardinality_aux_rows": 14594,
+  "aux_excluded_rows": 834,
+  "formal_protocol_diagnostics": {
+    "raw_task_type_counting_rows": 15428,
+    "excluded_non_cardinality": 623,
+    "excluded_missing_question": 0,
+    "excluded_invalid_reference": 211,
+    "valid_cardinality_rows": 14594,
+    "prediction_parse_failures": 0
+  },
+  "count_statistics": {
+    "minimum": 0,
+    "maximum": 36,
+    "mean": 2.75873646704125,
+    "median": 2.0
+  },
+  "count_bins": {
+    "0-2": 8745,
+    "3-5": 4345,
+    "6-10": 1499,
+    "11+": 5
+  },
+  "question_subtypes": {
+    "exact_cardinality_invalid_reference": 13,
+    "exact_cardinality_vague_quantifier_reference": 198,
+    "exact_cardinality_valid": 14594,
+    "non_cardinality_binary_question": 601,
+    "non_cardinality_other": 22
+  },
+  "invalid_reference_reasons": {
+    "count_unresolved": 211
+  },
+  "invalid_reference_examples": [
+    {
+      "id": "vrsbench_train_00044_0000_qa_003",
+      "question": "How many residential properties can be seen surrounding the community area?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_00074_0000_qa_001",
+      "question": "How many lanes are visible in the image?",
+      "reference": "multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_00275_0000_qa_004",
+      "question": "How many bases are visible on the field?",
+      "reference": "Unable to determine",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_00464_0000_qa_004",
+      "question": "How many runways can be seen in the airport?",
+      "reference": "multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_00637_0000_qa_003",
+      "question": "How many small buildings are adjacent to the baseball field?",
+      "reference": "A couple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_00647_0000_qa_001",
+      "question": "How many tennis courts are visible in the image?",
+      "reference": "multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_01000_0000_qa_003",
+      "question": "How many airplanes are visible in the image?",
+      "reference": "multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_01030_0000_qa_002",
+      "question": "How many bridges can be identified?",
+      "reference": "Cannot determine",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_01268_0000_qa_002",
+      "question": "How many lanes can be seen in the image?",
+      "reference": "multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_01302_0000_qa_002",
+      "question": "How many lanes are visible on the track field?",
+      "reference": "multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_01307_0000_qa_004",
+      "question": "How many runways can be seen at the airport?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_01390_0000_qa_002",
+      "question": "How many train tracks can be identified?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_01419_0000_qa_001",
+      "question": "How many lanes are visible under the overpass?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_01650_0000_qa_003",
+      "question": "How many lanes can be observed in this section of the highway?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_01659_0000_qa_001",
+      "question": "How many vehicles can be observed on the roadway?",
+      "reference": "multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_01700_0000_qa_001",
+      "question": "How many airplanes are docked at the terminal?",
+      "reference": "multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_01806_0000_qa_002",
+      "question": "How many buildings are present adjacent to the golf course?",
+      "reference": "A small cluster",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_01917_0000_qa_001",
+      "question": "How many vehicles can be seen near the planes?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_02270_0000_qa_004",
+      "question": "How many vertical supports for the overpass can be seen?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_02348_0000_qa_002",
+      "question": "How many trees are visible in the image?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_02403_0000_qa_002",
+      "question": "How many tracks are visible in the track and field area?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_02412_0000_qa_005",
+      "question": "How many lanes does the bridge have?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_02625_0000_qa_001",
+      "question": "How many roads are visible in the image?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_02909_0000_qa_003",
+      "question": "How many tracks are visible at the train station?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_03001_0000_qa_003",
+      "question": "How many lanes can be observed in the image?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_04328_0000_qa_001",
+      "question": "How many service vehicles are visible around the airplane?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_04342_0000_qa_000",
+      "question": "How many lanes can be seen on the highway?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_04786_0000_qa_001",
+      "question": "How many runways can be seen?",
+      "reference": "Cannot determine",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_04889_0000_qa_000",
+      "question": "How many lanes are visible?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_04915_0000_qa_004",
+      "question": "How many lanes are visible on the portion of the highway under the overpass?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_05075_0000_qa_002",
+      "question": "How many bleacher sections are there south of the baseball field?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_05084_0000_qa_003",
+      "question": "How many multilane roads are visible in the image?",
+      "reference": "multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_05196_0000_qa_005",
+      "question": "How many prominent structures are associated with the train station?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_05272_0000_qa_005",
+      "question": "How many roads are visible around the baseball field?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_05315_0000_qa_004",
+      "question": "How many lanes can be seen in the running track?",
+      "reference": "multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_05710_0000_qa_005",
+      "question": "How many buildings are adjacent to the runway?",
+      "reference": "few",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_P0002_0015_qa_002",
+      "question": "How many trees are visible at the top of the image?",
+      "reference": "Some",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_P0011_0001_qa_006",
+      "question": "How many large vehicles are partially visible?",
+      "reference": "Several",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_P0020_0083_qa_001",
+      "question": "How many harbors are visible in the image?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_P0020_0089_qa_002",
+      "question": "How many lanes are visible on the highway?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_P0023_0013_qa_003",
+      "question": "How many small vehicles are identifiable within the image?",
+      "reference": "Ащгк",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_P0025_0073_qa_001",
+      "question": "How many buildings are visible in the image?",
+      "reference": "multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_P0029_0014_qa_001",
+      "question": "How many small vehicles are parked along the road?",
+      "reference": "multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_P0036_0034_qa_003",
+      "question": "How many boarding bridges are connected to the terminal?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_P0039_0012_qa_000",
+      "question": "How many large vehicles are visible?",
+      "reference": "Many",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_P0054_0015_qa_001",
+      "question": "How many air conditioning units are visible on the rooftop?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_P0058_0000_qa_002",
+      "question": "How many buildings can be seen?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_P0066_0009_qa_001",
+      "question": "How many small vehicles are parked along the top edge of the parking area?",
+      "reference": "Several",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_P0066_0039_qa_002",
+      "question": "How many buses are parked?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    },
+    {
+      "id": "vrsbench_train_P0066_0048_qa_001",
+      "question": "How many trees are aligned beside the road?",
+      "reference": "Multiple",
+      "reason": "count_unresolved"
+    }
+  ],
+  "auxiliary_class_contract": {
+    "K": 15,
+    "classes": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "tail_policy": "clip_to_K",
+    "tail_rows": 2,
+    "class_frequency_after_tail_policy": {
+      "0": 36,
+      "1": 4044,
+      "2": 4665,
+      "3": 2319,
+      "4": 1257,
+      "5": 769,
+      "6": 552,
+      "7": 355,
+      "8": 275,
+      "9": 207,
+      "10": 110,
+      "11": 0,
+      "12": 2,
+      "13": 1,
+      "14": 0,
+      "15": 2
+    },
+    "non_eligible_policy": "LM CE retained; auxiliary target=-100"
+  }
+}

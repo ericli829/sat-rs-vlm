@@ -3,69 +3,41 @@
 from __future__ import annotations
 
 import json
-import math
-from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
 import torch
 
-from sat_rs_vlm.data.object_adapter_v0 import count_bin, extract_answer
+from sat_rs_vlm.data.object_adapter_v0 import count_bin, extract_answer, extract_prompt
 from sat_rs_vlm.data.qwen3vl_collator import Qwen3VLDataCollator
 from sat_rs_vlm.data.qwen3vl_dataset import Qwen3VLDataset
 from sat_rs_vlm.data.task_protocol import parse_count
+from sat_rs_vlm.evaluation.counting_protocol import summarize_exact_cardinality_counting
 from sat_rs_vlm.evaluation.metrics import summarize_predictions
 from sat_rs_vlm.evaluation.tiers import file_sha256
 from sat_rs_vlm.models.rs_merger_expert import RSMergerExpertController, route_for_task
 
 
-def _mean(values: Sequence[float]) -> float | None:
-    return sum(values) / len(values) if values else None
-
-
-def _count_metrics(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    errors: list[float] = []
-    signed: list[float] = []
-    exact = 0
-    within_one = 0
-    for row in rows:
-        reference = row.get("parsed_reference")
-        prediction = row.get("parsed_prediction")
-        if not isinstance(reference, int) or not isinstance(prediction, int):
-            continue
-        difference = float(prediction - reference)
-        error = abs(difference)
-        errors.append(error)
-        signed.append(difference)
-        exact += int(error == 0)
-        within_one += int(error <= 1)
-    n = len(rows)
-    parsed = len(errors)
-    return {
-        "n": n,
-        "parse_rate": parsed / n if n else None,
-        "exact": exact / n if n else None,
-        "within_1": within_one / n if n else None,
-        "mae": _mean(errors),
-        "rmse": math.sqrt(sum(value * value for value in errors) / parsed) if parsed else None,
-        "bias": _mean(signed),
-    }
-
-
 def summarize_counting_predictions(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    counting = [row for row in rows if str(row.get("task_type", "")).lower() == "counting"]
-    grouped: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
-    for row in counting:
-        grouped[str(row.get("count_bin", "unknown"))].append(row)
-    return {
-        "schema_version": "1.0",
-        "metrics_protocol": "existing_parse_count_with_fixed_reference_bins",
-        "overall": _count_metrics(counting),
-        "count_bins": {
-            name: _count_metrics(grouped.get(name, [])) for name in ("0-2", "3-5", "6-10", "11+")
-        },
-    }
+    """Score only exact-cardinality rows with the formal R1 counting protocol."""
+
+    compatible_rows: list[Mapping[str, Any]] = []
+    for source in rows:
+        if (
+            str(source.get("task_type", "")).lower() == "counting"
+            and not str(source.get("question", "")).strip()
+            and "parsed_reference" in source
+        ):
+            row = dict(source)
+            row["question"] = "How many objects are visible?"
+            row["reference"] = str(source.get("parsed_reference", ""))
+            parsed_prediction = source.get("parsed_prediction")
+            row["prediction"] = "" if parsed_prediction is None else str(parsed_prediction)
+            compatible_rows.append(row)
+        else:
+            compatible_rows.append(source)
+    return summarize_exact_cardinality_counting(compatible_rows)
 
 
 def _numeric_delta(candidate: Any, baseline: Any) -> Any:
@@ -82,7 +54,7 @@ def summarize_counting_focused_predictions(
     rows: Sequence[Mapping[str, Any]],
     baseline: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Summarize E_COUNT_V1 while retaining the existing counting metric schema."""
+    """Summarize E_COUNT_V1/V2 while retaining the merger metric schema."""
 
     counting = summarize_counting_predictions(rows)
     guard = summarize_predictions(
@@ -176,7 +148,7 @@ def update_experiment_matrix(
     training_summary: Mapping[str, Any],
     metrics: Mapping[str, Any],
 ) -> None:
-    """Update a machine-backed C0/C1/C2/C3 comparison table."""
+    """Update a machine-backed C0/C1/C2/C3/C4-Wide comparison table."""
 
     destination = Path(matrix_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -207,7 +179,7 @@ def update_experiment_matrix(
         "within 1 | MAE | bias | 6-10 exact | 6-10 within 1 | 6-10 MAE |",
         "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
-    for name in ("C0", "C1", "C2", "C3"):
+    for name in ("C0", "C1", "C2", "C3", "C4-Wide"):
         row = records.get(name, {})
         values = [
             name,
@@ -260,8 +232,9 @@ def evaluate_rows(
     max_new_tokens: int = 64,
     baseline_metrics: str | Path | None = None,
     force_base: bool = False,
+    eval_batch_size: int = 1,
 ) -> dict[str, Any]:
-    """Evaluate one sample at a time so mixed canonical tasks can hard-route safely."""
+    """Evaluate task-homogeneous batches so every batch has one hard route."""
 
     tier_provenance: dict[str, Any] | None = None
     if tier_manifest is not None:
@@ -291,61 +264,73 @@ def evaluate_rows(
     )
     device = next(model.parameters()).device
     model.eval()
-    predictions: list[dict[str, Any]] = []
+    if eval_batch_size < 1:
+        raise ValueError("eval_batch_size must be positive")
+    indexed_predictions: list[tuple[int, dict[str, Any]]] = []
+    grouped: dict[str, list[tuple[int, dict[str, Any]]]] = {}
+    for index, sample in enumerate(dataset):
+        grouped.setdefault(sample["task_type"].strip().lower(), []).append((index, sample))
     with torch.no_grad():
-        for sample in dataset:
-            task = sample["task_type"].strip().lower()
+        for task, task_rows in grouped.items():
             active = "base" if force_base else route_for_task(task)
             controller.set_active_expert(active)
-            batch = collator([sample])
-            inputs = {
-                key: value.to(device) if isinstance(value, torch.Tensor) else value
-                for key, value in batch.items()
-            }
-            prompt_length = int(inputs["input_ids"].shape[-1])
-            generated = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-            text = processor.batch_decode(
-                generated[:, prompt_length:],
-                skip_special_tokens=True,
-                clean_up_tokenization_spaces=False,
-            )[0]
-            reference = str(extract_answer(sample))
-            parsed_reference = parse_count(reference).value if task == "counting" else None
-            parsed_prediction = parse_count(text).value if task == "counting" else None
-            error = (
-                abs(parsed_prediction - parsed_reference)
-                if isinstance(parsed_reference, int) and isinstance(parsed_prediction, int)
-                else None
-            )
-            predictions.append(
-                {
-                    "id": sample["id"],
-                    "image": next(
-                        (
-                            str(item.get("image", ""))
-                            for message in sample["messages"]
-                            for item in (
-                                message.get("content", [])
-                                if isinstance(message.get("content"), list)
-                                else []
-                            )
-                            if isinstance(item, Mapping) and item.get("type") == "image"
-                        ),
-                        "",
-                    ),
-                    "task_type": task,
-                    "reference": reference,
-                    "prediction": text,
-                    "parsed_reference": parsed_reference,
-                    "parsed_prediction": parsed_prediction,
-                    "abs_error": error,
-                    "count_bin": count_bin(parsed_reference)
-                    if isinstance(parsed_reference, int)
-                    else None,
-                    "active_expert": active,
-                    "expert_variant": expert_variant,
+            for start in range(0, len(task_rows), eval_batch_size):
+                chunk = task_rows[start : start + eval_batch_size]
+                batch = collator([sample for _index, sample in chunk])
+                inputs = {
+                    key: value.to(device) if isinstance(value, torch.Tensor) else value
+                    for key, value in batch.items()
                 }
-            )
+                prompt_width = int(inputs["input_ids"].shape[-1])
+                generated = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+                texts = processor.batch_decode(
+                    generated[:, prompt_width:],
+                    skip_special_tokens=True,
+                    clean_up_tokenization_spaces=False,
+                )
+                for (source_index, sample), text in zip(chunk, texts, strict=True):
+                    reference = str(extract_answer(sample))
+                    parsed_reference = parse_count(reference).value if task == "counting" else None
+                    parsed_prediction = parse_count(text).value if task == "counting" else None
+                    error = (
+                        abs(parsed_prediction - parsed_reference)
+                        if isinstance(parsed_reference, int) and isinstance(parsed_prediction, int)
+                        else None
+                    )
+                    indexed_predictions.append(
+                        (
+                            source_index,
+                            {
+                                "id": sample["id"],
+                                "image": next(
+                                    (
+                                        str(item.get("image", ""))
+                                        for message in sample["messages"]
+                                        for item in (
+                                            message.get("content", [])
+                                            if isinstance(message.get("content"), list)
+                                            else []
+                                        )
+                                        if isinstance(item, Mapping) and item.get("type") == "image"
+                                    ),
+                                    "",
+                                ),
+                                "task_type": task,
+                                "question": extract_prompt(sample),
+                                "reference": reference,
+                                "prediction": text,
+                                "parsed_reference": parsed_reference,
+                                "parsed_prediction": parsed_prediction,
+                                "abs_error": error,
+                                "count_bin": count_bin(parsed_reference)
+                                if isinstance(parsed_reference, int)
+                                else None,
+                                "active_expert": active,
+                                "expert_variant": expert_variant,
+                            },
+                        )
+                    )
+    predictions = [row for _index, row in sorted(indexed_predictions, key=lambda item: item[0])]
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=False)
     prediction_path = output / "predictions.jsonl"

@@ -12,6 +12,7 @@ expert:
   variant: c3_rs_detail_lora
   expert_variant: rs_detail
   detail_hidden_size: 512
+  local_depth: 1
   interface_lora:
     enabled: true
     layers: [0, 1, 2, 3]
@@ -39,4 +40,4 @@ training:
 output:
   root: ${OUTPUT_ROOT}/rs_merger_expert
 provenance:
-  architecture_audit: reports/rs_merger_expert/source_architecture_audit.json
+  architecture_audit: ${SOURCE_ARCHITECTURE_AUDIT}

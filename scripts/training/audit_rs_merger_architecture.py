@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import inspect
 import json
 from pathlib import Path
 
 from sat_rs_vlm.models.qwen3vl_loader import load_qwen3vl
+from sat_rs_vlm.models.reliability.checksum import file_sha256
 from sat_rs_vlm.models.rs_merger_expert import (
     source_architecture_audit,
     validate_expected_qwen4b_contract,
@@ -22,6 +24,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--visual-sidecar", required=True)
     parser.add_argument("--output-dir", default="reports/rs_merger_expert")
     parser.add_argument("--allow-architecture-mismatch", action="store_true")
+    parser.add_argument("--train-file", default="data/processed/rs_count_merger_v1/train.jsonl")
+    parser.add_argument(
+        "--train-manifest", default="data/processed/rs_count_merger_v1/manifest.json"
+    )
+    parser.add_argument(
+        "--e-count-manifest", default="data/evaluation/tiers_v2/e_count_v2_manifest.json"
+    )
     return parser.parse_args()
 
 
@@ -63,7 +72,7 @@ def main() -> int:
     transformers = importlib.import_module("transformers")
     peft = importlib.import_module("peft")
     modules = {"torch": torch, "transformers": transformers, "peft": peft}
-    model, _processor = load_qwen3vl(
+    model, processor = load_qwen3vl(
         modules=modules,
         base_model=args.base_model,
         model_kwargs={
@@ -83,6 +92,38 @@ def main() -> int:
             "r1_checkpoint": str(Path(args.r1_checkpoint).resolve()),
             "visual_sidecar": str(Path(args.visual_sidecar).resolve()),
             "visual_sidecar_loaded_parameter_count": len(sidecar_names),
+            "processor": {
+                "class": f"{type(processor).__module__}.{type(processor).__qualname__}",
+                "apply_chat_template_signature": str(
+                    inspect.signature(processor.apply_chat_template)
+                ),
+                "padding_side": str(
+                    getattr(getattr(processor, "tokenizer", None), "padding_side", None)
+                ),
+            },
+            "gradient_checkpointing_gate": {
+                "available": callable(getattr(model, "gradient_checkpointing_enable", None)),
+                "mode_required_by_count_aux": "non_reentrant",
+                "reason": "layer-3 forward-hook features must retain their autograd graph",
+            },
+            "training_objective": {
+                "lm": "assistant-only model CE unchanged",
+                "count_aux": (
+                    "opt-in exact-cardinality categorical soft CE + CDF L1 + "
+                    "normalized SmoothL1"
+                ),
+                "count_aux_feature": (
+                    "decoder layer 3 output at token immediately before first supervised "
+                    "assistant token"
+                ),
+            },
+            "training_data": {
+                "path": str(Path(args.train_file).resolve()),
+                "sha256": file_sha256(Path(args.train_file)),
+                "manifest": str(Path(args.train_manifest).resolve()),
+                "manifest_sha256": file_sha256(Path(args.train_manifest)),
+            },
+            "evaluation_data": json.loads(Path(args.e_count_manifest).read_text(encoding="utf-8")),
             "blockers": [],
         }
     )

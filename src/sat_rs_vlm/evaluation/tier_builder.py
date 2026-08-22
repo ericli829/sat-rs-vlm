@@ -335,7 +335,7 @@ def validate_portable_images(rows: Sequence[Mapping[str, Any]], common_root: Pat
             raise ValueError(f"Sample {sample_id} dataset={dataset} contains no image path")
         for image in images:
             relative = Path(image)
-            candidate = (root / relative).resolve()
+            candidate = Path(os.path.abspath(root / relative))
             try:
                 candidate.relative_to(root)
             except ValueError as exc:

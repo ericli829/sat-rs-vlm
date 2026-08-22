@@ -150,6 +150,33 @@ class RSLocalMix(nn.Module):
         return values + self.pointwise(self.activation(self.depthwise(values)))
 
 
+def rs_detail_parameter_count(
+    visual_hidden_size: int,
+    llm_hidden_size: int,
+    detail_hidden_size: int,
+    *,
+    local_depth: int = 1,
+    spatial_merge_size: int = 2,
+) -> int:
+    """Return the exact trainable parameter count for one RS detail tap."""
+
+    visual = int(visual_hidden_size)
+    llm = int(llm_hidden_size)
+    detail = int(detail_hidden_size)
+    merge = int(spatial_merge_size)
+    depth = int(local_depth)
+    if min(visual, llm, detail, merge) <= 0:
+        raise ValueError("All RS detail dimensions must be positive")
+    if depth not in {1, 2}:
+        raise ValueError("local_depth must be 1 or 2")
+    layer_norm = 2 * visual
+    down = visual * detail + detail
+    depthwise = depth * (detail * 3 * 3 + detail)
+    pointwise = depth * (detail * detail + detail)
+    output = (detail * merge**2) * llm + llm
+    return layer_norm + down + depthwise + pointwise + output
+
+
 class RSDetailResidualBranch(nn.Module):
     """Independent pre-compression local-detail residual for one ViT tap."""
 
@@ -159,16 +186,24 @@ class RSDetailResidualBranch(nn.Module):
         llm_hidden_size: int,
         *,
         detail_hidden_size: int = 512,
+        local_depth: int = 1,
         spatial_merge_size: int = 2,
     ) -> None:
         super().__init__()
         self.visual_hidden_size = int(visual_hidden_size)
         self.llm_hidden_size = int(llm_hidden_size)
         self.detail_hidden_size = int(detail_hidden_size)
+        self.local_depth = int(local_depth)
+        if self.local_depth not in {1, 2}:
+            raise ValueError("local_depth must be 1 or 2")
         self.spatial_merge_size = int(spatial_merge_size)
         self.norm = nn.LayerNorm(self.visual_hidden_size)
         self.down = nn.Linear(self.visual_hidden_size, self.detail_hidden_size)
+        # Keep the historical D1 state keys exactly stable for C2/C3 continuation.
         self.local_mix = RSLocalMix(self.detail_hidden_size)
+        self.extra_local_mix = nn.ModuleList(
+            RSLocalMix(self.detail_hidden_size) for _ in range(self.local_depth - 1)
+        )
         packed_size = self.detail_hidden_size * self.spatial_merge_size**2
         self.output = nn.Linear(packed_size, self.llm_hidden_size)
         nn.init.zeros_(self.output.weight)
@@ -187,7 +222,10 @@ class RSDetailResidualBranch(nn.Module):
         for grid in grids:
             # Treat temporal patches as independent images; the hypothesis is spatial local detail.
             nchw = grid.permute(0, 3, 1, 2).contiguous()
-            mixed.append(self.local_mix(nchw).permute(0, 2, 3, 1).contiguous())
+            nchw = self.local_mix(nchw)
+            for block in self.extra_local_mix:
+                nchw = block(nchw)
+            mixed.append(nchw.permute(0, 2, 3, 1).contiguous())
         qwen_order = repack_qwen_merge_order(
             mixed,
             spatial_merge_size=self.spatial_merge_size,
@@ -223,6 +261,12 @@ class RoutedMerger(nn.Module):
 
     def clear_raw_features(self) -> None:
         self._raw_features = None
+
+    def clear_runtime_state(self) -> None:
+        """Drop per-forward tensor references retained by hooks/routes."""
+
+        self._raw_features = None
+        self._grid_thw = None
 
     def set_raw_features(self, raw_features: Tensor) -> None:
         if raw_features.ndim != 2:
@@ -299,8 +343,29 @@ class RoutedInterfaceLoRALinear(nn.Module):
         nn.init.kaiming_uniform_(self.lora_A.weight, a=math.sqrt(5))
         nn.init.zeros_(self.lora_B.weight)
         reference = next(base.parameters())
-        self.lora_A.to(device=reference.device, dtype=reference.dtype)
-        self.lora_B.to(device=reference.device, dtype=reference.dtype)
+        nested_base = None
+        get_base_layer = getattr(base, "get_base_layer", None)
+        if callable(get_base_layer):
+            nested_base = get_base_layer()
+        if nested_base is None:
+            nested_base = getattr(base, "base_layer", None)
+        compute_dtype = None
+        for candidate in (nested_base, base):
+            candidate_dtype = getattr(candidate, "compute_dtype", None)
+            if isinstance(candidate_dtype, torch.dtype) and (
+                candidate_dtype.is_floating_point or candidate_dtype.is_complex
+            ):
+                compute_dtype = candidate_dtype
+                break
+        if compute_dtype is None:
+            compute_dtype = reference.dtype
+        if not (compute_dtype.is_floating_point or compute_dtype.is_complex):
+            raise TypeError(
+                "Quantized interface LoRA target must expose a floating compute_dtype; "
+                f"got storage dtype={reference.dtype}, compute_dtype={compute_dtype}"
+            )
+        self.lora_A.to(device=reference.device, dtype=compute_dtype)
+        self.lora_B.to(device=reference.device, dtype=compute_dtype)
         for parameter in self.base.parameters():
             parameter.requires_grad = False
 
@@ -335,6 +400,36 @@ def _find_language_layers(model: nn.Module) -> tuple[str, nn.ModuleList]:
     return exact[0]
 
 
+class CountAuxiliaryHead(nn.Module):
+    """Question-conditioned count head stored with the merger expert sidecar."""
+
+    def __init__(
+        self,
+        llm_hidden_size: int,
+        *,
+        head_hidden_size: int = 512,
+        max_count: int,
+        distribution: str = "categorical",
+    ) -> None:
+        super().__init__()
+        if max_count < 1:
+            raise ValueError("max_count must be positive")
+        if distribution not in {"categorical", "negative_binomial"}:
+            raise ValueError(f"Unsupported count distribution: {distribution}")
+        self.max_count = int(max_count)
+        self.distribution = distribution
+        output_size = self.max_count + 1 if distribution == "categorical" else 2
+        self.network = nn.Sequential(
+            nn.LayerNorm(int(llm_hidden_size)),
+            nn.Linear(int(llm_hidden_size), int(head_hidden_size)),
+            nn.GELU(),
+            nn.Linear(int(head_hidden_size), output_size),
+        )
+
+    def forward(self, hidden_states: Tensor) -> Tensor:
+        return self.network(hidden_states)
+
+
 class RSMergerExpertController:
     """Lifecycle owner for instance-local visual and language route wrappers."""
 
@@ -345,6 +440,7 @@ class RSMergerExpertController:
         variant: str,
         interface_lora_enabled: bool = False,
         detail_hidden_size: int = 512,
+        local_depth: int = 1,
         lora_rank: int = 16,
         lora_alpha: float = 32.0,
         lora_dropout: float = 0.05,
@@ -353,6 +449,10 @@ class RSMergerExpertController:
             raise ValueError(f"Unsupported expert variant: {variant!r}")
         self.model = model
         self.variant = variant
+        self.detail_hidden_size = int(detail_hidden_size)
+        self.local_depth = int(local_depth)
+        self.count_head: nn.Module | None = None
+        self.count_head_distribution: str | None = None
         self.route_state = ExpertRouteState()
         self.visual = resolve_visual_module(model)
         config = getattr(self.visual, "config", None)
@@ -378,6 +478,7 @@ class RSMergerExpertController:
                     visual_hidden,
                     llm_hidden,
                     detail_hidden_size=detail_hidden_size,
+                    local_depth=local_depth,
                     spatial_merge_size=merge,
                 )
                 if variant == "rs_detail"
@@ -420,6 +521,36 @@ class RSMergerExpertController:
         self._interface_bindings: list[tuple[nn.Module, str, nn.Module]] = []
         if interface_lora_enabled:
             self._attach_interface_lora(lora_rank, lora_alpha, lora_dropout)
+        self._closed = False
+
+    def configure_count_head(
+        self,
+        *,
+        max_count: int,
+        head_hidden_size: int = 512,
+        distribution: str = "categorical",
+    ) -> nn.Module:
+        """Attach an opt-in auxiliary head without modifying the foundation model."""
+
+        if self.count_head is not None:
+            raise RuntimeError("Count head is already configured")
+        _language_path, layers = _find_language_layers(self.model)
+        first_attention = layers[0].self_attn
+        projection = first_attention.q_proj
+        while isinstance(projection, RoutedInterfaceLoRALinear):
+            projection = projection.base
+        llm_hidden_size = int(projection.in_features)
+        reference = next(self.model.parameters())
+        head = CountAuxiliaryHead(
+            llm_hidden_size,
+            head_hidden_size=head_hidden_size,
+            max_count=max_count,
+            distribution=distribution,
+        )
+        head.to(device=reference.device, dtype=reference.dtype)
+        self.count_head = head
+        self.count_head_distribution = distribution
+        return head
 
     def _capture_grid(
         self, _module: nn.Module, args: tuple[Any, ...], kwargs: dict[str, Any]
@@ -506,6 +637,13 @@ class RSMergerExpertController:
                 name = f"{path}.{local_name}"
                 lora_names.append(name)
                 lora_count += int(parameter.numel())
+        count_head_names: list[str] = []
+        count_head_count = 0
+        if self.count_head is not None:
+            for name, parameter in self.count_head.named_parameters():
+                parameter.requires_grad = True
+                count_head_names.append(f"count_head.{name}")
+                count_head_count += int(parameter.numel())
         allowed_ids = {
             id(parameter)
             for merger in self.routed_mergers
@@ -517,6 +655,8 @@ class RSMergerExpertController:
             for name, parameter in module.named_parameters()
             if name.startswith("lora_")
         )
+        if self.count_head is not None:
+            allowed_ids.update(id(parameter) for parameter in self.count_head.parameters())
         unexpected = [
             name
             for name, parameter in self.model.named_parameters()
@@ -524,17 +664,45 @@ class RSMergerExpertController:
         ]
         if unexpected:
             raise AssertionError(f"Unexpected trainable parameters: {unexpected}")
-        total_count = sum(int(parameter.numel()) for parameter in self.model.parameters())
-        trainable_count = expert_count + lora_count
+        model_total_count = sum(int(parameter.numel()) for parameter in self.model.parameters())
+        total_count = model_total_count + count_head_count
+        trainable_count = expert_count + lora_count + count_head_count
+        expected_expert_count: int | None = None
+        if self.variant == "rs_detail":
+            branch = self.routed_mergers[0].detail_branch
+            assert branch is not None
+            expected_expert_count = len(self.routed_mergers) * rs_detail_parameter_count(
+                branch.visual_hidden_size,
+                branch.llm_hidden_size,
+                branch.detail_hidden_size,
+                local_depth=branch.local_depth,
+                spatial_merge_size=branch.spatial_merge_size,
+            )
+            if expert_count != expected_expert_count:
+                raise AssertionError(
+                    "RS detail parameter formula mismatch: "
+                    f"expected={expected_expert_count}, actual={expert_count}"
+                )
         return {
             "expert_parameter_count": expert_count,
+            "expert_per_tap_parameter_count": (
+                expert_count // len(self.routed_mergers) if self.routed_mergers else 0
+            ),
             "interface_lora_parameter_count": lora_count,
+            "count_head_parameter_count": count_head_count,
             "total_trainable_parameter_count": trainable_count,
             "base_parameter_count": total_count - trainable_count,
             "total_parameter_count": total_count,
             "expert_names": expert_names,
             "interface_lora_names": lora_names,
+            "count_head_names": count_head_names,
             "unexpected_trainable": unexpected,
+            "expert_variant": self.variant,
+            "detail_hidden_size": self.detail_hidden_size,
+            "local_depth": self.local_depth,
+            "count_head_distribution": self.count_head_distribution,
+            "expert_tap_count": len(self.routed_mergers),
+            "expected_expert_parameter_count": expected_expert_count,
         }
 
     def set_training_mode(self, training: bool = True) -> None:
@@ -554,6 +722,8 @@ class RSMergerExpertController:
             module.dropout.train(True)
             module.lora_A.train(True)
             module.lora_B.train(True)
+        if self.count_head is not None:
+            self.count_head.train(True)
 
     def expert_state_dict(self) -> dict[str, Tensor]:
         state: dict[str, Tensor] = {}
@@ -565,6 +735,9 @@ class RSMergerExpertController:
         for path, module in zip(self.interface_paths, self.interface_modules, strict=True):
             state[f"interface_lora.{path}.lora_A.weight"] = module.lora_A.weight.detach()
             state[f"interface_lora.{path}.lora_B.weight"] = module.lora_B.weight.detach()
+        if self.count_head is not None:
+            for name, value in self.count_head.state_dict().items():
+                state[f"count_head.{name}"] = value
         return state
 
     def load_expert_state_dict(self, state: Mapping[str, Tensor]) -> None:
@@ -591,10 +764,24 @@ class RSMergerExpertController:
         for path, module in zip(self.interface_paths, self.interface_modules, strict=True):
             module.lora_A.weight.data.copy_(state[f"interface_lora.{path}.lora_A.weight"])
             module.lora_B.weight.data.copy_(state[f"interface_lora.{path}.lora_B.weight"])
+        if self.count_head is not None:
+            prefix = "count_head."
+            self.count_head.load_state_dict(
+                {
+                    key[len(prefix) :]: value
+                    for key, value in state.items()
+                    if key.startswith(prefix)
+                },
+                strict=True,
+            )
 
     def close(self, *, restore_modules: bool = True) -> None:
         """Remove hooks and optionally restore the exact pre-controller model modules."""
 
+        if self._closed:
+            return
+        for merger in self.routed_mergers:
+            merger.clear_runtime_state()
         if self._pre_hook is not None:
             self._pre_hook.remove()
             self._pre_hook = None
@@ -606,6 +793,12 @@ class RSMergerExpertController:
             self.visual.deepstack_merger_list = nn.ModuleList(self._base_deepstack_mergers)
             for parent, target, base in self._interface_bindings:
                 setattr(parent, target, base)
+        self._interface_bindings.clear()
+        self.interface_modules.clear()
+        self.interface_paths.clear()
+        self.count_head = None
+        self.count_head_distribution = None
+        self._closed = True
 
 
 def merger_description(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import importlib
 import json
 import os
@@ -11,9 +12,11 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from safetensors.torch import load_file
 
 from sat_rs_vlm.data.qwen3vl_collator import Qwen3VLDataCollator
 from sat_rs_vlm.data.qwen3vl_dataset import Qwen3VLDataset
+from sat_rs_vlm.evaluation.rs_merger_expert import evaluate_rows
 from sat_rs_vlm.models.reliability.checksum import file_sha256
 from sat_rs_vlm.models.rs_merger_expert import (
     RSMergerExpertController,
@@ -24,10 +27,13 @@ from sat_rs_vlm.training.rs_merger_expert import (
     capture_parity_snapshot,
     compare_parity_snapshots,
     expert_step0_parity,
+    inspect_expert_checkpoint,
+    load_expert_checkpoint,
     load_r1_foundation,
     resolve_effective_epoch_plan,
     run_training,
     save_composite_checkpoint,
+    validate_expert_checkpoint_compatibility,
 )
 
 
@@ -40,8 +46,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--forward-only", action="store_true")
     parser.add_argument("--skip-eval", action="store_true")
-    parser.add_argument("--resume-from-checkpoint")
+    parser.add_argument(
+        "--resume-expert-checkpoint",
+        help="Expert sidecar directory containing expert_model.safetensors/manifest.",
+    )
     parser.add_argument("--output-root")
+    parser.add_argument(
+        "--target-total-effective-epochs",
+        type=float,
+        choices=(2.0, 3.0, 4.0),
+        help="Continuation target; resolves extra epochs from parent checkpoint metadata.",
+    )
     return parser.parse_args()
 
 
@@ -72,150 +87,340 @@ def main() -> int:
     if args.dry_run and args.forward_only:
         raise ValueError("--dry-run and --forward-only are mutually exclusive")
     config = _expand(yaml.safe_load(Path(args.config).read_text(encoding="utf-8")))
-    torch = importlib.import_module("torch")
-    transformers = importlib.import_module("transformers")
-    peft = importlib.import_module("peft")
-    modules = {"torch": torch, "transformers": transformers, "peft": peft}
-    processor = transformers.AutoProcessor.from_pretrained(
-        config["model"]["base_model"], local_files_only=True
-    )
-    probe = _probe_batch(processor, config)
-    model, processor, r1_report = load_r1_foundation(
-        modules=modules,
-        base_model=config["model"]["base_model"],
-        r1_checkpoint=config["model"]["r1_checkpoint"],
-        visual_sidecar=config["model"]["visual_sidecar"],
-        model_kwargs={
+    torch = transformers = peft = None
+    model = processor = controller = probe = dataset = summary = None
+    foundation_probe = base_route_probe = continuation_base_probe = None
+    restored_state = None
+    final_expert_state = None
+    root: Path | None = None
+    try:
+        torch = importlib.import_module("torch")
+        transformers = importlib.import_module("transformers")
+        peft = importlib.import_module("peft")
+        modules = {"torch": torch, "transformers": transformers, "peft": peft}
+        processor = transformers.AutoProcessor.from_pretrained(
+            config["model"]["base_model"], local_files_only=True
+        )
+        probe = _probe_batch(processor, config)
+        model_kwargs = {
             "torch_dtype": torch.bfloat16,
             "device_map": "auto",
             "local_files_only": True,
-        },
-        integration=config["model"].get("r1_integration", "merge"),
-        probe_batch=probe,
-    )
-    architecture = source_architecture_audit(model)
-    validate_expected_qwen4b_contract(architecture)
-    foundation_probe = capture_parity_snapshot(model, probe)
-    expert = config["expert"]
-    controller = RSMergerExpertController(
-        model,
-        variant=expert["expert_variant"],
-        interface_lora_enabled=bool(expert["interface_lora"]["enabled"]),
-        detail_hidden_size=int(expert.get("detail_hidden_size", 512)),
-        lora_rank=int(expert["interface_lora"].get("r", 16)),
-        lora_alpha=float(expert["interface_lora"].get("alpha", 32)),
-        lora_dropout=float(expert["interface_lora"].get("dropout", 0.05)),
-    )
-    trainable_audit = controller.freeze_base_and_enable_expert()
-    controller.set_active_expert("base")
-    base_route_probe = capture_parity_snapshot(model, probe)
-    base_route_parity = compare_parity_snapshots(foundation_probe, base_route_probe)
-    if not base_route_parity["passed"]:
-        raise ValueError(f"Foundation/base route parity failed: {base_route_parity}")
-    step0 = expert_step0_parity(model, controller, probe)
-    if args.resume_from_checkpoint:
-        from safetensors.torch import load_file
+        }
+        if bool(config["model"].get("load_in_4bit", False)):
+            quantization_skip_modules = list(
+                config["model"].get("quantization_skip_modules", [])
+            )
+            model_kwargs["quantization_config"] = transformers.BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.bfloat16,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_use_double_quant=True,
+                llm_int8_skip_modules=quantization_skip_modules or None,
+            )
+        model, processor, r1_report = load_r1_foundation(
+            modules=modules,
+            base_model=config["model"]["base_model"],
+            r1_checkpoint=config["model"]["r1_checkpoint"],
+            visual_sidecar=config["model"]["visual_sidecar"],
+            model_kwargs=model_kwargs,
+            integration=config["model"].get("r1_integration", "merge"),
+            probe_batch=probe,
+        )
+        architecture = source_architecture_audit(model)
+        validate_expected_qwen4b_contract(architecture)
+        foundation_probe = capture_parity_snapshot(model, probe)
+        expert = config["expert"]
+        controller = RSMergerExpertController(
+            model,
+            variant=expert["expert_variant"],
+            interface_lora_enabled=bool(expert["interface_lora"]["enabled"]),
+            detail_hidden_size=int(expert.get("detail_hidden_size", 512)),
+            local_depth=int(expert.get("local_depth", 1)),
+            lora_rank=int(expert["interface_lora"].get("r", 16)),
+            lora_alpha=float(expert["interface_lora"].get("alpha", 32)),
+            lora_dropout=float(expert["interface_lora"].get("dropout", 0.05)),
+        )
+        trainable_audit = controller.freeze_base_and_enable_expert()
+        controller.set_active_expert("base")
+        base_route_probe = capture_parity_snapshot(model, probe)
+        base_route_parity = compare_parity_snapshots(foundation_probe, base_route_probe)
+        if not base_route_parity["passed"]:
+            raise ValueError(f"Foundation/base route parity failed: {base_route_parity}")
+        step0 = expert_step0_parity(model, controller, probe)
 
-        resume_root = Path(args.resume_from_checkpoint)
-        resume_weights = resume_root / "expert_model.safetensors"
-        if not resume_weights.is_file():
-            raise FileNotFoundError(f"Resume expert weights are missing: {resume_weights}")
-        controller.load_expert_state_dict(load_file(str(resume_weights), device="cpu"))
-    dataset = Qwen3VLDataset(config["data"]["train_file"], max_samples=args.max_train_samples)
-    plan = resolve_effective_epoch_plan(
-        len(dataset),
-        per_device_batch_size=int(config["training"]["per_device_train_batch_size"]),
-        gradient_accumulation_steps=int(config["training"]["gradient_accumulation_steps"]),
-        world_size=int(os.environ.get("WORLD_SIZE", "1")),
-        target_effective_epochs=float(config["training"].get("target_effective_epochs", 1.0)),
-        max_steps=args.max_steps,
-    )
-    preflight = {
-        "experiment": config["experiment"],
-        "architecture": architecture,
-        "r1_integration": r1_report,
-        "resume": {
-            "source": args.resume_from_checkpoint,
-            "expert_weights_restored": bool(args.resume_from_checkpoint),
+        audit_path = Path(config["provenance"]["architecture_audit"])
+        r1_manifest = Path(config["model"]["r1_checkpoint"]) / "strategy_manifest.json"
+        data_manifest = Path(config["data"]["manifest"])
+        audit_sha = file_sha256(audit_path)
+        r1_manifest_sha = file_sha256(r1_manifest)
+        sidecar_sha = file_sha256(config["model"]["visual_sidecar"])
+        configured_resume = dict(config.get("continuation", {})).get("source_checkpoint")
+        resume_path = args.resume_expert_checkpoint or configured_resume
+        if isinstance(resume_path, str) and "${" in resume_path:
+            raise ValueError(
+                "Continuation checkpoint environment variable is unresolved; "
+                "pass --resume-expert-checkpoint explicitly"
+            )
+        resume = None
+        resume_report: dict[str, Any] = {
+            "source": None,
+            "expert_weights_restored": False,
             "optimizer_state_restored": False,
             "scheduler_state_restored": False,
-        },
-        "foundation_base_route_parity": base_route_parity,
-        "step0_parity": step0,
-        "trainable_audit": trainable_audit,
-        "training_plan": plan.__dict__,
-    }
-    print(json.dumps(preflight, ensure_ascii=False, indent=2))
-    if args.dry_run:
-        return 0
-    timestamp = time.strftime("%Y%m%d_%H%M%S")
-    root = (
-        Path(args.output_root or config["output"]["root"]) / f"{config['experiment']}_{timestamp}"
-    )
-    root.mkdir(parents=True, exist_ok=False)
-    (root / "preflight.json").write_text(
-        json.dumps(preflight, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
-    summary = run_training(
-        model=model,
-        processor=processor,
-        controller=controller,
-        train_file=config["data"]["train_file"],
-        image_root=config["data"]["image_root"],
-        output_dir=root,
-        training_config=config["training"],
-        max_train_samples=args.max_train_samples,
-        max_steps=args.max_steps,
-        forward_only=args.forward_only,
-    )
-    if args.forward_only:
-        (root / "forward_only.json").write_text(
-            json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            "continuation_mode": "new expert initialized from R1",
+        }
+        continuation_base_parity = None
+        if resume_path:
+            resume = inspect_expert_checkpoint(resume_path)
+            resume_report = validate_expert_checkpoint_compatibility(
+                resume,
+                expected_variant=expert["variant"],
+                expected_expert_variant=expert["expert_variant"],
+                expected_detail_hidden_size=int(expert.get("detail_hidden_size", 512)),
+                expected_local_depth=int(expert.get("local_depth", 1)),
+                expected_interface_lora=expert["interface_lora"],
+                architecture=architecture,
+                architecture_audit_sha256=audit_sha,
+                source_r1_manifest_sha256=r1_manifest_sha,
+                source_visual_sidecar_sha256=sidecar_sha,
+                source_r1_checkpoint=config["model"]["r1_checkpoint"],
+                r1_integration=r1_report["implementation"],
+            )
+            load_expert_checkpoint(controller, resume)
+            controller.set_active_expert("base")
+            continuation_base_probe = capture_parity_snapshot(model, probe)
+            continuation_base_parity = compare_parity_snapshots(
+                foundation_probe, continuation_base_probe
+            )
+            if not continuation_base_parity["passed"]:
+                raise ValueError(
+                    f"Loaded expert changed the frozen base route: {continuation_base_parity}"
+                )
+            restored_state = controller.expert_state_dict()
+            resume_report["restored_tensor_count"] = len(restored_state)
+            resume_report["exact_state_key_parity"] = True
+
+        count_loss_config = dict(config["training"].get("count_loss", {}))
+        if bool(count_loss_config.get("enabled", False)):
+            controller.configure_count_head(
+                max_count=int(count_loss_config.get("max_count", 15)),
+                head_hidden_size=int(count_loss_config.get("head_hidden_size", 512)),
+                distribution=str(count_loss_config.get("distribution", "categorical")),
+            )
+        trainable_audit = controller.freeze_base_and_enable_expert()
+
+        dataset = Qwen3VLDataset(config["data"]["train_file"], max_samples=args.max_train_samples)
+        if args.target_total_effective_epochs is not None:
+            if resume is None:
+                raise ValueError("--target-total-effective-epochs requires continuation")
+            extra_epochs = args.target_total_effective_epochs - resume.completed_effective_epochs
+            if extra_epochs <= 0:
+                raise ValueError(
+                    "Target total effective epochs must exceed the parent checkpoint progress"
+                )
+            config["training"]["target_effective_epochs"] = extra_epochs
+            resume_report["target_total_effective_epochs"] = args.target_total_effective_epochs
+            resume_report["resolved_extra_effective_epochs"] = extra_epochs
+        plan = resolve_effective_epoch_plan(
+            len(dataset),
+            per_device_batch_size=int(config["training"]["per_device_train_batch_size"]),
+            gradient_accumulation_steps=int(config["training"]["gradient_accumulation_steps"]),
+            world_size=int(os.environ.get("WORLD_SIZE", "1")),
+            target_effective_epochs=float(config["training"].get("target_effective_epochs", 1.0)),
+            max_steps=args.max_steps,
+        )
+        preflight = {
+            "experiment": config["experiment"],
+            "architecture": architecture,
+            "r1_integration": r1_report,
+            "resume": resume_report,
+            "foundation_base_route_parity": base_route_parity,
+            "continuation_base_route_parity": continuation_base_parity,
+            "step0_r1_parity_before_continuation_load": step0,
+            "trainable_audit": trainable_audit,
+            "training_plan": plan.__dict__,
+        }
+        print(json.dumps(preflight, ensure_ascii=False, indent=2))
+        if args.dry_run:
+            return 0
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        root = Path(args.output_root or config["output"]["root"]) / (
+            f"{config['experiment']}_{timestamp}"
+        )
+        root.mkdir(parents=True, exist_ok=False)
+        (root / "preflight.json").write_text(
+            json.dumps(preflight, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+        summary = run_training(
+            model=model,
+            processor=processor,
+            controller=controller,
+            train_file=config["data"]["train_file"],
+            image_root=config["data"]["image_root"],
+            output_dir=root,
+            training_config=config["training"],
+            max_train_samples=args.max_train_samples,
+            max_steps=args.max_steps,
+            forward_only=args.forward_only,
+            resume_training_state_path=(resume.training_state_path if resume else None),
+            resume_completed_effective_epochs=(
+                resume.completed_effective_epochs if resume else 0.0
+            ),
+        )
+        if args.forward_only:
+            (root / "forward_only.json").write_text(
+                json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
+            return 0
+        manifest = {
+            "schema_version": "2.0",
+            "experiment": config["experiment"],
+            "variant": expert["variant"],
+            "expert_variant": expert["expert_variant"],
+            "detail_hidden_size": int(expert.get("detail_hidden_size", 512)),
+            "local_depth": int(expert.get("local_depth", 1)),
+            "task": "counting",
+            "source_r1_checkpoint": config["model"]["r1_checkpoint"],
+            "source_r1_manifest_sha256": r1_manifest_sha,
+            "source_visual_sidecar_sha256": sidecar_sha,
+            "transformers_version": transformers.__version__,
+            "torch_version": torch.__version__,
+            "peft_version": peft.__version__,
+            "foundation_precision": (
+                "real_4bit_nf4_bf16_compute"
+                if bool(config["model"].get("load_in_4bit", False))
+                else "real_bf16"
+            ),
+            "architecture_audit_sha256": audit_sha,
+            "train_data_sha256": file_sha256(config["data"]["train_file"]),
+            "train_data_manifest_sha256": file_sha256(data_manifest),
+            "selected_vit_blocks": architecture["deepstack_visual_indexes"]
+            + [architecture["vision_block_count"] - 1],
+            "spatial_merge_size": architecture["spatial_merge_size"],
+            "visual_hidden_size": architecture["vision_hidden_size"],
+            "llm_hidden_size": architecture["llm_hidden_size"],
+            "output_visual_token_policy": "same_as_qwen",
+            "merger_parameter_count": trainable_audit["expert_parameter_count"],
+            "interface_lora_parameter_count": trainable_audit["interface_lora_parameter_count"],
+            "total_trainable_parameter_count": trainable_audit["total_trainable_parameter_count"],
+            "count_head_parameter_count": trainable_audit["count_head_parameter_count"],
+            "count_loss": count_loss_config,
+            "interface_lora": {
+                "layers": [0, 1, 2, 3],
+                "targets": ["q_proj", "k_proj", "v_proj", "o_proj"],
+                **expert["interface_lora"],
+            },
+            "initialization": {"step0_functionally_equal_to_r1_before_continuation_load": True},
+            "route": {"counting": "counting_expert", "fallback": "base_r1"},
+            "r1_integration": r1_report["implementation"],
+            "continuation": resume_report,
+            "parent_checkpoint": (
+                {
+                    "path": resume.root.as_posix(),
+                    "expert_weights_sha256": resume.weights_sha256,
+                    "expert_manifest_sha256": resume.manifest_sha256,
+                }
+                if resume
+                else None
+            ),
+        }
+        fixed_eval = config["data"].get("fixed_eval")
+        if fixed_eval and not args.skip_eval:
+            eval_image_root = config["data"].get("eval_image_root", config["data"]["image_root"])
+            if isinstance(eval_image_root, str) and "${" in eval_image_root:
+                raise ValueError("Fixed evaluation image root is unresolved; set EVAL_DATA_ROOT")
+            final_expert_state = {
+                name: value.detach().cpu().clone()
+                for name, value in controller.expert_state_dict().items()
+            }
+            epoch_weights = sorted(
+                (root / "epoch_checkpoints").glob("epoch_*/expert_model.safetensors")
+            )
+            evaluation_sources: list[tuple[str, Path | None]] = [
+                (path.parent.name, path) for path in epoch_weights
+            ]
+            if not evaluation_sources:
+                evaluation_sources = [("final_partial_epoch", None)]
+            learning_curve = []
+            for label, weights_path in evaluation_sources:
+                if weights_path is not None:
+                    controller.load_expert_state_dict(load_file(str(weights_path), device="cpu"))
+                metrics = evaluate_rows(
+                    model=model,
+                    processor=processor,
+                    controller=controller,
+                    tier_file=fixed_eval,
+                    tier_manifest="data/evaluation/tiers_v2/e_count_v2_manifest.json",
+                    image_root=eval_image_root,
+                    output_dir=root / "fixed_eval" / label,
+                    expert_variant=str(expert["variant"]),
+                    max_eval_samples=args.max_eval_samples,
+                    max_new_tokens=int(config["training"].get("eval_max_new_tokens", 64)),
+                    eval_batch_size=int(config["training"].get("eval_batch_size", 4)),
+                )
+                learning_curve.append({"checkpoint": label, "metrics": metrics})
+            controller.load_expert_state_dict(final_expert_state)
+            summary["fixed_eval_learning_curve"] = learning_curve
+            (root / "learning_curve.json").write_text(
+                json.dumps(learning_curve, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            curve_lines = [
+                "# Fixed E_COUNT_V2 learning curve",
+                "",
+                "| checkpoint | exact | within-1 | MAE |",
+                "|---|---:|---:|---:|",
+            ]
+            for point in learning_curve:
+                overall = point["metrics"]["counting_focused"]["overall"]
+                curve_lines.append(
+                    f"| {point['checkpoint']} | {overall.get('exact')} | "
+                    f"{overall.get('within_1')} | {overall.get('mae')} |"
+                )
+            (root / "learning_curve.md").write_text("\n".join(curve_lines) + "\n", encoding="utf-8")
+            final_expert_state = None
+        save_composite_checkpoint(
+            controller,
+            root / "checkpoint",
+            manifest=manifest,
+            training_summary=summary,
+            resolved_config=config,
+            training_state_path=summary.get("training_state_path"),
         )
         return 0
-    audit_path = Path(config["provenance"]["architecture_audit"])
-    r1_manifest = Path(config["model"]["r1_checkpoint"]) / "strategy_manifest.json"
-    data_manifest = Path(config["data"]["manifest"])
-    manifest = {
-        "schema_version": "1.0",
-        "experiment": config["experiment"],
-        "variant": expert["variant"],
-        "task": "counting",
-        "source_r1_checkpoint": config["model"]["r1_checkpoint"],
-        "source_r1_manifest_sha256": file_sha256(r1_manifest),
-        "source_visual_sidecar_sha256": file_sha256(config["model"]["visual_sidecar"]),
-        "transformers_version": transformers.__version__,
-        "torch_version": torch.__version__,
-        "peft_version": peft.__version__,
-        "architecture_audit_sha256": file_sha256(audit_path),
-        "train_data_sha256": file_sha256(config["data"]["train_file"]),
-        "train_data_manifest_sha256": file_sha256(data_manifest),
-        "selected_vit_blocks": architecture["deepstack_visual_indexes"]
-        + [architecture["vision_block_count"] - 1],
-        "spatial_merge_size": architecture["spatial_merge_size"],
-        "visual_hidden_size": architecture["vision_hidden_size"],
-        "llm_hidden_size": architecture["llm_hidden_size"],
-        "output_visual_token_policy": "same_as_qwen",
-        "merger_parameter_count": trainable_audit["expert_parameter_count"],
-        "interface_lora_parameter_count": trainable_audit["interface_lora_parameter_count"],
-        "total_trainable_parameter_count": trainable_audit["total_trainable_parameter_count"],
-        "interface_lora": {
-            "layers": [0, 1, 2, 3],
-            "targets": ["q_proj", "k_proj", "v_proj", "o_proj"],
-            **expert["interface_lora"],
-        },
-        "initialization": {"step0_functionally_equal_to_r1": True},
-        "route": {"counting": "counting_expert", "fallback": "base_r1"},
-        "r1_integration": r1_report["implementation"],
-    }
-    save_composite_checkpoint(
-        controller,
-        root / "checkpoint",
-        manifest=manifest,
-        training_summary=summary,
-        resolved_config=config,
-    )
-    return 0
+    finally:
+        cleanup: dict[str, Any] | None = None
+        if torch is not None and torch.cuda.is_available():
+            cleanup = {
+                "before_cleanup": {
+                    "allocated_bytes": int(torch.cuda.memory_allocated()),
+                    "reserved_bytes": int(torch.cuda.memory_reserved()),
+                }
+            }
+        if controller is not None:
+            controller.close(restore_modules=True)
+        restored_state = None
+        final_expert_state = None
+        foundation_probe = base_route_probe = continuation_base_probe = None
+        summary = dataset = probe = controller = processor = model = None
+        gc.collect()
+        if torch is not None and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+            assert cleanup is not None
+            cleanup["after_cleanup"] = {
+                "allocated_bytes": int(torch.cuda.memory_allocated()),
+                "reserved_bytes": int(torch.cuda.memory_reserved()),
+            }
+            cleanup["reserved_memory_note"] = (
+                "reserved_bytes is CUDA allocator cache and is not reported as a live leak"
+            )
+        if root is not None and cleanup is not None and root.is_dir():
+            (root / "process_cleanup_memory.json").write_text(
+                json.dumps(cleanup, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
 
 
 if __name__ == "__main__":
