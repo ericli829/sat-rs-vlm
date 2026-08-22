@@ -15,6 +15,8 @@ from sat_rs_vlm.data.object_adapter_v0 import count_bin, extract_answer
 from sat_rs_vlm.data.qwen3vl_collator import Qwen3VLDataCollator
 from sat_rs_vlm.data.qwen3vl_dataset import Qwen3VLDataset
 from sat_rs_vlm.data.task_protocol import parse_count
+from sat_rs_vlm.evaluation.metrics import summarize_predictions
+from sat_rs_vlm.evaluation.tiers import file_sha256
 from sat_rs_vlm.models.rs_merger_expert import RSMergerExpertController, route_for_task
 
 
@@ -66,6 +68,45 @@ def summarize_counting_predictions(rows: Sequence[Mapping[str, Any]]) -> dict[st
     }
 
 
+def _numeric_delta(candidate: Any, baseline: Any) -> Any:
+    if isinstance(candidate, Mapping) and isinstance(baseline, Mapping):
+        return {
+            key: _numeric_delta(value, baseline[key])
+            for key, value in candidate.items()
+            if key in baseline
+        }
+    return _delta(candidate, baseline)
+
+
+def summarize_counting_focused_predictions(
+    rows: Sequence[Mapping[str, Any]],
+    baseline: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Summarize E_COUNT_V1 while retaining the existing counting metric schema."""
+
+    counting = summarize_counting_predictions(rows)
+    guard = summarize_predictions(
+        [row for row in rows if str(row.get("task_type", "")).lower() != "counting"]
+    )
+    metrics: dict[str, Any] = {
+        "schema_version": "1.1",
+        "overall": counting["overall"],
+        "count_bins": counting["count_bins"],
+        "counting_focused": counting,
+        "non_counting_e1_guard": guard,
+    }
+    if baseline is not None:
+        baseline_counting = baseline.get("counting_focused", baseline)
+        baseline_guard = baseline.get("non_counting_e1_guard")
+        delta: dict[str, Any] = {
+            "counting_focused": _numeric_delta(counting, baseline_counting),
+        }
+        if isinstance(baseline_guard, Mapping):
+            delta["non_counting_e1_guard"] = _numeric_delta(guard, baseline_guard)
+        metrics["baseline_delta"] = delta
+    return metrics
+
+
 def _delta(value: Any, baseline: Any) -> float | None:
     return (
         float(value) - float(baseline)
@@ -78,7 +119,9 @@ def render_summary(metrics: Mapping[str, Any], baseline: Mapping[str, Any] | Non
     overall = dict(metrics["overall"])
     dense = dict(metrics["count_bins"]["6-10"])
     lines = [
-        "# RS Counting Merger Expert Evaluation",
+        "# RS Counting-focused Merger Expert Evaluation",
+        "",
+        "## Counting-focused results",
         "",
         f"- n: {overall.get('n')}",
         f"- parse rate: {overall.get('parse_rate')}",
@@ -98,13 +141,21 @@ def render_summary(metrics: Mapping[str, Any], baseline: Mapping[str, Any] | Non
             f"| {name} | {row.get('n')} | {row.get('exact')} | {row.get('within_1')} | "
             f"{row.get('mae')} | {row.get('rmse')} | {row.get('bias')} |"
         )
+    guard = metrics.get("non_counting_e1_guard", {})
+    lines.extend(["", "## Non-counting E1 guard results", ""])
+    if isinstance(guard, Mapping):
+        guard_overall = dict(guard.get("overall", {}))
+        lines.append(f"- n: {guard_overall.get('num_samples', 0)}")
+        for task, task_metrics in dict(guard.get("by_task", {})).items():
+            rendered = json.dumps(task_metrics, ensure_ascii=False, sort_keys=True)
+            lines.append(f"- {task}: {rendered}")
     if baseline is not None:
         base_overall = dict(baseline["overall"])
         base_dense = dict(baseline["count_bins"]["6-10"])
         lines.extend(
             [
                 "",
-                "## Delta versus C0/R1",
+                "## Delta versus R1/C0 baseline",
                 "",
                 f"- delta exact: {_delta(overall.get('exact'), base_overall.get('exact'))}",
                 "- delta within 1: "
@@ -201,6 +252,7 @@ def evaluate_rows(
     processor: Any,
     controller: RSMergerExpertController,
     tier_file: str | Path,
+    tier_manifest: str | Path | None = None,
     image_root: str | Path,
     output_dir: str | Path,
     expert_variant: str,
@@ -210,6 +262,24 @@ def evaluate_rows(
     force_base: bool = False,
 ) -> dict[str, Any]:
     """Evaluate one sample at a time so mixed canonical tasks can hard-route safely."""
+
+    tier_provenance: dict[str, Any] | None = None
+    if tier_manifest is not None:
+        manifest_path = Path(tier_manifest)
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        expected_hash = manifest.get("final_tier_sha256")
+        actual_hash = file_sha256(Path(tier_file))
+        if expected_hash and str(expected_hash) != actual_hash:
+            raise ValueError(
+                "Counting-focused tier SHA256 mismatch: "
+                f"expected {expected_hash}, got {actual_hash}"
+            )
+        tier_provenance = {
+            "manifest": manifest_path.as_posix(),
+            "tier_name": manifest.get("tier_name"),
+            "sha256": actual_hash,
+            "total_rows": manifest.get("total_rows"),
+        }
 
     dataset = Qwen3VLDataset(tier_file, max_samples=max_eval_samples)
     collator = Qwen3VLDataCollator(
@@ -282,10 +352,12 @@ def evaluate_rows(
     with prediction_path.open("w", encoding="utf-8") as handle:
         for row in predictions:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
-    metrics = summarize_counting_predictions(predictions)
     baseline = None
     if baseline_metrics is not None:
         baseline = json.loads(Path(baseline_metrics).read_text(encoding="utf-8"))
+    metrics = summarize_counting_focused_predictions(predictions, baseline)
+    if tier_provenance is not None:
+        metrics["tier_provenance"] = tier_provenance
     (output / "metrics.json").write_text(
         json.dumps(metrics, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )

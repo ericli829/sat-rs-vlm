@@ -30,6 +30,9 @@ DEFAULT_TIER_FILES = UNIFIED_TIER_FILES
 LEGACY_TIERS_MANIFEST = "data/evaluation/tiers/evaluation_tiers_manifest.json"
 UNIFIED_TIERS_MANIFEST = "data/evaluation/tiers_v2/evaluation_tiers_manifest.json"
 DEFAULT_TIERS_MANIFEST = UNIFIED_TIERS_MANIFEST
+COUNTING_FOCUSED_TIER = "E_COUNT_V1"
+COUNTING_FOCUSED_TIER_FILE = "data/evaluation/tiers/e_count_v1.jsonl"
+COUNTING_FOCUSED_TIER_MANIFEST = "data/evaluation/tiers/e_count_v1_manifest.json"
 
 
 def normalize_tier(value: str | None) -> str:

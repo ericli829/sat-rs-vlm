@@ -24,7 +24,34 @@
     "existing_object_adapter_and_assistant_mask_regressions": {
       "passed": 63
     },
-    "ruff": "passed",
+    "ruff_changed_scope": {
+      "passed": true,
+      "error_count": 0,
+      "scope": "git diff --name-only master...HEAD -- '*.py'",
+      "files": [
+        "scripts/evaluation/evaluate_rs_merger_expert.py",
+        "scripts/training/audit_rs_merger_architecture.py",
+        "scripts/training/build_rs_count_merger_data.py",
+        "scripts/training/train_rs_merger_expert.py",
+        "src/sat_rs_vlm/data/rs_merger_expert.py",
+        "src/sat_rs_vlm/evaluation/rs_merger_expert.py",
+        "src/sat_rs_vlm/models/rs_merger_expert.py",
+        "src/sat_rs_vlm/training/rs_merger_expert.py",
+        "tests/unit/test_rs_merger_expert.py",
+        "tests/unit/test_rs_merger_expert_data.py",
+        "tests/unit/test_rs_merger_expert_evaluation.py",
+        "tests/unit/test_rs_merger_expert_routing.py",
+        "tests/unit/test_rs_merger_expert_training.py"
+      ]
+    },
+    "ruff_full_repo": {
+      "passed": false,
+      "error_count": 111,
+      "error_file_count": 31,
+      "status": "preexisting_repo_lint_debt",
+      "report": "reports/rs_merger_expert/full_repo_ruff_errors_20260822.txt",
+      "changed_scope_intersection_count": 0
+    },
     "compileall": "passed",
     "git_diff_check": "passed"
   },

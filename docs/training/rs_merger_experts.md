@@ -45,6 +45,11 @@ raw `[4,1024]` input probe through every base merger and requires main-merger no
 DeepStack norm shape `[4096]`, packed hidden/FC input width 4096, and output width 2560. A merger
 that only accepts an already packed input, or exposes inconsistent norm/linear shapes, fails closed.
 
+Merger Expert changed-file lint passes; full-repo Ruff currently has pre-existing lint debt and is
+not a formal-training blocker. The changed-file scope is the Python output of `git diff
+--name-only master...HEAD`, and its Ruff paths have no intersection with the full-repo debt report
+`reports/rs_merger_expert/full_repo_ruff_errors_20260822.txt`.
+
 ## C2 architecture and Qwen ordering
 
 Each tap owns its complete branch; no weights are shared.
@@ -186,3 +191,31 @@ python scripts/evaluation/evaluate_rs_merger_expert.py --base-model "$MODEL_ROOT
 
 Do not begin formal training unless the runtime audit, R1 merge/additive parity, step-0 parity,
 ordering tests, trainable audit, and real two-step CUDA smoke all pass.
+
+## Fixed Counting-focused tier (E_COUNT_V1)
+
+Build the derived tier without modifying the frozen E1/E2 sources. It contains every E2
+counting row and every non-counting E1 guard row, deduplicated by canonical `id`:
+
+```bash
+python scripts/evaluation/build_counting_focused_tier.py
+```
+
+Evaluate C0 with `--force-base` first, then use the resulting metrics as `--baseline-metrics`
+for C1, C2, and C3. The evaluator keeps the existing exact/±1/MAE/RMSE/bias and count-bin
+metrics, and adds the existing E1 task metrics under the non-counting guard section:
+
+```bash
+python scripts/evaluation/evaluate_rs_merger_expert.py ... --force-base \
+  --tier-file data/evaluation/tiers/e_count_v1.jsonl \
+  --tier-manifest data/evaluation/tiers/e_count_v1_manifest.json \
+  --output-root "$OUTPUT_ROOT/rs_merger_expert/c0_e_count"
+python scripts/evaluation/evaluate_rs_merger_expert.py ... --expert-checkpoint "$C1_CHECKPOINT" \
+  --tier-file data/evaluation/tiers/e_count_v1.jsonl \
+  --tier-manifest data/evaluation/tiers/e_count_v1_manifest.json \
+  --baseline-metrics "$C0_E_COUNT_METRICS" --output-root "$OUTPUT_ROOT/rs_merger_expert/c1_e_count"
+```
+
+Repeat the second command with `$C2_CHECKPOINT`/`c2_e_count` and `$C3_CHECKPOINT`/`c3_e_count`.
+Summary output contains “Counting-focused results”, “Non-counting E1 guard results”, and
+deltas versus the R1/C0 baseline.

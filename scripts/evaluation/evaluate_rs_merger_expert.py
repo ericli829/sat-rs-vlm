@@ -28,6 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--expert-checkpoint", required=True)
     parser.add_argument("--architecture-audit", required=True)
     parser.add_argument("--tier-file", required=True)
+    parser.add_argument("--tier-manifest")
     parser.add_argument("--image-root", required=True)
     parser.add_argument("--output-root", required=True)
     parser.add_argument("--baseline-metrics")
@@ -113,6 +114,7 @@ def main() -> int:
         processor=processor,
         controller=controller,
         tier_file=args.tier_file,
+        tier_manifest=args.tier_manifest,
         image_root=args.image_root,
         output_dir=output,
         expert_variant=str(manifest["variant"]),
