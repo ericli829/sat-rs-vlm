@@ -1,0 +1,23 @@
+model:
+  id: Qwen/Qwen3-1.7B
+  local_path: "${MODEL_ROOT}/Qwen3-1.7B"
+  revision: 70d244cc86ccca08cf5af4e1e306ecf908b1ad5e
+  local_files_only: true
+  device_map: auto
+  torch_dtype: auto
+
+inference:
+  routing: cascade
+  batch_size: 8
+  max_new_tokens: 4
+  do_sample: false
+  temperature: 0.0
+  enable_thinking: false
+
+decision:
+  labels:
+    no_change: 0
+    change: 1
+    uncertain: U
+  prompt_version: levir-caption-semantics-en-v3
+  uncertain_action: human_audit

@@ -1,0 +1,74 @@
+contract_version: "1.8-local-postjudge"
+contract_status: provisional
+implementation_version: sat-rs-vlm-evaluation-v1.8
+change_decision_profile: server_rule_then_local_judge_v1
+server_rule_required: false
+local_text_judge_required: true
+allow_local_judge_unresolved: true
+
+# This is the explicit post-router contract.  The historical
+# evaluation_contract_v1.8_local_complete.yaml remains as a compatibility
+# alias; neither contract silently treats an unresolved U as a binary answer.
+metric_labels:
+  - official
+  - internal
+  - human_audit
+default_metric_label: internal
+
+optional_profiles:
+  repository_native_v2:
+    status: implemented_compatibility
+    metrics_version: v2_task_metrics
+  server_rule_then_local_judge_v1:
+    status: implemented_internal_only
+    note: Server rules resolve obvious captions; the local text judge completes only server_rule_unresolved rows.
+
+protocols:
+  vrsbench_visual_grounding:
+    kind: visual_grounding
+    status: implemented
+    metric_profile: continuous_normalized_v2
+  vrsbench_counting:
+    kind: counting
+    status: implemented
+    metric_profile: counting_internal_v2
+  vrsbench_open_vqa:
+    kind: text
+    status: implemented_internal_only
+    metric_profile: normalized_text_internal_v2
+  vrsbench_detailed_caption:
+    kind: caption
+    status: implemented_internal_only
+    metric_profile: caption_approx_internal_v2
+  levir_cc_change_caption:
+    kind: change_caption
+    status: implemented_internal_only
+    metric_profile: levir_cc_server_rule_then_local_judge_v1
+  generic_single_target_grounding_internal:
+    kind: visual_grounding
+    status: implemented_internal_only
+    metric_profile: continuous_normalized_v2
+  generic_counting_internal:
+    kind: counting
+    status: implemented_internal_only
+    metric_profile: counting_internal_v2
+  generic_text_internal:
+    kind: text
+    status: implemented_internal_only
+    metric_profile: normalized_text_internal_v2
+  generic_captioning_internal:
+    kind: caption
+    status: implemented_internal_only
+    metric_profile: caption_approx_internal_v2
+  generic_change_captioning_internal:
+    kind: caption
+    status: implemented_internal_only
+    metric_profile: change_caption_approx_internal_v2
+  segmentation_not_implemented:
+    kind: unimplemented
+    status: registered_not_implemented
+    metric_profile: null
+  unknown_not_implemented:
+    kind: unimplemented
+    status: registered_not_implemented
+    metric_profile: null
