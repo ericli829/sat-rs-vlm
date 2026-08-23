@@ -68,8 +68,9 @@ def test_four_epoch_configs_use_external_fixed_eval_assets():
 
 
 def test_c4_wide_four_epoch_is_pure_c2_width_control():
-    c2 = _load("rs_count_merger_c2_lm_4e.yaml")
+    c2 = _load("rs_count_merger_c2_count_4e.yaml")
     c4 = _load("rs_count_merger_c4_wide_count_4e.yaml")
+    assert c4["experiment"] == "C4_WIDE_COUNT_4E"
     for key in (
         "bf16",
         "per_device_train_batch_size",
@@ -83,13 +84,16 @@ def test_c4_wide_four_epoch_is_pure_c2_width_control():
         "seed",
         "max_seq_length",
         "merger_lr",
-        "interface_lora_lr",
+        "count_head_lr",
         "merger_weight_decay",
         "warmup_ratio",
         "scheduler",
     ):
         assert c4["training"][key] == c2["training"][key]
-    assert c4["training"]["count_loss"] == {"enabled": False}
+    assert c2["training"]["count_loss"]["enabled"] is True
+    assert c4["training"]["count_loss"]["enabled"] is True
+    assert c4["training"]["count_loss"] == c2["training"]["count_loss"]
+    assert c4["training"]["count_head_lr"] == 2e-4
     assert c4["expert"]["expert_variant"] == "rs_detail"
     assert c4["expert"]["interface_lora"]["enabled"] is False
     assert c4["expert"]["detail_hidden_size"] == 1024

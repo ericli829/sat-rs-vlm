@@ -36,12 +36,23 @@ training:
   seed: 42
   max_seq_length: 2048
   merger_lr: 0.0001
-  interface_lora_lr: 0.00002
+  count_head_lr: 0.0002
   merger_weight_decay: 0.01
   warmup_ratio: 0.05
   scheduler: cosine
   count_loss:
-    enabled: false
+    enabled: true
+    distribution: categorical
+    feature_layer: 3
+    head_hidden_size: 512
+    max_count: 15
+    tail_policy: clip_to_K
+    epsilon: 0.15
+    tau: 1.0
+    classification_weight: 0.5
+    ordinal_weight: 1.0
+    regression_weight: 0.25
+    ramp_epochs: 0.1
 output:
   root: ${OUTPUT_ROOT}/rs_merger_expert
 provenance:

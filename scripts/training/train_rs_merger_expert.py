@@ -87,6 +87,19 @@ def _probe_batch(processor: Any, config: dict[str, Any], max_samples: int = 2) -
     return collator([dataset[index] for index in range(len(dataset))])
 
 
+def _parent_checkpoint_provenance(resume_report: dict[str, Any]) -> dict[str, Any] | None:
+    """Return the immutable parent identity for a weight continuation, if present."""
+
+    source = resume_report.get("source")
+    if not source:
+        return None
+    return {
+        "path": source,
+        "expert_weights_sha256": resume_report.get("expert_weights_sha256"),
+        "expert_manifest_sha256": resume_report.get("expert_manifest_sha256"),
+    }
+
+
 def _build_expert_manifest(
     *,
     config: dict[str, Any],
@@ -146,7 +159,7 @@ def _build_expert_manifest(
         "route": {"counting": "counting_expert", "fallback": "base_r1"},
         "r1_integration": r1_report["implementation"],
         "continuation": resume_report,
-        "parent_checkpoint": None,
+        "parent_checkpoint": _parent_checkpoint_provenance(resume_report),
     }
     if finalization is not None:
         payload["finalization"] = finalization
@@ -294,6 +307,290 @@ def _load_recovered_training_summary(root: Path, torch: Any) -> dict[str, Any]:
     return summary
 
 
+def _provenance_equal(recorded: Any, expected: Any) -> bool:
+    """Compare JSON provenance while allowing harmless float representation drift."""
+
+    if isinstance(recorded, dict) and isinstance(expected, dict):
+        return set(recorded) == set(expected) and all(
+            _provenance_equal(recorded[key], expected[key]) for key in recorded
+        )
+    if isinstance(recorded, list) and isinstance(expected, list):
+        return len(recorded) == len(expected) and all(
+            _provenance_equal(left, right)
+            for left, right in zip(recorded, expected, strict=True)
+        )
+    if isinstance(recorded, float) or isinstance(expected, float):
+        try:
+            return abs(float(recorded) - float(expected)) <= 1e-9
+        except (TypeError, ValueError):
+            return False
+    return recorded == expected
+
+
+def _read_json_mapping(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Malformed provenance JSON: {path}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"Provenance JSON must contain an object: {path}")
+    return payload
+
+
+def validate_existing_run_provenance(
+    *,
+    root: Path,
+    config: dict[str, Any],
+    expert: dict[str, Any],
+    expected_training_plan: dict[str, Any] | None = None,
+    current_trainable_audit: dict[str, Any] | None = None,
+    current_train_data_sha256: str | None = None,
+    current_train_data_manifest_sha256: str | None = None,
+    training_state: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Validate all recoverable provenance before wrapping an existing run.
+
+    Historical runs predate some of these fields.  Missing fields are explicitly
+    reported as unknown, while every field that is present and disagrees with the
+    current configuration is a hard failure.
+    """
+
+    preflight_path = root / "preflight.json"
+    preflight = _read_json_mapping(preflight_path) if preflight_path.is_file() else {}
+    if current_train_data_sha256 is None:
+        train_file = config.get("data", {}).get("train_file")
+        if train_file and Path(str(train_file)).is_file():
+            current_train_data_sha256 = file_sha256(str(train_file))
+    if current_train_data_manifest_sha256 is None:
+        manifest_file = config.get("data", {}).get("manifest")
+        if manifest_file and Path(str(manifest_file)).is_file():
+            current_train_data_manifest_sha256 = file_sha256(str(manifest_file))
+    provenance = preflight.get("provenance")
+    if not isinstance(provenance, dict):
+        provenance = {}
+    expert_provenance = preflight.get("expert_provenance")
+    if not isinstance(expert_provenance, dict):
+        expert_provenance = {}
+    state = training_state if isinstance(training_state, dict) else {}
+    mismatches: list[str] = []
+    unknown: list[str] = []
+    checks: dict[str, Any] = {}
+
+    def recorded_value(*candidates: tuple[dict[str, Any], str]) -> Any:
+        for source, key in candidates:
+            if key in source and source[key] is not None:
+                return source[key]
+        return None
+
+    def check_value(label: str, recorded: Any, expected: Any) -> None:
+        if recorded is None:
+            unknown.append(label)
+            return
+        if expected is None:
+            unknown.append(label)
+            return
+        checks[label] = {"recorded": recorded, "expected": expected}
+        if not _provenance_equal(recorded, expected):
+            mismatches.append(f"{label}: recorded={recorded!r}, expected={expected!r}")
+
+    check_value(
+        "experiment",
+        recorded_value(
+            (preflight, "experiment"),
+            (provenance, "experiment"),
+            (state, "experiment"),
+        ),
+        config.get("experiment"),
+    )
+    expert_config = preflight.get("expert")
+    if not isinstance(expert_config, dict):
+        expert_config = {}
+    recorded_variant = recorded_value(
+        (preflight, "variant"),
+        (expert_config, "variant"),
+        (provenance, "variant"),
+        (state, "variant"),
+    )
+    if recorded_variant is not None:
+        check_value("expert.variant", recorded_variant, expert.get("variant"))
+    expected_expert = {
+        "variant": expert.get("variant"),
+        "expert_variant": expert.get("expert_variant"),
+        "detail_hidden_size": int(expert.get("detail_hidden_size", 512)),
+        "local_depth": int(expert.get("local_depth", 1)),
+        "interface_lora_enabled": bool(expert.get("interface_lora", {}).get("enabled", False)),
+    }
+    recorded_expert = recorded_value(
+        (preflight, "expert_provenance"),
+        (provenance, "expert_provenance"),
+        (expert_provenance, "structure"),
+    )
+    fallback_audit = preflight.get("trainable_audit")
+    if not isinstance(fallback_audit, dict):
+        fallback_audit = preflight.get("trainable_parameter_audit")
+    if not isinstance(fallback_audit, dict):
+        fallback_audit = state.get("trainable_audit")
+    if not isinstance(recorded_expert, dict) and isinstance(fallback_audit, dict):
+        recorded_expert = {
+            "expert_variant": fallback_audit.get("expert_variant"),
+            "detail_hidden_size": fallback_audit.get("detail_hidden_size"),
+            "local_depth": fallback_audit.get("local_depth"),
+            "interface_lora_enabled": (
+                bool(fallback_audit.get("interface_lora_names"))
+                if "interface_lora_names" in fallback_audit
+                else None
+            ),
+        }
+    if isinstance(recorded_expert, dict):
+        for key, expected in expected_expert.items():
+            if expected is None:
+                continue
+            recorded = recorded_expert.get(key)
+            if key == "variant" and recorded is None:
+                recorded = recorded_variant
+            if key == "interface_lora_enabled" and recorded is None:
+                interface = recorded_expert.get("interface_lora")
+                if isinstance(interface, dict):
+                    recorded = interface.get("enabled")
+            check_value(f"expert.{key}", recorded, expected)
+    else:
+        unknown.extend(
+            f"expert.{key}"
+            for key in expected_expert
+            if not (key == "variant" and recorded_variant is not None)
+        )
+
+    target = float(config.get("training", {}).get("target_effective_epochs", 1.0))
+    recorded_target = recorded_value(
+        (preflight, "target_effective_epochs"),
+        (provenance, "target_effective_epochs"),
+        (state, "target_effective_epochs"),
+    )
+    recorded_plan = preflight.get("training_plan")
+    if not isinstance(recorded_plan, dict):
+        recorded_plan = provenance.get("training_plan")
+    if not isinstance(recorded_plan, dict):
+        recorded_plan = state.get("training_plan")
+    if not isinstance(recorded_plan, dict):
+        recorded_plan = {}
+    if recorded_target is None:
+        recorded_target = recorded_plan.get("expected_effective_epochs")
+    if recorded_target is None:
+        recorded_target = recorded_plan.get("target_effective_epochs")
+    epoch_manifest_paths = sorted((root / "epoch_checkpoints").glob("epoch_*/epoch_manifest.json"))
+    epoch_manifests: list[dict[str, Any]] = []
+    for path in epoch_manifest_paths:
+        payload = _read_json_mapping(path)
+        epoch_manifests.append(payload)
+        if recorded_target is None:
+            recorded_target = payload.get("target_effective_epochs")
+        for key in ("experiment", "variant"):
+            recorded = payload.get(key)
+            if recorded is not None:
+                expected = (
+                    config.get("experiment") if key == "experiment" else expert.get("variant")
+                )
+                check_value(f"epoch_manifests.{key}", recorded, expected)
+    check_value("target_effective_epochs", recorded_target, target)
+
+    if expected_training_plan is not None:
+        if not recorded_plan:
+            unknown.append("training_plan")
+        else:
+            for key, expected in expected_training_plan.items():
+                if key in recorded_plan:
+                    check_value(f"training_plan.{key}", recorded_plan[key], expected)
+                else:
+                    unknown.append(f"training_plan.{key}")
+            for payload in epoch_manifests:
+                epoch_plan = payload.get("training_plan")
+                if isinstance(epoch_plan, dict):
+                    for key, expected in expected_training_plan.items():
+                        if key in epoch_plan:
+                            check_value(
+                                f"epoch_manifests.training_plan.{key}",
+                                epoch_plan[key],
+                                expected,
+                            )
+
+    current_training_config = config.get("training")
+    if isinstance(current_training_config, dict):
+        recorded_training_config = recorded_value(
+            (preflight, "training_config"),
+            (provenance, "training_config"),
+        )
+        check_value("training_config", recorded_training_config, current_training_config)
+
+    if current_trainable_audit is not None:
+        recorded_audit = fallback_audit
+        if not isinstance(recorded_audit, dict):
+            recorded_audit = state.get("trainable_audit")
+        audit_keys = (
+            "expert_parameter_count",
+            "expert_per_tap_parameter_count",
+            "interface_lora_parameter_count",
+            "count_head_parameter_count",
+            "total_trainable_parameter_count",
+            "expert_variant",
+            "detail_hidden_size",
+            "local_depth",
+            "expert_tap_count",
+            "count_head_distribution",
+            "expert_names",
+            "interface_lora_names",
+            "count_head_names",
+            "unexpected_trainable",
+        )
+        if isinstance(recorded_audit, dict):
+            for key in audit_keys:
+                check_value(
+                    f"trainable_audit.{key}",
+                    recorded_audit.get(key),
+                    current_trainable_audit.get(key),
+                )
+        else:
+            unknown.extend(f"trainable_audit.{key}" for key in audit_keys)
+
+    expected_data = (
+        ("train_data_sha256", current_train_data_sha256),
+        ("train_data_manifest_sha256", current_train_data_manifest_sha256),
+    )
+    for key, expected in expected_data:
+        if expected is None:
+            continue
+        recorded = recorded_value((preflight, key), (provenance, key), (state, key))
+        if recorded is None:
+            for payload in epoch_manifests:
+                if payload.get(key) is not None:
+                    recorded = payload[key]
+                    break
+        check_value(
+            key,
+            recorded,
+            expected,
+        )
+
+    if mismatches:
+        raise ValueError(
+            "Existing run provenance mismatch; refusing to finalize: " + "; ".join(mismatches)
+        )
+    unknown = sorted(set(unknown))
+    return {
+        "status": "validated_with_unknowns" if unknown else "validated",
+        "source_run": root.as_posix(),
+        "sources": {
+            "preflight": preflight_path.as_posix() if preflight_path.is_file() else None,
+            "epoch_manifests": [path.as_posix() for path in epoch_manifest_paths],
+        },
+        "unknown_fields": unknown,
+        "recovered_fields": sorted(checks),
+        "checks": checks,
+        "recovered_resume": (
+            preflight.get("resume") if isinstance(preflight.get("resume"), dict) else None
+        ),
+    }
+
+
 def finalize_existing_run(
     *,
     root: Path,
@@ -305,6 +602,7 @@ def finalize_existing_run(
     manifest: dict[str, Any],
     torch: Any,
     max_eval_samples: int | None = None,
+    provenance_validation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Finalize a completed training run without constructing an optimizer."""
 
@@ -315,6 +613,15 @@ def finalize_existing_run(
         state = torch.load(state_path, map_location="cpu", weights_only=True)
     except TypeError:
         state = torch.load(state_path, map_location="cpu")
+    if not isinstance(state, dict):
+        raise ValueError("training_state.pt must contain a mapping")
+    if provenance_validation is None:
+        provenance_validation = validate_existing_run_provenance(
+            root=root,
+            config=config,
+            expert=expert,
+            training_state=state,
+        )
     completed = float(state.get("completed_effective_epochs", 0.0))
     target = float(config["training"].get("target_effective_epochs", 1.0))
     if completed + 1e-9 < target:
@@ -352,6 +659,8 @@ def finalize_existing_run(
         for name, value in controller.expert_state_dict().items()
     }
     summary = _load_recovered_training_summary(root, torch)
+    if provenance_validation is not None:
+        summary["provenance_validation"] = provenance_validation
     learning_curve = _evaluate_fixed_curve(
         root=root,
         config=config,
@@ -370,6 +679,8 @@ def finalize_existing_run(
         "training_reexecuted": False,
     }
     manifest["finalization"] = summary["finalization"]
+    if provenance_validation is not None:
+        manifest["provenance_validation"] = provenance_validation
     checkpoint_root = root / "checkpoint"
     if checkpoint_root.exists():
         raise FileExistsError(
@@ -543,6 +854,9 @@ def main() -> int:
         )
         preflight = {
             "experiment": config["experiment"],
+            "target_effective_epochs": float(
+                config["training"].get("target_effective_epochs", 1.0)
+            ),
             "architecture": architecture,
             "r1_integration": r1_report,
             "resume": resume_report,
@@ -551,6 +865,18 @@ def main() -> int:
             "step0_r1_parity_before_continuation_load": step0,
             "trainable_audit": trainable_audit,
             "training_plan": plan.__dict__,
+            "training_config": dict(config["training"]),
+            "expert_provenance": {
+                "variant": expert.get("variant"),
+                "expert_variant": expert.get("expert_variant"),
+                "detail_hidden_size": int(expert.get("detail_hidden_size", 512)),
+                "local_depth": int(expert.get("local_depth", 1)),
+                "interface_lora_enabled": bool(expert["interface_lora"].get("enabled", False)),
+            },
+            "provenance": {
+                "train_data_sha256": file_sha256(config["data"]["train_file"]),
+                "train_data_manifest_sha256": file_sha256(data_manifest),
+            },
         }
         print(json.dumps(preflight, ensure_ascii=False, indent=2))
         if args.dry_run:
@@ -570,6 +896,33 @@ def main() -> int:
             root = Path(args.finalize_existing_run).expanduser().resolve()
             if not root.is_dir():
                 raise FileNotFoundError(f"Existing run directory does not exist: {root}")
+            existing_state: dict[str, Any] | None = None
+            existing_state_path = root / "training_state.pt"
+            if existing_state_path.is_file():
+                try:
+                    loaded_state = torch.load(
+                        existing_state_path, map_location="cpu", weights_only=True
+                    )
+                except TypeError:
+                    loaded_state = torch.load(existing_state_path, map_location="cpu")
+                if isinstance(loaded_state, dict):
+                    existing_state = loaded_state
+            provenance_validation = validate_existing_run_provenance(
+                root=root,
+                config=config,
+                expert=expert,
+                expected_training_plan=plan.__dict__,
+                current_trainable_audit=trainable_audit,
+                current_train_data_sha256=file_sha256(config["data"]["train_file"]),
+                current_train_data_manifest_sha256=file_sha256(data_manifest),
+                training_state=existing_state,
+            )
+            recovered_resume = provenance_validation.get("recovered_resume")
+            manifest_resume_report = (
+                dict(recovered_resume)
+                if isinstance(recovered_resume, dict)
+                else resume_report
+            )
             manifest = _build_expert_manifest(
                 config=config,
                 expert=expert,
@@ -580,7 +933,7 @@ def main() -> int:
                 sidecar_sha=sidecar_sha,
                 data_manifest=data_manifest,
                 trainable_audit=trainable_audit,
-                resume_report=resume_report,
+                resume_report=manifest_resume_report,
                 transformers=transformers,
                 torch=torch,
                 peft=peft,
@@ -595,6 +948,7 @@ def main() -> int:
                 manifest=manifest,
                 torch=torch,
                 max_eval_samples=args.max_eval_samples,
+                provenance_validation=provenance_validation,
             )
             print(json.dumps(summary, ensure_ascii=False, indent=2))
             return 0
