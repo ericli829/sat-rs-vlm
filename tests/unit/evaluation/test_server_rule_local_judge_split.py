@@ -13,7 +13,7 @@ from sat_rs_vlm.evaluation.change_judge import (
     run_server_rule_router,
 )
 from sat_rs_vlm.evaluation.protocols import load_contract
-from sat_rs_vlm.evaluation.records import PredictionRecord
+from sat_rs_vlm.evaluation.records import InputValidationError, PredictionRecord
 from sat_rs_vlm.evaluation.runner import evaluate_record, run_evaluation
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -138,6 +138,10 @@ def test_server_partial_evaluation_and_local_completion_are_separate(tmp_path: P
     assert partial_metrics["binary_decision_coverage"]["value"] == pytest.approx(2 / 3)
     assert partial_metrics["binary_accuracy"]["status"] == "partial_coverage"
     assert partial_metrics["binary_accuracy"]["num_samples"] == 2
+    partial_rows = _rows(partial["evaluated_predictions"])
+    assert next(row for row in partial_rows if row["id"] == "unresolved")["parse_error"] == (
+        "server_rule_unresolved"
+    )
 
     backend = FakeJudge(["1"])
     completed = run_local_change_judge(
@@ -167,6 +171,43 @@ def test_server_partial_evaluation_and_local_completion_are_separate(tmp_path: P
     assert complete_metrics["binary_accuracy"]["status"] == "ok"
 
 
+def test_local_postjudge_rejects_pending_server_rule_unresolved(tmp_path: Path) -> None:
+    predictions = tmp_path / "predictions.jsonl"
+    _write_predictions(predictions)
+    routed = run_server_rule_router(predictions, tmp_path / "server-routed")
+
+    with pytest.raises(InputValidationError, match=r"server_rule_unresolved|--only-unresolved"):
+        run_evaluation(
+            routed["rule_routed_predictions"],
+            tmp_path / "postjudge-without-local",
+            contract_path=LOCAL_CONTRACT,
+            strict=True,
+            protected_repository=tmp_path / "protected",
+            semantic_enabled=False,
+        )
+
+
+def test_local_postjudge_non_strict_records_pending_warning(tmp_path: Path) -> None:
+    predictions = tmp_path / "predictions.jsonl"
+    _write_predictions(predictions)
+    routed = run_server_rule_router(predictions, tmp_path / "server-routed")
+
+    evaluated = run_evaluation(
+        routed["rule_routed_predictions"],
+        tmp_path / "postjudge-nonstrict",
+        contract_path=LOCAL_CONTRACT,
+        strict=False,
+        protected_repository=tmp_path / "protected",
+        semantic_enabled=False,
+    )
+    summary = json.loads(evaluated["summary"].read_text(encoding="utf-8"))
+    assert any("server_rule_unresolved" in warning for warning in summary["warnings"])
+    rows = _rows(evaluated["evaluated_predictions"])
+    pending = next(row for row in rows if row["id"] == "unresolved")
+    assert pending["predicted_changeflag"] is None
+    assert pending["parse_error"] == "pending_required_local_judge"
+
+
 def test_server_input_guard_is_manual_audit_only(tmp_path: Path) -> None:
     predictions = tmp_path / "guard.jsonl"
     _write_guard_prediction(predictions)
@@ -180,6 +221,20 @@ def test_server_input_guard_is_manual_audit_only(tmp_path: Path) -> None:
     summary = json.loads(outputs["rule_routing_summary"].read_text(encoding="utf-8"))
     assert summary["num_manual_audit_rows"] == 1
     assert summary["num_local_judge_queue_rows"] == 0
+
+    postjudge = run_evaluation(
+        outputs["rule_routed_predictions"],
+        tmp_path / "postjudge",
+        contract_path=LOCAL_CONTRACT,
+        strict=True,
+        protected_repository=tmp_path / "protected",
+        semantic_enabled=False,
+    )
+    metrics = json.loads(postjudge["summary"].read_text(encoding="utf-8"))["by_task"][
+        "change_detection"
+    ]["metrics"]
+    assert metrics["binary_decision_coverage"]["value"] == 0.0
+    assert metrics["binary_accuracy"]["status"] == "partial_coverage"
 
 
 def test_local_complete_contract_keeps_auditable_u_out_of_binary_denominator() -> None:

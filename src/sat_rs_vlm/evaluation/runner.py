@@ -60,6 +60,9 @@ DEFAULT_SEMANTIC_ONTOLOGY = (
 LOCAL_TEXT_JUDGE_DECISION_VERSION = "local_text_judge_priority_v1"
 SERVER_RULE_ONLY_DECISION_VERSION = "server_rule_only_v1"
 SERVER_RULE_THEN_LOCAL_DECISION_VERSION = "server_rule_then_local_judge_v1"
+# These are evaluation-level decision profiles.  The local judge module's
+# LOCAL_JUDGE_DECISION_PROFILE is a separate routing/implementation profile;
+# both string values are retained for provenance compatibility.
 SUPPORTED_CHANGE_DECISION_PROFILES = {
     LOCAL_TEXT_JUDGE_DECISION_VERSION,
     SERVER_RULE_ONLY_DECISION_VERSION,
@@ -80,7 +83,14 @@ SERVER_RULE_RESOLVED_SOURCES = frozenset(
         "server_semantic_non_target_rule",
     }
 )
-SERVER_RULE_UNRESOLVED_SOURCES = frozenset({"server_rule_unresolved", "server_input_guard"})
+SERVER_PENDING_SOURCES = frozenset({"server_rule_unresolved"})
+TERMINAL_AUDIT_SOURCES = frozenset(
+    {
+        "server_input_guard",
+        "local_llm_judge_uncertain",
+        "local_input_guard",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -368,7 +378,7 @@ def _evaluate_change_caption(
     local_judge_required: bool,
     server_rule_required: bool,
     allow_local_judge_unresolved: bool,
-) -> EvaluatedRow:
+) -> tuple[EvaluatedRow, list[str]]:
     if not record.reference.strip() and strict:
         raise InputValidationError(f"sample {record.id}: change caption reference is empty")
     raw_changeflag = record.metadata.get("changeflag")
@@ -395,33 +405,62 @@ def _evaluate_change_caption(
     combined_judge_valid = local_judge_valid or server_rule_valid
     if decision_priority and isinstance(requested_source, str):
         binary_source = requested_source
+    decision_warnings: list[str] = []
     required_decision_valid = (
         combined_judge_valid
         if change_decision_profile == SERVER_RULE_THEN_LOCAL_DECISION_VERSION
         else local_judge_valid
     )
-    locally_auditable_unresolved = allow_local_judge_unresolved and str(requested_source) in {
-        "local_llm_judge_uncertain",
-        "local_input_guard",
-        *SERVER_RULE_UNRESOLVED_SOURCES,
-    }
-    if local_judge_required and not required_decision_valid and not locally_auditable_unresolved:
+    requested_source_name = str(requested_source)
+    is_server_pending = requested_source_name in SERVER_PENDING_SOURCES
+    is_terminal_audit = requested_source_name in TERMINAL_AUDIT_SOURCES
+    terminal_audit_allowed = is_terminal_audit and (
+        requested_source_name == "server_input_guard" or allow_local_judge_unresolved
+    )
+    if decision_priority and is_server_pending and (
+        change_decision_profile == SERVER_RULE_THEN_LOCAL_DECISION_VERSION
+        or change_decision_profile == LOCAL_TEXT_JUDGE_DECISION_VERSION
+    ):
+        message = (
+            f"sample {record.id}: server_rule_unresolved is still pending local judging; "
+            "run judge_change_captions.py --only-unresolved before post-judge evaluation."
+        )
+        if strict:
+            raise InputValidationError(message)
+        decision_warnings.append(message)
+        predicted_changeflag = None
+        binary_reason = "pending_required_local_judge"
+        binary_mode = "unresolved"
+    elif decision_priority and is_server_pending:
+        # server_rule_only intentionally preserves this as an unresolved
+        # partial-coverage row; it is not a completed local-judge decision.
+        predicted_changeflag = None
+        binary_reason = "server_rule_unresolved"
+        binary_mode = "unresolved"
+    elif decision_priority and terminal_audit_allowed:
+        predicted_changeflag = None
+        binary_reason = (
+            "server_input_guard"
+            if requested_source_name == "server_input_guard"
+            else "local_judge_unresolved"
+        )
+        binary_mode = "unresolved"
+    elif local_judge_required and not required_decision_valid:
         message = (
             f"sample {record.id}: local text judge decision is required; run "
             "judge_change_captions.py first."
         )
         if strict:
             raise InputValidationError(message)
+        decision_warnings.append(message)
         predicted_changeflag = None
         binary_reason = "missing_required_local_judge_decision"
         binary_mode = "unresolved"
         binary_source = "missing_required_local_judge_decision"
-    elif locally_auditable_unresolved:
-        predicted_changeflag = None
-        binary_reason = "local_judge_unresolved"
-        binary_mode = "unresolved"
     elif server_rule_required and not (
-        server_rule_valid or requested_source in SERVER_RULE_UNRESOLVED_SOURCES
+        server_rule_valid
+        or requested_source_name in SERVER_PENDING_SOURCES
+        or requested_source_name == "server_input_guard"
     ):
         message = (
             f"sample {record.id}: server-rule evaluation requires routed output from "
@@ -429,6 +468,7 @@ def _evaluate_change_caption(
         )
         if strict:
             raise InputValidationError(message)
+        decision_warnings.append(message)
         predicted_changeflag = None
         binary_reason = "missing_required_server_rule_decision"
         binary_mode = "unresolved"
@@ -516,7 +556,12 @@ def _evaluate_change_caption(
                 "binary_prediction_source": binary_source,
             }
         )
-    return EvaluatedRow(output, resolution.name, resolution.kind, resolution.status)
+    if decision_warnings:
+        output["decision_warnings"] = decision_warnings
+    return (
+        EvaluatedRow(output, resolution.name, resolution.kind, resolution.status),
+        decision_warnings,
+    )
 
 
 def _evaluate_unimplemented(
@@ -561,19 +606,16 @@ def evaluate_record(
     if resolution.kind == "caption":
         return _evaluate_caption(record, resolution, strict=strict), []
     if resolution.kind == "change_caption":
-        return (
-            _evaluate_change_caption(
-                record,
-                resolution,
-                strict=strict,
-                change_decision_profile=str(contract.get("change_decision_profile", "")),
-                local_judge_required=bool(contract.get("local_text_judge_required", False)),
-                server_rule_required=bool(contract.get("server_rule_required", False)),
-                allow_local_judge_unresolved=bool(
-                    contract.get("allow_local_judge_unresolved", False)
-                ),
+        return _evaluate_change_caption(
+            record,
+            resolution,
+            strict=strict,
+            change_decision_profile=str(contract.get("change_decision_profile", "")),
+            local_judge_required=bool(contract.get("local_text_judge_required", False)),
+            server_rule_required=bool(contract.get("server_rule_required", False)),
+            allow_local_judge_unresolved=bool(
+                contract.get("allow_local_judge_unresolved", False)
             ),
-            [],
         )
     return _evaluate_unimplemented(record, resolution), []
 
@@ -899,6 +941,11 @@ def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
         partial_status = (
             "partial_coverage" if server_rule_only_profile or local_complete_with_gaps else "ok"
         )
+        binary_status = (
+            partial_status
+            if partial_status == "partial_coverage"
+            else ("ok" if comparable else "not_available")
+        )
         partial_note = (
             "Unresolved captions are excluded from this partial binary diagnostic; "
             "do not treat it as a full LEVIR-CC score."
@@ -929,13 +976,13 @@ def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
                 "binary_accuracy": metric_value(
                     accuracy,
                     num_samples=comparable,
-                    status=partial_status if comparable else "not_available",
+                    status=binary_status,
                     note=partial_note,
                 ),
                 "resolved_only_binary_accuracy": metric_value(
                     accuracy,
                     num_samples=comparable,
-                    status=partial_status if comparable else "not_available",
+                    status=binary_status,
                     note=partial_note,
                 ),
                 "balanced_accuracy": metric_value(

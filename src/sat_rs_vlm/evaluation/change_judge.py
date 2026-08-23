@@ -26,6 +26,8 @@ from sat_rs_vlm.evaluation.records import EvaluationError, read_prediction_jsonl
 
 LOCAL_JUDGE_IMPLEMENTATION_VERSION = "levir-local-text-judge-v2.4-lora"
 LOCAL_JUDGE_PROMPT_VERSION = "levir-caption-semantics-en-v3"
+# Routing/implementation provenance; do not confuse this with runner-level
+# evaluation decision profiles such as local_text_judge_priority_v1.
 LOCAL_JUDGE_DECISION_PROFILE = "local_text_judge_priority_v1.3"
 SERVER_RULE_ROUTER_VERSION = "levir-server-rule-router-v1.0"
 SERVER_RULE_UNRESOLVED_SOURCE = "server_rule_unresolved"

@@ -24,41 +24,17 @@ LEVIR-CC主模型继续自由生成变化描述，不再为了统计准确率进
 完整命令、分母规则和报告限制见
 [服务器规则评测与本地语言模型补全](levir_server_rule_local_judge_split.md)。
 
-## v1.7 历史复现流程
+## v1.7 历史说明
 
-主模型推理配置默认关闭历史二次0/1推理：
+v1.7 Local Judge workflow 仅保留在历史分支
+`feature/evaluation-v1.7-local-judge`，当前 integration 分支不再引用不存在的历史
+contract，也不会重新迁入整套历史 artifacts。
 
-```yaml
-generation:
-  change_binary_enabled: false
-```
+当前 integration 分支保证：
 
-准备本地Qwen3-1.7B权重后，运行：
-
-```powershell
-python scripts/evaluation/judge_change_captions.py `
-  --predictions E:\path\to\predictions.jsonl `
-  --model E:\太空智算\models\Qwen3-1.7B `
-  --output-dir E:\太空智算\evaluation-results-local\local-judge `
-  --routing cascade `
-  --batch-size 8
-```
-
-默认禁止联网加载模型。只有明确需要下载时才传入`--allow-download`。
-
-随后使用v1.7契约评测：
-
-```powershell
-python scripts/evaluation/evaluate_predictions.py `
-  --predictions E:\太空智算\evaluation-results-local\local-judge\judged_predictions.jsonl `
-  --output-dir E:\太空智算\evaluation-results-local\local-judge-evaluated `
-  --contract configs/eval/evaluation_contract_v1.7.yaml
-```
-
-v1.7严格模式会检查每条LEVIR-CC结果都具有本地评审器写入的
-`prediction_changeflag=0/1`及`binary_prediction_source=local_*`。直接把主模型的原始
-`predictions.jsonl`交给v1.7离线评测会停止并提示先运行本评审器，避免静默回退到旧的
-Caption关键词规则、导致不同模型被粗粒度地判为相同结果。
+- 历史评测继续使用 legacy parser 语义；
+- v1.8 server/local split 是支持的推荐流程；
+- 主 VLM 不重新启用第二次 image binary inference。
 
 主模型推理也必须为每个模型/检查点使用新的独立输出目录，例如：
 
