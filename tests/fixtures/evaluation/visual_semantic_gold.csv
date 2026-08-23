@@ -1,0 +1,3 @@
+sample_id,image_t1_path,image_t2_path,gold_change_label,gold_changed_objects,gold_change_directions,gold_change_events,annotation_confidence,label_source
+sample-1,before1.png,after1.png,1,building,appearance_construction,building:appearance_construction,high,fixture
+sample-2,before2.png,after2.png,1,building,disappearance_demolition,building:disappearance_demolition,high,fixture

@@ -1,0 +1,52 @@
+{
+  "schema_version": "1.1",
+  "protocol": "levir_cc_visual_change_semantics_v1_1",
+  "metric_label": "internal_rule_extracted_caption_vs_visual_gold",
+  "gold_basis": "dual_annotator_visual_inspection_of_before_after_image_pair",
+  "prediction_basis": "deterministic_extraction_from_generated_caption",
+  "required_gold_fields": [
+    "sample_id",
+    "image_t1_path",
+    "image_t2_path",
+    "gold_change_label",
+    "gold_changed_objects",
+    "gold_change_directions",
+    "gold_change_events",
+    "annotation_confidence",
+    "label_source"
+  ],
+  "labels": {
+    "change": ["0", "1", "U"],
+    "objects": ["building", "road", "parking_area", "bridge", "sports_field", "water_body", "vegetation_landcover", "other_permanent_structure", "none", "unknown"],
+    "directions": ["appearance_construction", "disappearance_demolition", "expansion", "reduction", "replacement_modification", "state_change_unspecified", "none", "unknown"]
+  },
+  "opposite_temporal_pairs": [
+    ["appearance_construction", "disappearance_demolition"],
+    ["expansion", "reduction"]
+  ],
+  "metrics": [
+    "binary_accuracy",
+    "binary_parse_success_rate",
+    "binary_balanced_accuracy",
+    "change_precision_recall_f1",
+    "no_change_recall",
+    "object_micro_precision_recall_f1",
+    "object_exact_match_accuracy",
+    "direction_micro_precision_recall_f1",
+    "direction_exact_match_accuracy",
+    "opposite_temporal_error_count",
+    "object_direction_event_micro_precision_recall_f1",
+    "object_direction_event_exact_match_accuracy"
+  ],
+  "prompt_reproducibility": {
+    "required_fields": ["prompt_text_verbatim", "image_t1_role", "image_t2_role", "input_image_order", "do_sample", "temperature", "top_p", "max_new_tokens", "num_beams", "output_postprocessing", "model_id", "adapter_id", "quantization", "code_version"],
+    "comparison_rule": "Only runs with the same declared prompt profile and generation settings may be compared directly."
+  },
+  "limitations": [
+    "Do not use reference Captions as visual semantic gold.",
+    "Rule extraction is an explicit output postprocessing step and must be reported with its version.",
+    "Rows with visual gold label U are audit-only and excluded from binary score denominators.",
+    "Object, direction and event scores use gold-change samples only; no-change rows do not inflate empty-set agreement.",
+    "gold_change_events uses object:direction pairs and must be explicitly annotated; object and direction lists cannot be expanded as a Cartesian product."
+  ]
+}

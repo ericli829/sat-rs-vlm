@@ -1,0 +1,18 @@
+{
+  "prompt_profile": "fixture_levir_caption_v1",
+  "prompt_text_verbatim": "Compare the two remote-sensing images and describe any changes.",
+  "image_t1_role": "before",
+  "image_t2_role": "after",
+  "input_image_order": ["image_t1", "image_t2"],
+  "do_sample": false,
+  "temperature": 0.0,
+  "top_p": 1.0,
+  "max_new_tokens": 128,
+  "num_beams": 1,
+  "output_postprocessing": "strip_only",
+  "model_id": "fixture-model",
+  "adapter_id": "none",
+  "quantization": "none",
+  "code_version": "fixture-v1",
+  "predictions_sha256": "c5984ac766c433b252d5af27a3c205daab9dce16aa91b4b5ef02db3627a2c571"
+}
