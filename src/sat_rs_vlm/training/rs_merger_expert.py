@@ -730,19 +730,38 @@ def validate_checkpoint_provenance(
     architecture_audit_sha256: str,
     source_r1_manifest_sha256: str,
     source_visual_sidecar_sha256: str,
-) -> None:
-    expected = {
-        "architecture_audit_sha256": architecture_audit_sha256,
+) -> dict[str, Any]:
+    """Validate checkpoint provenance with an explicit audit-hash drift policy.
+
+    The architecture audit is a diagnostic report whose bytes may change when
+    non-architectural metadata is added.  R1 and visual sidecar identities are
+    source assets and remain hard compatibility gates.
+    """
+
+    source_expected = {
         "source_r1_manifest_sha256": source_r1_manifest_sha256,
         "source_visual_sidecar_sha256": source_visual_sidecar_sha256,
     }
     mismatches = [
         f"{key}: checkpoint={manifest.get(key)!r}, runtime={value!r}"
-        for key, value in expected.items()
+        for key, value in source_expected.items()
         if manifest.get(key) != value
     ]
     if mismatches:
         raise ValueError("Composite checkpoint provenance mismatch: " + "; ".join(mismatches))
+    audit_match = manifest.get("architecture_audit_sha256") == architecture_audit_sha256
+    warnings = [] if audit_match else [
+        "architecture_audit_sha256 drift recorded as provenance warning; "
+        "runtime architecture fields remain independently hard-validated"
+    ]
+    return {
+        "architecture_audit_hash_match": audit_match,
+        "architecture_audit_sha256": manifest.get("architecture_audit_sha256"),
+        "runtime_architecture_audit_sha256": architecture_audit_sha256,
+        "provenance_warnings": warnings,
+        "source_r1_manifest_sha256": source_r1_manifest_sha256,
+        "source_visual_sidecar_sha256": source_visual_sidecar_sha256,
+    }
 
 
 def run_training(

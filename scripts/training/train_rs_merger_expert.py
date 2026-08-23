@@ -57,6 +57,11 @@ def parse_args() -> argparse.Namespace:
         choices=(2.0, 3.0, 4.0),
         help="Continuation target; resolves extra epochs from parent checkpoint metadata.",
     )
+    parser.add_argument(
+        "--finalize-existing-run",
+        metavar="RUN_DIR",
+        help="Recover fixed evaluation and final checkpoint artifacts without retraining.",
+    )
     return parser.parse_args()
 
 
@@ -82,6 +87,313 @@ def _probe_batch(processor: Any, config: dict[str, Any], max_samples: int = 2) -
     return collator([dataset[index] for index in range(len(dataset))])
 
 
+def _build_expert_manifest(
+    *,
+    config: dict[str, Any],
+    expert: dict[str, Any],
+    architecture: dict[str, Any],
+    r1_report: dict[str, Any],
+    audit_sha: str,
+    r1_manifest_sha: str,
+    sidecar_sha: str,
+    data_manifest: Path,
+    trainable_audit: dict[str, Any],
+    resume_report: dict[str, Any],
+    transformers: Any,
+    torch: Any,
+    peft: Any,
+    finalization: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "schema_version": "2.0",
+        "experiment": config["experiment"],
+        "variant": expert["variant"],
+        "expert_variant": expert["expert_variant"],
+        "detail_hidden_size": int(expert.get("detail_hidden_size", 512)),
+        "local_depth": int(expert.get("local_depth", 1)),
+        "task": "counting",
+        "source_r1_checkpoint": config["model"]["r1_checkpoint"],
+        "source_r1_manifest_sha256": r1_manifest_sha,
+        "source_visual_sidecar_sha256": sidecar_sha,
+        "transformers_version": transformers.__version__,
+        "torch_version": torch.__version__,
+        "peft_version": peft.__version__,
+        "foundation_precision": (
+            "real_4bit_nf4_bf16_compute"
+            if bool(config["model"].get("load_in_4bit", False))
+            else "real_bf16"
+        ),
+        "architecture_audit_sha256": audit_sha,
+        "train_data_sha256": file_sha256(config["data"]["train_file"]),
+        "train_data_manifest_sha256": file_sha256(data_manifest),
+        "selected_vit_blocks": architecture["deepstack_visual_indexes"]
+        + [architecture["vision_block_count"] - 1],
+        "spatial_merge_size": architecture["spatial_merge_size"],
+        "visual_hidden_size": architecture["vision_hidden_size"],
+        "llm_hidden_size": architecture["llm_hidden_size"],
+        "output_visual_token_policy": "same_as_qwen",
+        "merger_parameter_count": trainable_audit["expert_parameter_count"],
+        "interface_lora_parameter_count": trainable_audit["interface_lora_parameter_count"],
+        "total_trainable_parameter_count": trainable_audit["total_trainable_parameter_count"],
+        "count_head_parameter_count": trainable_audit["count_head_parameter_count"],
+        "count_loss": dict(config["training"].get("count_loss", {})),
+        "interface_lora": {
+            "layers": [0, 1, 2, 3],
+            "targets": ["q_proj", "k_proj", "v_proj", "o_proj"],
+            **expert["interface_lora"],
+        },
+        "initialization": {"step0_functionally_equal_to_r1_before_continuation_load": True},
+        "route": {"counting": "counting_expert", "fallback": "base_r1"},
+        "r1_integration": r1_report["implementation"],
+        "continuation": resume_report,
+        "parent_checkpoint": None,
+    }
+    if finalization is not None:
+        payload["finalization"] = finalization
+    return payload
+
+
+def _write_learning_curve(root: Path, learning_curve: list[dict[str, Any]]) -> None:
+    (root / "learning_curve.json").write_text(
+        json.dumps(learning_curve, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    lines = [
+        "# Fixed E_COUNT_V2 learning curve",
+        "",
+        "| checkpoint | exact | within-1 | MAE |",
+        "|---|---:|---:|---:|",
+    ]
+    for point in learning_curve:
+        overall = point["metrics"]["counting_focused"]["overall"]
+        lines.append(
+            f"| {point['checkpoint']} | {overall.get('exact')} | "
+            f"{overall.get('within_1')} | {overall.get('mae')} |"
+        )
+    (root / "learning_curve.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _evaluate_fixed_curve(
+    *,
+    root: Path,
+    config: dict[str, Any],
+    expert: dict[str, Any],
+    model: Any,
+    processor: Any,
+    controller: Any,
+    load_weights: bool = True,
+    require_epoch_checkpoints: bool = False,
+    max_eval_samples: int | None = None,
+) -> list[dict[str, Any]]:
+    fixed_eval = config["data"].get("fixed_eval")
+    fixed_manifest = config["data"].get("fixed_eval_manifest")
+    if not fixed_eval:
+        return []
+    if not fixed_manifest:
+        raise ValueError("fixed_eval_manifest must be explicitly configured with fixed_eval")
+    if "${" in str(fixed_eval) or "${" in str(fixed_manifest):
+        raise ValueError("Fixed evaluation tier paths are unresolved")
+    eval_image_root = config["data"].get("eval_image_root", config["data"]["image_root"])
+    if "${" in str(eval_image_root):
+        raise ValueError("Fixed evaluation image root is unresolved; set EVAL_DATA_ROOT")
+    epoch_weights = sorted(
+        (root / "epoch_checkpoints").glob("epoch_*/expert_model.safetensors"),
+        key=lambda path: int(path.parent.name.split("_")[-1]),
+    )
+    if require_epoch_checkpoints and not epoch_weights:
+        raise FileNotFoundError("No completed epoch checkpoints are available for recovery")
+    evaluation_sources: list[tuple[str, Path | None]] = [
+        (path.parent.name, path) for path in epoch_weights
+    ]
+    if not evaluation_sources:
+        evaluation_sources = [("final_partial_epoch", None)]
+    final_state = {
+        name: value.detach().cpu().clone()
+        for name, value in controller.expert_state_dict().items()
+    }
+    learning_curve: list[dict[str, Any]] = []
+    try:
+        for label, weights_path in evaluation_sources:
+            if load_weights and weights_path is not None:
+                controller.load_expert_state_dict(load_file(str(weights_path), device="cpu"))
+            metrics = evaluate_rows(
+                model=model,
+                processor=processor,
+                controller=controller,
+                tier_file=fixed_eval,
+                tier_manifest=fixed_manifest,
+                image_root=eval_image_root,
+                output_dir=root / "fixed_eval" / label,
+                expert_variant=str(expert["variant"]),
+                max_eval_samples=max_eval_samples,
+                max_new_tokens=int(config["training"].get("eval_max_new_tokens", 64)),
+                eval_batch_size=int(config["training"].get("eval_batch_size", 4)),
+            )
+            learning_curve.append({"checkpoint": label, "metrics": metrics})
+    finally:
+        controller.load_expert_state_dict(final_state)
+    _write_learning_curve(root, learning_curve)
+    return learning_curve
+
+
+def _load_recovered_training_summary(root: Path, torch: Any) -> dict[str, Any]:
+    state_path = root / "training_state.pt"
+    if not state_path.is_file():
+        raise FileNotFoundError(f"Completed run is missing training_state.pt: {state_path}")
+    try:
+        state = torch.load(state_path, map_location="cpu", weights_only=True)
+    except TypeError:
+        state = torch.load(state_path, map_location="cpu")
+    if not isinstance(state, dict):
+        raise ValueError("training_state.pt must contain a mapping")
+    preflight_path = root / "preflight.json"
+    preflight = (
+        json.loads(preflight_path.read_text(encoding="utf-8"))
+        if preflight_path.is_file()
+        else {}
+    )
+    plan = dict(preflight.get("training_plan", {}))
+    log_path = root / "train_log.jsonl"
+    last_log: dict[str, Any] = {}
+    if log_path.is_file():
+        for line in log_path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                last_log = json.loads(line)
+    summary: dict[str, Any] = {
+        "mode": "recovered_post_training",
+        "recovered_from_existing_run": True,
+        "training_reexecuted": False,
+        "completed_effective_epochs": float(state.get("completed_effective_epochs", 0.0)),
+        "global_optimizer_steps": int(
+            state.get("global_optimizer_step", last_log.get("global_optimizer_step", 0))
+        ),
+        "optimizer_steps": int(
+            last_log.get("optimizer_step", state.get("global_optimizer_step", 0))
+        ),
+        "loss_total": last_log.get("loss_total"),
+        "elapsed_seconds": last_log.get("elapsed_seconds"),
+        "trainable_params": dict(preflight.get("trainable_audit", {})).get(
+            "total_trainable_parameter_count"
+        ),
+        "trainable_audit": preflight.get("trainable_audit"),
+        "plan": plan,
+        "training_state_path": state_path.as_posix(),
+        "recovery_sources": [
+            name
+            for name in (
+                "training_state.pt",
+                "train_log.jsonl",
+                "memory_log.json",
+                "preflight.json",
+            )
+            if (root / name).is_file()
+        ],
+    }
+    memory_path = root / "memory_log.json"
+    if memory_path.is_file():
+        summary["memory"] = json.loads(memory_path.read_text(encoding="utf-8"))
+    return summary
+
+
+def finalize_existing_run(
+    *,
+    root: Path,
+    config: dict[str, Any],
+    expert: dict[str, Any],
+    model: Any,
+    processor: Any,
+    controller: Any,
+    manifest: dict[str, Any],
+    torch: Any,
+    max_eval_samples: int | None = None,
+) -> dict[str, Any]:
+    """Finalize a completed training run without constructing an optimizer."""
+
+    state_path = root / "training_state.pt"
+    if not state_path.is_file():
+        raise FileNotFoundError(f"Finalize run is missing training_state.pt: {state_path}")
+    try:
+        state = torch.load(state_path, map_location="cpu", weights_only=True)
+    except TypeError:
+        state = torch.load(state_path, map_location="cpu")
+    completed = float(state.get("completed_effective_epochs", 0.0))
+    target = float(config["training"].get("target_effective_epochs", 1.0))
+    if completed + 1e-9 < target:
+        raise ValueError(
+            "Cannot finalize incomplete run: "
+            f"completed_effective_epochs={completed}, target={target}"
+        )
+    epoch_weights = sorted(
+        (root / "epoch_checkpoints").glob("epoch_*/expert_model.safetensors"),
+        key=lambda path: int(path.parent.name.split("_")[-1]),
+    )
+    expected_epoch = int(target + 0.999999)
+    available_epochs = [int(path.parent.name.split("_")[-1]) for path in epoch_weights]
+    if any(epoch not in available_epochs for epoch in range(1, expected_epoch + 1)):
+        raise FileNotFoundError(
+            "Finalize run requires "
+            f"epoch_01..epoch_{expected_epoch:02d}; available={available_epochs}"
+        )
+    if any(epoch > expected_epoch for epoch in available_epochs):
+        raise ValueError(
+            f"Finalize run has epoch checkpoints beyond target epoch {expected_epoch}: "
+            f"available={available_epochs}"
+        )
+    final_epoch_path = root / "epoch_checkpoints" / f"epoch_{expected_epoch:02d}"
+    epoch_manifest_path = final_epoch_path / "epoch_manifest.json"
+    if not epoch_manifest_path.is_file():
+        raise FileNotFoundError(f"Final epoch manifest is missing: {epoch_manifest_path}")
+    epoch_manifest = json.loads(epoch_manifest_path.read_text(encoding="utf-8"))
+    if float(epoch_manifest.get("completed_effective_epochs", 0.0)) + 1e-9 < target:
+        raise ValueError("Final epoch checkpoint is not marked as a complete target epoch")
+    final_weights_path = final_epoch_path / "expert_model.safetensors"
+    controller.load_expert_state_dict(load_file(str(final_weights_path), device="cpu"))
+    final_state = {
+        name: value.detach().cpu().clone()
+        for name, value in controller.expert_state_dict().items()
+    }
+    summary = _load_recovered_training_summary(root, torch)
+    learning_curve = _evaluate_fixed_curve(
+        root=root,
+        config=config,
+        expert=expert,
+        model=model,
+        processor=processor,
+        controller=controller,
+        require_epoch_checkpoints=True,
+        max_eval_samples=max_eval_samples,
+    )
+    summary["fixed_eval_learning_curve"] = learning_curve
+    summary["finalization"] = {
+        "mode": "recovered_post_training",
+        "source_run": root.as_posix(),
+        "source_epoch": expected_epoch,
+        "training_reexecuted": False,
+    }
+    manifest["finalization"] = summary["finalization"]
+    checkpoint_root = root / "checkpoint"
+    if checkpoint_root.exists():
+        raise FileExistsError(
+            f"Refusing to overwrite an existing final checkpoint during recovery: {checkpoint_root}"
+        )
+    save_composite_checkpoint(
+        controller,
+        checkpoint_root,
+        manifest=manifest,
+        training_summary=summary,
+        resolved_config=config,
+        training_state_path=state_path,
+    )
+    saved_state = load_file(str(checkpoint_root / "expert_model.safetensors"), device="cpu")
+    if set(saved_state) != set(final_state) or any(
+        not torch.equal(saved_state[name], final_state[name]) for name in final_state
+    ):
+        raise AssertionError("Recovered final checkpoint differs from final epoch expert state")
+    (root / "training_summary.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    return summary
+
+
 def main() -> int:
     args = parse_args()
     if args.dry_run and args.forward_only:
@@ -91,7 +403,6 @@ def main() -> int:
     model = processor = controller = probe = dataset = summary = None
     foundation_probe = base_route_probe = continuation_base_probe = None
     restored_state = None
-    final_expert_state = None
     root: Path | None = None
     try:
         torch = importlib.import_module("torch")
@@ -244,6 +555,49 @@ def main() -> int:
         print(json.dumps(preflight, ensure_ascii=False, indent=2))
         if args.dry_run:
             return 0
+        if args.finalize_existing_run:
+            if args.skip_eval:
+                raise ValueError("--finalize-existing-run always performs fixed evaluation")
+            if (
+                args.resume_expert_checkpoint
+                or args.forward_only
+                or args.max_steps is not None
+                or args.target_total_effective_epochs is not None
+            ):
+                raise ValueError(
+                    "--finalize-existing-run cannot be combined with training/resume controls"
+                )
+            root = Path(args.finalize_existing_run).expanduser().resolve()
+            if not root.is_dir():
+                raise FileNotFoundError(f"Existing run directory does not exist: {root}")
+            manifest = _build_expert_manifest(
+                config=config,
+                expert=expert,
+                architecture=architecture,
+                r1_report=r1_report,
+                audit_sha=audit_sha,
+                r1_manifest_sha=r1_manifest_sha,
+                sidecar_sha=sidecar_sha,
+                data_manifest=data_manifest,
+                trainable_audit=trainable_audit,
+                resume_report=resume_report,
+                transformers=transformers,
+                torch=torch,
+                peft=peft,
+            )
+            summary = finalize_existing_run(
+                root=root,
+                config=config,
+                expert=expert,
+                model=model,
+                processor=processor,
+                controller=controller,
+                manifest=manifest,
+                torch=torch,
+                max_eval_samples=args.max_eval_samples,
+            )
+            print(json.dumps(summary, ensure_ascii=False, indent=2))
+            return 0
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         root = Path(args.output_root or config["output"]["root"]) / (
             f"{config['experiment']}_{timestamp}"
@@ -273,113 +627,31 @@ def main() -> int:
                 json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
             )
             return 0
-        manifest = {
-            "schema_version": "2.0",
-            "experiment": config["experiment"],
-            "variant": expert["variant"],
-            "expert_variant": expert["expert_variant"],
-            "detail_hidden_size": int(expert.get("detail_hidden_size", 512)),
-            "local_depth": int(expert.get("local_depth", 1)),
-            "task": "counting",
-            "source_r1_checkpoint": config["model"]["r1_checkpoint"],
-            "source_r1_manifest_sha256": r1_manifest_sha,
-            "source_visual_sidecar_sha256": sidecar_sha,
-            "transformers_version": transformers.__version__,
-            "torch_version": torch.__version__,
-            "peft_version": peft.__version__,
-            "foundation_precision": (
-                "real_4bit_nf4_bf16_compute"
-                if bool(config["model"].get("load_in_4bit", False))
-                else "real_bf16"
-            ),
-            "architecture_audit_sha256": audit_sha,
-            "train_data_sha256": file_sha256(config["data"]["train_file"]),
-            "train_data_manifest_sha256": file_sha256(data_manifest),
-            "selected_vit_blocks": architecture["deepstack_visual_indexes"]
-            + [architecture["vision_block_count"] - 1],
-            "spatial_merge_size": architecture["spatial_merge_size"],
-            "visual_hidden_size": architecture["vision_hidden_size"],
-            "llm_hidden_size": architecture["llm_hidden_size"],
-            "output_visual_token_policy": "same_as_qwen",
-            "merger_parameter_count": trainable_audit["expert_parameter_count"],
-            "interface_lora_parameter_count": trainable_audit["interface_lora_parameter_count"],
-            "total_trainable_parameter_count": trainable_audit["total_trainable_parameter_count"],
-            "count_head_parameter_count": trainable_audit["count_head_parameter_count"],
-            "count_loss": count_loss_config,
-            "interface_lora": {
-                "layers": [0, 1, 2, 3],
-                "targets": ["q_proj", "k_proj", "v_proj", "o_proj"],
-                **expert["interface_lora"],
-            },
-            "initialization": {"step0_functionally_equal_to_r1_before_continuation_load": True},
-            "route": {"counting": "counting_expert", "fallback": "base_r1"},
-            "r1_integration": r1_report["implementation"],
-            "continuation": resume_report,
-            "parent_checkpoint": (
-                {
-                    "path": resume.root.as_posix(),
-                    "expert_weights_sha256": resume.weights_sha256,
-                    "expert_manifest_sha256": resume.manifest_sha256,
-                }
-                if resume
-                else None
-            ),
-        }
-        fixed_eval = config["data"].get("fixed_eval")
-        if fixed_eval and not args.skip_eval:
-            eval_image_root = config["data"].get("eval_image_root", config["data"]["image_root"])
-            if isinstance(eval_image_root, str) and "${" in eval_image_root:
-                raise ValueError("Fixed evaluation image root is unresolved; set EVAL_DATA_ROOT")
-            final_expert_state = {
-                name: value.detach().cpu().clone()
-                for name, value in controller.expert_state_dict().items()
-            }
-            epoch_weights = sorted(
-                (root / "epoch_checkpoints").glob("epoch_*/expert_model.safetensors")
+        manifest = _build_expert_manifest(
+            config=config,
+            expert=expert,
+            architecture=architecture,
+            r1_report=r1_report,
+            audit_sha=audit_sha,
+            r1_manifest_sha=r1_manifest_sha,
+            sidecar_sha=sidecar_sha,
+            data_manifest=data_manifest,
+            trainable_audit=trainable_audit,
+            resume_report=resume_report,
+            transformers=transformers,
+            torch=torch,
+            peft=peft,
+        )
+        if config["data"].get("fixed_eval") and not args.skip_eval:
+            summary["fixed_eval_learning_curve"] = _evaluate_fixed_curve(
+                root=root,
+                config=config,
+                expert=expert,
+                model=model,
+                processor=processor,
+                controller=controller,
+                max_eval_samples=args.max_eval_samples,
             )
-            evaluation_sources: list[tuple[str, Path | None]] = [
-                (path.parent.name, path) for path in epoch_weights
-            ]
-            if not evaluation_sources:
-                evaluation_sources = [("final_partial_epoch", None)]
-            learning_curve = []
-            for label, weights_path in evaluation_sources:
-                if weights_path is not None:
-                    controller.load_expert_state_dict(load_file(str(weights_path), device="cpu"))
-                metrics = evaluate_rows(
-                    model=model,
-                    processor=processor,
-                    controller=controller,
-                    tier_file=fixed_eval,
-                    tier_manifest="data/evaluation/tiers_v2/e_count_v2_manifest.json",
-                    image_root=eval_image_root,
-                    output_dir=root / "fixed_eval" / label,
-                    expert_variant=str(expert["variant"]),
-                    max_eval_samples=args.max_eval_samples,
-                    max_new_tokens=int(config["training"].get("eval_max_new_tokens", 64)),
-                    eval_batch_size=int(config["training"].get("eval_batch_size", 4)),
-                )
-                learning_curve.append({"checkpoint": label, "metrics": metrics})
-            controller.load_expert_state_dict(final_expert_state)
-            summary["fixed_eval_learning_curve"] = learning_curve
-            (root / "learning_curve.json").write_text(
-                json.dumps(learning_curve, ensure_ascii=False, indent=2) + "\n",
-                encoding="utf-8",
-            )
-            curve_lines = [
-                "# Fixed E_COUNT_V2 learning curve",
-                "",
-                "| checkpoint | exact | within-1 | MAE |",
-                "|---|---:|---:|---:|",
-            ]
-            for point in learning_curve:
-                overall = point["metrics"]["counting_focused"]["overall"]
-                curve_lines.append(
-                    f"| {point['checkpoint']} | {overall.get('exact')} | "
-                    f"{overall.get('within_1')} | {overall.get('mae')} |"
-                )
-            (root / "learning_curve.md").write_text("\n".join(curve_lines) + "\n", encoding="utf-8")
-            final_expert_state = None
         save_composite_checkpoint(
             controller,
             root / "checkpoint",
@@ -401,7 +673,6 @@ def main() -> int:
         if controller is not None:
             controller.close(restore_modules=True)
         restored_state = None
-        final_expert_state = None
         foundation_probe = base_route_probe = continuation_base_probe = None
         summary = dataset = probe = controller = processor = model = None
         gc.collect()

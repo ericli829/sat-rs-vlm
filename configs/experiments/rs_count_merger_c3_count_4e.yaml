@@ -8,7 +8,8 @@ data:
   train_file: data/processed/rs_count_merger_v1/train.jsonl
   manifest: data/processed/rs_count_merger_v1/manifest.json
   image_root: ${DATA_ROOT}
-  fixed_eval: data/evaluation/tiers_v2/e_count_v2.jsonl
+  fixed_eval: ${E_COUNT_V2_FILE}
+  fixed_eval_manifest: ${E_COUNT_V2_MANIFEST}
   eval_image_root: ${EVAL_DATA_ROOT}
 expert:
   variant: c3_rs_detail_lora

@@ -11,7 +11,7 @@ from typing import Any
 from sat_rs_vlm.data.object_adapter_v0 import count_bin, extract_answer, extract_prompt
 from sat_rs_vlm.data.task_protocol import parse_count
 from sat_rs_vlm.evaluation.counting_protocol import classify_counting_predictions
-from sat_rs_vlm.evaluation.tiers import file_sha256
+from sat_rs_vlm.evaluation.tiers import canonical_jsonl_sha256, file_sha256
 from sat_rs_vlm.utils.jsonl import read_jsonl, write_jsonl
 
 COUNTING_FOCUSED_TIER = "E_COUNT_V1"
@@ -83,15 +83,43 @@ def _validate_unified_source(
         if not isinstance(record, dict):
             raise ValueError(f"Unified tier manifest is missing {name}")
         recorded_path = Path(str(record.get("path", "")))
-        if recorded_path.resolve() != path.resolve():
+        recorded_candidates = [recorded_path]
+        if not recorded_path.is_absolute():
+            recorded_candidates.extend(
+                [source_manifest.parent / recorded_path, Path.cwd() / recorded_path]
+            )
+        if not any(candidate.resolve() == path.resolve() for candidate in recorded_candidates):
             raise ValueError(
                 f"{name} path does not match unified manifest: "
                 f"manifest={recorded_path}, requested={path}"
             )
         actual_sha = file_sha256(path)
-        if record.get("sha256") != actual_sha:
+        expected_canonical = record.get("canonical_jsonl_sha256")
+        expected_raw = record.get("raw_sha256", record.get("sha256"))
+        if expected_canonical:
+            actual_canonical = canonical_jsonl_sha256(path)
+            if str(expected_canonical) != actual_canonical:
+                formal_r1_sha = record.get("formal_r1_sha256")
+                if formal_r1_sha and actual_sha == str(formal_r1_sha):
+                    raise ValueError(
+                        "formal R1 reference tier was supplied where generated unified-v2 "
+                        f"tier is required ({name}); actual raw SHA matches "
+                        f"formal_r1_sha256={formal_r1_sha}"
+                    )
+                raise ValueError(
+                    f"{name} canonical JSONL SHA256 mismatch: "
+                    f"manifest={expected_canonical}, actual={actual_canonical}"
+                )
+        elif expected_raw and str(expected_raw) != actual_sha:
+            formal_r1_sha = record.get("formal_r1_sha256")
+            if formal_r1_sha and actual_sha == str(formal_r1_sha):
+                raise ValueError(
+                    "formal R1 reference tier was supplied where generated unified-v2 "
+                    f"tier is required ({name}); actual SHA matches "
+                    f"formal_r1_sha256={formal_r1_sha}"
+                )
             raise ValueError(
-                f"{name} SHA256 mismatch: manifest={record.get('sha256')}, actual={actual_sha}"
+                f"{name} SHA256 mismatch: manifest={expected_raw}, actual={actual_sha}"
             )
         records[name] = record
     return payload, records["E1"], records["E2"]
@@ -199,6 +227,8 @@ def build_counting_focused_tier_v2(
             "E1": {
                 "path": e1.as_posix(),
                 "sha256": file_sha256(e1),
+                "raw_sha256": file_sha256(e1),
+                "canonical_jsonl_sha256": canonical_jsonl_sha256(e1),
                 "formal_r1_sha256": e1_record.get("formal_r1_sha256"),
                 "tier_version": source_payload["tier_version"],
                 "row_count": len(e1_rows),
@@ -209,6 +239,8 @@ def build_counting_focused_tier_v2(
             "E2": {
                 "path": e2.as_posix(),
                 "sha256": file_sha256(e2),
+                "raw_sha256": file_sha256(e2),
+                "canonical_jsonl_sha256": canonical_jsonl_sha256(e2),
                 "formal_r1_sha256": e2_record.get("formal_r1_sha256"),
                 "tier_version": source_payload["tier_version"],
                 "row_count": len(e2_rows),
@@ -237,6 +269,8 @@ def build_counting_focused_tier_v2(
         "duplicate_removal_count": len(duplicate_ids),
         "duplicate_ids": duplicate_ids,
         "excluded_e1_counting_count": len(e1_rows) - len(e1_guard),
+        "raw_sha256": file_sha256(output),
+        "canonical_jsonl_sha256": canonical_jsonl_sha256(output),
         "final_tier_sha256": file_sha256(output),
     }
     manifest_file.write_text(

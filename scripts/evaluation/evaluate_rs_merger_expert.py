@@ -149,7 +149,7 @@ def main() -> int:
             distribution=str(count_loss.get("distribution", "categorical")),
         )
     manifest = load_expert_weights(controller, args.expert_checkpoint)
-    validate_checkpoint_provenance(
+    provenance_report = validate_checkpoint_provenance(
         manifest,
         architecture_audit_sha256=file_sha256(args.architecture_audit),
         source_r1_manifest_sha256=file_sha256(Path(args.r1_checkpoint) / "strategy_manifest.json"),
@@ -185,6 +185,7 @@ def main() -> int:
         force_base=args.force_base,
         eval_batch_size=args.eval_batch_size,
     )
+    metrics["checkpoint_provenance"] = provenance_report
     if args.verify_batch1_parity:
         if args.eval_batch_size == 1:
             raise ValueError("--verify-batch1-parity requires --eval-batch-size > 1")
@@ -204,6 +205,7 @@ def main() -> int:
             force_base=args.force_base,
             eval_batch_size=1,
         )
+        batch1_metrics["checkpoint_provenance"] = provenance_report
         batched_predictions = (output / "predictions.jsonl").read_text(encoding="utf-8")
         batch1_predictions = (batch1_output / "predictions.jsonl").read_text(encoding="utf-8")
         parity = {

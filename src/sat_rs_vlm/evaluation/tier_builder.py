@@ -15,7 +15,7 @@ from typing import Any
 import yaml
 
 from sat_rs_vlm.configuration.environment import expand_environment
-from sat_rs_vlm.evaluation.tiers import file_sha256
+from sat_rs_vlm.evaluation.tiers import canonical_jsonl_sha256, file_sha256
 from sat_rs_vlm.utils.jsonl import read_jsonl, write_jsonl
 
 
@@ -369,18 +369,30 @@ def build_unified_evaluation_tiers(
     config_path: str | Path,
     *,
     project_root: str | Path,
+    output_dir_override: str | Path | None = None,
 ) -> dict[str, Any]:
     """从完整多源评测 population 生成冻结 Unified E1/E2/E3 v2。"""
 
     config_file = Path(config_path)
+    root = Path(project_root).resolve()
     payload = dict(yaml.safe_load(config_file.read_text(encoding="utf-8")) or {})
+    # Resolve the runtime output location before environment expansion.  This
+    # permits a CLI override even when the checked-in config uses
+    # ${EVAL_TIER_ROOT}, and prevents an implicit write into tracked repo data.
+    if output_dir_override is not None:
+        payload["output_dir"] = str(output_dir_override)
+    elif os.environ.get("EVAL_TIER_ROOT"):
+        payload["output_dir"] = os.environ["EVAL_TIER_ROOT"]
+    elif str(payload.get("output_dir", "")).strip() in {
+        "${EVAL_TIER_ROOT}",
+        "$EVAL_TIER_ROOT",
+    }:
+        payload["output_dir"] = str(root / "outputs/evaluation_tiers/unified_v2")
     payload = dict(
         expand_environment(payload, environ=os.environ, allow_unresolved=False)
     )
     if str(payload.get("schema_version")) != "2.0":
         raise ValueError("Unified evaluation tier config requires schema_version='2.0'")
-    root = Path(project_root).resolve()
-
     def project_path(value: str | Path) -> Path:
         path = Path(value).expanduser()
         return path if path.is_absolute() else root / path
@@ -472,7 +484,21 @@ def build_unified_evaluation_tiers(
     if not required_tasks <= e2_tasks:
         raise ValueError(f"E2 is missing required tasks: {sorted(required_tasks - e2_tasks)}")
 
-    output_dir = project_path(payload.get("output_dir", "data/evaluation/tiers_v2"))
+    output_dir = project_path(payload.get("output_dir", "outputs/evaluation_tiers/unified_v2"))
+    frozen_repo_tier_root = (root / "data/evaluation/tiers_v2").resolve()
+    if output_dir.resolve() == frozen_repo_tier_root and any(
+        (output_dir / name).exists()
+        for name in (
+            "e1_quick.jsonl",
+            "e2_standard.jsonl",
+            "e3_full.jsonl",
+            "evaluation_tiers_manifest.json",
+        )
+    ):
+        raise RuntimeError(
+            "Refusing to overwrite frozen/generated repo tiers_v2. Pass --output-dir "
+            "or set EVAL_TIER_ROOT to an external runtime directory."
+        )
     output_dir.mkdir(parents=True, exist_ok=True)
     tier_rows = {"E1": e1_rows, "E2": e2_rows, "E3": e3_rows}
     tier_paths = {
@@ -530,6 +556,11 @@ def build_unified_evaluation_tiers(
             "path": str(tier_paths[tier]),
             "sample_count": len(tier_data),
             "sha256": file_sha256(tier_paths[tier]),
+            "raw_sha256": file_sha256(tier_paths[tier]),
+            "canonical_jsonl_sha256": canonical_jsonl_sha256(tier_paths[tier]),
+            "ordered_sample_ids_sha256": hashlib.sha256(
+                "\n".join(str(row["id"]) for row in tier_data).encode("utf-8")
+            ).hexdigest(),
             "distribution": tier_distribution,
             "sampling_fraction": _sampling_fraction(
                 tier_distribution,

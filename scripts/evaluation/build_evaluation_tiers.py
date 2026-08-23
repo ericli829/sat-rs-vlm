@@ -11,13 +11,15 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import random
 import re
 import sys
 from collections import Counter, defaultdict
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import yaml
 
@@ -25,7 +27,7 @@ SRC_ROOT = Path(__file__).resolve().parents[2] / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from sat_rs_vlm.evaluation.tier_builder import build_unified_evaluation_tiers
+from sat_rs_vlm.evaluation.tier_builder import build_unified_evaluation_tiers  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -178,10 +180,14 @@ def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
             handle.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
 
 
-def build(config_path: Path) -> dict[str, Any]:
+def build(config_path: Path, *, output_dir_override: Path | None = None) -> dict[str, Any]:
     payload = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     if str(payload.get("schema_version", "1.0")) == "2.0":
-        return build_unified_evaluation_tiers(config_path, project_root=PROJECT_ROOT)
+        return build_unified_evaluation_tiers(
+            config_path,
+            project_root=PROJECT_ROOT,
+            output_dir_override=output_dir_override,
+        )
     seed = int(payload.get("seed", 42))
     data_cfg = dict(payload.get("data", {}))
     source_files = [_project_path(value) for value in data_cfg.get("source_files", [])]
@@ -235,7 +241,10 @@ def build(config_path: Path) -> dict[str, Any]:
     )
     e2_ids = {str(row["id"]) for row in e2_rows}
     e3_rows = list(rows)
-    output_dir = _project_path(payload.get("output_dir", "data/evaluation/tiers"))
+    output_dir = output_dir_override or _project_path(
+        os.environ.get("EVAL_TIER_ROOT")
+        or payload.get("output_dir", "outputs/evaluation_tiers/legacy")
+    )
     tier_rows = {"E1": e1_rows, "E2": e2_rows, "E3": e3_rows}
     tier_paths = {
         "E1": output_dir / "e1_quick.jsonl",
@@ -275,11 +284,22 @@ def build(config_path: Path) -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=Path("configs/eval/evaluation_tiers.yaml"))
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        help="External runtime directory for generated E1/E2/E3 and manifest",
+    )
     args = parser.parse_args()
-    manifest = build(args.config.resolve())
+    manifest = build(
+        args.config.resolve(),
+        output_dir_override=args.output_dir.resolve() if args.output_dir else None,
+    )
     print(
         json.dumps(
-            {"output_dir": str(_project_path(manifest["tiers"]["E2"]["path"]).parent), "tiers": manifest["tiers"]},
+            {
+                "output_dir": str(_project_path(manifest["tiers"]["E2"]["path"]).parent),
+                "tiers": manifest["tiers"],
+            },
             ensure_ascii=False,
             indent=2,
         )

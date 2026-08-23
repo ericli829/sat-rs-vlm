@@ -8,7 +8,8 @@ data:
   train_file: data/processed/rs_count_merger_v1/train.jsonl
   manifest: data/processed/rs_count_merger_v1/manifest.json
   image_root: ${DATA_ROOT}
-  fixed_eval: data/evaluation/tiers_v2/e_count_v2.jsonl
+  fixed_eval: ${E_COUNT_V2_FILE}
+  fixed_eval_manifest: ${E_COUNT_V2_MANIFEST}
   eval_image_root: ${EVAL_DATA_ROOT}
 expert:
   variant: c4_wide
@@ -35,23 +36,12 @@ training:
   seed: 42
   max_seq_length: 2048
   merger_lr: 0.0001
-  count_head_lr: 0.0002
+  interface_lora_lr: 0.00002
   merger_weight_decay: 0.01
   warmup_ratio: 0.05
   scheduler: cosine
   count_loss:
-    enabled: true
-    distribution: categorical
-    feature_layer: 3
-    head_hidden_size: 512
-    max_count: 15
-    tail_policy: clip_to_K
-    epsilon: 0.15
-    tau: 1.0
-    classification_weight: 0.5
-    ordinal_weight: 1.0
-    regression_weight: 0.25
-    ramp_epochs: 0.1
+    enabled: false
 output:
   root: ${OUTPUT_ROOT}/rs_merger_expert
 provenance:

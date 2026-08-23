@@ -12,6 +12,17 @@ CLOUD_ENV = {
     "DATA_ROOT": "/workspace/data",
     "MODEL_ROOT": "/workspace/models",
     "OUTPUT_ROOT": "/workspace/outputs",
+    "EVAL_TIER_ROOT": "/workspace/outputs/evaluation_tiers/unified_v2",
+    "EVAL_DATA_ROOT": "/workspace/data",
+    "E_COUNT_V2_FILE": "/workspace/outputs/evaluation_tiers/unified_v2/e_count_v2.jsonl",
+    "E_COUNT_V2_MANIFEST": (
+        "/workspace/outputs/evaluation_tiers/unified_v2/e_count_v2_manifest.json"
+    ),
+    "R1_CHECKPOINT": "/workspace/outputs/r1/adapter",
+    "R1_VISUAL_SIDECAR": "/workspace/outputs/r1/adapter/visual_trainable_weights.safetensors",
+    "SOURCE_ARCHITECTURE_AUDIT": "/workspace/outputs/r1/source_architecture_audit.json",
+    "C2_EXPERT_CHECKPOINT": "/workspace/outputs/rs_merger_expert/c2/final.safetensors",
+    "C3_EXPERT_CHECKPOINT": "/workspace/outputs/rs_merger_expert/c3/final.safetensors",
     "CACHE_ROOT": "/workspace/cache",
     "LOCAL_MODEL_DIR": "/workspace/models/Qwen3-VL-2B-Instruct",
     "QWEN3VL_4B_MODEL_DIR": "/workspace/models/Qwen3-VL-4B-Instruct",

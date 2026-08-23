@@ -15,7 +15,7 @@ from sat_rs_vlm.data.qwen3vl_dataset import Qwen3VLDataset
 from sat_rs_vlm.data.task_protocol import parse_count
 from sat_rs_vlm.evaluation.counting_protocol import summarize_exact_cardinality_counting
 from sat_rs_vlm.evaluation.metrics import summarize_predictions
-from sat_rs_vlm.evaluation.tiers import file_sha256
+from sat_rs_vlm.evaluation.tiers import canonical_jsonl_sha256, file_sha256
 from sat_rs_vlm.models.rs_merger_expert import RSMergerExpertController, route_for_task
 
 
@@ -240,18 +240,38 @@ def evaluate_rows(
     if tier_manifest is not None:
         manifest_path = Path(tier_manifest)
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        expected_hash = manifest.get("final_tier_sha256")
-        actual_hash = file_sha256(Path(tier_file))
-        if expected_hash and str(expected_hash) != actual_hash:
+        tier_path = Path(tier_file)
+        expected_canonical = manifest.get("canonical_jsonl_sha256")
+        expected_raw = manifest.get("raw_sha256", manifest.get("final_tier_sha256"))
+        actual_hash = file_sha256(tier_path)
+        provenance_warnings: list[str] = []
+        if expected_canonical:
+            actual_canonical = canonical_jsonl_sha256(tier_path)
+            if str(expected_canonical) != actual_canonical:
+                raise ValueError(
+                    "Counting-focused tier canonical JSONL SHA256 mismatch: "
+                    f"expected {expected_canonical}, got {actual_canonical}"
+                )
+            if expected_raw and str(expected_raw) != actual_hash:
+                provenance_warnings.append(
+                    "raw SHA drift accepted because canonical JSONL SHA matches; "
+                    "semantic benchmark identity is unchanged"
+                )
+        elif expected_raw and str(expected_raw) != actual_hash:
             raise ValueError(
                 "Counting-focused tier SHA256 mismatch: "
-                f"expected {expected_hash}, got {actual_hash}"
+                f"expected {expected_raw}, got {actual_hash}"
             )
         tier_provenance = {
             "manifest": manifest_path.as_posix(),
             "tier_name": manifest.get("tier_name"),
             "sha256": actual_hash,
+            "raw_sha256": actual_hash,
+            "canonical_jsonl_sha256": (
+                canonical_jsonl_sha256(tier_path) if expected_canonical else None
+            ),
             "total_rows": manifest.get("total_rows"),
+            "provenance_warnings": provenance_warnings,
         }
 
     dataset = Qwen3VLDataset(tier_file, max_samples=max_eval_samples)
