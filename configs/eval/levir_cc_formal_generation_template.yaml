@@ -1,0 +1,50 @@
+# Copy this file for each formal LEVIR-CC run.  Do not reuse it unchanged:
+# fill every null disclosure field with the exact setting used for that run.
+
+model:
+  base_model: "${MODEL_ROOT}/Qwen3-VL-4B-Instruct"
+  adapter_path: null
+  processor_id: "${MODEL_ROOT}/Qwen3-VL-4B-Instruct"
+  local_files_only: true
+  trust_remote_code: true
+  torch_dtype: "bfloat16"
+  device_map: "auto"
+
+data:
+  # Must be a frozen LEVIR-CC evaluation JSONL, containing its user messages.
+  eval_file: null
+  image_root: "${DATA_ROOT}/LEVIR-CC"
+  max_seq_length: 1024
+  max_eval_samples: null
+
+generation:
+  do_sample: false
+  # These two values are not passed by greedy decoding, but are recorded as
+  # not_used_greedy in generation_manifest.json for unambiguous disclosure.
+  temperature: 0.0
+  top_p: 1.0
+  num_beams: 1
+  max_new_tokens: 256
+  change_binary_enabled: false
+
+performance:
+  enabled: true
+  batch_size: 1
+  repeats: 1
+  warmup_samples: 2
+  continue_on_error: false
+
+prompt_reproducibility:
+  # With this true, the evaluator refuses to load the model unless every
+  # disclosure item below is explicitly supplied.
+  require_complete: true
+  generation_profile_name: null
+  prompt_text: null
+  image_t1_role: "before"
+  image_t2_role: "after"
+  image_input_order: "T1_before_then_T2_after"
+  output_postprocessing: "decoded_text_strip_only"
+  model_id: null
+  adapter_id: null
+  quantization: null
+  code_version: null

@@ -14,12 +14,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from sat_rs_vlm.models.qwen3vl_loader import (
-    load_qwen3vl,
-)
-from sat_rs_vlm.models.qwen3vl_loader import (
-    validate_local_adapter as _validate_local_adapter,
-)
 
 from sat_rs_vlm.configuration.environment import expand_environment
 from sat_rs_vlm.data.qwen3vl_collator import Qwen3VLDataCollator
@@ -48,6 +42,12 @@ from sat_rs_vlm.evaluation.performance import (
     environment_metadata,
     model_resource_metadata,
 )
+from sat_rs_vlm.models.qwen3vl_loader import (
+    load_qwen3vl,
+)
+from sat_rs_vlm.models.qwen3vl_loader import (
+    validate_local_adapter as _validate_local_adapter,
+)
 from sat_rs_vlm.training.utils import (
     MODEL_DEPS_ERROR,
     model_input_device,
@@ -57,6 +57,26 @@ from sat_rs_vlm.training.utils import (
 from sat_rs_vlm.utils.jsonl import write_jsonl
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+# Kept at the manifest root so the image-level semantic evaluator can validate
+# an inference run without importing this entry point or its YAML file.
+FORMAL_GENERATION_MANIFEST_FIELDS = (
+    "prompt_text_verbatim",
+    "image_t1_role",
+    "image_t2_role",
+    "input_image_order",
+    "do_sample",
+    "temperature",
+    "top_p",
+    "max_new_tokens",
+    "num_beams",
+    "output_postprocessing",
+    "model_id",
+    "adapter_id",
+    "quantization",
+    "code_version",
+    "prompt_profile",
+)
 
 
 def build_generation_kwargs(generation_cfg: dict[str, Any]) -> dict[str, Any]:
@@ -162,6 +182,68 @@ def sha256_if_file(path: Path) -> str | None:
     return sha256_file(path) if path.is_file() else None
 
 
+def _generation_manifest_declarations(
+    *, config: dict[str, Any], checkpoint: Path | None
+) -> dict[str, Any]:
+    """Build the portable prompt/model/generation disclosure fields.
+
+    Greedy decoding intentionally does not pass temperature or top-p to the
+    model. ``not_used_greedy`` records that fact rather than fabricating a
+    numeric setting.
+    """
+
+    model_cfg = dict(config.get("model", {}))
+    generation_cfg = dict(config.get("generation", {}))
+    reproducibility = dict(config.get("prompt_reproducibility", {}))
+    do_sample = bool(generation_cfg.get("do_sample", False))
+    checkpoint_id = str(checkpoint.resolve()) if checkpoint is not None else None
+    return {
+        "prompt_profile": reproducibility.get("generation_profile_name"),
+        "prompt_text_verbatim": reproducibility.get("prompt_text"),
+        "image_t1_role": reproducibility.get("image_t1_role"),
+        "image_t2_role": reproducibility.get("image_t2_role"),
+        "input_image_order": reproducibility.get("image_input_order"),
+        "do_sample": do_sample,
+        "temperature": (generation_cfg.get("temperature", 1.0) if do_sample else "not_used_greedy"),
+        "top_p": generation_cfg.get("top_p", 1.0) if do_sample else "not_used_greedy",
+        "max_new_tokens": generation_cfg.get("max_new_tokens", 256),
+        "num_beams": generation_cfg.get("num_beams", 1),
+        "output_postprocessing": reproducibility.get(
+            "output_postprocessing", "decoded_text_strip_only"
+        ),
+        "model_id": reproducibility.get("model_id", model_cfg.get("base_model")),
+        "adapter_id": reproducibility.get(
+            "adapter_id", checkpoint_id or model_cfg.get("adapter_path") or "none"
+        ),
+        "quantization": reproducibility.get("quantization"),
+        "code_version": reproducibility.get("code_version"),
+    }
+
+
+def _missing_formal_generation_fields(declarations: dict[str, Any]) -> list[str]:
+    return [
+        field
+        for field in FORMAL_GENERATION_MANIFEST_FIELDS
+        if declarations.get(field) is None or not str(declarations.get(field)).strip()
+    ]
+
+
+def validate_formal_generation_config(config: dict[str, Any], *, checkpoint: Path | None) -> None:
+    """Fail before model loading only when a config opts into formal reporting."""
+
+    reproducibility = dict(config.get("prompt_reproducibility", {}))
+    if not bool(reproducibility.get("require_complete", False)):
+        return
+    missing = _missing_formal_generation_fields(
+        _generation_manifest_declarations(config=config, checkpoint=checkpoint)
+    )
+    if missing:
+        raise ValueError(
+            "formal generation manifest is incomplete; fill prompt_reproducibility "
+            f"before inference: {missing}"
+        )
+
+
 def validate_run_output_directory(output_dir: Path) -> Path:
     """Refuse an existing non-empty inference directory before loading a model."""
 
@@ -244,13 +326,14 @@ def build_model_run_manifest(
 
     model_cfg = dict(config.get("model", {}))
     reproducibility = dict(config.get("prompt_reproducibility", {}))
-    unresolved_prompt_fields = [
-        field
-        for field in ("prompt_text", "image_input_order", "generation_profile_name")
-        if not str(reproducibility.get(field, "")).strip()
-    ]
+    declarations = _generation_manifest_declarations(config=config, checkpoint=checkpoint)
+    missing_formal_fields = _missing_formal_generation_fields(declarations)
     return {
-        "schema_version": "model_run_manifest_v1",
+        "schema_version": "generation_manifest_v1",
+        "manifest_kind": "generation_manifest",
+        "reproducibility_status": "complete" if not missing_formal_fields else "incomplete",
+        "missing_reproducibility_fields": missing_formal_fields,
+        **declarations,
         "run_id": (
             f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:12]}"
         ),
@@ -291,8 +374,8 @@ def build_model_run_manifest(
         "prompt_reproducibility": {
             "source": "user messages in evaluation_jsonl",
             "declared": reproducibility,
-            "status": "complete" if not unresolved_prompt_fields else "incomplete",
-            "missing_fields": unresolved_prompt_fields,
+            "status": "complete" if not missing_formal_fields else "incomplete",
+            "missing_fields": missing_formal_fields,
             "note": (
                 "For formal LEVIR-CC reporting, declare the raw prompt, before/after image "
                 "order and generation profile in prompt_reproducibility."
@@ -363,6 +446,7 @@ def evaluate(
         raise ValueError("--output-dir is required for every inference evaluation run")
     destination = validate_run_output_directory(output_dir)
     config = load_yaml(config_path)
+    validate_formal_generation_config(config, checkpoint=checkpoint)
     data_cfg = dict(config["data"])
     eval_file = resolve_project_path(str(data_cfg["eval_file"]))
     if not eval_file.is_file():
@@ -572,9 +656,7 @@ def evaluate(
                 "generation": generation_cfg,
                 "max_seq_length": int(data_cfg.get("max_seq_length", 4096)),
                 "max_eval_samples": data_cfg.get("max_eval_samples"),
-                "change_binary_enabled": bool(
-                    generation_cfg.get("change_binary_enabled", False)
-                ),
+                "change_binary_enabled": bool(generation_cfg.get("change_binary_enabled", False)),
                 "continue_on_error": continue_on_error,
                 "batch_size": batch_size,
                 "repeats": repeats,
@@ -604,28 +686,25 @@ def evaluate(
         encoding="utf-8",
     )
     write_jsonl(predictions_file, predictions)
-    run_manifest_file = summary_file.parent / "model_run_manifest.json"
-    run_manifest_file.write_text(
-        json.dumps(
-            build_model_run_manifest(
-                config_path=config_path,
-                eval_file=eval_file,
-                output_dir=destination,
-                config=config,
-                checkpoint=checkpoint,
-                predictions_file=predictions_file,
-                summary_file=summary_file,
-                performance_file=performance_file,
-            ),
-            ensure_ascii=False,
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
+    run_manifest = build_model_run_manifest(
+        config_path=config_path,
+        eval_file=eval_file,
+        output_dir=destination,
+        config=config,
+        checkpoint=checkpoint,
+        predictions_file=predictions_file,
+        summary_file=summary_file,
+        performance_file=performance_file,
     )
+    generation_manifest_file = summary_file.parent / "generation_manifest.json"
+    model_run_manifest_file = summary_file.parent / "model_run_manifest.json"
+    manifest_text = json.dumps(run_manifest, ensure_ascii=False, indent=2) + "\n"
+    generation_manifest_file.write_text(manifest_text, encoding="utf-8")
+    # Preserve the former filename for scripts that already consume it.
+    model_run_manifest_file.write_text(manifest_text, encoding="utf-8")
     print(f"Saved summary to {summary_file}")
     print(f"Saved predictions to {predictions_file}")
-    print(f"Saved model run manifest to {run_manifest_file}")
+    print(f"Saved generation manifest to {generation_manifest_file}")
     if monitor is not None:
         print(f"Saved performance report to {performance_file}")
 
