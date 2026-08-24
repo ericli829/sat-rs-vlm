@@ -276,14 +276,123 @@ def test_shared_config_patch_fails_without_any_pad_or_eos_id() -> None:
         patch_config_compatibility(config, tokenizer)
 
 
+def test_shared_config_patch_prefers_raw_sliding_window_over_nested_value() -> None:
+    config = types.SimpleNamespace(
+        eos_token_id=2,
+        text_config=types.SimpleNamespace(
+            use_sliding_window=False,
+            sliding_window=None,
+            max_window_layers=None,
+        ),
+    )
+    tokenizer = types.SimpleNamespace(pad_token_id=0, eos_token_id=2)
+
+    patches = patch_config_compatibility(
+        config,
+        tokenizer,
+        raw_config={
+            "use_sliding_window": False,
+            "sliding_window": 4096,
+            "max_window_layers": 70,
+        },
+    )
+
+    assert config.use_sliding_window is False
+    assert config.sliding_window == 4096
+    assert config.max_window_layers == 70
+    assert patches["legacy_text_config_fields"]["sliding_window"] == {
+        "source": "raw_config.sliding_window",
+        "value": 4096,
+    }
+
+
+def test_shared_config_patch_raw_value_wins_over_nested_normalized_value() -> None:
+    config = types.SimpleNamespace(
+        eos_token_id=2,
+        text_config=types.SimpleNamespace(
+            use_sliding_window=False,
+            sliding_window=8192,
+            max_window_layers=70,
+        ),
+    )
+    tokenizer = types.SimpleNamespace(pad_token_id=0, eos_token_id=2)
+
+    patches = patch_config_compatibility(
+        config,
+        tokenizer,
+        raw_config={"sliding_window": 4096},
+    )
+
+    assert config.sliding_window == 4096
+    assert patches["legacy_text_config_fields"]["sliding_window"]["source"] == (
+        "raw_config.sliding_window"
+    )
+
+
+def test_shared_config_patch_uses_fo1_legacy_sliding_default_when_raw_missing() -> None:
+    config = types.SimpleNamespace(
+        eos_token_id=2,
+        text_config=types.SimpleNamespace(
+            use_sliding_window=False,
+            sliding_window=None,
+            max_window_layers=70,
+        ),
+    )
+    tokenizer = types.SimpleNamespace(pad_token_id=0, eos_token_id=2)
+
+    patches = patch_config_compatibility(
+        config,
+        tokenizer,
+        raw_config={"use_sliding_window": False},
+    )
+
+    assert config.sliding_window == 4096
+    assert patches["legacy_text_config_fields"]["sliding_window"] == {
+        "source": "official_fo1_legacy_default",
+        "value": 4096,
+    }
+
+
+def test_shared_config_patch_does_not_modify_disk_config(tmp_path: Path) -> None:
+    raw_text = '{"use_sliding_window": false, "sliding_window": null}'
+    config_path = tmp_path / "config.json"
+    config_path.write_text(raw_text, encoding="utf-8")
+    config = types.SimpleNamespace(
+        eos_token_id=2,
+        text_config=types.SimpleNamespace(
+            use_sliding_window=False,
+            sliding_window=None,
+            max_window_layers=None,
+        ),
+    )
+    tokenizer = types.SimpleNamespace(pad_token_id=0, eos_token_id=2)
+
+    patch_config_compatibility(
+        config,
+        tokenizer,
+        raw_config=json.loads(config_path.read_text(encoding="utf-8")),
+    )
+
+    assert config_path.read_text(encoding="utf-8") == raw_text
+
+
 def test_shared_loader_passes_patched_config_to_from_pretrained(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     model_path = tmp_path / "model"
     model_path.mkdir()
-    (model_path / "config.json").write_text("{}", encoding="utf-8")
+    (model_path / "config.json").write_text(
+        '{"use_sliding_window": false, "sliding_window": 4096, '
+        '"max_window_layers": 70}',
+        encoding="utf-8",
+    )
     calls: list[str] = []
-    text_config = types.SimpleNamespace(_attn_implementation_internal=None)
+    text_config = types.SimpleNamespace(
+        _attn_implementation_internal=None,
+        use_sliding_window=False,
+        sliding_window=None,
+        max_window_layers=None,
+    )
     vision_config = types.SimpleNamespace(_attn_implementation_internal=None)
     config = types.SimpleNamespace(
         eos_token_id=151644,
@@ -352,8 +461,25 @@ def test_shared_loader_passes_patched_config_to_from_pretrained(
     assert config._attn_implementation_internal == "sdpa"
     assert text_config._attn_implementation_internal == "sdpa"
     assert vision_config._attn_implementation_internal == "sdpa"
+    assert config.use_sliding_window is False
+    assert config.sliding_window == 4096
+    assert config.max_window_layers == 70
     assert bundle.config_compatibility_patches == {
         "pad_token_id": {"source": "tokenizer.pad_token_id", "value": 151643},
+        "legacy_text_config_fields": {
+            "use_sliding_window": {
+                "source": "raw_config.use_sliding_window",
+                "value": False,
+            },
+            "sliding_window": {
+                "source": "raw_config.sliding_window",
+                "value": 4096,
+            },
+            "max_window_layers": {
+                "source": "raw_config.max_window_layers",
+                "value": 70,
+            },
+        },
         "attention_backend": {
             "source": "loader.attention_backend",
             "value": "sdpa",

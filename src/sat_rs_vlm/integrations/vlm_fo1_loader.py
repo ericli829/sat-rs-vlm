@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import importlib.util
 import inspect
+import json
 import os
 import sys
+from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -109,7 +111,40 @@ def resolve_attention_backend(attention_backend: str) -> str:
     return requested
 
 
-def patch_config_compatibility(config: Any, tokenizer: Any) -> dict[str, dict[str, Any]]:
+def _read_raw_model_config(path: Path) -> dict[str, Any]:
+    """Read the checkpoint JSON without modifying it or passing it to HF."""
+
+    try:
+        raw_config = json.loads((path / "config.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"could not read raw FO1 model config: {path / 'config.json'}") from exc
+    if not isinstance(raw_config, dict):
+        raise RuntimeError(f"raw FO1 model config must be a JSON object: {path / 'config.json'}")
+    return raw_config
+
+
+def _raw_legacy_field(
+    raw_config: Mapping[str, Any] | None, name: str
+) -> tuple[str, Any] | None:
+    """Return a non-null raw field and its provenance source, if present."""
+
+    if raw_config is None:
+        return None
+    if name in raw_config and raw_config[name] is not None:
+        return f"raw_config.{name}", raw_config[name]
+    raw_text_config = raw_config.get("text_config")
+    if isinstance(raw_text_config, Mapping):
+        if name in raw_text_config and raw_text_config[name] is not None:
+            return f"raw_config.text_config.{name}", raw_text_config[name]
+    return None
+
+
+def patch_config_compatibility(
+    config: Any,
+    tokenizer: Any,
+    *,
+    raw_config: Mapping[str, Any] | None = None,
+) -> dict[str, dict[str, Any]]:
     """Apply shared-runtime-only compatibility fixes to an in-memory config.
 
     The official checkpoint is never written to.  The returned structure is
@@ -139,21 +174,45 @@ def patch_config_compatibility(config: Any, tokenizer: Any) -> dict[str, dict[st
                 "are all None"
             )
 
-    # Transformers 5.x nests the language-model fields.  The official FO1
-    # class still reads them from its top-level config, so promote only values
-    # absent from the in-memory config.  This never mutates checkpoint files.
+    # Transformers 5.x nests the language-model fields and can normalize some
+    # of them to None.  The official FO1 class still reads them from its
+    # top-level config.  Keep a valid top-level value, otherwise prefer the
+    # original checkpoint JSON over the normalized nested object, then fall
+    # back to the nested value.  This never mutates checkpoint files.
     text_config = getattr(config, "text_config", None)
     promoted: dict[str, dict[str, Any]] = {}
+    for name in _LEGACY_TEXT_CONFIG_FIELDS:
+        current = getattr(config, name, None)
+        if current is not None:
+            continue
+        raw_field = _raw_legacy_field(raw_config, name)
+        if raw_field is not None:
+            source, value = raw_field
+        else:
+            value = getattr(text_config, name, None) if text_config is not None else None
+            source = f"config.text_config.{name}"
+        if value is not None:
+            setattr(config, name, value)
+            promoted[name] = {
+                "source": source,
+                "value": value,
+            }
+
+    # Qwen2.5-VL's Transformers 5.x post-init turns sliding_window into None
+    # when use_sliding_window=False.  Old FO1 code still expects the attribute
+    # to exist; only use the documented legacy default when the raw checkpoint
+    # did not carry a value and sliding-window attention is disabled.
+    if (
+        getattr(config, "sliding_window", None) is None
+        and getattr(config, "use_sliding_window", None) is False
+    ):
+        config.sliding_window = 4096
+        promoted["sliding_window"] = {
+            "source": "official_fo1_legacy_default",
+            "value": 4096,
+        }
+
     if text_config is not None:
-        for name in _LEGACY_TEXT_CONFIG_FIELDS:
-            current = getattr(config, name, None)
-            value = getattr(text_config, name, None)
-            if current is None and value is not None:
-                setattr(config, name, value)
-                promoted[name] = {
-                    "source": f"config.text_config.{name}",
-                    "value": value,
-                }
         rope_parameters = getattr(text_config, "rope_parameters", None)
         if rope_parameters is not None:
             rope_parameters = dict(rope_parameters)
@@ -352,11 +411,14 @@ def load_fo1_model(
     from transformers import AutoConfig, AutoTokenizer
     from vlm_fo1.model import OmChatQwen25VLForCausalLM
 
+    raw_config = _read_raw_model_config(path)
     config = AutoConfig.from_pretrained(str(path), local_files_only=True)
     tokenizer = AutoTokenizer.from_pretrained(
         str(path), use_fast=False, local_files_only=True
     )
-    config_compatibility_patches = patch_config_compatibility(config, tokenizer)
+    config_compatibility_patches = patch_config_compatibility(
+        config, tokenizer, raw_config=raw_config
+    )
     _set_attention_backend_on_nested_configs(
         config, resolved_backend, config_compatibility_patches
     )
