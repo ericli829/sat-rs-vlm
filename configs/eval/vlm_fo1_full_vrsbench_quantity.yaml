@@ -11,6 +11,9 @@ worker:
   python: "${VLM_FO1_PYTHON}"
   script: scripts/integrations/vlm_fo1_worker.py
   backend: official
+  runtime_mode: shared_rs_vlm
+  proposal_backend: upn
+  attention_backend: sdpa
 model:
   path: "${VLM_FO1_MODEL}"
   device: cuda

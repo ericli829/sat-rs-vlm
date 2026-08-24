@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Long-lived JSONL worker for the official VLM-FO1 + UPN pipeline.
+"""Long-lived JSONL worker for VLM-FO1.
 
-Run this file with ``VLM_FO1_PYTHON`` from the isolated ``vlm-fo1``
-environment.  The default imports in the rs-vlm environment never load the
-official package; only the ``official`` backend below does so lazily.
+The ``official`` backend retains the original isolated-runtime path.  The
+``shared_rs_vlm`` runtime uses the current rs-vlm interpreter and the
+compatibility loader, and can consume precomputed proposal boxes without a
+UPN CUDA extension.
 """
 
 from __future__ import annotations
@@ -33,6 +34,9 @@ from sat_rs_vlm.integrations.vlm_fo1 import (  # noqa: E402
     parse_profile_output,
     request_has_reference_leak,
 )
+from sat_rs_vlm.integrations.vlm_fo1_loader import (  # noqa: E402
+    load_fo1_model,
+)
 
 
 def _configure_cache() -> None:
@@ -46,7 +50,7 @@ def _configure_cache() -> None:
     os.environ.setdefault("TRANSFORMERS_CACHE", str(cache_dir / "transformers"))
 
 
-def _configure_official_import_path() -> Path:
+def _configure_official_import_path(*, require_upn: bool = True) -> Path:
     """Add only the official checkout to this worker's import path."""
 
     value = os.environ.get("VLM_FO1_ROOT", "").strip()
@@ -58,7 +62,10 @@ def _configure_official_import_path() -> Path:
     root = Path(value).expanduser().resolve()
     if not root.is_dir():
         raise RuntimeError(f"VLM_FO1_ROOT is not a directory: {root}")
-    for relative in ("vlm_fo1", "detect_tools", "detect_tools/upn"):
+    required = ["vlm_fo1"]
+    if require_upn:
+        required.extend(("detect_tools", "detect_tools/upn"))
+    for relative in required:
         if not (root / relative).is_dir():
             raise RuntimeError(f"VLM_FO1_ROOT is missing required directory: {root / relative}")
     root_text = str(root)
@@ -94,7 +101,7 @@ def _request_target(request: Mapping[str, Any]) -> tuple[str | None, str, str | 
 
 
 def validate_request(
-    request: Any, *, prompt_profile: str
+    request: Any, *, prompt_profile: str, proposal_backend: str = "upn"
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     if not isinstance(request, dict):
         return None, {
@@ -117,6 +124,10 @@ def validate_request(
     if prompt_profile not in FO1_PROMPT_PROFILES:
         return None, _failure(
             request, "protocol_guard", f"unsupported prompt profile: {prompt_profile}"
+        )
+    if proposal_backend not in {"upn", "precomputed"}:
+        return None, _failure(
+            request, "protocol_guard", f"unsupported proposal backend: {proposal_backend}"
         )
     phrase, status, reason = _request_target(request)
     if status != "supported":
@@ -149,6 +160,48 @@ def validate_request(
         )
     normalized = dict(request)
     normalized["target_phrase"] = phrase
+    if proposal_backend == "precomputed":
+        raw_boxes = request.get("bbox_list")
+        if not isinstance(raw_boxes, list):
+            return None, _failure(
+                request,
+                "protocol_guard",
+                "precomputed proposal backend requires bbox_list",
+            )
+        boxes: list[list[float]] = []
+        for index, box in enumerate(raw_boxes):
+            if not isinstance(box, (list, tuple)) or len(box) != 4:
+                return None, _failure(
+                    request,
+                    "protocol_guard",
+                    f"bbox_list[{index}] must contain four numeric coordinates",
+                )
+            try:
+                boxes.append([float(value) for value in box])
+            except (TypeError, ValueError) as exc:
+                return None, _failure(
+                    request,
+                    "protocol_guard",
+                    f"bbox_list[{index}] contains a non-numeric coordinate: {exc}",
+                )
+        raw_scores = request.get("bbox_scores")
+        if raw_scores is None:
+            scores = [1.0] * len(boxes)
+        elif isinstance(raw_scores, list) and len(raw_scores) == len(boxes):
+            try:
+                scores = [float(value) for value in raw_scores]
+            except (TypeError, ValueError) as exc:
+                return None, _failure(
+                    request, "protocol_guard", f"bbox_scores contains a non-numeric value: {exc}"
+                )
+        else:
+            return None, _failure(
+                request,
+                "protocol_guard",
+                "bbox_scores must be a list with the same length as bbox_list",
+            )
+        normalized["bbox_list"] = boxes
+        normalized["bbox_scores"] = scores
     return normalized, None
 
 
@@ -165,6 +218,9 @@ class PipelineConfig:
     top_p: float = 0.05
     prompt_profile: str = "official_fo1"
     count_source: str = "region"
+    runtime_mode: str = "official"
+    proposal_backend: str = "upn"
+    attention_backend: str = "sdpa"
 
 
 class Backend:
@@ -225,28 +281,71 @@ class OfficialFO1Backend(Backend):
     """Lazy official implementation; imports never execute in rs-vlm."""
 
     def __init__(self, config: PipelineConfig) -> None:
-        _configure_official_import_path()
+        _configure_official_import_path(
+            require_upn=not (
+                config.runtime_mode == "shared_rs_vlm" and config.proposal_backend == "precomputed"
+            )
+        )
         try:
             import torch
-            from detect_tools.upn import UPNWrapper
             from vlm_fo1.mm_utils import prepare_inputs
-            from vlm_fo1.model.builder import load_pretrained_model
         except ImportError as exc:  # pragma: no cover - exercised in isolated env
             raise RuntimeError(
-                "official FO1 dependencies are unavailable; run with VLM_FO1_PYTHON "
-                "from the isolated vlm-fo1 environment"
+                "VLM-FO1 dependencies are unavailable; check VLM_FO1_ROOT and "
+                "the selected runtime environment"
             ) from exc
         self._torch = torch
         self._prepare_inputs = prepare_inputs
+        self._proposal_backend = config.proposal_backend
+        self._runtime_mode = config.runtime_mode
         self._model_path = config.model_path
+        # The upstream helper enables Qwen vision-token handling by checking
+        # the model-name string.  The distributed FO1 directory is named
+        # ``VLM-FO1-3B-v01`` (without ``qwen``), so preserve the local path for
+        # loading while supplying an explicit Qwen alias to ``prepare_inputs``.
+        self._prepare_model_name = str(config.model_path)
+        if "qwen" not in self._prepare_model_name.lower():
+            self._prepare_model_name = f"qwen2.5-vl::{self._prepare_model_name}"
+        self._upn = None
         # The public helpers print prompts/tokens to stdout.  stdout is the
         # machine-readable JSONL channel, so suppress library chatter while
         # constructing the long-lived backend as well as during inference.
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            self._upn = UPNWrapper(config.upn_checkpoint)
-            self._tokenizer, self._model, self._processors = load_pretrained_model(
-                config.model_path, device=config.device
-            )
+            if config.runtime_mode == "shared_rs_vlm":
+                if config.proposal_backend == "precomputed":
+                    self._upn = None
+                else:
+                    try:
+                        from detect_tools.upn import UPNWrapper
+                    except ImportError as exc:
+                        raise RuntimeError(
+                            "shared_rs_vlm with proposal_backend=upn requires the "
+                            "official UPN Python package; use precomputed proposals "
+                            "when the CUDA extension is unavailable"
+                        ) from exc
+                    self._upn = UPNWrapper(config.upn_checkpoint)
+                bundle = load_fo1_model(
+                    config.model_path,
+                    config.device,
+                    attention_backend=config.attention_backend,
+                )
+                self._model_path = str(bundle.model_path)
+                self._tokenizer = bundle.tokenizer
+                self._model = bundle.model
+                self._processors = bundle.image_processors
+            else:
+                try:
+                    from detect_tools.upn import UPNWrapper
+                    from vlm_fo1.model.builder import load_pretrained_model
+                except ImportError as exc:  # pragma: no cover - isolated env only
+                    raise RuntimeError(
+                        "official FO1 dependencies are unavailable; run with VLM_FO1_PYTHON "
+                        "from the isolated vlm-fo1 environment"
+                    ) from exc
+                self._upn = UPNWrapper(config.upn_checkpoint)
+                self._tokenizer, self._model, self._processors = load_pretrained_model(
+                    config.model_path, device=config.device
+                )
 
     def infer(self, request: Mapping[str, Any], config: PipelineConfig) -> dict[str, Any]:
         from PIL import Image
@@ -262,18 +361,31 @@ class OfficialFO1Backend(Backend):
                 target_status="supported",
             )
         try:
-            start = time.perf_counter()
-            with (
-                contextlib.redirect_stdout(io.StringIO()),
-                contextlib.redirect_stderr(io.StringIO()),
-            ):
-                raw_proposals = self._upn.inference(image)
-                filtered = self._upn.filter(
-                    raw_proposals,
-                    min_score=config.proposal_score_threshold,
-                    nms_value=config.nms_threshold,
-                )
-            upn_latency_ms = (time.perf_counter() - start) * 1000.0
+            if self._proposal_backend == "precomputed":
+                boxes = list(request.get("bbox_list", []))
+                scores = list(request.get("bbox_scores", [1.0] * len(boxes)))
+                proposal_count_raw = len(boxes)
+                upn_latency_ms = 0.0
+            else:
+                if self._upn is None:
+                    raise RuntimeError("UPN backend was not initialized")
+                start = time.perf_counter()
+                with (
+                    contextlib.redirect_stdout(io.StringIO()),
+                    contextlib.redirect_stderr(io.StringIO()),
+                ):
+                    raw_proposals = self._upn.inference(image)
+                    filtered = self._upn.filter(
+                        raw_proposals,
+                        min_score=config.proposal_score_threshold,
+                        nms_value=config.nms_threshold,
+                    )
+                upn_latency_ms = (time.perf_counter() - start) * 1000.0
+                filtered_boxes = filtered.get("original_xyxy_boxes") or []
+                filtered_scores = filtered.get("scores") or []
+                boxes = list(filtered_boxes[0]) if filtered_boxes else []
+                scores = list(filtered_scores[0]) if filtered_scores else []
+                proposal_count_raw = len(boxes)
         except Exception as exc:
             return _failure(
                 request,
@@ -283,11 +395,6 @@ class OfficialFO1Backend(Backend):
                 target_status="supported",
             )
         try:
-            filtered_boxes = filtered.get("original_xyxy_boxes") or []
-            filtered_scores = filtered.get("scores") or []
-            boxes = list(filtered_boxes[0]) if filtered_boxes else []
-            scores = list(filtered_scores[0]) if filtered_scores else []
-            proposal_count_raw = len(boxes)
             boxes = boxes[: config.proposal_top_k]
             scores = scores[: config.proposal_top_k]
             proposal_count_used = len(boxes)
@@ -347,11 +454,12 @@ class OfficialFO1Backend(Backend):
                 contextlib.redirect_stderr(io.StringIO()),
             ):
                 generation_kwargs = self._prepare_inputs(
-                    self._model_path,
+                    self._prepare_model_name,
                     self._model,
                     self._processors,
                     self._tokenizer,
                     messages,
+                    device=config.device,
                     max_tokens=config.max_new_tokens,
                     top_p=config.top_p,
                     temperature=config.temperature,
@@ -451,7 +559,11 @@ def process_request(
     backend: Backend,
     config: PipelineConfig,
 ) -> dict[str, Any]:
-    normalized, error = validate_request(request, prompt_profile=config.prompt_profile)
+    normalized, error = validate_request(
+        request,
+        prompt_profile=config.prompt_profile,
+        proposal_backend=config.proposal_backend,
+    )
     if error is not None:
         return error
     assert normalized is not None
@@ -465,6 +577,21 @@ def process_request(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--backend", choices=("official", "mock"), default="official")
+    parser.add_argument(
+        "--runtime-mode",
+        choices=("official", "shared_rs_vlm"),
+        default=os.environ.get("VLM_FO1_RUNTIME_MODE", "official"),
+    )
+    parser.add_argument(
+        "--proposal-backend",
+        choices=("upn", "precomputed"),
+        default=os.environ.get("VLM_FO1_PROPOSAL_BACKEND", "upn"),
+    )
+    parser.add_argument(
+        "--attention-backend",
+        choices=("auto", "sdpa", "flash_attention_2", "eager"),
+        default=os.environ.get("VLM_FO1_ATTENTION_BACKEND", "sdpa"),
+    )
     parser.add_argument("--model", default=os.environ.get("VLM_FO1_MODEL", ""))
     parser.add_argument("--upn-checkpoint", default=os.environ.get("VLM_FO1_UPN_CHECKPOINT", ""))
     parser.add_argument("--device", default="cuda")
@@ -501,6 +628,9 @@ def main() -> int:
         top_p=args.top_p,
         prompt_profile=args.prompt_profile,
         count_source=args.count_source,
+        runtime_mode=args.runtime_mode,
+        proposal_backend=args.proposal_backend,
+        attention_backend=args.attention_backend,
     )
     try:
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):

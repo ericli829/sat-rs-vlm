@@ -26,6 +26,11 @@ from sat_rs_vlm.integrations.vlm_fo1 import (
     parse_profile_output,
     parse_region_indexes,
 )
+from sat_rs_vlm.integrations.vlm_fo1_loader import (
+    ensure_official_root,
+    resolve_attention_backend,
+    validate_model_path,
+)
 
 
 @pytest.mark.parametrize(
@@ -154,6 +159,32 @@ def test_worker_json_protocol_and_failure_handling() -> None:
     assert mismatch["failure_stage"] == "protocol_guard"
 
 
+def test_precomputed_proposals_are_validated_without_upn() -> None:
+    config = PipelineConfig(
+        model_path="mock",
+        upn_checkpoint="",
+        runtime_mode="shared_rs_vlm",
+        proposal_backend="precomputed",
+    )
+    request = {
+        "id": "precomputed-1",
+        "image": "missing.png",
+        "question": "How many ships are visible?",
+        "target_phrase": "ships",
+        "bbox_list": [[0, 0, 10, 10]],
+    }
+    response = process_request(request, MockBackend(), config)
+    assert response["status"] == "ok"
+    normalized, error = validate_request(
+        {key: value for key, value in request.items() if key != "bbox_list"},
+        prompt_profile="official_fo1",
+        proposal_backend="precomputed",
+    )
+    assert normalized is None
+    assert error is not None
+    assert "bbox_list" in error["error"]
+
+
 def test_mock_does_not_require_official_root(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("VLM_FO1_ROOT", raising=False)
     response = process_request(
@@ -178,6 +209,34 @@ def test_official_backend_missing_root_fails_clearly(monkeypatch: pytest.MonkeyP
 def test_official_model_path_helper() -> None:
     assert is_official_fo1_model_path("VLM-FO1-3B-v01")
     assert not is_official_fo1_model_path("some-other-model")
+
+
+def test_shared_loader_validates_local_model_before_hf(tmp_path: Path) -> None:
+    missing = tmp_path / "does-not-exist"
+    with pytest.raises(RuntimeError, match="does not exist"):
+        validate_model_path(missing)
+    incomplete = tmp_path / "incomplete"
+    incomplete.mkdir()
+    with pytest.raises(RuntimeError, match="missing config.json"):
+        validate_model_path(incomplete)
+
+
+def test_shared_attention_auto_falls_back_without_flash(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("importlib.util.find_spec", lambda name: None)
+    assert resolve_attention_backend("auto") == "sdpa"
+
+
+def test_shared_attention_explicit_flash_is_clear_without_optional_dependency(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("importlib.util.find_spec", lambda name: None)
+    with pytest.raises(RuntimeError, match="flash_attn is unavailable"):
+        resolve_attention_backend("flash_attention_2")
+
+
+def test_shared_root_does_not_require_upn_source(tmp_path: Path) -> None:
+    (tmp_path / "vlm_fo1").mkdir()
+    assert ensure_official_root(tmp_path, require_upn=False) == tmp_path.resolve()
 
 
 def test_worker_early_exit_returns_one_failed_row_per_request(tmp_path: Path) -> None:

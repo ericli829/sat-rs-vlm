@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Evaluate VRSBench counting through an isolated VLM-FO1 JSONL worker.
+"""Evaluate VRSBench counting through a VLM-FO1 JSONL worker.
 
-The rs-vlm interpreter only orchestrates JSONL.  The worker process is run by
-``VLM_FO1_PYTHON`` and owns every official FO1/UPN import.  ``--backend mock``
-is intentionally available for deterministic unit and protocol smoke tests.
+The worker supports both the legacy isolated runtime and the current
+``shared_rs_vlm`` interpreter. ``--backend mock`` is intentionally available
+for deterministic unit and protocol smoke tests.
 """
 
 from __future__ import annotations
@@ -36,6 +36,7 @@ from sat_rs_vlm.integrations.vlm_fo1 import (  # noqa: E402
     extract_count_target_phrase,
     prediction_count_text,
 )
+from sat_rs_vlm.integrations.vlm_fo1_loader import validate_model_path  # noqa: E402
 
 DEFAULT_ECOUNT = PROJECT_ROOT / "data/evaluation/tiers_v2/e_count_v2.jsonl"
 DEFAULT_FULL = PROJECT_ROOT / "data/processed/multisource/vrsbench_levircc_eval_full.jsonl"
@@ -176,6 +177,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--image-root", type=Path)
     parser.add_argument("--max-samples", type=int)
     parser.add_argument("--backend", choices=("official", "mock"))
+    parser.add_argument("--runtime-mode", choices=("official", "shared_rs_vlm"))
+    parser.add_argument("--proposal-backend", choices=("upn", "precomputed"))
+    parser.add_argument(
+        "--attention-backend", choices=("auto", "sdpa", "flash_attention_2", "eager")
+    )
     parser.add_argument("--worker-python", type=Path)
     parser.add_argument("--worker-script", type=Path)
     parser.add_argument("--model", type=Path)
@@ -219,6 +225,12 @@ def _settings(args: argparse.Namespace) -> dict[str, Any]:
         if args.max_samples is not None
         else _config_value(config, "evaluation", "max_samples", None),
         "backend": args.backend or _config_value(config, "worker", "backend", "official"),
+        "runtime_mode": args.runtime_mode
+        or _config_value(config, "worker", "runtime_mode", "official"),
+        "proposal_backend": args.proposal_backend
+        or _config_value(config, "worker", "proposal_backend", "upn"),
+        "attention_backend": args.attention_backend
+        or _config_value(config, "worker", "attention_backend", "sdpa"),
         "worker_python": args.worker_python
         or Path(
             _config_value(
@@ -279,6 +291,12 @@ def _settings(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError(f"unsupported scope: {settings['scope']}")
     if settings.get("count_source", "region") not in {"region", "text", "auto"}:
         raise ValueError(f"unsupported count source: {settings['count_source']}")
+    if settings["runtime_mode"] not in {"official", "shared_rs_vlm"}:
+        raise ValueError(f"unsupported runtime mode: {settings['runtime_mode']}")
+    if settings["proposal_backend"] not in {"upn", "precomputed"}:
+        raise ValueError(f"unsupported proposal backend: {settings['proposal_backend']}")
+    if settings["attention_backend"] not in {"auto", "sdpa", "flash_attention_2", "eager"}:
+        raise ValueError(f"unsupported attention backend: {settings['attention_backend']}")
     return settings
 
 
@@ -323,6 +341,12 @@ def _worker_command(settings: Mapping[str, Any]) -> list[str]:
         str(settings["worker_script"]),
         "--backend",
         str(settings["backend"]),
+        "--runtime-mode",
+        str(settings.get("runtime_mode", "official")),
+        "--proposal-backend",
+        str(settings.get("proposal_backend", "upn")),
+        "--attention-backend",
+        str(settings.get("attention_backend", "sdpa")),
         "--model",
         str(settings["model"]),
         "--upn-checkpoint",
@@ -545,6 +569,8 @@ def evaluate(settings: Mapping[str, Any]) -> dict[str, Path]:
         )
     if settings["max_samples"] is not None:
         rows = rows[: int(settings["max_samples"])]
+    if settings.get("backend", "official") != "mock":
+        validate_model_path(settings["model"])
     image_root = Path(settings["image_root"]).resolve() if settings["image_root"] else None
     requests: list[dict[str, Any]] = []
     prepared: list[dict[str, Any]] = []
@@ -552,14 +578,18 @@ def evaluate(settings: Mapping[str, Any]) -> dict[str, Path]:
         image, question, reference = _message_parts(row)
         target = extract_count_target_phrase(question)
         phrase = target.phrase or ""
-        requests.append(
-            {
-                "id": str(row["id"]),
-                "image": _resolve_image(image, image_root),
-                "question": question,
-                "target_phrase": phrase,
-            }
-        )
+        request = {
+            "id": str(row["id"]),
+            "image": _resolve_image(image, image_root),
+            "question": question,
+            "target_phrase": phrase,
+        }
+        if settings.get("proposal_backend", "upn") == "precomputed":
+            if "bbox_list" in row:
+                request["bbox_list"] = row["bbox_list"]
+            if "bbox_scores" in row:
+                request["bbox_scores"] = row["bbox_scores"]
+        requests.append(request)
         prepared.append(
             {
                 "source": row,
@@ -648,6 +678,9 @@ def evaluate(settings: Mapping[str, Any]) -> dict[str, Path]:
         "prompt_profile": settings["prompt_profile"],
         "count_source": settings.get("count_source", "region"),
         "backend": settings["backend"],
+        "runtime_mode": settings.get("runtime_mode", "official"),
+        "proposal_backend": settings.get("proposal_backend", "upn"),
+        "attention_backend": settings.get("attention_backend", "sdpa"),
         "worker_python": str(Path(settings["worker_python"]).resolve()),
         "worker_script": str(Path(settings["worker_script"]).resolve()),
         "cache_dir": os.environ.get("VLM_FO1_CACHE_DIR"),

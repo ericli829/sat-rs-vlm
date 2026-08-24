@@ -1,8 +1,9 @@
 # VLM-FO1 counting evaluation integration
 
 This integration evaluates the official `om-ai-lab/VLM-FO1` model through a
-long-lived JSONL sidecar.  The main `sat-rs-vlm` interpreter never imports
-`torch`, `transformers`, UPN, or the official `vlm_fo1` package for this path.
+long-lived JSONL sidecar.  The supported path uses the existing `rs-vlm`
+runtime through the `shared_rs_vlm` compatibility loader; no second Conda
+environment or dependency downgrade is required.
 
 ## Architecture
 
@@ -11,7 +12,7 @@ evaluation-v1.8 tier JSONL
         |
         | id, image, question, target_phrase (never reference)
         v
-vlm_fo1_worker.py (VLM_FO1_PYTHON / isolated vlm-fo1)
+vlm_fo1_worker.py (shared_rs_vlm / existing rs-vlm Python)
         |
         | proposal evidence + FO1 region indexes + count
         v
@@ -37,40 +38,38 @@ audited public path is UPN (the paper's OPN is not released): score threshold
 boxes, official `OD_Counting_template`, and greedy generation with
 `max_tokens=4096`, `top_p=0.05`, `temperature=0.0`, `do_sample=false`.
 
-## Isolated environment
+## Shared rs-vlm environment
 
-Do not install the official requirements into `rs-vlm`.  From a clean host:
-
-```bash
-git clone https://github.com/om-ai-lab/VLM-FO1.git "$VLM_FO1_ROOT"
-bash sat-rs-vlm/environments/vlm_fo1/install.sh
-# The official builder hard-codes flash_attention_2.  Install a wheel/source
-# build compatible with the image's Torch/CUDA/Python; do not use a blind pin.
-conda run -n vlm-fo1 python -m pip install --no-build-isolation flash-attn
-```
+Keep the official checkout and local model separate from the Python runtime.
+Do not run `VLM-FO1/requirements.txt`: it would replace the already verified
+Torch, torchvision, or Transformers versions.
 
 Set these variables before a real run:
 
 ```bash
 export VLM_FO1_ROOT=/path/to/VLM-FO1
-export VLM_FO1_PYTHON=/path/to/conda/envs/vlm-fo1/bin/python
+export VLM_FO1_PYTHON=/path/to/rs-vlm/bin/python
 export VLM_FO1_MODEL=/path/to/VLM-FO1-3B-v01
+export VLM_FO1_RUNTIME_MODE=shared_rs_vlm
+export VLM_FO1_ATTENTION_BACKEND=sdpa
+# Use precomputed boxes for the FO1-only smoke; use `upn` only on a node with
+# a built UPN CUDA extension and an available checkpoint.
+export VLM_FO1_PROPOSAL_BACKEND=precomputed
 export VLM_FO1_UPN_CHECKPOINT=/path/to/upn_large.pth
 export VLM_FO1_CACHE_DIR=/path/to/cache
 export VLM_FO1_IMAGE_ROOT=/path/to/dataset-parent
 ```
 
-Validate the environment without touching the rs-vlm interpreter:
+Validate the shared runtime without loading model weights:
 
 ```bash
-"$VLM_FO1_PYTHON" sat-rs-vlm/environments/vlm_fo1/check_environment.py
+"$VLM_FO1_PYTHON" sat-rs-vlm/environments/vlm_fo1/check_environment.py \
+  --runtime-mode shared_rs_vlm --allow-missing-upn
 ```
 
-The preflight must report `flash_attention_available: true`; it also reports
-CUDA and `nvcc` availability and imports `mmengine`, `detect_tools.upn`, and
-`vlm_fo1`.  A missing `VLM_FO1_ROOT`, FlashAttention, or UPN ops fails before
-model weights are loaded.  The worker adds `VLM_FO1_ROOT` to `sys.path` only in
-its isolated process.
+The preflight reports CUDA, `nvcc`, optional FlashAttention, and UPN Python/
+extension capabilities.  Missing FlashAttention, CUDA, or UPN ops do not fail
+the shared FO1 path; missing model/config or required shared imports do.
 
 ## Prompt profiles
 
@@ -113,14 +112,24 @@ $py = 'C:\Users\Ericoneabc\AppData\Local\Microsoft\WindowsApps\python.exe'
   --image-root F:\VIT-data
 ```
 
-After the isolated environment and UPN checkpoint are validated, the focused
-run is:
+For a GPU node with the shared runtime, the focused run is:
 
 ```bash
 python scripts/evaluation/evaluate_vlm_fo1.py \
   --config configs/eval/vlm_fo1_e_count_v2.yaml \
   --worker-python "$VLM_FO1_PYTHON" \
+  --runtime-mode shared_rs_vlm --attention-backend sdpa \
   --image-root "$VLM_FO1_IMAGE_ROOT"
+```
+
+The FO1-only precomputed-box smoke (no UPN dependency) is:
+
+```bash
+python scripts/integrations/smoke_vlm_fo1_shared.py \
+  --model "$VLM_FO1_MODEL" --fo1-root "$VLM_FO1_ROOT" \
+  --image /path/to/image.jpg --bbox-json /path/to/boxes.json \
+  --question "How many ships are visible?" --device cuda \
+  --attention-backend sdpa
 ```
 
 For a bounded official smoke, always use a fresh output directory:
@@ -151,8 +160,9 @@ python scripts/evaluation/evaluate_vlm_fo1.py \
   --image-root "$VLM_FO1_IMAGE_ROOT"
 ```
 
-Here `python` is the existing `rs-vlm`/evaluation interpreter; only the
-long-lived worker is launched with `VLM_FO1_PYTHON`.
+Here both the evaluator and long-lived worker use the existing `rs-vlm`
+interpreter.  A CPU-only node should stop after static/config/tokenizer/path
+checks; the 3B smoke must run on a GPU node.
 
 The full-scope selector keeps the reproducible 6,131-row VRSBench Quantity
 population (counting rows with parseable references).  The shared formal
@@ -178,8 +188,8 @@ marked explicitly and must not be reported as a formal test result.
 ## Known limitations
 
 The current public FO1 source does not release the paper's OPN detector, so
-the baseline is UPN.  The downloaded local model directory contains model
-weights separately from the source/config files; `VLM_FO1_MODEL` must point to
-a complete model directory when the official worker is used.  GPU inference
-and the UPN custom ops require the isolated Linux environment and are not part
-of the Windows unit-test suite.
+UPN remains an optional proposal provider.  The downloaded local model
+directory contains model weights separately from the source/config files;
+`VLM_FO1_MODEL` must point to a complete model directory.  UPN custom ops are
+optional for the precomputed-box FO1 smoke and are reported separately by the
+environment check.
