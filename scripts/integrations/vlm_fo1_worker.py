@@ -95,6 +95,49 @@ def _failure(
     return output
 
 
+def _canonicalize_boxes(boxes: Any) -> list[list[float]]:
+    """Convert proposal coordinates to JSON-native Python floats."""
+
+    if boxes is None:
+        return []
+    return [[float(value) for value in box] for box in boxes]
+
+
+def _canonicalize_scores(scores: Any) -> list[float]:
+    """Convert proposal scores to JSON-native Python floats."""
+
+    if scores is None:
+        return []
+    return [float(value) for value in scores]
+
+
+def _canonicalize_protocol_response(response: dict[str, Any]) -> dict[str, Any]:
+    """Normalize numeric evidence at the worker protocol boundary."""
+
+    for name in (
+        "proposal_boxes",
+        "selected_region_boxes",
+    ):
+        if name in response:
+            response[name] = _canonicalize_boxes(response[name])
+    for name in (
+        "proposal_scores",
+        "selected_region_scores",
+    ):
+        if name in response:
+            response[name] = _canonicalize_scores(response[name])
+    for name in ("upn_latency_ms", "fo1_latency_ms"):
+        if name in response and response[name] is not None:
+            response[name] = float(response[name])
+    return response
+
+
+def ensure_json_serializable(value: Any) -> None:
+    """Fail explicitly if a response contains a non-JSON-native value."""
+
+    json.dumps(value, allow_nan=False)
+
+
 def _request_target(request: Mapping[str, Any]) -> tuple[str | None, str, str | None]:
     result = extract_count_target_phrase(str(request.get("question", "")))
     return result.phrase, result.status, result.reason
@@ -362,8 +405,12 @@ class OfficialFO1Backend(Backend):
             )
         try:
             if self._proposal_backend == "precomputed":
-                boxes = list(request.get("bbox_list", []))
-                scores = list(request.get("bbox_scores", [1.0] * len(boxes)))
+                raw_boxes = request.get("bbox_list") or []
+                boxes = _canonicalize_boxes(raw_boxes)
+                raw_scores = request.get("bbox_scores")
+                if raw_scores is None:
+                    raw_scores = [1.0] * len(boxes)
+                scores = _canonicalize_scores(raw_scores)
                 proposal_count_raw = len(boxes)
                 upn_latency_ms = 0.0
             else:
@@ -383,8 +430,8 @@ class OfficialFO1Backend(Backend):
                 upn_latency_ms = (time.perf_counter() - start) * 1000.0
                 filtered_boxes = filtered.get("original_xyxy_boxes") or []
                 filtered_scores = filtered.get("scores") or []
-                boxes = list(filtered_boxes[0]) if filtered_boxes else []
-                scores = list(filtered_scores[0]) if filtered_scores else []
+                boxes = _canonicalize_boxes(filtered_boxes[0]) if filtered_boxes else []
+                scores = _canonicalize_scores(filtered_scores[0]) if filtered_scores else []
                 proposal_count_raw = len(boxes)
         except Exception as exc:
             return _failure(
@@ -395,8 +442,8 @@ class OfficialFO1Backend(Backend):
                 target_status="supported",
             )
         try:
-            boxes = boxes[: config.proposal_top_k]
-            scores = scores[: config.proposal_top_k]
+            boxes = _canonicalize_boxes(boxes[: config.proposal_top_k])
+            scores = _canonicalize_scores(scores[: config.proposal_top_k])
             proposal_count_used = len(boxes)
             if not boxes:
                 if config.prompt_profile == "official_fo1":
@@ -513,6 +560,8 @@ class OfficialFO1Backend(Backend):
             selected_boxes, selected_scores = compact_proposal_evidence(
                 boxes, scores, parsed["selected_region_indexes"]
             )
+            selected_boxes = _canonicalize_boxes(selected_boxes)
+            selected_scores = _canonicalize_scores(selected_scores)
             return {
                 "id": request["id"],
                 "status": "ok",
@@ -571,7 +620,7 @@ def process_request(
     response.setdefault("id", normalized["id"])
     response.setdefault("target_phrase", normalized["target_phrase"])
     response.setdefault("target_status", "supported")
-    return response
+    return _canonicalize_protocol_response(response)
 
 
 def parse_args() -> argparse.Namespace:
@@ -655,6 +704,15 @@ def main() -> int:
             }
         except Exception as exc:  # keep the long-lived protocol alive for the next id
             response = {"status": "failed", "failure_stage": "worker", "error": str(exc)}
+        try:
+            ensure_json_serializable(response)
+        except (TypeError, ValueError) as exc:
+            response = {
+                "id": response.get("id") if isinstance(response, dict) else None,
+                "status": "failed",
+                "failure_stage": "protocol_serialization",
+                "error": str(exc),
+            }
         print(json.dumps(response, ensure_ascii=False, separators=(",", ":")), flush=True)
     return 0
 

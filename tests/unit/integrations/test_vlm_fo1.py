@@ -9,6 +9,7 @@ import pytest
 from scripts.integrations.vlm_fo1_worker import (
     MockBackend,
     PipelineConfig,
+    _canonicalize_protocol_response,
     build_backend,
     process_request,
     validate_request,
@@ -654,6 +655,29 @@ def test_mock_evaluator_writes_standard_outputs(tmp_path: Path) -> None:
         "selected_region_indexes",
         "selected_region_boxes",
     } <= prediction.keys()
+
+
+def test_worker_protocol_canonicalizes_numpy_float32_proposals() -> None:
+    numpy = pytest.importorskip("numpy")
+    response = {
+        "proposal_boxes": [[numpy.float32(1.25), numpy.float32(2.5), 3.0, 4.0]],
+        "proposal_scores": [numpy.float32(0.875)],
+        "selected_region_boxes": [[numpy.float32(1.25), 2.5, 3.0, 4.0]],
+        "selected_region_scores": [numpy.float32(0.875)],
+        "upn_latency_ms": numpy.float32(1.5),
+        "fo1_latency_ms": numpy.float32(2.5),
+    }
+
+    normalized = _canonicalize_protocol_response(response)
+    encoded = json.dumps(normalized)
+    decoded = json.loads(encoded)
+
+    assert isinstance(normalized["proposal_scores"][0], float)
+    assert isinstance(normalized["selected_region_scores"][0], float)
+    assert isinstance(normalized["upn_latency_ms"], float)
+    assert isinstance(decoded["proposal_scores"][0], float)
+    assert not isinstance(decoded["proposal_scores"][0], str)
+    assert decoded["proposal_scores"][0] == pytest.approx(0.875)
 
 
 def test_full_quantity_scope_keeps_parseable_quantity_population() -> None:
