@@ -30,8 +30,7 @@ from sat_rs_vlm.integrations.vlm_fo1 import (  # noqa: E402
     build_counting_prompt,
     compact_proposal_evidence,
     extract_count_target_phrase,
-    parse_fo1_count,
-    parse_region_indexes,
+    parse_profile_output,
     request_has_reference_leak,
 )
 
@@ -45,6 +44,27 @@ def _configure_cache() -> None:
     os.environ.setdefault("HF_HOME", str(cache_dir))
     os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(cache_dir / "hub"))
     os.environ.setdefault("TRANSFORMERS_CACHE", str(cache_dir / "transformers"))
+
+
+def _configure_official_import_path() -> Path:
+    """Add only the official checkout to this worker's import path."""
+
+    value = os.environ.get("VLM_FO1_ROOT", "").strip()
+    if not value:
+        raise RuntimeError(
+            "VLM_FO1_ROOT is required for the official backend; set it to the "
+            "official VLM-FO1 checkout"
+        )
+    root = Path(value).expanduser().resolve()
+    if not root.is_dir():
+        raise RuntimeError(f"VLM_FO1_ROOT is not a directory: {root}")
+    for relative in ("vlm_fo1", "detect_tools", "detect_tools/upn"):
+        if not (root / relative).is_dir():
+            raise RuntimeError(f"VLM_FO1_ROOT is missing required directory: {root / relative}")
+    root_text = str(root)
+    if root_text not in sys.path:
+        sys.path.insert(0, root_text)
+    return root
 
 
 def _failure(
@@ -114,7 +134,12 @@ def validate_request(
             "selected_region_boxes": [],
             "selected_region_scores": [],
             "fo1_raw_output": "",
+            "fo1_region_count": None,
+            "fo1_textual_count": None,
             "fo1_count": None,
+            "fo1_count_source": None,
+            "fo1_count_agrees_with_text": None,
+            "zero_proposal_assumed_zero": False,
             "upn_latency_ms": 0.0,
             "fo1_latency_ms": 0.0,
         }
@@ -139,6 +164,7 @@ class PipelineConfig:
     temperature: float = 0.0
     top_p: float = 0.05
     prompt_profile: str = "official_fo1"
+    count_source: str = "region"
 
 
 class Backend:
@@ -152,10 +178,22 @@ class MockBackend(Backend):
     def infer(self, request: Mapping[str, Any], config: PipelineConfig) -> dict[str, Any]:
         boxes = [[0.0, 0.0, 10.0, 10.0], [10.0, 10.0, 20.0, 20.0]]
         scores = [0.9, 0.8]
-        raw = "<ground>{}</ground><objects><region0><region1></objects>".format(
-            request["target_phrase"]
+        if config.prompt_profile == "official_fo1":
+            raw = "<ground>{}</ground><objects><region0><region1></objects>".format(
+                request["target_phrase"]
+            )
+        elif config.prompt_profile == "integer":
+            raw = "2"
+        elif config.prompt_profile == "json":
+            raw = '{"count":2}'
+        else:
+            raw = "There are 2."
+        parsed = parse_profile_output(
+            raw,
+            config.prompt_profile,
+            proposal_count=len(boxes),
+            count_source=config.count_source,
         )
-        parsed = parse_region_indexes(raw, proposal_count=len(boxes))
         selected_boxes, selected_scores = compact_proposal_evidence(
             boxes, scores, parsed["selected_region_indexes"]
         )
@@ -172,7 +210,12 @@ class MockBackend(Backend):
             "selected_region_scores": selected_scores,
             "fo1_raw_output": raw,
             "fo1_selected_region_indexes": parsed["selected_region_indexes"],
-            "fo1_count": len(parsed["selected_region_indexes"]),
+            "fo1_region_count": parsed["region_count"],
+            "fo1_textual_count": parsed["textual_count"],
+            "fo1_count": parsed["count"],
+            "fo1_count_source": parsed["count_source"],
+            "fo1_count_agrees_with_text": parsed["count_agrees_with_text"],
+            "zero_proposal_assumed_zero": False,
             "upn_latency_ms": 0.0,
             "fo1_latency_ms": 0.0,
         }
@@ -182,6 +225,7 @@ class OfficialFO1Backend(Backend):
     """Lazy official implementation; imports never execute in rs-vlm."""
 
     def __init__(self, config: PipelineConfig) -> None:
+        _configure_official_import_path()
         try:
             import torch
             from detect_tools.upn import UPNWrapper
@@ -248,6 +292,20 @@ class OfficialFO1Backend(Backend):
             scores = scores[: config.proposal_top_k]
             proposal_count_used = len(boxes)
             if not boxes:
+                if config.prompt_profile == "official_fo1":
+                    zero_raw = "<ground>{}</ground><objects></objects>".format(
+                        request["target_phrase"]
+                    )
+                    zero_source = "region" if config.count_source == "auto" else config.count_source
+                elif config.prompt_profile == "integer":
+                    zero_raw = "0"
+                    zero_source = "text"
+                elif config.prompt_profile == "json":
+                    zero_raw = '{"count":0}'
+                    zero_source = "text"
+                else:
+                    zero_raw = "There are 0."
+                    zero_source = "text"
                 return {
                     "id": request["id"],
                     "status": "ok",
@@ -260,11 +318,14 @@ class OfficialFO1Backend(Backend):
                     "selected_region_indexes": [],
                     "selected_region_boxes": [],
                     "selected_region_scores": [],
-                    "fo1_raw_output": "<ground>{}</ground><objects></objects>".format(
-                        request["target_phrase"]
-                    ),
+                    "fo1_raw_output": zero_raw,
                     "fo1_selected_region_indexes": [],
+                    "fo1_region_count": 0,
+                    "fo1_textual_count": None,
                     "fo1_count": 0,
+                    "fo1_count_source": zero_source,
+                    "zero_proposal_assumed_zero": True,
+                    "fo1_count_agrees_with_text": None,
                     "upn_latency_ms": upn_latency_ms,
                     "fo1_latency_ms": 0.0,
                 }
@@ -312,12 +373,17 @@ class OfficialFO1Backend(Backend):
                 input_ids = generation_kwargs.get("input_ids")
             prompt_len = int(input_ids.shape[1]) if input_ids is not None else 0
             raw_output = self._tokenizer.decode(output_ids[0, prompt_len:]).strip()
-            parsed = parse_region_indexes(raw_output, proposal_count=proposal_count_used)
+            parsed = parse_profile_output(
+                raw_output,
+                config.prompt_profile,
+                proposal_count=proposal_count_used,
+                count_source=config.count_source,
+            )
             if not parsed["parse_ok"]:
                 return _failure(
                     request,
-                    "fo1_parse",
-                    str(parsed.get("parse_error") or "official region output did not parse"),
+                    "fo1_parse" if config.prompt_profile == "official_fo1" else "count_parse",
+                    str(parsed.get("parse_error") or "FO1 count output did not parse"),
                     target_phrase=request["target_phrase"],
                     target_status="supported",
                 ) | {
@@ -325,6 +391,13 @@ class OfficialFO1Backend(Backend):
                     "proposal_count_used": proposal_count_used,
                     "proposal_boxes": boxes,
                     "proposal_scores": scores,
+                    "selected_region_indexes": parsed["selected_region_indexes"],
+                    "fo1_selected_region_indexes": parsed["selected_region_indexes"],
+                    "fo1_region_count": parsed["region_count"],
+                    "fo1_textual_count": parsed["textual_count"],
+                    "fo1_count_source": parsed["count_source"],
+                    "fo1_count_agrees_with_text": parsed["count_agrees_with_text"],
+                    "zero_proposal_assumed_zero": False,
                     "fo1_raw_output": raw_output,
                     "upn_latency_ms": upn_latency_ms,
                     "fo1_latency_ms": fo1_latency_ms,
@@ -332,11 +405,6 @@ class OfficialFO1Backend(Backend):
             selected_boxes, selected_scores = compact_proposal_evidence(
                 boxes, scores, parsed["selected_region_indexes"]
             )
-            explicit_count, _ = parse_fo1_count(raw_output)
-            selected_count = len(parsed["selected_region_indexes"])
-            # Official FO1's contract is region selection; the number of
-            # selected regions is the authoritative count.  The textual number
-            # is retained only as a diagnostic to detect readout disagreement.
             return {
                 "id": request["id"],
                 "status": "ok",
@@ -351,9 +419,12 @@ class OfficialFO1Backend(Backend):
                 "selected_region_scores": selected_scores,
                 "fo1_raw_output": raw_output,
                 "fo1_selected_region_indexes": parsed["selected_region_indexes"],
-                "fo1_count": selected_count,
-                "fo1_textual_count": explicit_count,
-                "fo1_count_agrees_with_text": explicit_count in {None, selected_count},
+                "fo1_region_count": parsed["region_count"],
+                "fo1_count": parsed["count"],
+                "fo1_textual_count": parsed["textual_count"],
+                "fo1_count_source": parsed["count_source"],
+                "fo1_count_agrees_with_text": parsed["count_agrees_with_text"],
+                "zero_proposal_assumed_zero": False,
                 "upn_latency_ms": upn_latency_ms,
                 "fo1_latency_ms": fo1_latency_ms,
             }
@@ -404,6 +475,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--top-p", type=float, default=0.05)
     parser.add_argument("--prompt-profile", choices=FO1_PROMPT_PROFILES, default="official_fo1")
+    parser.add_argument("--count-source", choices=("region", "text", "auto"), default="region")
     return parser.parse_args()
 
 
@@ -428,6 +500,7 @@ def main() -> int:
         temperature=args.temperature,
         top_p=args.top_p,
         prompt_profile=args.prompt_profile,
+        count_source=args.count_source,
     )
     try:
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):

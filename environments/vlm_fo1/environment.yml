@@ -12,6 +12,7 @@ dependencies:
       - transformers==4.50.1
       - timm==1.0.9
       - accelerate==1.4.0
+      - mmengine==0.8.2
       - gradio
       - einops
       - ninja

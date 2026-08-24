@@ -8,6 +8,7 @@ import importlib
 import json
 import os
 import platform
+import shutil
 import sys
 from pathlib import Path
 
@@ -31,6 +32,9 @@ def main() -> int:
         "environment": "vlm-fo1",
         "imports": {},
         "paths": {},
+        "flash_attention_available": False,
+        "cuda_available": None,
+        "nvcc_available": bool(shutil.which("nvcc")),
     }
     try:
         if sys.version_info < (3, 10):  # noqa: UP036 - retain runtime guard
@@ -40,8 +44,16 @@ def main() -> int:
         upn = _env_path("VLM_FO1_UPN_CHECKPOINT", required=not args.allow_missing_upn)
         cache = _env_path("VLM_FO1_CACHE_DIR", required=False)
         assert model is not None and root is not None
+        root = root.resolve()
         if not root.is_dir():
             raise RuntimeError(f"VLM_FO1_ROOT is not a directory: {root}")
+        for relative in ("vlm_fo1", "detect_tools", "detect_tools/upn"):
+            if not (root / relative).is_dir():
+                raise RuntimeError(
+                    f"VLM_FO1_ROOT is missing required directory: {root / relative}"
+                )
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
         if not (model / "config.json").is_file():
             raise RuntimeError(f"VLM_FO1_MODEL is missing config.json: {model}")
         if upn is not None and not upn.is_file():
@@ -52,12 +64,32 @@ def main() -> int:
             "VLM_FO1_UPN_CHECKPOINT": str(upn) if upn else None,
             "VLM_FO1_CACHE_DIR": str(cache) if cache else None,
         }
-        for module_name in ("torch", "torchvision", "transformers", "timm", "accelerate"):
+        torch_module = None
+        for module_name in (
+            "torch",
+            "torchvision",
+            "transformers",
+            "timm",
+            "accelerate",
+            "mmengine",
+        ):
             try:
                 module = importlib.import_module(module_name)
+                if module_name == "torch":
+                    torch_module = module
                 report["imports"][module_name] = getattr(module, "__version__", "ok")  # type: ignore[index]
             except Exception as exc:
                 raise RuntimeError(f"failed to import {module_name}: {exc}") from exc
+        try:
+            flash_module = importlib.import_module("flash_attn")
+            report["imports"]["flash_attn"] = getattr(flash_module, "__version__", "ok")  # type: ignore[index]
+            report["flash_attention_available"] = True
+        except Exception as exc:
+            report["flash_attention_available"] = False
+            raise RuntimeError(
+                "flash_attn is required because the official builder uses "
+                f"flash_attention_2: {exc}"
+            ) from exc
         for module_name in ("detect_tools.upn", "vlm_fo1"):
             try:
                 importlib.import_module(module_name)
@@ -66,6 +98,8 @@ def main() -> int:
                 raise RuntimeError(
                     f"failed to import official module {module_name}: {exc}"
                 ) from exc
+        if torch_module is not None:
+            report["cuda_available"] = bool(torch_module.cuda.is_available())
         print(json.dumps({"status": "ok", **report}, ensure_ascii=False, indent=2))
         return 0
     except Exception as exc:

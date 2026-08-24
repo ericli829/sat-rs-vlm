@@ -28,14 +28,20 @@ INTEGER_COUNTING_SUFFIX = "Answer with an integer only."
 
 _UNSUPPORTED_PHRASE_RE = re.compile(
     r"\b(?:object|objects|thing|things|category|categories|class|classes|"
-    r"lane|lanes|row|rows|unique|different|more\s+than|less\s+than|"
+    r"lane|lanes|row|rows|different|more\s+than|less\s+than|"
     r"multiple|at\s+least|at\s+most|ratio|percentage)\b",
+    re.IGNORECASE,
+)
+_COMPARATIVE_RE = re.compile(
+    r"\b(?:more|fewer|less)\b(?:\s+[a-z][a-z-]*){0,8}\s+\bthan\b|"
+    r"^\s*(?:more|fewer|less)\b",
     re.IGNORECASE,
 )
 _LEADING_ARTICLE_RE = re.compile(r"^(?:the|a|an)\s+", re.IGNORECASE)
 _WHITESPACE_RE = re.compile(r"\s+")
 _QUESTION_PREFIX_RE = re.compile(
-    r"^\s*(?:how\s+many|number\s+of)\s+(?P<phrase>.+?)\s*$",
+    r"^\s*(?:(?:how\s+many)|(?:what\s+is\s+the\s+(?:total\s+)?number\s+of)|"
+    r"(?:the\s+)?number\s+of)\s+(?P<phrase>.+?)\s*$",
     re.IGNORECASE,
 )
 _TRAILING_CLAUSE_RE = re.compile(
@@ -88,10 +94,13 @@ def extract_count_target_phrase(question: str) -> TargetPhraseResult:
     phrase = match.group("phrase").strip(" \t,;:?.!")
     phrase = _TRAILING_CLAUSE_RE.sub("", phrase).strip(" \t,;:?.!")
     phrase = _LEADING_ARTICLE_RE.sub("", phrase).strip()
+    # ``unique`` is a harmless instance-level modifier (for example,
+    # "unique airplanes"), but category-level requests remain unsupported.
+    phrase = re.sub(r"^unique\s+", "", phrase, flags=re.IGNORECASE).strip()
     phrase = _WHITESPACE_RE.sub(" ", phrase)
     if not phrase:
         return TargetPhraseResult(None, "unsupported", "empty_target_phrase")
-    if _UNSUPPORTED_PHRASE_RE.search(phrase):
+    if _UNSUPPORTED_PHRASE_RE.search(phrase) or _COMPARATIVE_RE.search(phrase):
         return TargetPhraseResult(None, "unsupported", "non_instance_or_comparative_target")
     if not re.search(r"[A-Za-z]", phrase):
         return TargetPhraseResult(None, "unsupported", "target_phrase_not_text")
@@ -181,8 +190,98 @@ def parse_fo1_count(output: str) -> tuple[int | None, str | None]:
     """Parse an integer/JSON answer without overriding official region evidence."""
 
     cleaned = re.sub(r"</?(?:ground|objects|region\d+|think)[^>]*>", " ", str(output), flags=re.I)
+    # The shared parser intentionally rejects a digit adjacent to a decimal
+    # point; a sentence-final full stop is punctuation, not a decimal.
+    cleaned = re.sub(r"(?<=\d)[.,!?;:](?=\s*$)", "", cleaned.strip())
     result = parse_count(cleaned)
     return result.value, result.reason
+
+
+def parse_profile_output(
+    output: str,
+    profile: str,
+    *,
+    proposal_count: int | None = None,
+    count_source: str = "region",
+) -> dict[str, Any]:
+    """Parse profile-specific FO1 evidence without inventing a count.
+
+    The official profile defaults to valid region markup as its authoritative
+    evidence.  Explicit ``text``/``auto`` sources may use textual evidence when
+    region markup is absent.  Plain/integer/json always use textual counts and
+    may omit region markup; any region evidence is retained for diagnostics.
+    """
+
+    if profile not in FO1_PROMPT_PROFILES:
+        raise ValueError(f"unsupported FO1 prompt profile: {profile}")
+    if count_source not in {"region", "text", "auto"}:
+        raise ValueError(f"unsupported FO1 count source: {count_source}")
+    region = parse_region_indexes(output, proposal_count=proposal_count)
+    region_available = bool(region["parse_ok"])
+    region_count = (
+        len(region["selected_region_indexes"]) if region_available else None
+    )
+    textual_count, textual_reason = parse_fo1_count(output)
+    if profile == "official_fo1" and count_source == "region":
+        if not region_available:
+            return {
+                "parse_ok": False,
+                "parse_error": str(region.get("parse_error") or "missing_official_region_markup"),
+                "region_count": None,
+                "textual_count": textual_count,
+                "count": None,
+                "count_source": None,
+                "selected_region_indexes": region["selected_region_indexes"],
+                "region": region,
+                "count_agrees_with_text": None,
+            }
+        resolved_source = "region"
+        final_count = region_count
+    elif profile == "official_fo1" and count_source in {"text", "auto"}:
+        resolved_source = "region" if count_source == "auto" and region_available else "text"
+        if resolved_source == "text" and textual_count is None:
+            return {
+                "parse_ok": False,
+                "parse_error": textual_reason or "missing_textual_count",
+                "region_count": region_count,
+                "textual_count": None,
+                "count": None,
+                "count_source": None,
+                "selected_region_indexes": region["selected_region_indexes"],
+                "region": region,
+                "count_agrees_with_text": None,
+            }
+        final_count = region_count if resolved_source == "region" else textual_count
+    else:
+        resolved_source = "text"
+        if textual_count is None:
+            return {
+                "parse_ok": False,
+                "parse_error": textual_reason or "missing_textual_count",
+                "region_count": region_count,
+                "textual_count": None,
+                "count": None,
+                "count_source": None,
+                "selected_region_indexes": region["selected_region_indexes"],
+                "region": region,
+                "count_agrees_with_text": None,
+            }
+        final_count = textual_count
+    return {
+        "parse_ok": final_count is not None,
+        "parse_error": None if final_count is not None else "missing_count",
+        "region_count": region_count,
+        "textual_count": textual_count,
+        "count": final_count,
+        "count_source": resolved_source if final_count is not None else None,
+        "selected_region_indexes": region["selected_region_indexes"],
+        "region": region,
+        "count_agrees_with_text": (
+            None
+            if textual_count is None or region_count is None
+            else region_count == textual_count
+        ),
+    }
 
 
 def compact_proposal_evidence(
@@ -206,12 +305,20 @@ def request_has_reference_leak(request: Mapping[str, Any]) -> bool:
     """Guard the sidecar boundary against reference-answer leakage."""
 
     forbidden = {"reference", "answer", "ground_truth", "groundtruth", "label"}
+
+    def contains_forbidden(value: Any) -> bool:
+        if isinstance(value, Mapping):
+            return any(
+                str(key).lower() in forbidden or contains_forbidden(item)
+                for key, item in value.items()
+            )
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+            return any(contains_forbidden(item) for item in value)
+        return False
+
     if any(str(key).lower() in forbidden for key in request):
         return True
-    nested = request.get("metadata")
-    if isinstance(nested, Mapping):
-        return any(str(key).lower() in forbidden for key in nested)
-    return False
+    return contains_forbidden(request.get("metadata"))
 
 
 def prediction_count_text(count: int | None) -> str:
@@ -228,6 +335,12 @@ def counting_json_prediction(count: int | None) -> str:
 
 def is_supported_prompt_profile(profile: str) -> bool:
     return profile in FO1_PROMPT_PROFILES
+
+
+def is_official_fo1_model_path(model_path: str) -> bool:
+    """Return whether a model path clearly denotes the official FO1 family."""
+
+    return "vlm-fo1" in str(model_path or "").lower()
 
 
 def protocol_error(message: str) -> dict[str, Any]:

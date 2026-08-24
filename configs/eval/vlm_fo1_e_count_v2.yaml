@@ -24,5 +24,6 @@ generation:
   temperature: 0.0
   top_p: 0.05
   prompt_profile: official_fo1
+  count_source: region
 provenance:
   audit: reports/integrations/vlm_fo1_source_audit.json

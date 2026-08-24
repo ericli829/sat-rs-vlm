@@ -7,6 +7,7 @@ import pytest
 from scripts.integrations.vlm_fo1_worker import (
     MockBackend,
     PipelineConfig,
+    build_backend,
     process_request,
     validate_request,
 )
@@ -21,6 +22,8 @@ from sat_rs_vlm.evaluation.ensemble import (
 from sat_rs_vlm.integrations.vlm_fo1 import (
     build_counting_prompt,
     extract_count_target_phrase,
+    is_official_fo1_model_path,
+    parse_profile_output,
     parse_region_indexes,
 )
 
@@ -33,6 +36,10 @@ from sat_rs_vlm.integrations.vlm_fo1 import (
         ("How many planes are visible?", "planes"),
         ("How many tennis courts can be seen?", "tennis courts"),
         ("How many ships are there?", "ships"),
+        ("What is the total number of planes visible?", "planes"),
+        ("What is the number of storage tanks in the image?", "storage tanks"),
+        ("Number of tennis courts visible in the image?", "tennis courts"),
+        ("How many unique airplanes are visible?", "airplanes"),
     ],
 )
 def test_target_phrase_extraction_is_open_vocabulary(question: str, expected: str) -> None:
@@ -56,6 +63,11 @@ def test_unsupported_target_is_explicit(question: str) -> None:
     assert result.phrase is None
 
 
+def test_comparative_target_is_not_instance_counting() -> None:
+    result = extract_count_target_phrase("How many more ships than boats are visible?")
+    assert result.status == "unsupported"
+
+
 def test_prompt_profiles_are_switchable() -> None:
     question = "How many small vehicles are visible?"
     assert build_counting_prompt(question, "small vehicles", "plain") == question
@@ -64,6 +76,36 @@ def test_prompt_profiles_are_switchable() -> None:
     assert build_counting_prompt(question, "small vehicles", "official_fo1").startswith(
         "How many small vehicles are there in this image?"
     )
+
+
+def test_profile_specific_count_parsing_keeps_region_and_text_evidence() -> None:
+    assert parse_profile_output("There are 7.", "plain")["count"] == 7
+    assert parse_profile_output("7", "integer")["count"] == 7
+    assert parse_profile_output('{"count":7}', "json")["count"] == 7
+    official = parse_profile_output(
+        "<ground>airplanes</ground><objects><region1><region3><region8></objects> 3",
+        "official_fo1",
+        proposal_count=10,
+    )
+    assert official["region_count"] == 3
+    assert official["textual_count"] == 3
+    assert official["count"] == 3
+    disagreement = parse_profile_output(
+        "<ground>airplanes</ground><objects><region1><region3><region8></objects> 4",
+        "official_fo1",
+        proposal_count=10,
+    )
+    assert disagreement["region_count"] == 3
+    assert disagreement["textual_count"] == 4
+    assert disagreement["count"] == 3
+    assert disagreement["count_agrees_with_text"] is False
+    assert parse_profile_output("There are 7.", "official_fo1")["parse_ok"] is False
+    assert parse_profile_output(
+        "There are 7.", "official_fo1", count_source="text"
+    )["count"] == 7
+    assert parse_profile_output(
+        "There are 7.", "official_fo1", count_source="auto"
+    )["count_source"] == "text"
 
 
 def test_region_index_parser_preserves_evidence_and_zero_count() -> None:
@@ -104,8 +146,77 @@ def test_worker_json_protocol_and_failure_handling() -> None:
     assert bad["failure_stage"] == "protocol_guard"
     upper_bad = process_request({**request, "Reference": "2"}, backend, config)
     assert upper_bad["failure_stage"] == "protocol_guard"
+    nested_bad = process_request(
+        {**request, "metadata": {"nested": [{"ground_truth": 2}]}}, backend, config
+    )
+    assert nested_bad["failure_stage"] == "protocol_guard"
     mismatch = process_request({**request, "target_phrase": "ships"}, backend, config)
     assert mismatch["failure_stage"] == "protocol_guard"
+
+
+def test_mock_does_not_require_official_root(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("VLM_FO1_ROOT", raising=False)
+    response = process_request(
+        {
+            "id": "mock-no-root",
+            "image": "missing.png",
+            "question": "How many ships are visible?",
+            "target_phrase": "ships",
+        },
+        MockBackend(),
+        PipelineConfig(model_path="mock", upn_checkpoint="mock"),
+    )
+    assert response["status"] == "ok"
+
+
+def test_official_backend_missing_root_fails_clearly(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("VLM_FO1_ROOT", raising=False)
+    with pytest.raises(RuntimeError, match="VLM_FO1_ROOT"):
+        build_backend("official", PipelineConfig(model_path="mock", upn_checkpoint="mock"))
+
+
+def test_official_model_path_helper() -> None:
+    assert is_official_fo1_model_path("VLM-FO1-3B-v01")
+    assert not is_official_fo1_model_path("some-other-model")
+
+
+def test_worker_early_exit_returns_one_failed_row_per_request(tmp_path: Path) -> None:
+    from scripts.evaluation.evaluate_vlm_fo1 import _run_worker
+
+    script = tmp_path / "exit_after_one.py"
+    script.write_text(
+        "import json, sys\n"
+        "line = sys.stdin.readline()\n"
+        "if line:\n"
+        "    request = json.loads(line)\n"
+        "    print(json.dumps({'id': request['id'], 'status': 'ok'}), flush=True)\n",
+        encoding="utf-8",
+    )
+    requests = [
+        {"id": "one", "image": "a", "question": "q", "target_phrase": "q"},
+        {"id": "two", "image": "b", "question": "q", "target_phrase": "q"},
+        {"id": "three", "image": "c", "question": "q", "target_phrase": "q"},
+    ]
+    settings = {
+        "worker_python": Path(__import__("sys").executable),
+        "worker_script": script,
+        "backend": "mock",
+        "model": Path("mock"),
+        "upn_checkpoint": Path("mock"),
+        "device": "cpu",
+        "proposal_score_threshold": 0.3,
+        "proposal_top_k": 100,
+        "nms_threshold": 0.8,
+        "max_new_tokens": 8,
+        "temperature": 0.0,
+        "top_p": 0.05,
+        "prompt_profile": "plain",
+        "count_source": "text",
+    }
+    responses = _run_worker(requests, settings)
+    assert [response["id"] for response in responses] == ["one", "two", "three"]
+    assert responses[0]["status"] == "ok"
+    assert all(response["status"] == "failed" for response in responses[1:])
 
 
 def test_validate_request_marks_unsupported_without_backend_call() -> None:
@@ -216,6 +327,12 @@ def test_mock_evaluator_writes_standard_outputs(tmp_path: Path) -> None:
     metrics = json.loads(outputs["metrics"].read_text(encoding="utf-8"))
     assert metrics["metrics_protocol"] == PROTOCOL_NAME
     assert metrics["n"] == 1
+    diagnostics = json.loads(outputs["diagnostics"].read_text(encoding="utf-8"))
+    assert diagnostics["prompt_profile"] == "official_fo1"
+    assert diagnostics["count_source"] == "region"
+    assert diagnostics["region_count_available_count"] == 1
+    assert diagnostics["textual_count_available_count"] == 0
+    assert diagnostics["failure_stage_histogram"] == {}
     prediction = json.loads(outputs["predictions"].read_text(encoding="utf-8"))
     assert prediction["prediction"] == "2"
     assert {

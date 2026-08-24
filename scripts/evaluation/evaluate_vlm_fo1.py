@@ -16,6 +16,7 @@ import statistics
 import subprocess
 import sys
 import time
+from collections import Counter
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
@@ -187,6 +188,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--temperature", type=float)
     parser.add_argument("--top-p", type=float)
     parser.add_argument("--prompt-profile", choices=FO1_PROMPT_PROFILES)
+    parser.add_argument("--count-source", choices=("region", "text", "auto"))
     parser.add_argument("--audit", type=Path)
     return parser.parse_args()
 
@@ -254,6 +256,8 @@ def _settings(args: argparse.Namespace) -> dict[str, Any]:
         else _config_value(config, "generation", "top_p", 0.05),
         "prompt_profile": args.prompt_profile
         or _config_value(config, "generation", "prompt_profile", "official_fo1"),
+        "count_source": args.count_source
+        or _config_value(config, "generation", "count_source", "region"),
         "audit": args.audit or Path(_config_value(config, "provenance", "audit", DEFAULT_AUDIT)),
     }
     for key in (
@@ -273,6 +277,8 @@ def _settings(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError("--max-samples must be positive")
     if settings["scope"] not in {"e_count_v2", "full_vrsbench_quantity"}:
         raise ValueError(f"unsupported scope: {settings['scope']}")
+    if settings.get("count_source", "region") not in {"region", "text", "auto"}:
+        raise ValueError(f"unsupported count source: {settings['count_source']}")
     return settings
 
 
@@ -337,6 +343,8 @@ def _worker_command(settings: Mapping[str, Any]) -> list[str]:
         str(settings["top_p"]),
         "--prompt-profile",
         str(settings["prompt_profile"]),
+        "--count-source",
+        str(settings.get("count_source", "region")),
     ]
     return command
 
@@ -355,77 +363,122 @@ def _run_worker(
     )
     assert process.stdin is not None and process.stdout is not None
     responses: list[dict[str, Any]] = []
-    for request in requests:
-        process.stdin.write(json.dumps(request, ensure_ascii=False) + "\n")
-        process.stdin.flush()
-        line = process.stdout.readline()
-        if not line:
-            error = process.stderr.read() if process.stderr is not None else ""
-            responses.append(
-                {
-                    "id": request["id"],
+    interruption_error: str | None = None
+    try:
+        for request in requests:
+            try:
+                process.stdin.write(json.dumps(request, ensure_ascii=False) + "\n")
+                process.stdin.flush()
+                line = process.stdout.readline()
+            except (BrokenPipeError, OSError) as exc:
+                interruption_error = f"worker pipe closed: {exc}"
+                break
+            if not line:
+                interruption_error = "worker exited before returning a response"
+                break
+            try:
+                response = json.loads(line)
+            except json.JSONDecodeError as exc:
+                response = {
                     "status": "failed",
-                    "failure_stage": "worker_process",
-                    "error": error.strip() or "worker exited before returning a response",
+                    "failure_stage": "worker_protocol",
+                    "error": f"worker emitted invalid JSON: {exc}",
                 }
-            )
-            break
+            if not isinstance(response, dict):
+                response = {
+                    "status": "failed",
+                    "failure_stage": "worker_protocol",
+                    "error": "worker response must be an object",
+                }
+            # One response slot belongs to one input request.  Never allow a
+            # malformed/duplicate worker id to make later rows disappear.
+            response["id"] = request["id"]
+            responses.append(response)
+    finally:
         try:
-            response = json.loads(line)
-        except json.JSONDecodeError as exc:
-            response = {
-                "id": request["id"],
-                "status": "failed",
-                "failure_stage": "worker_protocol",
-                "error": f"worker emitted invalid JSON: {exc}",
-            }
-        if not isinstance(response, dict):
-            response = {
-                "id": request["id"],
-                "status": "failed",
-                "failure_stage": "worker_protocol",
-                "error": "worker response must be an object",
-            }
-        response.setdefault("id", request["id"])
-        responses.append(response)
-    process.stdin.close()
-    process.wait(timeout=120)
+            process.stdin.close()
+        except (BrokenPipeError, OSError):
+            pass
+    try:
+        process.wait(timeout=120)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=30)
+        interruption_error = interruption_error or "worker did not exit after stdin closed"
     stderr = process.stderr.read() if process.stderr is not None else ""
-    if process.returncode not in {0, None} and len(responses) < len(requests):
+    if len(responses) < len(requests):
+        error = stderr.strip() or interruption_error or (
+            f"worker exit code {process.returncode}"
+            if process.returncode not in {0, None}
+            else "worker returned fewer responses than requests"
+        )
         for request in requests[len(responses) :]:
             responses.append(
                 {
                     "id": request["id"],
                     "status": "failed",
                     "failure_stage": "worker_process",
-                    "error": stderr.strip() or f"worker exit code {process.returncode}",
+                    "error": error,
                 }
             )
     return responses
 
 
-def _diagnostics(responses: list[dict[str, Any]]) -> dict[str, Any]:
+def _diagnostics(
+    responses: list[dict[str, Any]],
+    *,
+    prompt_profile: str = "official_fo1",
+    count_source: str = "region",
+) -> dict[str, Any]:
     supported = sum(response.get("target_status") == "supported" for response in responses)
+    unsupported = sum(response.get("target_status") == "unsupported" for response in responses)
     proposal_counts = [
         float(response["proposal_count_raw"])
         for response in responses
         if isinstance(response.get("proposal_count_raw"), (int, float))
     ]
-    selected_counts = [
-        float(len(response.get("selected_region_indexes", [])))
-        for response in responses
-        if isinstance(response.get("selected_region_indexes", []), list)
-    ]
+    selected_counts: list[float] = []
+    for response in responses:
+        region_count = response.get("fo1_region_count")
+        if isinstance(region_count, (int, float)):
+            selected_counts.append(float(region_count))
+        elif isinstance(response.get("selected_region_indexes"), list):
+            # Preserve the legacy diagnostic for adapters that predate the
+            # explicit region-count field.
+            selected_counts.append(float(len(response["selected_region_indexes"])))
     latencies = [
         float(response.get("upn_latency_ms", 0.0)) + float(response.get("fo1_latency_ms", 0.0))
         for response in responses
         if response.get("upn_latency_ms") is not None and response.get("fo1_latency_ms") is not None
     ]
     failures = [response for response in responses if response.get("status") == "failed"]
+    failure_histogram = Counter(
+        str(response.get("failure_stage")) for response in failures if response.get("failure_stage")
+    )
+    region_available = sum(
+        isinstance(response.get("fo1_region_count"), int) for response in responses
+    )
+    textual_available = sum(
+        isinstance(response.get("fo1_textual_count"), int) for response in responses
+    )
+    disagreements = sum(
+        response.get("status") == "ok" and response.get("fo1_count_agrees_with_text") is False
+        for response in responses
+    )
     return {
         "target_phrase_supported_rate": supported / len(responses) if responses else None,
         "target_phrase_supported_count": supported,
+        "target_phrase_unsupported_count": unsupported,
         "target_phrase_total_count": len(responses),
+        "region_count_available_count": region_available,
+        "textual_count_available_count": textual_available,
+        "region_text_disagreement_count": disagreements,
+        "zero_proposal_count": sum(
+            bool(response.get("zero_proposal_assumed_zero")) for response in responses
+        ),
+        "failure_stage_histogram": dict(sorted(failure_histogram.items())),
+        "prompt_profile": prompt_profile,
+        "count_source": count_source,
         "proposal_count": _numeric_summary(proposal_counts),
         "selected_region_count": _numeric_summary(selected_counts),
         "proposal_failure_count": sum(
@@ -443,10 +496,7 @@ def _diagnostics(responses: list[dict[str, Any]]) -> dict[str, Any]:
             status: sum(response.get("status") == status for response in responses)
             for status in sorted({str(response.get("status")) for response in responses})
         },
-        "region_selection_text_count_disagreements": sum(
-            response.get("status") == "ok" and response.get("fo1_count_agrees_with_text") is False
-            for response in responses
-        ),
+        "region_selection_text_count_disagreements": disagreements,
     }
 
 
@@ -461,6 +511,7 @@ def _summary_markdown(
         "",
         f"- scope: `{provenance.get('scope')}`",
         f"- prompt profile: `{provenance.get('prompt_profile')}`",
+        f"- count source: `{provenance.get('count_source')}`",
         f"- formal population: {overall.get('n')}",
         f"- parsed predictions: {overall.get('parsed_n')}",
         f"- parse rate: {overall.get('parse_rate')}",
@@ -569,14 +620,22 @@ def evaluate(settings: Mapping[str, Any]) -> dict[str, Path]:
             "fo1_selected_region_indexes": response.get(
                 "fo1_selected_region_indexes", response.get("selected_region_indexes", [])
             ),
+            "fo1_region_count": response.get("fo1_region_count"),
             "selected_region_indexes": response.get("selected_region_indexes", []),
             "selected_region_boxes": response.get("selected_region_boxes", []),
             "selected_region_scores": response.get("selected_region_scores", []),
             "fo1_textual_count": response.get("fo1_textual_count"),
+            "fo1_count_source": response.get("fo1_count_source"),
+            "fo1_count_agrees_with_text": response.get("fo1_count_agrees_with_text"),
+            "zero_proposal_assumed_zero": bool(response.get("zero_proposal_assumed_zero", False)),
         }
         predictions.append(output)
     formal = summarize_exact_cardinality_counting(predictions)
-    diagnostics = _diagnostics(responses)
+    diagnostics = _diagnostics(
+        responses,
+        prompt_profile=str(settings["prompt_profile"]),
+        count_source=str(settings.get("count_source", "region")),
+    )
     audit_path = Path(settings["audit"]).resolve()
     provenance = {
         "schema_version": "vlm-fo1-evaluation-v1",
@@ -587,6 +646,7 @@ def evaluate(settings: Mapping[str, Any]) -> dict[str, Path]:
         "input_rows_selected": len(rows),
         "expected_population": settings.get("expected_population"),
         "prompt_profile": settings["prompt_profile"],
+        "count_source": settings.get("count_source", "region"),
         "backend": settings["backend"],
         "worker_python": str(Path(settings["worker_python"]).resolve()),
         "worker_script": str(Path(settings["worker_script"]).resolve()),

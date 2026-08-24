@@ -43,8 +43,10 @@ Do not install the official requirements into `rs-vlm`.  From a clean host:
 
 ```bash
 git clone https://github.com/om-ai-lab/VLM-FO1.git "$VLM_FO1_ROOT"
-conda env create -f sat-rs-vlm/environments/vlm_fo1/environment.yml
-conda run -n vlm-fo1 python -m pip install -v -e "$VLM_FO1_ROOT/detect_tools/upn/ops"
+bash sat-rs-vlm/environments/vlm_fo1/install.sh
+# The official builder hard-codes flash_attention_2.  Install a wheel/source
+# build compatible with the image's Torch/CUDA/Python; do not use a blind pin.
+conda run -n vlm-fo1 python -m pip install --no-build-isolation flash-attn
 ```
 
 Set these variables before a real run:
@@ -63,6 +65,12 @@ Validate the environment without touching the rs-vlm interpreter:
 ```bash
 "$VLM_FO1_PYTHON" sat-rs-vlm/environments/vlm_fo1/check_environment.py
 ```
+
+The preflight must report `flash_attention_available: true`; it also reports
+CUDA and `nvcc` availability and imports `mmengine`, `detect_tools.upn`, and
+`vlm_fo1`.  A missing `VLM_FO1_ROOT`, FlashAttention, or UPN ops fails before
+model weights are loaded.  The worker adds `VLM_FO1_ROOT` to `sys.path` only in
+its isolated process.
 
 ## Prompt profiles
 
@@ -83,7 +91,9 @@ Every sample keeps:
 * raw proposal boxes and scores;
 * selected region indexes and selected boxes/scores;
 * raw FO1 output and textual-count diagnostic;
-* final selected-region count, status, failure stage, and latencies.
+* `fo1_region_count`, `fo1_textual_count`, selected count source, status,
+  failure stage, and latencies.  `region` is the default source for the
+  official profile; `text` and `auto` are explicit alternatives.
 
 Each run writes `predictions.jsonl`, `metrics.json`, `summary.md`,
 `provenance.json`, and `fo1_diagnostics.json`.  Counting metrics are delegated
@@ -111,6 +121,24 @@ python scripts/evaluation/evaluate_vlm_fo1.py \
   --config configs/eval/vlm_fo1_e_count_v2.yaml \
   --worker-python "$VLM_FO1_PYTHON" \
   --image-root "$VLM_FO1_IMAGE_ROOT"
+```
+
+For a bounded official smoke, always use a fresh output directory:
+
+```bash
+python scripts/evaluation/evaluate_vlm_fo1.py \
+  --config configs/eval/vlm_fo1_e_count_v2.yaml \
+  --worker-python "$VLM_FO1_PYTHON" \
+  --image-root "$VLM_FO1_IMAGE_ROOT" \
+  --max-samples 1 \
+  --output-dir /root/autodl-tmp/outputs/vlm_fo1/smoke1
+
+python scripts/evaluation/evaluate_vlm_fo1.py \
+  --config configs/eval/vlm_fo1_e_count_v2.yaml \
+  --worker-python "$VLM_FO1_PYTHON" \
+  --image-root "$VLM_FO1_IMAGE_ROOT" \
+  --max-samples 4 \
+  --output-dir /root/autodl-tmp/outputs/vlm_fo1/smoke4
 ```
 
 The full VRSBench Quantity scope (the same evaluator core, filtered from the
