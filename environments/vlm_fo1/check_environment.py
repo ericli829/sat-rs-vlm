@@ -8,7 +8,9 @@ path, whose smoke can use precomputed proposal boxes.
 
 from __future__ import annotations
 
+import contextlib
 import importlib
+import io
 import json
 import os
 import platform
@@ -25,6 +27,7 @@ if str(SRC_ROOT) not in sys.path:
 
 from sat_rs_vlm.integrations.vlm_fo1_loader import (  # noqa: E402
     ensure_official_root,
+    load_fo1_model,
     resolve_attention_backend,
     validate_model_path,
 )
@@ -60,6 +63,16 @@ def main() -> int:
         choices=("auto", "sdpa", "flash_attention_2", "eager"),
         default=os.environ.get("VLM_FO1_ATTENTION_BACKEND", "sdpa"),
     )
+    parser.add_argument(
+        "--device",
+        default=os.environ.get("VLM_FO1_DEVICE", "cuda"),
+        help="device used by --show-loading-info (default: cuda)",
+    )
+    parser.add_argument(
+        "--show-loading-info",
+        action="store_true",
+        help="load the model and emit bounded from_pretrained loading diagnostics",
+    )
     parser.add_argument("--allow-missing-upn", action="store_true")
     args = parser.parse_args()
     report: dict[str, object] = {
@@ -82,6 +95,7 @@ def main() -> int:
             "cuda_extension_error": None,
             "checkpoint_available": False,
         },
+        "loading_info": None,
     }
     try:
         if sys.version_info < (3, 10):  # noqa: UP036 - retain runtime guard
@@ -162,15 +176,31 @@ def main() -> int:
             except Exception as exc:
                 raise RuntimeError(f"failed to import official module {module_name}: {exc}") from exc
         try:
-            from transformers import AutoConfig, AutoTokenizer
+            if args.show_loading_info:
+                report["failure_stage"] = "model_load"
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
+                    io.StringIO()
+                ):
+                    bundle = load_fo1_model(
+                        model,
+                        args.device,
+                        attention_backend=report["attention_backend"],  # type: ignore[arg-type]
+                    )
+                report["loading_info"] = bundle.loading_info
+            else:
+                from transformers import AutoConfig, AutoTokenizer
 
-            AutoConfig.from_pretrained(str(model), local_files_only=True)
-            AutoTokenizer.from_pretrained(str(model), use_fast=False, local_files_only=True)
+                AutoConfig.from_pretrained(str(model), local_files_only=True)
+                AutoTokenizer.from_pretrained(
+                    str(model), use_fast=False, local_files_only=True
+                )
             report["imports"]["model_config"] = "ok"  # type: ignore[index]
             report["imports"]["tokenizer"] = "ok"  # type: ignore[index]
             report["fo1_model_ready"] = True
+            report["failure_stage"] = None
         except Exception as exc:
-            raise RuntimeError(f"failed to load local FO1 config/tokenizer: {exc}") from exc
+            detail = "model/loading-info" if args.show_loading_info else "config/tokenizer"
+            raise RuntimeError(f"failed to load local FO1 {detail}: {exc}") from exc
 
         try:
             importlib.import_module("detect_tools.upn")

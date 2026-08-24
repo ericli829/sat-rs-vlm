@@ -58,6 +58,7 @@ class FO1ModelBundle:
     attention_backend: str
     model_path: Path
     config_compatibility_patches: dict[str, dict[str, Any]] = field(default_factory=dict)
+    loading_info: dict[str, Any] = field(default_factory=dict)
 
 
 def ensure_official_root(root: str | Path, *, require_upn: bool = True) -> Path:
@@ -247,6 +248,101 @@ def patch_config_compatibility(
     return patches
 
 
+_LOADING_INFO_FIELDS = (
+    "missing_keys",
+    "unexpected_keys",
+    "mismatched_keys",
+    "error_msgs",
+)
+_LOADING_INFO_PREFIXES = (
+    "lm_head",
+    "model.embed_tokens",
+    "model.layers",
+    "model.mm_projector",
+    "model.mm_projector_aux",
+    "model.object_vp_extractor",
+    "model.vision_tower",
+    "model.vision_tower_aux",
+)
+
+
+def _loading_info_values(loading_info: Any, name: str) -> list[Any]:
+    if isinstance(loading_info, Mapping):
+        value = loading_info.get(name, [])
+    else:
+        value = getattr(loading_info, name, []) if loading_info is not None else []
+    if value is None:
+        return []
+    if isinstance(value, (str, bytes)):
+        return [value]
+    try:
+        return list(value)
+    except TypeError:
+        return [value]
+
+
+def _json_safe_loading_value(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Mapping):
+        return {str(key): _json_safe_loading_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe_loading_value(item) for item in value]
+    item_method = getattr(value, "item", None)
+    if callable(item_method):
+        try:
+            return _json_safe_loading_value(item_method())
+        except Exception:  # pragma: no cover - diagnostic fallback only
+            pass
+    return str(value)
+
+
+def _loading_info_key(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, Mapping):
+        for name in ("key", "name", "parameter", "param"):
+            candidate = value.get(name)
+            if isinstance(candidate, str):
+                return candidate
+    if isinstance(value, (list, tuple)) and value:
+        return _loading_info_key(value[0])
+    return ""
+
+
+def summarize_loading_info(loading_info: Any) -> dict[str, Any]:
+    """Keep bounded loading diagnostics while retaining complete counts."""
+
+    values = {name: _loading_info_values(loading_info, name) for name in _LOADING_INFO_FIELDS}
+    summary = {
+        "missing_key_count": len(values["missing_keys"]),
+        "unexpected_key_count": len(values["unexpected_keys"]),
+        "mismatched_key_count": len(values["mismatched_keys"]),
+        "error_msg_count": len(values["error_msgs"]),
+    }
+    result: dict[str, Any] = {
+        name: [_json_safe_loading_value(item) for item in items[:50]]
+        for name, items in values.items()
+    }
+    result["summary"] = summary
+    prefix_counts: dict[str, dict[str, int]] = {}
+    for prefix in _LOADING_INFO_PREFIXES:
+        counts: dict[str, int] = {}
+        for name, items in values.items():
+            if name == "error_msgs":
+                count = sum(prefix in str(item) for item in items)
+            else:
+                count = sum(
+                    _loading_info_key(item) == prefix
+                    or _loading_info_key(item).startswith(f"{prefix}.")
+                    for item in items
+                )
+            counts[f"{name[:-1]}_count" if name.endswith("s") else f"{name}_count"] = count
+        prefix_counts[prefix] = counts
+    result["prefix_counts"] = prefix_counts
+    return result
+
+
 def _set_attention_backend_on_nested_configs(
     config: Any, attention_backend: str, patches: dict[str, dict[str, Any]]
 ) -> None:
@@ -430,6 +526,7 @@ def load_fo1_model(
         "torch_dtype": dtype,
         "attn_implementation": resolved_backend,
         "local_files_only": True,
+        "output_loading_info": True,
     }
     if use_cuda:
         load_kwargs["device_map"] = device_text
@@ -437,10 +534,13 @@ def load_fo1_model(
         _override_official_vision_attention_backend(resolved_backend) as vision_patch_applied,
         _override_legacy_tied_weights_keys(OmChatQwen25VLForCausalLM) as tied_weights_patch,
     ):
-        model = OmChatQwen25VLForCausalLM.from_pretrained(str(path), **load_kwargs)
+        model, raw_loading_info = OmChatQwen25VLForCausalLM.from_pretrained(
+            str(path), **load_kwargs
+        )
         if tied_weights_patch is not None:
             model._tied_weights_keys = dict(tied_weights_patch)
         image_processors = _load_vision_towers(model, path, device_text, dtype)
+    loading_info = summarize_loading_info(raw_loading_info)
     if vision_patch_applied:
         config_compatibility_patches["vision_attention_backend"] = {
             "source": "official_vision_tower.hardcoded_flash_attention_2",
@@ -463,6 +563,7 @@ def load_fo1_model(
         attention_backend=resolved_backend,
         model_path=path,
         config_compatibility_patches=config_compatibility_patches,
+        loading_info=loading_info,
     )
 
 
@@ -473,5 +574,6 @@ __all__ = [
     "load_fo1_model",
     "patch_config_compatibility",
     "resolve_attention_backend",
+    "summarize_loading_info",
     "validate_model_path",
 ]

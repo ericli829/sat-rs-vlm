@@ -34,6 +34,7 @@ from sat_rs_vlm.integrations.vlm_fo1_loader import (
     load_fo1_model,
     patch_config_compatibility,
     resolve_attention_backend,
+    summarize_loading_info,
     validate_model_path,
 )
 
@@ -377,6 +378,31 @@ def test_shared_config_patch_does_not_modify_disk_config(tmp_path: Path) -> None
     assert config_path.read_text(encoding="utf-8") == raw_text
 
 
+def test_shared_loading_info_summary_is_bounded_and_prefix_counted() -> None:
+    loading_info = {
+        "missing_keys": ["lm_head.weight"] + [f"model.layers.{index}.weight" for index in range(60)],
+        "unexpected_keys": ["model.mm_projector_aux.extra"],
+        "mismatched_keys": [("model.embed_tokens.weight", [1, 2], [3, 4])],
+        "error_msgs": ["error while loading model.vision_tower_aux.layer"],
+    }
+
+    summary = summarize_loading_info(loading_info)
+
+    assert summary["summary"] == {
+        "missing_key_count": 61,
+        "unexpected_key_count": 1,
+        "mismatched_key_count": 1,
+        "error_msg_count": 1,
+    }
+    assert len(summary["missing_keys"]) == 50
+    assert summary["prefix_counts"]["lm_head"]["missing_key_count"] == 1
+    assert summary["prefix_counts"]["model.layers"]["missing_key_count"] == 60
+    assert summary["prefix_counts"]["model.embed_tokens"]["mismatched_key_count"] == 1
+    assert summary["prefix_counts"]["model.mm_projector_aux"]["unexpected_key_count"] == 1
+    assert summary["prefix_counts"]["model.vision_tower_aux"]["error_msg_count"] == 1
+    json.dumps(summary)
+
+
 def test_shared_loader_passes_patched_config_to_from_pretrained(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -419,10 +445,17 @@ def test_shared_loader_passes_patched_config_to_from_pretrained(
 
     class FakeModel:
         @classmethod
-        def from_pretrained(cls, *args: object, **kwargs: object) -> "FakeModel":
+        def from_pretrained(
+            cls, *args: object, **kwargs: object
+        ) -> tuple["FakeModel", dict[str, list[object]]]:
             calls.append("model")
             captured.update(kwargs)
-            return cls()
+            return cls(), {
+                "missing_keys": [],
+                "unexpected_keys": [],
+                "mismatched_keys": [],
+                "error_msgs": [],
+            }
 
         def get_vision_tower(self) -> None:
             return None
@@ -458,6 +491,7 @@ def test_shared_loader_passes_patched_config_to_from_pretrained(
 
     assert calls == ["config", "tokenizer", "model"]
     assert captured["config"] is config
+    assert captured["output_loading_info"] is True
     assert config.pad_token_id == 151643
     assert config._attn_implementation_internal == "sdpa"
     assert text_config._attn_implementation_internal == "sdpa"
@@ -486,6 +520,12 @@ def test_shared_loader_passes_patched_config_to_from_pretrained(
             "value": "sdpa",
             "targets": ["config", "config.text_config", "config.vision_config"],
         },
+    }
+    assert bundle.loading_info["summary"] == {
+        "missing_key_count": 0,
+        "unexpected_key_count": 0,
+        "mismatched_key_count": 0,
+        "error_msg_count": 0,
     }
 
 
