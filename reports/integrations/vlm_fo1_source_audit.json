@@ -1,0 +1,136 @@
+{
+  "schema_version": "vlm-fo1-source-audit-v1",
+  "audit_time_utc": "2026-08-24T07:26:51.689211+00:00",
+  "auditor_python": "3.11.9",
+  "official_repository": "https://github.com/om-ai-lab/VLM-FO1",
+  "official_commit": "348c1e8163a8fca5ed621cdfab0c94e3432336bd",
+  "official_commit_source": "https://github.com/om-ai-lab/VLM-FO1/commit/348c1e8163a8fca5ed621cdfab0c94e3432336bd",
+  "official_model": {
+    "name": "VLM-FO1-3B-v01",
+    "model_id": "omlab/VLM-FO1-3B-v01",
+    "base_vlm_family": "Qwen2.5-VL-3B",
+    "architecture": "OmChatQwen25VLForCausalLM",
+    "transformers_version_recorded_by_checkpoint": "4.50.1",
+    "local_model_directory": "D:\\Desktop\\tzb-2026\\VLM-FO1-3B-v01",
+    "config_sha256": "a248785b605b192b09104993d84cc4675ea12912779d84a74568b2167f3f49aa",
+    "tokenizer_config_sha256": "a576b883ddd3a3f266d4416cc5477187b2c0c356fbb577e4bb4ff5c86f5d0058",
+    "generation_config_sha256": "8f52612983d99a3641def4db454a58bbf9102210864918c474ad3805fdca2227",
+    "weight_inventory": {
+      "present": false,
+      "files": []
+    }
+  },
+  "proposal_pipeline": {
+    "public_generator": "UPNWrapper from detect_tools/upn",
+    "paper_opn_status": "OPN referenced in the paper is not released; official public path uses UPN.",
+    "upn_checkpoint_url": "https://github.com/IDEA-Research/ChatRex/releases/download/upn-large/upn_large.pth",
+    "upn_checkpoint_environment_variable": "VLM_FO1_UPN_CHECKPOINT",
+    "score_threshold": 0.3,
+    "nms_threshold": 0.8,
+    "top_k": 100,
+    "proposal_output_key": "original_xyxy_boxes",
+    "score_output_key": "scores",
+    "bbox_format": "pixel xyxy in original image coordinates",
+    "upn_transform": {
+      "short_edge": 800,
+      "max_size": 1333,
+      "normalization_mean": [
+        0.485,
+        0.456,
+        0.406
+      ],
+      "normalization_std": [
+        0.229,
+        0.224,
+        0.225
+      ]
+    }
+  },
+  "fo1_inference": {
+    "official_counting_template": "How many {target} are there in this image? Count each instance of the target object. Locate them with object indexes and then answer the question with the number of objects.",
+    "bbox_input_field": "messages[0].bbox_list",
+    "region_index_output_format": "<ground>label</ground><objects><regionN>...</objects>",
+    "region_index_range": "<region0> through <region99>",
+    "generation": {
+      "max_tokens": 4096,
+      "top_p": 0.05,
+      "temperature": 0.0,
+      "do_sample": false,
+      "greedy": true
+    },
+    "model_loading": {
+      "dtype": "bfloat16",
+      "device": "cuda",
+      "attn_implementation": "flash_attention_2",
+      "slow_tokenizer": true
+    }
+  },
+  "model_sidecars": {
+    "auxiliary_vision_tower": "resources/davit-large.pth",
+    "primary_vision_tower": "resources/Qwen2.5-VL-3B-Instruct-Vision_Tower",
+    "aux_image_size": 1024,
+    "aux_image_aspect_ratio": "dynamic",
+    "uses_region_index_tokens": true,
+    "num_region_tokens": 100,
+    "special_tokens": {
+      "image": "<|image_pad|>",
+      "region": "<region0>...<region99>",
+      "grounding": [
+        "<ground>",
+        "</ground>",
+        "<objects>",
+        "</objects>"
+      ],
+      "think": [
+        "<think>",
+        "</think>"
+      ]
+    }
+  },
+  "environment": {
+    "official_requirements": {
+      "torch": "2.6.0",
+      "torchvision": "0.21.0",
+      "transformers": "4.50.1",
+      "timm": "1.0.9",
+      "accelerate": "1.4.0",
+      "ninja": "unversioned in official requirements",
+      "upn_ops": "detect_tools/upn/ops editable install"
+    },
+    "isolated_environment_name": "vlm-fo1",
+    "rs_vlm_environment_must_not_install_official_requirements": true
+  },
+  "observed_source_differences": [
+    "README and scripts expose both Hugging Face and local model paths; the evaluator requires an explicit local VLM_FO1_MODEL.",
+    "The paper mentions OPN, while the public repository documents UPN as the available object proposal path.",
+    "The official script calls filter(min_score=0.3), whose implementation default nms_value=0.8 is recorded explicitly here."
+  ],
+  "source_urls": {
+    "upn_inference_script": "https://github.com/om-ai-lab/VLM-FO1/blob/348c1e8163a8fca5ed621cdfab0c94e3432336bd/scripts/inference_with_upn.py",
+    "upn_wrapper": "https://github.com/om-ai-lab/VLM-FO1/blob/348c1e8163a8fca5ed621cdfab0c94e3432336bd/detect_tools/upn/inference_wrapper.py",
+    "builder": "https://github.com/om-ai-lab/VLM-FO1/blob/348c1e8163a8fca5ed621cdfab0c94e3432336bd/vlm_fo1/model/builder.py",
+    "task_templates": "https://github.com/om-ai-lab/VLM-FO1/blob/348c1e8163a8fca5ed621cdfab0c94e3432336bd/vlm_fo1/task_templates.py",
+    "requirements": "https://github.com/om-ai-lab/VLM-FO1/blob/348c1e8163a8fca5ed621cdfab0c94e3432336bd/requirements.txt"
+  },
+  "checkpoint_generation_config_observed": {
+    "bos_token_id": 151643,
+    "delay_load": true,
+    "do_sample": true,
+    "eos_token_id": [
+      151645,
+      151643
+    ],
+    "multi_scale_im": false,
+    "pad_token_id": 151643,
+    "rotary_type": "fused_rotary",
+    "temperature": 0.1,
+    "top_k": 1,
+    "top_p": 0.001,
+    "transformers_version": "4.50.1"
+  },
+  "checkpoint_tokenizer_config_observed": {
+    "eos_token": "<|im_end|>",
+    "pad_token": "<|image_pad|>",
+    "additional_special_tokens_count": 106
+  }
+}
