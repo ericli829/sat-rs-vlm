@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -28,6 +30,8 @@ from sat_rs_vlm.integrations.vlm_fo1 import (
 )
 from sat_rs_vlm.integrations.vlm_fo1_loader import (
     ensure_official_root,
+    load_fo1_model,
+    patch_config_compatibility,
     resolve_attention_backend,
     validate_model_path,
 )
@@ -237,6 +241,125 @@ def test_shared_attention_explicit_flash_is_clear_without_optional_dependency(
 def test_shared_root_does_not_require_upn_source(tmp_path: Path) -> None:
     (tmp_path / "vlm_fo1").mkdir()
     assert ensure_official_root(tmp_path, require_upn=False) == tmp_path.resolve()
+
+
+def test_shared_config_patch_uses_tokenizer_pad_token_id() -> None:
+    config = types.SimpleNamespace(eos_token_id=2)
+    tokenizer = types.SimpleNamespace(pad_token_id=151643, eos_token_id=2)
+
+    patches = patch_config_compatibility(config, tokenizer)
+
+    assert config.pad_token_id == 151643
+    assert patches == {
+        "pad_token_id": {"source": "tokenizer.pad_token_id", "value": 151643}
+    }
+
+
+def test_shared_config_patch_falls_back_to_tokenizer_eos_token_id() -> None:
+    config = types.SimpleNamespace(eos_token_id=2)
+    tokenizer = types.SimpleNamespace(pad_token_id=None, eos_token_id=151644)
+
+    patches = patch_config_compatibility(config, tokenizer)
+
+    assert config.pad_token_id == 151644
+    assert patches["pad_token_id"] == {
+        "source": "tokenizer.eos_token_id",
+        "value": 151644,
+    }
+
+
+def test_shared_config_patch_fails_without_any_pad_or_eos_id() -> None:
+    config = types.SimpleNamespace(eos_token_id=None)
+    tokenizer = types.SimpleNamespace(pad_token_id=None, eos_token_id=None)
+
+    with pytest.raises(RuntimeError, match="no fallback is available"):
+        patch_config_compatibility(config, tokenizer)
+
+
+def test_shared_loader_passes_patched_config_to_from_pretrained(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    model_path = tmp_path / "model"
+    model_path.mkdir()
+    (model_path / "config.json").write_text("{}", encoding="utf-8")
+    calls: list[str] = []
+    text_config = types.SimpleNamespace(_attn_implementation_internal=None)
+    vision_config = types.SimpleNamespace(_attn_implementation_internal=None)
+    config = types.SimpleNamespace(
+        eos_token_id=151644,
+        text_config=text_config,
+        vision_config=vision_config,
+    )
+    tokenizer = types.SimpleNamespace(pad_token_id=151643, eos_token_id=151644)
+    captured: dict[str, object] = {}
+
+    class FakeAutoConfig:
+        @staticmethod
+        def from_pretrained(*args: object, **kwargs: object) -> object:
+            calls.append("config")
+            assert kwargs["local_files_only"] is True
+            return config
+
+    class FakeAutoTokenizer:
+        @staticmethod
+        def from_pretrained(*args: object, **kwargs: object) -> object:
+            calls.append("tokenizer")
+            assert kwargs["local_files_only"] is True
+            return tokenizer
+
+    class FakeModel:
+        @classmethod
+        def from_pretrained(cls, *args: object, **kwargs: object) -> "FakeModel":
+            calls.append("model")
+            captured.update(kwargs)
+            return cls()
+
+        def get_vision_tower(self) -> None:
+            return None
+
+        def get_vision_tower_aux(self) -> None:
+            return None
+
+        def eval(self) -> "FakeModel":
+            return self
+
+        def to(self, **kwargs: object) -> "FakeModel":
+            return self
+
+    fake_torch = types.ModuleType("torch")
+    fake_torch.cuda = types.SimpleNamespace(is_available=lambda: False)
+    fake_torch.float32 = object()
+    fake_torch.bfloat16 = object()
+    fake_transformers = types.ModuleType("transformers")
+    fake_transformers.AutoConfig = FakeAutoConfig
+    fake_transformers.AutoTokenizer = FakeAutoTokenizer
+    fake_vlm = types.ModuleType("vlm_fo1")
+    fake_vlm.__path__ = []
+    fake_vlm_model = types.ModuleType("vlm_fo1.model")
+    fake_vlm_model.OmChatQwen25VLForCausalLM = FakeModel
+
+    monkeypatch.delenv("VLM_FO1_ROOT", raising=False)
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+    monkeypatch.setitem(sys.modules, "vlm_fo1", fake_vlm)
+    monkeypatch.setitem(sys.modules, "vlm_fo1.model", fake_vlm_model)
+
+    bundle = load_fo1_model(model_path, "cpu", attention_backend="sdpa")
+
+    assert calls == ["config", "tokenizer", "model"]
+    assert captured["config"] is config
+    assert config.pad_token_id == 151643
+    assert config._attn_implementation_internal == "sdpa"
+    assert text_config._attn_implementation_internal == "sdpa"
+    assert vision_config._attn_implementation_internal == "sdpa"
+    assert bundle.config_compatibility_patches == {
+        "pad_token_id": {"source": "tokenizer.pad_token_id", "value": 151643},
+        "attention_backend": {
+            "source": "loader.attention_backend",
+            "value": "sdpa",
+            "targets": ["config", "config.text_config", "config.vision_config"],
+        },
+    }
 
 
 def test_worker_early_exit_returns_one_failed_row_per_request(tmp_path: Path) -> None:
