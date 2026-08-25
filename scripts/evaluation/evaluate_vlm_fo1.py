@@ -176,6 +176,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--image-root", type=Path)
     parser.add_argument("--max-samples", type=int)
+    parser.add_argument("--expected-population", type=int)
     parser.add_argument("--backend", choices=("official", "mock"))
     parser.add_argument("--runtime-mode", choices=("official", "shared_rs_vlm"))
     parser.add_argument("--proposal-backend", choices=("upn", "precomputed"))
@@ -202,13 +203,37 @@ def parse_args() -> argparse.Namespace:
 def _settings(args: argparse.Namespace) -> dict[str, Any]:
     config = _load_config(args.config)
     scope = args.scope or _config_value(config, "evaluation", "scope", "e_count_v2")
-    input_default = DEFAULT_ECOUNT if scope == "e_count_v2" else DEFAULT_FULL
-    input_path = args.input or _config_value(config, "evaluation", "input", str(input_default))
+    proposal_backend = args.proposal_backend or _config_value(config, "worker", "proposal_backend", "upn")
+    precomputed_file = _config_value(config, "proposal", "precomputed_file", None)
+    input_default = (
+        Path(precomputed_file)
+        if proposal_backend == "precomputed" and precomputed_file
+        else DEFAULT_ECOUNT
+        if scope == "e_count_v2"
+        else DEFAULT_FULL
+    )
+    configured_input = _config_value(config, "evaluation", "input", None)
+    if args.input:
+        input_path = args.input
+    elif proposal_backend == "precomputed" and precomputed_file:
+        # A precomputed provider must consume the artifact produced by the
+        # precompute pipeline unless the caller explicitly overrides --input.
+        input_path = precomputed_file
+    else:
+        input_path = configured_input or input_default
+    upn_checkpoint_value = _config_value(
+        config,
+        "worker",
+        "upn_checkpoint",
+        _config_value(config, "proposal", "checkpoint", os.environ.get("VLM_FO1_UPN_CHECKPOINT", "")),
+    )
     output_default = PROJECT_ROOT / "reports/evaluation/vlm_fo1" / str(scope)
     settings: dict[str, Any] = {
         "scope": scope,
         "input": Path(input_path),
-        "expected_population": _config_value(config, "evaluation", "expected_population", None),
+        "expected_population": args.expected_population
+        if args.expected_population is not None
+        else _config_value(config, "evaluation", "expected_population", None),
         "output_dir": Path(
             args.output_dir or _config_value(config, "evaluation", "output_dir", output_default)
         ),
@@ -227,8 +252,7 @@ def _settings(args: argparse.Namespace) -> dict[str, Any]:
         "backend": args.backend or _config_value(config, "worker", "backend", "official"),
         "runtime_mode": args.runtime_mode
         or _config_value(config, "worker", "runtime_mode", "official"),
-        "proposal_backend": args.proposal_backend
-        or _config_value(config, "worker", "proposal_backend", "upn"),
+        "proposal_backend": proposal_backend,
         "attention_backend": args.attention_backend
         or _config_value(config, "worker", "attention_backend", "sdpa"),
         "worker_python": args.worker_python
@@ -242,11 +266,7 @@ def _settings(args: argparse.Namespace) -> dict[str, Any]:
         "model": args.model
         or Path(_config_value(config, "model", "path", os.environ.get("VLM_FO1_MODEL", ""))),
         "upn_checkpoint": args.upn_checkpoint
-        or Path(
-            _config_value(
-                config, "proposal", "checkpoint", os.environ.get("VLM_FO1_UPN_CHECKPOINT", "")
-            )
-        ),
+        or (Path(upn_checkpoint_value) if upn_checkpoint_value else ""),
         "device": args.device or _config_value(config, "model", "device", "cuda"),
         "proposal_score_threshold": args.proposal_score_threshold
         if args.proposal_score_threshold is not None
@@ -257,6 +277,16 @@ def _settings(args: argparse.Namespace) -> dict[str, Any]:
         "nms_threshold": args.nms_threshold
         if args.nms_threshold is not None
         else _config_value(config, "proposal", "nms_threshold", 0.8),
+        "proposal_provider": _config_value(
+            config,
+            "proposal",
+            "provider",
+            "upn" if proposal_backend == "upn" else "precomputed",
+        ),
+        "proposal_model": _config_value(config, "proposal", "model_path", None),
+        "proposal_checkpoint": _config_value(config, "proposal", "checkpoint", None),
+        "proposal_cache_dir": _config_value(config, "proposal", "cache_dir", None),
+        "precomputed_proposal_file": precomputed_file,
         "max_new_tokens": args.max_new_tokens
         if args.max_new_tokens is not None
         else _config_value(config, "generation", "max_new_tokens", 4096),
@@ -471,13 +501,27 @@ def _diagnostics(
             # explicit region-count field.
             selected_counts.append(float(len(response["selected_region_indexes"])))
     latencies = [
-        float(response.get("upn_latency_ms", 0.0)) + float(response.get("fo1_latency_ms", 0.0))
+        float(response.get("proposal_latency_ms", response.get("upn_latency_ms", 0.0)))
+        + float(response.get("fo1_latency_ms", 0.0))
         for response in responses
-        if response.get("upn_latency_ms") is not None and response.get("fo1_latency_ms") is not None
+        if response.get("fo1_latency_ms") is not None
+    ]
+    proposal_latencies = [
+        float(response.get("proposal_latency_ms", response.get("upn_latency_ms", 0.0)))
+        for response in responses
+        if response.get("proposal_latency_ms", response.get("upn_latency_ms")) is not None
+    ]
+    fo1_latencies = [
+        float(response["fo1_latency_ms"])
+        for response in responses
+        if response.get("fo1_latency_ms") is not None
     ]
     failures = [response for response in responses if response.get("status") == "failed"]
     failure_histogram = Counter(
         str(response.get("failure_stage")) for response in failures if response.get("failure_stage")
+    )
+    zero_proposal_count = sum(
+        bool(response.get("zero_proposal_assumed_zero")) for response in responses
     )
     region_available = sum(
         isinstance(response.get("fo1_region_count"), int) for response in responses
@@ -497,9 +541,8 @@ def _diagnostics(
         "region_count_available_count": region_available,
         "textual_count_available_count": textual_available,
         "region_text_disagreement_count": disagreements,
-        "zero_proposal_count": sum(
-            bool(response.get("zero_proposal_assumed_zero")) for response in responses
-        ),
+        "zero_proposal_count": zero_proposal_count,
+        "zero_proposal_rate": zero_proposal_count / len(responses) if responses else None,
         "failure_stage_histogram": dict(sorted(failure_histogram.items())),
         "prompt_profile": prompt_profile,
         "count_source": count_source,
@@ -516,6 +559,8 @@ def _diagnostics(
             for response in failures
         ),
         "latency_ms": _numeric_summary(latencies),
+        "proposal_latency_ms": _numeric_summary(proposal_latencies),
+        "fo1_latency_ms": _numeric_summary(fo1_latencies),
         "status_counts": {
             status: sum(response.get("status") == status for response in responses)
             for status in sorted({str(response.get("status")) for response in responses})
@@ -550,8 +595,19 @@ def _summary_markdown(
         f"{proposal_counts.get('p50')} / {proposal_counts.get('p90')}",
         f"- selected region count mean/p50/p90: {selected_counts.get('mean')} / "
         f"{selected_counts.get('p50')} / {selected_counts.get('p90')}",
+        f"- zero proposals count/rate: {diagnostics.get('zero_proposal_count')} / "
+        f"{diagnostics.get('zero_proposal_rate')}",
         f"- proposal failures: {diagnostics.get('proposal_failure_count')}",
         f"- FO1 parse failures: {diagnostics.get('fo1_parse_failure_count')}",
+        f"- proposal latency mean/p50/p90: {diagnostics.get('proposal_latency_ms', {}).get('mean')} / "
+        f"{diagnostics.get('proposal_latency_ms', {}).get('p50')} / "
+        f"{diagnostics.get('proposal_latency_ms', {}).get('p90')}",
+        f"- FO1 latency mean/p50/p90: {diagnostics.get('fo1_latency_ms', {}).get('mean')} / "
+        f"{diagnostics.get('fo1_latency_ms', {}).get('p50')} / "
+        f"{diagnostics.get('fo1_latency_ms', {}).get('p90')}",
+        f"- total latency mean/p50/p90: {diagnostics.get('latency_ms', {}).get('mean')} / "
+        f"{diagnostics.get('latency_ms', {}).get('p50')} / "
+        f"{diagnostics.get('latency_ms', {}).get('p90')}",
     ]
     return "\n".join(lines) + "\n"
 
@@ -589,6 +645,16 @@ def evaluate(settings: Mapping[str, Any]) -> dict[str, Path]:
                 request["bbox_list"] = row["bbox_list"]
             if "bbox_scores" in row:
                 request["bbox_scores"] = row["bbox_scores"]
+            if isinstance(row.get("proposal_metadata"), Mapping):
+                request["proposal_metadata"] = dict(row["proposal_metadata"])
+            if row.get("proposal_provider") is not None:
+                request["proposal_provider"] = str(row["proposal_provider"])
+            if row.get("proposal_model") is not None:
+                request["proposal_model"] = str(row["proposal_model"])
+            proposal_latency = row.get("proposal_latency_ms")
+            if proposal_latency is None and isinstance(row.get("proposal_metadata"), Mapping):
+                proposal_latency = row["proposal_metadata"].get("latency_ms", 0.0)
+            request["proposal_latency_ms"] = float(proposal_latency or 0.0)
         requests.append(request)
         prepared.append(
             {
@@ -597,6 +663,12 @@ def evaluate(settings: Mapping[str, Any]) -> dict[str, Path]:
                 "question": question,
                 "reference": reference,
                 "target": target,
+                "proposal_metadata": dict(row.get("proposal_metadata", {}))
+                if isinstance(row.get("proposal_metadata"), Mapping)
+                else {},
+                "proposal_provider": row.get("proposal_provider"),
+                "proposal_model": row.get("proposal_model"),
+                "proposal_latency_ms": row.get("proposal_latency_ms"),
             }
         )
     started = time.perf_counter()
@@ -629,9 +701,9 @@ def evaluate(settings: Mapping[str, Any]) -> dict[str, Path]:
             if isinstance(row.get("metadata"), Mapping)
             else {},
             "inference_latency_ms": (
-                float(response.get("upn_latency_ms", 0.0))
+                float(response.get("proposal_latency_ms", response.get("upn_latency_ms", 0.0)))
                 + float(response.get("fo1_latency_ms", 0.0))
-                if response.get("upn_latency_ms") is not None
+                if response.get("proposal_latency_ms", response.get("upn_latency_ms")) is not None
                 and response.get("fo1_latency_ms") is not None
                 else None
             ),
@@ -646,6 +718,14 @@ def evaluate(settings: Mapping[str, Any]) -> dict[str, Path]:
             "proposal_count_used": response.get("proposal_count_used"),
             "proposal_boxes": response.get("proposal_boxes", []),
             "proposal_scores": response.get("proposal_scores", []),
+            "proposal_provider": item.get("proposal_provider") or response.get("proposal_provider"),
+            "proposal_model": item.get("proposal_model") or response.get("proposal_model"),
+            "proposal_metadata": item.get("proposal_metadata", {}),
+            "proposal_latency_ms": (
+                float(response.get("proposal_latency_ms"))
+                if response.get("proposal_latency_ms") is not None
+                else item.get("proposal_latency_ms")
+            ),
             "fo1_raw_output": response.get("fo1_raw_output", ""),
             "fo1_selected_region_indexes": response.get(
                 "fo1_selected_region_indexes", response.get("selected_region_indexes", [])
@@ -680,6 +760,11 @@ def evaluate(settings: Mapping[str, Any]) -> dict[str, Path]:
         "backend": settings["backend"],
         "runtime_mode": settings.get("runtime_mode", "official"),
         "proposal_backend": settings.get("proposal_backend", "upn"),
+        "proposal_provider": settings.get("proposal_provider"),
+        "proposal_model": settings.get("proposal_model"),
+        "proposal_checkpoint": settings.get("proposal_checkpoint"),
+        "proposal_cache_dir": settings.get("proposal_cache_dir"),
+        "precomputed_proposal_file": settings.get("precomputed_proposal_file"),
         "attention_backend": settings.get("attention_backend", "sdpa"),
         "worker_python": str(Path(settings["worker_python"]).resolve()),
         "worker_script": str(Path(settings["worker_script"]).resolve()),

@@ -316,9 +316,10 @@ def request_has_reference_leak(request: Mapping[str, Any]) -> bool:
             return any(contains_forbidden(item) for item in value)
         return False
 
-    if any(str(key).lower() in forbidden for key in request):
-        return True
-    return contains_forbidden(request.get("metadata"))
+    # Inspect the complete protocol object, including provider metadata, so a
+    # precomputed artifact cannot smuggle a reference/label field into the
+    # detector-to-FO1 boundary.
+    return contains_forbidden(request)
 
 
 def prediction_count_text(count: int | None) -> str:

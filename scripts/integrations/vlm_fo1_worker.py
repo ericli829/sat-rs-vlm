@@ -126,7 +126,7 @@ def _canonicalize_protocol_response(response: dict[str, Any]) -> dict[str, Any]:
     ):
         if name in response:
             response[name] = _canonicalize_scores(response[name])
-    for name in ("upn_latency_ms", "fo1_latency_ms"):
+    for name in ("upn_latency_ms", "proposal_latency_ms", "fo1_latency_ms"):
         if name in response and response[name] is not None:
             response[name] = float(response[name])
     return response
@@ -195,6 +195,7 @@ def validate_request(
             "fo1_count_agrees_with_text": None,
             "zero_proposal_assumed_zero": False,
             "upn_latency_ms": 0.0,
+            "proposal_latency_ms": 0.0,
             "fo1_latency_ms": 0.0,
         }
     if str(request["target_phrase"]).strip().lower() != str(phrase).strip().lower():
@@ -204,6 +205,15 @@ def validate_request(
     normalized = dict(request)
     normalized["target_phrase"] = phrase
     if proposal_backend == "precomputed":
+        proposal_metadata = request.get("proposal_metadata")
+        if isinstance(proposal_metadata, Mapping) and proposal_metadata.get("status") == "failed":
+            return None, _failure(
+                request,
+                "proposal_generation",
+                str(proposal_metadata.get("error") or "precomputed proposal generation failed"),
+                target_phrase=phrase,
+                target_status="supported",
+            )
         raw_boxes = request.get("bbox_list")
         if not isinstance(raw_boxes, list):
             return None, _failure(
@@ -316,6 +326,7 @@ class MockBackend(Backend):
             "fo1_count_agrees_with_text": parsed["count_agrees_with_text"],
             "zero_proposal_assumed_zero": False,
             "upn_latency_ms": 0.0,
+            "proposal_latency_ms": 0.0,
             "fo1_latency_ms": 0.0,
         }
 
@@ -404,6 +415,13 @@ class OfficialFO1Backend(Backend):
                 target_status="supported",
             )
         try:
+            proposal_metadata = (
+                dict(request.get("proposal_metadata", {}))
+                if isinstance(request.get("proposal_metadata"), Mapping)
+                else {}
+            )
+            proposal_provider = request.get("proposal_provider") or proposal_metadata.get("provider")
+            proposal_model = request.get("proposal_model") or proposal_metadata.get("model_id")
             if self._proposal_backend == "precomputed":
                 raw_boxes = request.get("bbox_list") or []
                 boxes = _canonicalize_boxes(raw_boxes)
@@ -413,6 +431,7 @@ class OfficialFO1Backend(Backend):
                 scores = _canonicalize_scores(raw_scores)
                 proposal_count_raw = len(boxes)
                 upn_latency_ms = 0.0
+                proposal_latency_ms = float(request.get("proposal_latency_ms", 0.0))
             else:
                 if self._upn is None:
                     raise RuntimeError("UPN backend was not initialized")
@@ -428,6 +447,7 @@ class OfficialFO1Backend(Backend):
                         nms_value=config.nms_threshold,
                     )
                 upn_latency_ms = (time.perf_counter() - start) * 1000.0
+                proposal_latency_ms = upn_latency_ms
                 filtered_boxes = filtered.get("original_xyxy_boxes") or []
                 filtered_scores = filtered.get("scores") or []
                 boxes = _canonicalize_boxes(filtered_boxes[0]) if filtered_boxes else []
@@ -469,6 +489,9 @@ class OfficialFO1Backend(Backend):
                     "proposal_count_used": 0,
                     "proposal_boxes": [],
                     "proposal_scores": [],
+                    "proposal_provider": proposal_provider,
+                    "proposal_model": proposal_model,
+                    "proposal_metadata": proposal_metadata,
                     "selected_region_indexes": [],
                     "selected_region_boxes": [],
                     "selected_region_scores": [],
@@ -481,6 +504,7 @@ class OfficialFO1Backend(Backend):
                     "zero_proposal_assumed_zero": True,
                     "fo1_count_agrees_with_text": None,
                     "upn_latency_ms": upn_latency_ms,
+                    "proposal_latency_ms": proposal_latency_ms,
                     "fo1_latency_ms": 0.0,
                 }
             prompt = build_counting_prompt(
@@ -546,6 +570,9 @@ class OfficialFO1Backend(Backend):
                     "proposal_count_used": proposal_count_used,
                     "proposal_boxes": boxes,
                     "proposal_scores": scores,
+                    "proposal_provider": proposal_provider,
+                    "proposal_model": proposal_model,
+                    "proposal_metadata": proposal_metadata,
                     "selected_region_indexes": parsed["selected_region_indexes"],
                     "fo1_selected_region_indexes": parsed["selected_region_indexes"],
                     "fo1_region_count": parsed["region_count"],
@@ -555,6 +582,7 @@ class OfficialFO1Backend(Backend):
                     "zero_proposal_assumed_zero": False,
                     "fo1_raw_output": raw_output,
                     "upn_latency_ms": upn_latency_ms,
+                    "proposal_latency_ms": proposal_latency_ms,
                     "fo1_latency_ms": fo1_latency_ms,
                 }
             selected_boxes, selected_scores = compact_proposal_evidence(
@@ -571,6 +599,9 @@ class OfficialFO1Backend(Backend):
                 "proposal_count_used": proposal_count_used,
                 "proposal_boxes": boxes,
                 "proposal_scores": scores,
+                "proposal_provider": proposal_provider,
+                "proposal_model": proposal_model,
+                "proposal_metadata": proposal_metadata,
                 "selected_region_indexes": parsed["selected_region_indexes"],
                 "selected_region_boxes": selected_boxes,
                 "selected_region_scores": selected_scores,
@@ -583,6 +614,7 @@ class OfficialFO1Backend(Backend):
                 "fo1_count_agrees_with_text": parsed["count_agrees_with_text"],
                 "zero_proposal_assumed_zero": False,
                 "upn_latency_ms": upn_latency_ms,
+                "proposal_latency_ms": proposal_latency_ms,
                 "fo1_latency_ms": fo1_latency_ms,
             }
         except Exception as exc:
