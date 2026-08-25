@@ -25,14 +25,17 @@ generation:
   max_new_tokens: 128
 evaluation:
   contract: configs/eval/evaluation_contract_v1.5.yaml
+  tier: E1
+  tiers_manifest: data/evaluation/tiers/evaluation_tiers_manifest.json
   semantic: false
 fault:
+  execution_order: coverage_first
   # Default study scans the language model one layer at a time. The LoRA
   # adapter remains loaded for inference and is also included as a fault target.
-  sensitivity_targets: [language_model, attention, mlp, vision_encoder, embeddings, lora_adapter]
+  sensitivity_targets: [language_model, attention, mlp, vision_encoder, visual_blocks, visual_merger, embeddings, lora_adapter]
   # Applies to layered language/LoRA targets. Non-layered targets scan all
   # matching parameters when this list is empty.
-  layer_indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27]
+  layer_indices: auto
   bit_flip_counts: [1, 10, 100]
   repeats: 3
   bit_planes: [sign, exponent, mantissa]

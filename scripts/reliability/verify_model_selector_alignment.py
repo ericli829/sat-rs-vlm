@@ -32,9 +32,12 @@ def main() -> int:
     from safetensors import safe_open
     from sat_rs_vlm.models.reliability.fault_injector import selector_for_fault_target
 
-    with safe_open(str(args.model), framework="pt", device="cpu") as handle:
-        rows = [{"name": name, "shape": handle.get_slice(name).get_shape(), "dtype": str(handle.get_slice(name).get_dtype())} for name in handle.keys()]
-    selectors = ("language_model", "attention", "mlp", "vision_encoder", "embeddings")
+    files = sorted(args.model.glob("*.safetensors")) if args.model.is_dir() else [args.model]
+    rows = []
+    for model_file in files:
+        with safe_open(str(model_file), framework="pt", device="cpu") as handle:
+            rows.extend({"name": name, "shape": handle.get_slice(name).get_shape(), "dtype": str(handle.get_slice(name).get_dtype())} for name in handle.keys())
+    selectors = ("language_model", "attention", "mlp", "vision_encoder", "visual_blocks", "visual_merger", "embeddings")
     report = {"schema_version": "1.0", "model": str(args.model), "total_tensors": len(rows), "targets": {}}
     for target in selectors:
         selector = selector_for_fault_target(target)
@@ -58,11 +61,16 @@ def main() -> int:
             "bit_positions": {plane: bit_positions(next(iter(dtype), "BF16"), plane) for plane in ("sign", "exponent", "mantissa")},
             "sample_names": [row["name"] for row in matched[:8]],
         }
+    language_layers = report["targets"]["language_model"]["layers"]
+    visual_layers = report["targets"]["visual_blocks"]["layers"]
+    report["discovered"] = {"language_layers": language_layers, "visual_layers": visual_layers}
     report["checks"] = {
-        "language_layers_0_to_27": report["targets"]["language_model"]["layers"] == list(range(28)),
-        "attention_layers_0_to_27": report["targets"]["attention"]["layers"] == list(range(28)),
-        "mlp_layers_0_to_27": report["targets"]["mlp"]["layers"] == list(range(28)),
+        "language_layers_contiguous": bool(language_layers) and language_layers == list(range(max(language_layers) + 1)),
+        "attention_matches_language_layers": report["targets"]["attention"]["layers"] == language_layers,
+        "mlp_matches_language_layers": report["targets"]["mlp"]["layers"] == language_layers,
         "vision_matched": report["targets"]["vision_encoder"]["matched_tensors"] > 0,
+        "visual_blocks_contiguous": bool(visual_layers) and visual_layers == list(range(max(visual_layers) + 1)),
+        "visual_merger_matched": report["targets"]["visual_merger"]["matched_tensors"] > 0,
         "embeddings_matched": report["targets"]["embeddings"]["matched_tensors"] > 0,
     }
     report["passed"] = all(report["checks"].values())

@@ -1,0 +1,37 @@
+# Cloud template for Qwen3-VL 4B (or a compatible checkpoint).
+# Set MODEL_ROOT/DATA_ROOT/OUTPUT_ROOT in the cloud job environment.
+experiment:
+  name: qwen3vl_4b_v15_seu_sensitivity
+  seed: 20260814
+model:
+  base_model: ${MODEL_ROOT}/Qwen3-VL-4B-Instruct
+  processor_id: ${MODEL_ROOT}/Qwen3-VL-4B-Instruct
+  adapter_path: ${OUTPUT_ROOT}/training/lora_baseline/best_adapter
+  local_files_only: true
+  trust_remote_code: true
+  device_map: auto
+  torch_dtype: bfloat16
+  attn_implementation: sdpa
+data:
+  dataset_root: ${DATA_ROOT}
+  eval_manifest: ${DATA_ROOT}/project_metadata/reliability/vrsbench_levircc_eval.jsonl
+  max_eval_samples: 120
+  max_seq_length: 1024
+  eval_batch_size: 8
+  group_by_task: true
+generation:
+  do_sample: false
+  num_beams: 1
+  max_new_tokens: 128
+evaluation:
+  contract: configs/eval/evaluation_contract_v1.5.yaml
+  tier: E1
+  tiers_manifest: data/evaluation/tiers/evaluation_tiers_manifest.json
+  semantic: false
+fault:
+  execution_order: coverage_first
+  sensitivity_targets: [language_model, attention, mlp, vision_encoder, visual_blocks, visual_merger, embeddings, lora_adapter]
+  layer_indices: auto
+  bit_flip_counts: [1, 10, 100]
+  repeats: 3
+  bit_planes: [sign, exponent, mantissa]

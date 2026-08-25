@@ -1,0 +1,33 @@
+experiment:
+  name: qwen3vl_4b_e1_local_pilot
+  seed: 20260826
+model:
+  base_model: D:/models/Qwen3-VL-4B-Instruct
+  processor_id: D:/models/Qwen3-VL-4B-Instruct
+  adapter_path: null
+  local_files_only: true
+  trust_remote_code: true
+  device_map: auto
+  torch_dtype: bfloat16
+  attn_implementation: eager
+data:
+  dataset_root: D:/Dataset/VRSBench
+  eval_manifest: data/evaluation/tiers/e1_quick.jsonl
+  max_eval_samples: null
+  max_seq_length: 512
+  eval_batch_size: 1
+  group_by_task: true
+  log_every_samples: 1
+evaluation:
+  contract: configs/eval/evaluation_contract_v1.5.yaml
+  tier: E1
+  tier_version: legacy-vrs-v1
+  tiers_manifest: data/evaluation/tiers/evaluation_tiers_manifest.json
+  semantic: false
+fault:
+  execution_order: coverage_first
+  sensitivity_targets: [language_model, attention, mlp, vision_encoder, visual_blocks, visual_merger, embeddings]
+  layer_indices: auto
+  bit_flip_counts: [1]
+  repeats: 1
+  bit_planes: [sign, exponent, mantissa]

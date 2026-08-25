@@ -140,6 +140,19 @@ class LoggingConfig(BaseModel):
     experiment_name: str = "qwen3vl-rs-lora-baseline"
 
 
+class BBoxAreaThresholdConfig(BaseModel):
+    """Shared normalized bounding-box area thresholds for visual analysis."""
+
+    small_max: float = Field(default=0.01, gt=0.0, lt=1.0)
+    medium_max: float = Field(default=0.10, gt=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def validate_order(self) -> "BBoxAreaThresholdConfig":
+        if self.small_max >= self.medium_max:
+            raise ValueError("small_max must be less than medium_max")
+        return self
+
+
 class Qwen3VLTrainingConfig(BaseModel):
     """完整 Qwen3-VL 微调配置。"""
 

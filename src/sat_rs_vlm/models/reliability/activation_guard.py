@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Any
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -21,15 +22,21 @@ class ActivationAnomaly(BaseModel):
     max_abs: float | None = None
 
 
+GuardMode = Literal["research", "deployment"]
+
+
 class ActivationGuard:
-    def __init__(self, model: Any, *, module_patterns: list[str], max_abs: float) -> None:
+    def __init__(self, model: Any, *, module_patterns: list[str], max_abs: float, mode: GuardMode = "research") -> None:
         if not module_patterns:
             raise ValueError("module_patterns must not be empty")
         if max_abs <= 0:
             raise ValueError("max_abs must be positive")
+        if mode not in {"research", "deployment"}:
+            raise ValueError("mode must be 'research' or 'deployment'")
         self.model = model
         self.module_patterns = tuple(module_patterns)
         self.max_abs = float(max_abs)
+        self.mode = mode
         self.anomalies: list[ActivationAnomaly] = []
         self._handles: list[Any] = []
         self._checked_tensors = 0
@@ -104,6 +111,7 @@ class ActivationGuard:
             "does_not_protect": ["parameter_memory", "kv_cache_recovery", "automatic_recompute"],
             "module_patterns": list(self.module_patterns),
             "max_abs_threshold": self.max_abs,
+            "mode": self.mode,
             "checked_tensors": self._checked_tensors,
             "anomalies": [item.model_dump(mode="json") for item in self.anomalies],
         }

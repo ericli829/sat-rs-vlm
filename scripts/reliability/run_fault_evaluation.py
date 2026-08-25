@@ -29,6 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fault-bit-index", type=int)
     parser.add_argument("--fault-flat-index", type=int)
     parser.add_argument("--activation-guard", action="store_true")
+    parser.add_argument("--activation-guard-mode", choices=("research", "deployment"), default="research")
     parser.add_argument("--activation-patterns", nargs="+", default=["self_attn", "mlp"])
     parser.add_argument("--activation-max-abs", type=float, default=10000.0)
     return parser.parse_args()
@@ -67,6 +68,18 @@ def main() -> int:
                 lora_scope=selector.lora_scope,
             )
         inventory = model_fault_inventory(model, selector=selector, bit_plane=args.fault_bit_plane)
+        if args.fault_bit_index is not None:
+            allowed = {
+                "all": set(range(64)),
+                "sign": {15, 31},
+                "exponent": set(range(7, 15)) | set(range(23, 31)),
+                "mantissa": set(range(0, 7)) | set(range(0, 23)),
+            }[args.fault_bit_plane]
+            if args.fault_bit_index not in allowed:
+                raise SystemExit(
+                    f"fault bit index {args.fault_bit_index} is incompatible with "
+                    f"bit plane {args.fault_bit_plane}"
+                )
         records = inject_model_parameter_bitflips(
             model,
             num_bits=args.fault_num_bits,
@@ -80,7 +93,8 @@ def main() -> int:
     guard_report = None
     if args.activation_guard:
         guard = ActivationGuard(
-            model, module_patterns=list(args.activation_patterns), max_abs=args.activation_max_abs
+            model, module_patterns=list(args.activation_patterns), max_abs=args.activation_max_abs,
+            mode=args.activation_guard_mode,
         )
         guard.install()
     try:

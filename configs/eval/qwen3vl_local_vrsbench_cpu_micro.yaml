@@ -1,0 +1,31 @@
+model:
+  base_model: "D:/models/Qwen3-VL-2B-Instruct"
+  processor_id: "D:/models/Qwen3-VL-2B-Instruct"
+  adapter_path: null
+  local_files_only: true
+  trust_remote_code: true
+  torch_dtype: "bfloat16"
+  device_map: "cpu"
+  attn_implementation: "eager"
+data:
+  eval_file: "data/processed/qwen3vl_val.jsonl"
+  image_root: "D:/Dataset/VRSBench"
+  max_seq_length: 512
+  max_eval_samples: 1
+  eval_batch_size: 1
+  group_by_task: true
+  log_every_samples: 1
+generation:
+  max_new_tokens: 16
+  do_sample: false
+  temperature: 0.0
+  num_beams: 1
+evaluation:
+  contract: "configs/eval/evaluation_contract_v1.5.yaml"
+  strict: true
+  semantic: false
+  latency_semantics: "batch_amortized_per_sample"
+output:
+  summary_file: "reports/eval/qwen3vl_local_vrsbench_cpu_micro_summary.json"
+  predictions_file: "reports/eval/qwen3vl_local_vrsbench_cpu_micro_predictions.jsonl"
+  evaluation_dir: "reports/evaluation/qwen3vl_local_vrsbench_cpu_micro"

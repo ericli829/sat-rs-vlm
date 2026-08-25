@@ -27,7 +27,7 @@ LoraScope = Literal["none", "all", "a", "b"]
 BitPlane = Literal["all", "sign", "exponent", "mantissa"]
 FaultTarget = Literal[
     "all_parameters", "lora_adapter", "lora_a", "lora_b", "vision_encoder",
-    "language_model", "attention", "mlp", "embeddings",
+    "visual_blocks", "visual_merger", "language_model", "attention", "mlp", "embeddings",
 ]
 
 
@@ -100,6 +100,8 @@ def selector_for_fault_target(
         "lora_a": {"lora_scope": "a"},
         "lora_b": {"lora_scope": "b"},
         "vision_encoder": {"module_names": ("visual",)},
+        "visual_blocks": {"module_names": ("visual.blocks", "vision.blocks")},
+        "visual_merger": {"module_names": (".merger", "deepstack_merger")},
         "language_model": {"module_names": ("model.layers",)},
         "attention": {"module_names": ("self_attn",)},
         "mlp": {"module_names": ("mlp",)},
@@ -178,6 +180,10 @@ def summarize_fault_inventory(inventory: dict[str, Any]) -> list[dict[str, Any]]
         lowered = name.lower()
         if "lora_" in lowered:
             region = "lora_adapter"
+        elif ("visual" in lowered or "vision" in lowered) and "merger" in lowered:
+            region = "visual_merger"
+        elif ("visual" in lowered or "vision" in lowered) and ".blocks." in lowered:
+            region = "visual_blocks"
         elif "self_attn" in lowered or "attention" in lowered:
             region = "attention"
         elif ".mlp." in lowered:

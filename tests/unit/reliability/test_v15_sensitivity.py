@@ -58,6 +58,43 @@ def test_condition_plan_rejects_duplicate_ids_and_seeds() -> None:
     assert result["duplicate_seeds"] == [7]
 
 
+def test_visual_blocks_use_separate_discovered_layers() -> None:
+    from scripts.reliability.run_v15_sensitivity import build_conditions
+
+    conditions = build_conditions({
+        "fault": {
+            "sensitivity_targets": ["attention", "visual_blocks"],
+            "layer_indices": [0, 1, 2],
+            "visual_layer_indices": [0, 1],
+            "bit_flip_counts": [1],
+            "repeats": 1,
+            "bit_planes": ["exponent"],
+        }
+    })
+    assert [c["layers"] for c in conditions if c["target"] == "attention"] == [[0], [1], [2]]
+    assert [c["layers"] for c in conditions if c["target"] == "visual_blocks"] == [[0], [1]]
+
+
+def test_coverage_first_pilot_spans_targets_planes_and_representative_layers() -> None:
+    from scripts.reliability.run_v15_sensitivity import build_conditions, prioritize_coverage_first
+
+    ordered = prioritize_coverage_first(build_conditions({
+        "fault": {
+            "sensitivity_targets": ["attention", "visual_merger"],
+            "layer_indices": [0, 1, 2, 3, 4],
+            "bit_flip_counts": [1, 10],
+            "repeats": 2,
+            "bit_planes": ["sign", "exponent", "mantissa"],
+        }
+    }))
+    pilot = [row for row in ordered if row["phase"] == "pilot"]
+    assert {row["target"] for row in pilot} == {"attention", "visual_merger"}
+    assert {row["bit_plane"] for row in pilot} == {"sign", "exponent", "mantissa"}
+    assert {tuple(row["layers"]) for row in pilot if row["target"] == "attention"} == {(0,), (2,), (4,)}
+    assert all(row["num_bits"] == 1 and row["repeat"] == 0 for row in pilot)
+    assert all(row["phase"] == "full" for row in ordered[len(pilot):])
+
+
 def test_condition_complete_rejects_inconsistent_fault_records(tmp_path: Path) -> None:
     import json
 

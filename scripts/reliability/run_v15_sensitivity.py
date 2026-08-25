@@ -17,16 +17,20 @@ from sat_rs_vlm.configuration.layered import (
     write_resolved_config,
 )
 from sat_rs_vlm.configuration.paths import PathConfig
+from sat_rs_vlm.models.reliability.checksum import file_sha256
 from sat_rs_vlm.training.experiment import write_json
+from sat_rs_vlm.models.reliability.sensitivity import aggregate_sensitivity_conditions
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-LAYERED_TARGETS = {"language_model", "attention", "mlp", "lora_adapter", "lora_a", "lora_b"}
+LAYERED_TARGETS = {"language_model", "attention", "mlp", "lora_adapter", "lora_a", "lora_b", "visual_blocks"}
 ALLOWED_TARGETS = {
     "all_parameters",
     "lora_adapter",
     "lora_a",
     "lora_b",
     "vision_encoder",
+    "visual_blocks",
+    "visual_merger",
     "language_model",
     "attention",
     "mlp",
@@ -48,6 +52,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--layers", nargs="+", type=int)
     parser.add_argument("--bit-counts", nargs="+", type=int)
     parser.add_argument("--repeats", type=int)
+    parser.add_argument("--evaluation-tier", choices=("E1", "E2", "E3"))
     parser.add_argument("--bit-planes", nargs="+", choices=("all", "sign", "exponent", "mantissa"))
     parser.add_argument(
         "--dry-run", action="store_true", help="Create and print a reproducible condition plan."
@@ -62,7 +67,13 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Resume a matching interrupted run and skip completed conditions.",
     )
+    parser.add_argument(
+        "--pilot-only",
+        action="store_true",
+        help="Run only coverage-first pilot conditions; resume later without this flag.",
+    )
     parser.add_argument("--activation-guard", action="store_true")
+    parser.add_argument("--activation-guard-mode", choices=("research", "deployment"), default="research")
     parser.add_argument("--activation-patterns", nargs="+", default=["self_attn", "mlp"])
     parser.add_argument("--activation-max-abs", type=float, default=10000.0)
     return parser.parse_args()
@@ -96,7 +107,7 @@ def load_config(args: argparse.Namespace) -> tuple[dict[str, Any], PathConfig]:
     fault = dict(config.get("fault", {}))
     if str(fault.get("layer_indices", "")).lower() == "auto":
         model_path = Path(str(config["model"]["base_model"])).expanduser()
-        discovered: set[int] = set()
+        discovered = {"language": set(), "visual": set()}
         try:
             from safetensors import safe_open
 
@@ -104,12 +115,25 @@ def load_config(args: argparse.Namespace) -> tuple[dict[str, Any], PathConfig]:
             for file_path in files:
                 with safe_open(str(file_path), framework="pt", device="cpu") as handle:
                     for name in handle.keys():
-                        discovered.update(int(value) for value in re.findall(r"(?:layers?|blocks?)\.(\d+)", name))
+                        indices = {int(value) for value in re.findall(r"(?:layers?|blocks?)\.(\d+)", name)}
+                        region = "visual" if "visual" in name.lower() or "vision" in name.lower() else "language"
+                        discovered[region].update(indices)
         except (ImportError, OSError):
-            discovered = set()
-        if not discovered:
+            discovered = {"language": set(), "visual": set()}
+        if not discovered["language"] and not discovered["visual"]:
             raise ValueError("fault.layer_indices=auto could not discover layers from model safetensors")
-        config["fault"] = {**fault, "layer_indices": sorted(discovered)}
+        config["fault"] = {
+            **fault,
+            "layer_indices": sorted(discovered["language"]),
+            "visual_layer_indices": sorted(discovered["visual"]),
+        }
+    if args.evaluation_tier:
+        evaluation = dict(config.get("evaluation", {}))
+        config["evaluation"] = {**evaluation, "tier": args.evaluation_tier}
+        config["data"] = {
+            **dict(config.get("data", {})),
+            "eval_manifest": str(PROJECT_ROOT / f"data/evaluation/tiers/{args.evaluation_tier.lower()}_{'quick' if args.evaluation_tier == 'E1' else 'standard' if args.evaluation_tier == 'E2' else 'full'}.jsonl"),
+        }
     paths = PathConfig.from_mapping(
         config.get("paths", {}),
         project_root=PROJECT_ROOT,
@@ -138,6 +162,7 @@ def build_conditions(
     layers = (
         layers_override if layers_override is not None else list(fault.get("layer_indices", []))
     )
+    visual_layers = layers_override if layers_override is not None else list(fault.get("visual_layer_indices", layers))
     counts = counts_override or list(fault.get("bit_flip_counts", [1]))
     repeats = repeats_override if repeats_override is not None else int(fault.get("repeats", 1))
     planes = bit_planes_override or list(fault.get("bit_planes", ["all"]))
@@ -150,9 +175,8 @@ def build_conditions(
     base_seed = int(dict(config.get("experiment", {})).get("seed", 2026))
     ordinal = 0
     for target in targets:
-        selected_layers: list[int | None] = (
-            layers if target in LAYERED_TARGETS and layers else [None]
-        )
+        target_layers = visual_layers if target == "visual_blocks" else layers
+        selected_layers: list[int | None] = target_layers if target in LAYERED_TARGETS and target_layers else [None]
         for layer in selected_layers:
             for bit_plane in planes:
                 for count in counts:
@@ -196,14 +220,79 @@ def validate_condition_plan(conditions: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def prioritize_coverage_first(conditions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Run a small cross-target pilot before the exhaustive condition matrix."""
+    if not conditions:
+        return []
+    min_bits = min(int(row["num_bits"]) for row in conditions)
+    target_order = list(dict.fromkeys(str(row["target"]) for row in conditions))
+    plane_order = list(dict.fromkeys(str(row["bit_plane"]) for row in conditions))
+    representative: dict[str, set[tuple[int, ...]]] = {}
+    for target in target_order:
+        layer_sets = list(dict.fromkeys(
+            tuple(int(value) for value in row.get("layers", []))
+            for row in conditions if row["target"] == target
+        ))
+        representative[target] = (
+            set(layer_sets)
+            if len(layer_sets) <= 3
+            else {layer_sets[0], layer_sets[len(layer_sets) // 2], layer_sets[-1]}
+        )
+    pilot_ids: set[str] = set()
+    pilot: list[dict[str, Any]] = []
+    for target in target_order:
+        for layers in sorted(representative[target]):
+            for plane in plane_order:
+                match = next((
+                    row for row in conditions
+                    if row["target"] == target
+                    and tuple(row.get("layers", [])) == layers
+                    and row["bit_plane"] == plane
+                    and int(row["num_bits"]) == min_bits
+                    and int(row["repeat"]) == 0
+                ), None)
+                if match is not None:
+                    pilot_ids.add(str(match["id"]))
+                    pilot.append({**match, "phase": "pilot"})
+    return pilot + [
+        {**row, "phase": "full"}
+        for row in conditions if str(row["id"]) not in pilot_ids
+    ]
+
+
 def _configured_paths(config: dict[str, Any]) -> dict[str, Path]:
     model, data = dict(config["model"]), dict(config["data"])
-    return {
+    paths = {
         "base_model": Path(str(model["base_model"])).expanduser(),
         "processor": Path(str(model.get("processor_id", model["base_model"]))).expanduser(),
-        "adapter": Path(str(model["adapter_path"])).expanduser(),
         "eval_manifest": Path(str(data["eval_manifest"])).expanduser(),
         "dataset_root": Path(str(data["dataset_root"])).expanduser(),
+    }
+    if model.get("adapter_path"):
+        paths["adapter"] = Path(str(model["adapter_path"])).expanduser()
+    for name in ("eval_manifest",):
+        if not paths[name].is_absolute():
+            paths[name] = PROJECT_ROOT / paths[name]
+    tiers_manifest = config.get("evaluation", {}).get("tiers_manifest")
+    if tiers_manifest:
+        manifest_path = Path(str(tiers_manifest)).expanduser()
+        paths["tiers_manifest"] = manifest_path if manifest_path.is_absolute() else PROJECT_ROOT / manifest_path
+    return paths
+
+
+def evaluation_identity(config: dict[str, Any]) -> dict[str, Any]:
+    """Bind a run to the exact evaluation file and contract it used."""
+    data = dict(config.get("data", {}))
+    evaluation = dict(config.get("evaluation", {}))
+    eval_path = Path(str(data.get("eval_manifest", ""))).expanduser()
+    if not eval_path.is_absolute():
+        eval_path = PROJECT_ROOT / eval_path
+    return {
+        "tier": evaluation.get("tier"),
+        "eval_file": str(eval_path),
+        "sha256": file_sha256(eval_path) if eval_path.is_file() else None,
+        "tiers_manifest": evaluation.get("tiers_manifest"),
+        "contract": evaluation.get("contract", "configs/eval/evaluation_contract_v1.5.yaml"),
     }
 
 
@@ -225,6 +314,30 @@ def preflight_report(config: dict[str, Any]) -> dict[str, Any]:
             for name, path in paths.items()
         },
     }
+    evaluation = dict(config.get("evaluation", {}))
+    tier = evaluation.get("tier")
+    if tier:
+        from sat_rs_vlm.evaluation.tiers import validate_tier_asset
+
+        eval_path = paths["eval_manifest"]
+        manifest_value = evaluation.get("tiers_manifest")
+        manifest_path = Path(str(manifest_value)).expanduser() if manifest_value else PROJECT_ROOT / "data/evaluation/tiers/evaluation_tiers_manifest.json"
+        if not manifest_path.is_absolute():
+            manifest_path = PROJECT_ROOT / manifest_path
+        try:
+            report["tier"] = validate_tier_asset(
+                tier=str(tier), eval_file=eval_path, manifest_path=manifest_path
+            )
+            report["success"] = bool(report["success"])
+        except (FileNotFoundError, ValueError, OSError) as exc:
+            report["success"] = False
+            report["tier"] = {
+                "tier": str(tier),
+                "eval_file": str(eval_path),
+                "tiers_manifest": str(manifest_path),
+                "valid": False,
+                "error": str(exc),
+            }
     try:
         import torch
 
@@ -274,6 +387,8 @@ def _write_eval_config(config: dict[str, Any], destination: Path) -> Path:
             ),
             "strict": True,
             "semantic": bool(config.get("evaluation", {}).get("semantic", False)),
+            "tier": config.get("evaluation", {}).get("tier"),
+            "tiers_manifest": config.get("evaluation", {}).get("tiers_manifest"),
             "latency_semantics": "batch_amortized_per_sample",
         },
         "output": {},
@@ -368,6 +483,8 @@ def main() -> int:
         repeats_override=args.repeats,
         bit_planes_override=args.bit_planes,
     )
+    if str(config.get("fault", {}).get("execution_order", "coverage_first")) == "coverage_first":
+        conditions = prioritize_coverage_first(conditions)
     plan_validation = validate_condition_plan(conditions)
     if not plan_validation["valid"]:
         raise ValueError(f"Invalid condition plan: {plan_validation}")
@@ -377,7 +494,11 @@ def main() -> int:
         return 0
     paths.create_output_directories()
     root = paths.output_root / "reliability" / "v15_sensitivity" / args.run_id
-    plan = {"schema_version": "2.0", "conditions": conditions}
+    plan = {
+        "schema_version": "2.1",
+        "evaluation_identity": evaluation_identity(config),
+        "conditions": conditions,
+    }
     if root.exists():
         if not args.resume:
             raise FileExistsError(
@@ -391,9 +512,10 @@ def main() -> int:
         write_resolved_config(config, root / "config_resolved.yaml")
         write_json(root / "condition_plan.json", plan)
     if args.dry_run:
+        pilot_count = sum(condition.get("phase") == "pilot" for condition in conditions)
         print(
             json.dumps(
-                {"dry_run": True, "run_dir": str(root), "num_conditions": len(conditions)},
+                {"dry_run": True, "run_dir": str(root), "num_conditions": len(conditions), "pilot_conditions": pilot_count},
                 ensure_ascii=False,
             )
         )
@@ -425,7 +547,11 @@ def main() -> int:
                 root / "logs" / "baseline.log",
             )
         summary: list[dict[str, Any]] = []
+        pilot_stopped = False
         for condition in conditions:
+            if args.pilot_only and condition.get("phase") == "full":
+                pilot_stopped = True
+                break
             directory = root / "conditions" / condition["id"]
             if _condition_complete(directory, condition):
                 summary.append(_load_condition_result(directory, condition))
@@ -457,6 +583,8 @@ def main() -> int:
                 fault_command.extend(
                     [
                         "--activation-guard",
+                        "--activation-guard-mode",
+                        args.activation_guard_mode,
                         "--activation-patterns",
                         *args.activation_patterns,
                         "--activation-max-abs",
@@ -501,16 +629,18 @@ def main() -> int:
             "method": "in_memory_seu_parameter_fault",
             "baseline_evaluation_dir": str(baseline_dir / "evaluation_v1_5"),
             "conditions": summary,
+            "aggregated": aggregate_sensitivity_conditions(summary),
             "interpretation": (
                 "Use each condition's paired comparison for task-metric deltas "
                 "and Bootstrap confidence intervals."
             ),
         },
     )
-    _write_progress(root, status="completed", completed=len(summary), total=len(conditions))
+    final_status = "pilot_completed" if pilot_stopped else "completed"
+    _write_progress(root, status=final_status, completed=len(summary), total=len(conditions))
     print(
         json.dumps(
-            {"success": True, "run_dir": str(root), "num_conditions": len(summary)},
+            {"success": True, "status": final_status, "run_dir": str(root), "num_conditions": len(summary)},
             ensure_ascii=False,
         )
     )

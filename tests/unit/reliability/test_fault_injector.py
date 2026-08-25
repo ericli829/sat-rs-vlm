@@ -230,7 +230,7 @@ def test_fault_inventory_summary_groups_regions_and_layers() -> None:
     by_key = {(row["region"], row["layer"]): row for row in summary}
     assert by_key[("attention", 14)]["candidate_bits"] == 64
     assert by_key[("mlp", 14)]["elements"] == 8
-    assert by_key[("vision_encoder", 2)]["tensor_count"] == 1
+    assert by_key[("visual_blocks", 2)]["tensor_count"] == 1
     assert by_key[("lora_adapter", 14)]["candidate_bits"] == 32
 
 
@@ -242,3 +242,23 @@ def test_embeddings_selector_does_not_capture_visual_patch_embed() -> None:
     }
     selected = selectable_parameters(state, selector_for_fault_target("embeddings"))
     assert [name for name, _ in selected] == ["model.language_model.embed_tokens.weight"]
+
+
+def test_visual_block_and_merger_selectors_are_disjoint() -> None:
+    torch = pytest.importorskip("torch")
+    state = {
+        "model.visual.blocks.0.attn.proj.weight": torch.ones(2, dtype=torch.float32),
+        "model.visual.blocks.1.mlp.linear_fc1.weight": torch.ones(2, dtype=torch.float32),
+        "model.visual.merger.linear.weight": torch.ones(2, dtype=torch.float32),
+        "model.visual.deepstack_merger.weight": torch.ones(2, dtype=torch.float32),
+    }
+    blocks = selectable_parameters(state, selector_for_fault_target("visual_blocks"))
+    merger = selectable_parameters(state, selector_for_fault_target("visual_merger"))
+    assert {name for name, _ in blocks} == {
+        "model.visual.blocks.0.attn.proj.weight",
+        "model.visual.blocks.1.mlp.linear_fc1.weight",
+    }
+    assert {name for name, _ in merger} == {
+        "model.visual.merger.linear.weight",
+        "model.visual.deepstack_merger.weight",
+    }

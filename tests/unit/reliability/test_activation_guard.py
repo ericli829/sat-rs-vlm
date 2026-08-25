@@ -35,3 +35,11 @@ def test_activation_guard_accepts_normal_activation_and_detects_large_value() ->
     with pytest.raises(RuntimeError, match="max_abs_exceeded"):
         guard.assert_healthy()
     guard.close()
+
+
+def test_activation_guard_reports_research_mode() -> None:
+    torch = pytest.importorskip("torch")
+    model = torch.nn.Sequential(torch.nn.Identity())
+    guard = ActivationGuard(model, module_patterns=["0"], max_abs=2.0, mode="research")
+    assert guard.report()["mode"] == "research"
+    guard.close()

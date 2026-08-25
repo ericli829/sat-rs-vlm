@@ -156,10 +156,12 @@ def plot_sensitivity_results(input_dir: str | Path, output_dir: str | Path) -> l
         key = (row["target"], layer, row["bit_plane"])
         groups.setdefault(key, []).append(float(row["changed_rate"]))
     targets = sorted({key[0] for key in groups})
-    planes = ["sign", "exponent", "mantissa", "all"]
+    plane_order = ["sign", "exponent", "mantissa", "all"]
+    planes = [plane for plane in plane_order if any(key[2] == plane for key in groups)]
     layers = sorted({key[1] for key in groups if key[1] is not None})
     if layers:
         matrix = np.full((len(targets) * len(planes), len(layers)), np.nan)
+        sample_counts = np.zeros_like(matrix, dtype=int)
         labels = []
         for target_index, target in enumerate(targets):
             for plane_index, plane in enumerate(planes):
@@ -169,9 +171,18 @@ def plot_sensitivity_results(input_dir: str | Path, output_dir: str | Path) -> l
                     samples = groups.get((target, layer, plane), [])
                     if samples:
                         matrix[row_index, layer_index] = float(np.mean(samples))
+                        sample_counts[row_index, layer_index] = len(samples)
         fig, ax = plt.subplots(figsize=(max(12, len(layers) * 0.45), max(5, len(labels) * 0.28)))
-        image = ax.imshow(matrix, aspect="auto", cmap="magma", vmin=0, vmax=1)
-        ax.set_title("Changed rate by target, layer and bit-plane")
+        cmap = plt.get_cmap("magma").copy()
+        cmap.set_bad("#d1d5db")
+        image = ax.imshow(np.ma.masked_invalid(matrix), aspect="auto", cmap=cmap, vmin=0, vmax=1)
+        for row_index in range(matrix.shape[0]):
+            for layer_index in range(matrix.shape[1]):
+                if sample_counts[row_index, layer_index]:
+                    value = matrix[row_index, layer_index]
+                    color = "black" if value > 0.72 else "white"
+                    ax.text(layer_index, row_index, f"{value:.2f}\nn={sample_counts[row_index, layer_index]}", ha="center", va="center", fontsize=7, color=color)
+        ax.set_title("Changed rate by target, layer and bit-plane (gray = not scanned)")
         ax.set_xlabel("Layer")
         ax.set_ylabel("Target : bit-plane")
         ax.set_xticks(range(len(layers)), layers)
@@ -184,7 +195,7 @@ def plot_sensitivity_results(input_dir: str | Path, output_dir: str | Path) -> l
     for row in values:
         plane_values.setdefault(row["bit_plane"], []).append(float(row["changed_rate"]))
     fig, ax = plt.subplots(figsize=(7, 4.5))
-    names = [name for name in planes if name in plane_values]
+    names = [name for name in plane_order if name in plane_values]
     means = [float(np.mean(plane_values[name])) for name in names]
     errors = [float(np.std(plane_values[name])) if len(plane_values[name]) > 1 else 0.0 for name in names]
     ax.bar(names, means, yerr=errors, capsize=4, color="#dc2626")
@@ -195,7 +206,7 @@ def plot_sensitivity_results(input_dir: str | Path, output_dir: str | Path) -> l
 
     # Parameter projection and exact bit-index coverage from injection records.
     projection_values: dict[str, list[float]] = {}
-    bit_index_values: dict[int, list[float]] = {}
+    bit_index_values: dict[tuple[str, int], list[float]] = {}
     for row in values:
         for record in row.get("records", []):
             name = str(record.get("target_name", "")).lower()
@@ -206,7 +217,8 @@ def plot_sensitivity_results(input_dir: str | Path, output_dir: str | Path) -> l
             projection_values.setdefault(projection, []).append(float(row["changed_rate"]))
             bit_index = record.get("bit_index")
             if isinstance(bit_index, int):
-                bit_index_values.setdefault(bit_index, []).append(float(row["changed_rate"]))
+                dtype = str(record.get("dtype", "unknown"))
+                bit_index_values.setdefault((dtype, bit_index), []).append(float(row["changed_rate"]))
     if projection_values:
         names = sorted(projection_values)
         fig, ax = plt.subplots(figsize=(9, 4.5))
@@ -217,13 +229,17 @@ def plot_sensitivity_results(input_dir: str | Path, output_dir: str | Path) -> l
         ax.tick_params(axis="x", rotation=25)
         save(fig, "projection_changed_rate.png")
     if bit_index_values:
-        indices = sorted(bit_index_values)
-        fig, ax = plt.subplots(figsize=(10, 4.5))
-        ax.plot(indices, [float(np.mean(bit_index_values[index])) for index in indices], "o-")
-        ax.set_ylim(0, 1)
-        ax.set_xlabel("Exact bit index")
-        ax.set_ylabel("Changed rate")
-        ax.set_title("Sensitivity by exact injected bit index")
+        dtypes = sorted({dtype for dtype, _ in bit_index_values})
+        fig, axes = plt.subplots(len(dtypes), 1, figsize=(10, max(4.5, 3.5 * len(dtypes))), squeeze=False)
+        for axis, dtype in zip(axes[:, 0], dtypes):
+            points = {index: values for (record_dtype, index), values in bit_index_values.items() if record_dtype == dtype}
+            indices = sorted(points)
+            axis.plot(indices, [float(np.mean(points[index])) for index in indices], "o-")
+            axis.set_ylim(0, 1)
+            axis.set_xlabel("Exact bit index")
+            axis.set_ylabel("Changed rate")
+            axis.set_title(f"{dtype}: sensitivity by exact injected bit index")
+            axis.grid(axis="y", alpha=0.2)
         save(fig, "bit_index_changed_rate.png")
 
     # Optional protection-cost plot. The plot is intentionally schema-tolerant.
