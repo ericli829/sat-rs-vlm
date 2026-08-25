@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import sys
 from collections.abc import Mapping
 from pathlib import Path
@@ -18,9 +17,15 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from sat_rs_vlm.integrations.detectors.cache import ProposalCache  # noqa: E402
+from sat_rs_vlm.integrations.detectors.config import (  # noqa: E402
+    expand_config_value,
+    resolve_config_path,
+)
+from sat_rs_vlm.integrations.detectors.lae_dino_sidecar import (  # noqa: E402
+    PINNED_LAE_DINO_SOURCE_REVISION,
+)
 from sat_rs_vlm.integrations.detectors.protocol import (  # noqa: E402
     ProposalError,
-    ProposalResult,
     proposal_cache_key,
     stable_file_identity,
 )
@@ -137,7 +142,40 @@ def _build_provider_config(args: argparse.Namespace, proposal: Mapping[str, Any]
         value = getattr(args, name, None)
         if value is not None:
             config[name] = value
-    return {key: os.path.expandvars(value) if isinstance(value, str) else value for key, value in config.items()}
+    return dict(expand_config_value(config))
+
+
+def _manifest_model_identity(provider_name: str, provider_config: Mapping[str, Any]) -> Any:
+    """Capture only assets that affect detector semantics, not source trees."""
+
+    if str(provider_name).startswith("lae_dino"):
+        checkpoint = resolve_config_path(provider_config.get("checkpoint"), label="checkpoint")
+        config_path = resolve_config_path(
+            provider_config.get("config_path") or provider_config.get("config"),
+            label="config_path",
+        )
+        bert_root = resolve_config_path(provider_config.get("bert_root"), label="bert_root")
+        return {
+            "provider": provider_name,
+            "checkpoint": stable_file_identity(checkpoint),
+            "config": stable_file_identity(config_path),
+            "bert": stable_file_identity(bert_root),
+            "source_revision": provider_config.get(
+                "source_revision", PINNED_LAE_DINO_SOURCE_REVISION
+            ),
+            "checkpoint_training_regime": provider_config.get(
+                "checkpoint_training_regime", "unspecified"
+            ),
+            "inference_query_mode": provider_config.get(
+                "inference_query_mode", "target_conditioned_text_prompt"
+            ),
+        }
+    model_path = provider_config.get("model_path") or provider_config.get("checkpoint")
+    return (
+        stable_file_identity(resolve_config_path(model_path, label="model_path"))
+        if model_path
+        else None
+    )
 
 
 def precompute_rows(
@@ -226,6 +264,7 @@ def precompute_rows(
                 )
             except Exception as exc:
                 counts["failed"] += 1
+                failure_stage = str(getattr(exc, "failure_stage", "proposal_generation"))
                 output.update(
                     {
                         "bbox_list": [],
@@ -235,7 +274,7 @@ def precompute_rows(
                         "proposal_metadata": {
                             "schema_version": "vlm-fo1-proposal-row-v1",
                             "status": "failed",
-                            "failure_stage": "proposal_generation",
+                            "failure_stage": failure_stage,
                             "error": str(exc),
                         },
                     }
@@ -252,7 +291,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--image-root", type=Path)
-    parser.add_argument("--provider", choices=("mock", "grounding_dino", "lae_dino_lae1m", "lae_dino_dior", "lae_dino_dota"))
+    parser.add_argument(
+        "--provider",
+        choices=("mock", "grounding_dino", "lae_dino_lae1m", "lae_dino_dior", "lae_dino_dota"),
+    )
     parser.add_argument("--model-path")
     parser.add_argument("--source-root")
     parser.add_argument("--config-path")
@@ -289,18 +331,28 @@ def main() -> int:
         output_path = args.output or payload.get("output") or proposal.get("precomputed_file")
         if not provider_name or not input_path or not output_path:
             raise ValueError("--provider, --input, and --output are required")
-        input_path = Path(os.path.expandvars(str(input_path))).expanduser().resolve()
-        output_path = Path(os.path.expandvars(str(output_path))).expanduser().resolve()
+        input_path = resolve_config_path(input_path, label="proposal input")
+        output_path = resolve_config_path(output_path, label="proposal output")
         if output_path.exists() and not args.force:
             raise FileExistsError(f"output exists; pass --force to overwrite: {output_path}")
         data_section = payload.get("data", {})
         if not isinstance(data_section, Mapping):
             data_section = {}
-        image_root = args.image_root or payload.get("image_root") or data_section.get("image_root")
-        image_root = Path(str(image_root)).expanduser().resolve() if image_root else None
+        image_root_value = (
+            args.image_root or payload.get("image_root") or data_section.get("image_root")
+        )
+        image_root = (
+            resolve_config_path(image_root_value, label="proposal image_root")
+            if image_root_value
+            else None
+        )
         provider_config = _build_provider_config(args, proposal)
         cache_dir = _value(args, proposal, "cache_dir", None)
-        cache = ProposalCache(cache_dir) if cache_dir else None
+        cache = (
+            ProposalCache(resolve_config_path(cache_dir, label="proposal cache_dir"))
+            if cache_dir
+            else None
+        )
         all_rows = _read_jsonl(input_path)
         if args.max_samples is not None and args.max_samples < 1:
             raise ValueError("--max-samples must be positive")
@@ -314,11 +366,15 @@ def main() -> int:
         )
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(
-            "".join(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n" for row in output_rows),
+            "".join(
+                json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n"
+                for row in output_rows
+            ),
             encoding="utf-8",
         )
-        manifest_path = args.manifest or output_path.with_suffix(output_path.suffix + ".manifest.json")
-        model_path = provider_config.get("checkpoint") or provider_config.get("model_path")
+        manifest_path = args.manifest or output_path.with_suffix(
+            output_path.suffix + ".manifest.json"
+        )
         manifest = {
             "schema_version": "vlm-fo1-proposal-manifest-v1",
             "provider": provider_name,
@@ -335,12 +391,23 @@ def main() -> int:
                 "hits": cache.hits if cache else 0,
                 "misses": cache.misses if cache else 0,
             },
-            "model_identity": stable_file_identity(model_path) if model_path else None,
+            "model_identity": _manifest_model_identity(provider_name, provider_config),
             "reference_not_sent_to_provider": True,
         }
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
-        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        print(json.dumps({"status": "ok", "output": str(output_path), "manifest": str(manifest_path), "counts": counts}))
+        manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+        print(
+            json.dumps(
+                {
+                    "status": "ok",
+                    "output": str(output_path),
+                    "manifest": str(manifest_path),
+                    "counts": counts,
+                }
+            )
+        )
         return 0
     except (OSError, ValueError, ProposalError, RuntimeError) as exc:
         print(f"proposal precomputation failed: {exc}", file=sys.stderr)

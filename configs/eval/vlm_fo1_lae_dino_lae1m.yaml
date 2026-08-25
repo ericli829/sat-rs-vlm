@@ -23,6 +23,9 @@ proposal:
   source_root: "${LAE_DINO_SOURCE_ROOT}"
   config_path: "${LAE_DINO_CONFIG_LAE1M}"
   checkpoint: "${LAE_DINO_CHECKPOINT_LAE1M}"
+  checkpoint_training_regime: lae1m_pretrained
+  source_revision: 6b1519626e39d1f39f8ed1f38761c20f7e0e8c35
+  inference_query_mode: target_conditioned_text_prompt
   bert_root: "${LAE_DINO_BERT_ROOT}"
   worker_python: "${LAE_DINO_PYTHON}"
   precomputed_file: data/evaluation/proposals/lae_dino_lae1m_e_count_v2.jsonl

@@ -66,6 +66,21 @@ LAE-DINO is an MMDetection/legacy stack and is never imported by the main
 `rs-vlm` process.  Pass the exact config discovered from the downloaded source;
 the integration intentionally does not guess a filename.
 
+For the pinned source revision `6b1519626e39d1f39f8ed1f38761c20f7e0e8c35`, the
+upstream config names are:
+
+```text
+mmdetection_lae/configs/lae_dino/lae_dino_swin-t_pretrain_LAE-1M.py
+mmdetection_lae/configs/lae_dino/lae_dino_swin-t_finetune_DIOR.py
+mmdetection_lae/configs/lae_dino/lae_dino_swin-t_finetune_DOTA.py
+```
+
+The pinned `inference_detector` places `text_prompt` into `data_['text']` and
+`custom_entities` into `data_['custom_entities']` before the test pipeline and
+model forward.  The sidecar therefore uses the normalized target phrase as a
+real target-conditioned query; checkpoint training regime and inference query
+mode are recorded separately.
+
 ```bash
 python environments/lae_dino/check_environment.py \
   --source-root /root/autodl-fs/rs_detectors/lae_dino/source/LAE-DINO \
@@ -90,10 +105,9 @@ python scripts/integrations/precompute_vlm_fo1_proposals.py \
 ```
 
 Use `vlm_fo1_lae_dino_dior.yaml` and `vlm_fo1_lae_dino_dota.yaml` for the DIOR
-and DOTA fine-tuned checkpoints.  LAE-DINO is a closed-set detector; its
-target phrase is recorded for provenance but is not silently treated as open
-vocabulary category filtering.  This comparability limitation must remain in
-reports.
+and DOTA fine-tuned checkpoints.  Reports must keep the checkpoint's recorded
+training regime separate from the target-conditioned inference mode; do not
+reinterpret either property as a global open-/closed-set label.
 
 ## Reusing proposal cache and running FO1
 

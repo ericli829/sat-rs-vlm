@@ -29,6 +29,17 @@ def _find_configs(source_root: Path) -> list[str]:
     ]
 
 
+def _bert_missing(bert_root: Path) -> list[str]:
+    missing: list[str] = []
+    if not (bert_root / "config.json").is_file():
+        missing.append("config.json")
+    if not any((bert_root / name).is_file() for name in ("model.safetensors", "pytorch_model.bin")):
+        missing.append("model.safetensors or pytorch_model.bin")
+    if not any((bert_root / name).is_file() for name in ("tokenizer.json", "vocab.txt")):
+        missing.append("tokenizer.json or vocab.txt")
+    return missing
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-root", required=True, type=Path)
@@ -68,12 +79,20 @@ def main() -> int:
         (args.bert_root, "bert_root"),
     ):
         if value is None:
-            report["errors"].append(f"--{label.replace('_', '-')} is required unless --discover is used")
+            report["errors"].append(
+                f"--{label.replace('_', '-')} is required unless --discover is used"
+            )
             continue
         path = value.expanduser().resolve()
         report["paths"][label] = str(path)
         if not path.exists():
             report["errors"].append(f"{label} does not exist: {path}")
+        elif label == "bert_root" and path.is_dir():
+            missing = _bert_missing(path)
+            if missing:
+                report["errors"].append(
+                    f"bert_root is incomplete ({', '.join(missing)}): {path}"
+                )
     try:
         torch = importlib.import_module("torch")
         report["cuda"] = {
@@ -97,4 +116,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

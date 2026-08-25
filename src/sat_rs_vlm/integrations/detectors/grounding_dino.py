@@ -119,7 +119,11 @@ class GroundingDinoProvider:
             raise ProposalError("Grounding DINO target_phrase must not be empty")
         started = time.perf_counter()
         try:
-            inputs = self._processor(images=image, text=query, return_tensors="pt")
+            # Transformers 4.57+ documents a structured single-image label
+            # batch.  Keep the query as one label instead of inventing
+            # punctuation/caption rules.
+            text_labels = [[query]]
+            inputs = self._processor(images=image, text=text_labels, return_tensors="pt")
             inputs = {
                 name: value.to(self.device) if hasattr(value, "to") else value
                 for name, value in inputs.items()
@@ -128,9 +132,11 @@ class GroundingDinoProvider:
                 outputs = self._model(**inputs)
             processed = self._processor.post_process_grounded_object_detection(
                 outputs,
+                input_ids=inputs.get("input_ids"),
                 threshold=self.box_threshold,
                 text_threshold=self.text_threshold,
                 target_sizes=[(image.height, image.width)],
+                text_labels=text_labels,
             )[0]
             boxes = processed.get("boxes", [])
             scores = processed.get("scores", [])
@@ -144,11 +150,13 @@ class GroundingDinoProvider:
                 image_width=image.width,
                 image_height=image.height,
                 coordinate_mode="pixel",
-                top_k=self.top_k,
+                # NMS must see the complete thresholded/sorted proposal set;
+                # final top-k is applied only after suppression.
+                top_k=None,
             )
             if self.nms_threshold is not None:
                 boxes, scores = _nms(boxes, scores, self.nms_threshold)
-                boxes, scores = boxes[: self.top_k], scores[: self.top_k]
+            boxes, scores = boxes[: self.top_k], scores[: self.top_k]
         except Exception as exc:
             raise ProposalError(f"Grounding DINO inference failed: {exc}") from exc
         latency_ms = (time.perf_counter() - started) * 1000.0
@@ -161,6 +169,7 @@ class GroundingDinoProvider:
             metadata={
                 "schema_version": "grounding-dino-provider-v1",
                 "target_phrase": query,
+                "text_labels": text_labels,
                 "box_threshold": self.box_threshold,
                 "text_threshold": self.text_threshold,
                 "top_k": self.top_k,

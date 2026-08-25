@@ -6,7 +6,7 @@ README and requirements, not from the main project requirements.  This
 repository does not install or downgrade either environment automatically.
 
 If the LAE-DINO checkout provides a requirements file, the explicit installer
-can be run from that isolated environment (all four variables are required;
+can be run from that isolated environment (all five variables are required;
 the config must match the selected checkpoint):
 
 ```bash
