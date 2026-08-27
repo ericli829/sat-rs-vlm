@@ -188,7 +188,14 @@ def _load_detector(args: argparse.Namespace) -> Any:
     # Keep stdout reserved for JSONL.  Leave stderr untouched so the parent
     # sidecar can preserve library diagnostics in its stderr log.
     with contextlib.redirect_stdout(io.StringIO()):
-        model = init_detector(cfg, str(checkpoint), device=args.device)
+        # Detector-only proposal inference has no validation dataset.  The
+        # legacy LAE-DINO API otherwise builds ``test_dataloader`` solely to
+        # discover a palette, forcing unrelated DIOR/DOTA annotations.
+        # The vendored API's ``palette='none'`` branch builds the full test
+        # dataset; ``random`` selects a visualization-only palette directly.
+        model = init_detector(
+            cfg, str(checkpoint), device=args.device, palette="random"
+        )
     return model
 
 

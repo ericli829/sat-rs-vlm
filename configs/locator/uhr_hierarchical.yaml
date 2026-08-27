@@ -1,0 +1,97 @@
+locator:
+  provider: hierarchical
+
+parser:
+  provider: rules
+  ontology_path: configs/eval/semantic/remote_sensing_ontology.json
+  fallback: null
+
+router:
+  retrieval_for_counting: true
+
+search:
+  grid_size: 3
+  halo_ratio: 0.15
+  target_view_size: 1280
+  max_depth: 3
+  temperature: 1.0
+  cumulative_mass: 0.90
+  max_beam: 4
+  min_score_gain: 0.01
+  max_regions: 64
+  max_area_ratio: 3.0
+  posterior_stop_threshold: 0.985
+
+scorers:
+  detector:
+    enabled: true
+  retrieval:
+    enabled: true
+  spatial:
+    enabled: true
+  weights:
+    detector: 1.0
+    retrieval: 1.0
+    spatial: 0.5
+    parent: 0.25
+    redundancy: 0.2
+
+detector:
+  enabled: true
+  provider: mock
+  config: {}
+
+retriever:
+  enabled: true
+  provider: mock
+  config: {}
+
+provider_configs:
+  detector:
+    mock: {}
+    lae_dino_lae1m:
+      source_root: ${LAE_DINO_SOURCE_ROOT}
+      config_path: ${LAE_DINO_CONFIG_LAE1M}
+      checkpoint: ${LAE_DINO_CHECKPOINT_LAE1M}
+      bert_root: ${LAE_DINO_BERT_ROOT}
+      worker_python: ${LAE_DINO_PYTHON}
+      worker_script: scripts/integrations/lae_dino_worker.py
+      checkpoint_training_regime: lae1m_pretrained
+      source_revision: 6b1519626e39d1f39f8ed1f38761c20f7e0e8c35
+      inference_query_mode: target_conditioned_text_prompt
+      score_threshold: 0.3
+      nms_threshold: null
+      top_k: 100
+    grounding_dino:
+      model_path: ${GROUNDING_DINO_MODEL}
+      device: auto
+      box_threshold: 0.25
+      text_threshold: 0.25
+      top_k: 100
+  retriever:
+    mock: {}
+    visrag:
+      model_path: ${VISRAG_MODEL_PATH}
+      runtime: sidecar
+      worker_python: ${VISRAG_PYTHON}
+      worker_script: scripts/integrations/visrag_worker.py
+      device: auto
+      precision: bfloat16
+      batch_size: 8
+      trust_remote_code: true
+
+fusion:
+  overlap_iou_threshold: 0.65
+  max_regions: 6
+  merge_adjacent: false
+  adjacent_gap: 4.0
+  context_margin: 0.08
+
+cache:
+  enabled: false
+
+debug:
+  export_crops: false
+  export_overlay: false
+
+fail_on_provider_error: true

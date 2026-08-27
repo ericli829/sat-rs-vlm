@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import pytest
 from scripts.integrations import precompute_vlm_fo1_proposals as precompute
 from scripts.integrations.lae_dino_worker import (
     _extract_predictions,
+    _load_detector,
     _patch_lae_config_for_local_runtime,
     _validate_local_bert_root,
 )
@@ -440,6 +441,68 @@ def test_lae_config_patch_sets_absolute_local_bert_path_without_disk_write(tmp_p
     assert patched["model"]["language_model"]["name"] == str(bert_root)
     assert patched["load_from"] is None
     assert patched["model"]["backbone"]["init_cfg"] is None
+
+
+def test_lae_worker_skips_validation_dataset_palette_lookup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    config_path = tmp_path / "config.py"
+    config_path.write_text("# test config\n", encoding="utf-8")
+    checkpoint = tmp_path / "checkpoint.pth"
+    checkpoint.write_bytes(b"checkpoint")
+    bert_root = tmp_path / "bert"
+    bert_root.mkdir()
+    (bert_root / "config.json").write_text("{}", encoding="utf-8")
+    (bert_root / "model.safetensors").write_bytes(b"weights")
+    (bert_root / "vocab.txt").write_text("[UNK]\n", encoding="utf-8")
+
+    config = {
+        "load_from": None,
+        "model": {
+            "language_model": {"name": "legacy"},
+            "backbone": {"init_cfg": None},
+        },
+    }
+    captured: dict[str, object] = {}
+
+    class FakeConfig:
+        @staticmethod
+        def fromfile(_path: str) -> dict[str, object]:
+            return config
+
+    def fake_init_detector(cfg, checkpoint_path, **kwargs):
+        captured.update({"config": cfg, "checkpoint": checkpoint_path, **kwargs})
+        return "model"
+
+    mmdet = ModuleType("mmdet")
+    mmdet.__path__ = []  # type: ignore[attr-defined]
+    mmdet_apis = ModuleType("mmdet.apis")
+    mmdet_apis.init_detector = fake_init_detector  # type: ignore[attr-defined]
+    mmengine = ModuleType("mmengine")
+    mmengine.__path__ = []  # type: ignore[attr-defined]
+    mmengine_config = ModuleType("mmengine.config")
+    mmengine_config.Config = FakeConfig  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "mmdet", mmdet)
+    monkeypatch.setitem(sys.modules, "mmdet.apis", mmdet_apis)
+    monkeypatch.setitem(sys.modules, "mmengine", mmengine)
+    monkeypatch.setitem(sys.modules, "mmengine.config", mmengine_config)
+
+    model = _load_detector(
+        SimpleNamespace(
+            source_root=str(source_root),
+            config=str(config_path),
+            checkpoint=str(checkpoint),
+            bert_root=str(bert_root),
+            device="cuda:0",
+        )
+    )
+    assert model == "model"
+    assert captured["palette"] == "random"
+    assert captured["device"] == "cuda:0"
+    assert config["model"]["language_model"]["name"] == str(bert_root.resolve())
 
 
 def test_lae_predict_passes_target_prompt_and_custom_entities(tmp_path: Path) -> None:
