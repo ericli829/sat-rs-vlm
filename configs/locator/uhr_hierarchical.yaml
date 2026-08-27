@@ -17,10 +17,8 @@ search:
   temperature: 1.0
   cumulative_mass: 0.90
   max_beam: 4
-  min_score_gain: 0.01
   max_regions: 64
-  max_area_ratio: 3.0
-  posterior_stop_threshold: 0.985
+  max_processed_area_ratio: 3.0
 
 scorers:
   detector:
@@ -39,6 +37,12 @@ scorers:
 detector:
   enabled: true
   provider: mock
+  base_provider: lae_dino_lae1m
+  tiled:
+    tile_size: 1333
+    overlap_ratio: 0.15
+    global_nms_iou: 0.4
+    global_top_k: 300
   config: {}
 
 retriever:

@@ -1,4 +1,5 @@
 import builtins
+import io
 import json
 import math
 import sys
@@ -9,11 +10,17 @@ import pytest
 from scripts.integrations.visrag_worker import score_request
 
 from sat_rs_vlm.integrations.detectors.protocol import ProposalResult
+from sat_rs_vlm.integrations.detectors.tiled import (
+    TiledProposalProvider,
+    generate_tiles,
+    global_nms,
+)
 from sat_rs_vlm.integrations.locators.answer import MultiROIRequest
 from sat_rs_vlm.integrations.locators.beam import (
     StopPolicyConfig,
     adaptive_beam_select,
     evaluate_stop,
+    standardized_logits,
 )
 from sat_rs_vlm.integrations.locators.config import load_locator_config
 from sat_rs_vlm.integrations.locators.fusion import RegionFusion
@@ -35,7 +42,9 @@ from sat_rs_vlm.integrations.retrievers.protocol import RetrievalError, Retrieva
 from sat_rs_vlm.integrations.retrievers.registry import create_retriever_provider
 from sat_rs_vlm.integrations.retrievers.visrag import (
     _OFFICIAL_QUERY_INSTRUCTION,
+    VisRAGDirectRetrieverProvider,
     _representations,
+    _VisRAGSidecarClient,
 )
 from sat_rs_vlm.semantics import RelationSpec, TaskSpec
 
@@ -105,6 +114,65 @@ def test_detector_scorer_is_unavailable_without_a_real_target() -> None:
     assert result.reason == "task_has_no_detector_target"
 
 
+def test_tiled_proposal_converts_local_boxes_to_global_coordinates(tmp_path: Path) -> None:
+    from PIL import Image
+
+    image_path = tmp_path / "uhr.png"
+    Image.new("RGB", (150, 80), "white").save(image_path)
+
+    class BaseProvider:
+        provider_name = "fixture"
+        model_id = "fixture-v1"
+
+        def __init__(self) -> None:
+            self.closed = False
+
+        def predict(self, image_path: Path, target_phrase: str) -> ProposalResult:
+            assert Image.open(image_path).size == (100, 80)
+            return ProposalResult(
+                boxes_xyxy=[[10.0, 10.0, 30.0, 30.0]],
+                scores=[0.9],
+                latency_ms=1.0,
+                provider=self.provider_name,
+                model_id=self.model_id,
+                metadata={"query": target_phrase},
+            )
+
+        def close(self) -> None:
+            self.closed = True
+
+    base = BaseProvider()
+    provider = TiledProposalProvider(
+        base,
+        {"tile_size": 100, "overlap_ratio": 0.5, "global_nms_iou": 0.4},
+        base_provider_name="fixture",
+    )
+    result = provider.predict(image_path, "aircraft")
+    assert generate_tiles(150, 80, 100, 0.5) == (
+        (0, 0, 100, 80),
+        (50, 0, 150, 80),
+    )
+    assert result.boxes_xyxy == [
+        [10.0, 10.0, 30.0, 30.0],
+        [60.0, 10.0, 80.0, 30.0],
+    ]
+    assert result.metadata["tiles"][1]["tile_xyxy"] == [50, 0, 150, 80]
+    assert result.metadata["model_identity"]["tiling_sha256"]
+    provider.close()
+    assert base.closed is True
+
+
+def test_tiled_global_nms_deduplicates_overlap_without_summing_counts() -> None:
+    boxes, scores, keep = global_nms(
+        [[40.0, 10.0, 60.0, 30.0], [41.0, 10.0, 61.0, 30.0], [80.0, 10.0, 90.0, 20.0]],
+        [0.9, 0.8, 0.7],
+        0.4,
+    )
+    assert boxes == [[40.0, 10.0, 60.0, 30.0], [80.0, 10.0, 90.0, 20.0]]
+    assert scores == [0.9, 0.7]
+    assert keep == [0, 2]
+
+
 def test_spatial_scorer_and_complex_relation_guard() -> None:
     regions = [
         _region("upper-left", (0.0, 0.0, 100.0, 100.0)),
@@ -151,6 +219,54 @@ def test_adaptive_beam_uses_minimum_cumulative_mass() -> None:
     assert result.cumulative_probability - result.probabilities[1] < 0.8
 
 
+def test_standardized_beam_uses_real_fused_score_range() -> None:
+    scores = [0.95, 0.65, 0.60, 0.15, 0.10, 0.05]
+    logits = standardized_logits(scores)
+    assert sum(logits) == pytest.approx(0.0)
+    assert logits[0] > logits[1] > logits[3]
+    regions = [
+        _region(str(index), (index * 10, 0, (index + 1) * 10, 10))
+        for index in range(len(scores))
+    ]
+    narrow = adaptive_beam_select(
+        regions,
+        scores,
+        temperature=0.7,
+        cumulative_mass=0.7,
+        max_beam=6,
+        redundancy_weight=0.0,
+    )
+    broad = adaptive_beam_select(
+        regions,
+        scores,
+        temperature=1.4,
+        cumulative_mass=0.95,
+        max_beam=6,
+        redundancy_weight=0.0,
+    )
+    assert len(narrow.selected_indices) < len(broad.selected_indices)
+    assert narrow.standardized_logits == pytest.approx(logits)
+    assert all(math.isfinite(value) for value in narrow.probabilities)
+
+
+def test_equal_scores_have_uniform_beam_probabilities() -> None:
+    regions = [
+        _region(str(index), (index * 10, 0, (index + 1) * 10, 10))
+        for index in range(4)
+    ]
+    result = adaptive_beam_select(
+        regions,
+        [0.5] * 4,
+        temperature=1.0,
+        cumulative_mass=0.5,
+        max_beam=4,
+        redundancy_weight=0.0,
+    )
+    assert result.standardized_logits == (0.0,) * 4
+    assert result.probabilities == pytest.approx((0.25,) * 4)
+    assert len(result.selected_indices) == 2
+
+
 def test_adaptive_beam_diversity_penalizes_duplicate_region() -> None:
     regions = [
         _region("a", (0, 0, 20, 20)),
@@ -166,35 +282,44 @@ def test_adaptive_beam_diversity_penalizes_duplicate_region() -> None:
         redundancy_weight=1.0,
     )
     assert result.selected_indices == (0, 2)
-    assert result.redundancy_penalties[1] == pytest.approx(1.0)
+    assert result.redundancy_penalties[1] > 1.0
 
 
-def test_stop_conditions_report_each_trigger() -> None:
+def test_stop_conditions_use_only_geometry_and_processed_budgets() -> None:
     region = _region("leaf", (0, 0, 100, 100), score=0.5, depth=3)
     decision = evaluate_stop(
         region,
         StopPolicyConfig(
             target_view_size=128,
             max_depth=3,
-            min_score_gain=0.1,
             max_regions=9,
-            max_area_ratio=1.0,
-            posterior_stop_threshold=0.9,
+            max_processed_area_ratio=1.0,
         ),
         evaluated_regions=9,
-        inspected_area_ratio=1.1,
-        score_gain=0.01,
-        posterior_max=0.95,
+        processed_area_ratio=1.1,
     )
     assert decision.stop is True
     assert set(decision.reasons) == {
         "target_view_size",
         "max_depth",
         "max_regions",
-        "max_area_ratio",
-        "min_score_gain",
-        "posterior_concentrated",
+        "max_processed_area_ratio",
     }
+
+    continue_zoom = evaluate_stop(
+        _region("confident", (0, 0, 1000, 1000), score=0.99, depth=1),
+        StopPolicyConfig(
+            target_view_size=128,
+            max_depth=3,
+            max_regions=100,
+            max_processed_area_ratio=3.0,
+        ),
+        evaluated_regions=9,
+        processed_area_ratio=0.5,
+    )
+    assert continue_zoom.stop is False
+    assert "posterior_concentrated" not in continue_zoom.reasons
+    assert "min_score_gain" not in continue_zoom.reasons
 
 
 def test_region_fusion_suppresses_overlap_and_preserves_global_provenance() -> None:
@@ -323,6 +448,58 @@ def test_visrag_default_query_instruction_matches_official_model_card(tmp_path: 
     assert provider.query_instruction == _OFFICIAL_QUERY_INSTRUCTION
 
 
+def test_visrag_reuses_model_query_embedding_and_batches_crops(tmp_path: Path) -> None:
+    from PIL import Image
+
+    torch = pytest.importorskip("torch")
+    image_path = tmp_path / "image.png"
+    Image.new("RGB", (100, 100), "white").save(image_path)
+    provider = VisRAGDirectRetrieverProvider(
+        {"model_path": str(tmp_path), "batch_size": 2, "precision": "float32"}
+    )
+
+    class FakeModel:
+        def __init__(self) -> None:
+            self.query_calls = 0
+            self.crop_batch_sizes: list[int] = []
+
+        def __call__(self, *, text, image, tokenizer):
+            assert tokenizer is not None
+            batch = len(text)
+            if image == [None]:
+                self.query_calls += 1
+            else:
+                self.crop_batch_sizes.append(batch)
+            hidden = torch.tensor([[[1.0, 0.0], [0.0, 1.0]]] * batch)
+            mask = torch.tensor([[1, 1]] * batch)
+            return SimpleNamespace(last_hidden_state=hidden, attention_mask=mask)
+
+    model = FakeModel()
+    provider._model = model
+    provider._tokenizer = object()
+    provider._torch = torch
+    first = provider.score_regions(
+        image_path,
+        "Where are the aircraft?",
+        [(0, 0, 20, 20), (20, 0, 40, 20), (40, 0, 60, 20), (60, 0, 80, 20), (80, 0, 100, 20)],
+    )
+    second = provider.score_regions(
+        image_path,
+        "Where are the aircraft?",
+        [(0, 20, 20, 40), (20, 20, 40, 40)],
+    )
+    assert model.query_calls == 1
+    assert model.crop_batch_sizes == [2, 2, 1, 2]
+    assert first.metadata["query_cache_hit"] is False
+    assert first.metadata["crop_batch_count"] == 3
+    assert second.metadata["query_cache_hit"] is True
+    assert second.metadata["crop_batch_count"] == 1
+    assert provider.is_loaded is True
+    provider.close()
+    assert provider.is_loaded is False
+    assert provider._query_cache == {}
+
+
 def test_visrag_sidecar_is_lazy_and_worker_protocol_is_json_native(tmp_path: Path) -> None:
     provider = create_retriever_provider(
         "visrag",
@@ -361,6 +538,55 @@ def test_visrag_sidecar_is_lazy_and_worker_protocol_is_json_native(tmp_path: Pat
     )
     assert response["result"]["scores"] == [0.25]
     assert json.loads(json.dumps(response))["status"] == "ok"
+
+
+def test_visrag_sidecar_process_is_reused_until_close(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    worker = tmp_path / "worker.py"
+    worker.write_text("", encoding="utf-8")
+    popen_calls: list[list[str]] = []
+
+    class FakeProcess:
+        def __init__(self) -> None:
+            self.stdin = io.StringIO()
+            self.stdout = io.StringIO()
+            self.returncode = None
+
+        def poll(self) -> None:
+            return None
+
+        def terminate(self) -> None:
+            self.returncode = 0
+
+        def wait(self, timeout: int) -> int:
+            assert timeout == 10
+            return 0
+
+    def fake_popen(command, **kwargs):
+        del kwargs
+        popen_calls.append(list(command))
+        return FakeProcess()
+
+    monkeypatch.setattr(
+        "sat_rs_vlm.integrations.retrievers.visrag.subprocess.Popen",
+        fake_popen,
+    )
+    client = _VisRAGSidecarClient(
+        {
+            "model_path": str(tmp_path),
+            "worker_script": str(worker),
+            "stderr_log": str(tmp_path / "sidecar.log"),
+        }
+    )
+    client.start()
+    process = client.process
+    client.start()
+    assert client.process is process
+    assert len(popen_calls) == 1
+    client.close()
+    assert client.process is None
 
 
 def test_retrieval_cache_key_covers_query_bbox_model_and_parameters(tmp_path: Path) -> None:

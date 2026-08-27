@@ -11,12 +11,30 @@ from .geometry import bbox_iou
 from .types import LocatorError, SearchRegion
 
 
-def softmax_probabilities(scores: Sequence[float], temperature: float) -> tuple[float, ...]:
+def standardized_logits(scores: Sequence[float], *, epsilon: float = 1e-8) -> tuple[float, ...]:
+    """Map one depth's fused scores to a stable softmax logit scale."""
+
+    values = tuple(float(score) for score in scores)
+    if not all(math.isfinite(value) for value in values):
+        raise LocatorError("beam scores must all be finite")
+    if not values:
+        return ()
+    mean = sum(values) / len(values)
+    variance = sum((value - mean) ** 2 for value in values) / len(values)
+    standard_deviation = math.sqrt(max(variance, 0.0))
+    if standard_deviation <= epsilon:
+        return (0.0,) * len(values)
+    return tuple((value - mean) / standard_deviation for value in values)
+
+
+def softmax_probabilities(logits: Sequence[float], temperature: float) -> tuple[float, ...]:
     if temperature <= 0.0:
         raise LocatorError("beam temperature must be positive")
-    if not scores:
+    if not logits:
         return ()
-    scaled = [float(score) / temperature for score in scores]
+    scaled = [float(logit) / temperature for logit in logits]
+    if not all(math.isfinite(value) for value in scaled):
+        raise LocatorError("beam logits must all be finite")
     maximum = max(scaled)
     exponentials = [math.exp(score - maximum) for score in scaled]
     denominator = sum(exponentials)
@@ -26,10 +44,12 @@ def softmax_probabilities(scores: Sequence[float], temperature: float) -> tuple[
 @dataclass(frozen=True)
 class BeamSelection:
     selected_indices: tuple[int, ...]
+    standardized_logits: tuple[float, ...]
     probabilities: tuple[float, ...]
     cumulative_probability: float
     redundancy_penalties: tuple[float, ...]
     effective_scores: tuple[float, ...]
+    entropy: float
 
 
 def adaptive_beam_select(
@@ -49,11 +69,13 @@ def adaptive_beam_select(
         raise LocatorError("max_beam must be positive")
     if redundancy_weight < 0.0:
         raise LocatorError("redundancy_weight must be non-negative")
-    probabilities = softmax_probabilities(scores, temperature)
+    logits = standardized_logits(scores)
+    probabilities = softmax_probabilities(logits, temperature)
     remaining = set(range(len(regions)))
     selected: list[int] = []
     penalties = [0.0] * len(regions)
-    effective = [float(score) for score in scores]
+    effective = list(logits)
+    logit_span = max(max(logits) - min(logits), 1.0)
     cumulative = 0.0
     while remaining and len(selected) < min(max_beam, len(regions)):
         for index in remaining:
@@ -64,9 +86,9 @@ def adaptive_beam_select(
                 ),
                 default=0.0,
             )
-            penalties[index] = redundancy_weight * overlap
-            effective[index] = float(scores[index]) - penalties[index]
-        chosen = max(remaining, key=lambda index: (effective[index], scores[index], -index))
+            penalties[index] = redundancy_weight * overlap * logit_span
+            effective[index] = logits[index] - penalties[index]
+        chosen = max(remaining, key=lambda index: (effective[index], logits[index], -index))
         selected.append(chosen)
         remaining.remove(chosen)
         cumulative += probabilities[chosen]
@@ -74,10 +96,16 @@ def adaptive_beam_select(
             break
     return BeamSelection(
         selected_indices=tuple(selected),
+        standardized_logits=logits,
         probabilities=probabilities,
         cumulative_probability=cumulative,
         redundancy_penalties=tuple(penalties),
         effective_scores=tuple(effective),
+        entropy=-sum(
+            probability * math.log(probability)
+            for probability in probabilities
+            if probability > 0.0
+        ),
     )
 
 
@@ -85,10 +113,8 @@ def adaptive_beam_select(
 class StopPolicyConfig:
     target_view_size: int = 1280
     max_depth: int = 3
-    min_score_gain: float = 0.01
     max_regions: int = 64
-    max_area_ratio: float = 3.0
-    posterior_stop_threshold: float = 0.985
+    max_processed_area_ratio: float = 3.0
 
     @classmethod
     def from_mapping(cls, config: Mapping[str, Any] | None) -> StopPolicyConfig:
@@ -96,19 +122,18 @@ class StopPolicyConfig:
         result = cls(
             target_view_size=int(values.get("target_view_size", cls.target_view_size)),
             max_depth=int(values.get("max_depth", cls.max_depth)),
-            min_score_gain=float(values.get("min_score_gain", cls.min_score_gain)),
             max_regions=int(values.get("max_regions", cls.max_regions)),
-            max_area_ratio=float(values.get("max_area_ratio", cls.max_area_ratio)),
-            posterior_stop_threshold=float(
-                values.get("posterior_stop_threshold", cls.posterior_stop_threshold)
+            max_processed_area_ratio=float(
+                values.get(
+                    "max_processed_area_ratio",
+                    values.get("max_area_ratio", cls.max_processed_area_ratio),
+                )
             ),
         )
         if result.target_view_size < 1 or result.max_depth < 1 or result.max_regions < 1:
             raise LocatorError("stop-policy size, depth, and region limits must be positive")
-        if result.min_score_gain < 0.0 or result.max_area_ratio <= 0.0:
-            raise LocatorError("stop-policy gain/area limits are invalid")
-        if not 0.0 < result.posterior_stop_threshold <= 1.0:
-            raise LocatorError("posterior_stop_threshold must be in (0, 1]")
+        if result.max_processed_area_ratio <= 0.0:
+            raise LocatorError("stop-policy processed-area limit must be positive")
         return result
 
 
@@ -123,9 +148,7 @@ def evaluate_stop(
     config: StopPolicyConfig,
     *,
     evaluated_regions: int,
-    inspected_area_ratio: float,
-    score_gain: float | None,
-    posterior_max: float | None,
+    processed_area_ratio: float,
 ) -> StopDecision:
     width = region.core_xyxy[2] - region.core_xyxy[0]
     height = region.core_xyxy[3] - region.core_xyxy[1]
@@ -136,10 +159,6 @@ def evaluate_stop(
         reasons.append("max_depth")
     if evaluated_regions >= config.max_regions:
         reasons.append("max_regions")
-    if inspected_area_ratio >= config.max_area_ratio:
-        reasons.append("max_area_ratio")
-    if score_gain is not None and score_gain < config.min_score_gain:
-        reasons.append("min_score_gain")
-    if posterior_max is not None and posterior_max >= config.posterior_stop_threshold:
-        reasons.append("posterior_concentrated")
+    if processed_area_ratio >= config.max_processed_area_ratio:
+        reasons.append("max_processed_area_ratio")
     return StopDecision(stop=bool(reasons), reasons=tuple(reasons))

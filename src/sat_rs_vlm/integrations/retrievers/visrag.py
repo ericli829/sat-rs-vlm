@@ -237,6 +237,7 @@ class VisRAGDirectRetrieverProvider:
         missing = [index for index, score in enumerate(scores) if score is None]
         query_cache_hit = False
         peak_memory = None
+        crop_batch_count = 0
         if missing:
             self._load()
             assert self._torch is not None
@@ -247,6 +248,7 @@ class VisRAGDirectRetrieverProvider:
             with torch.inference_mode():
                 query_embedding, query_cache_hit = self._query_embedding(query)
                 for offset in range(0, len(missing), self.batch_size):
+                    crop_batch_count += 1
                     batch_indices = missing[offset : offset + self.batch_size]
                     batch_crops = [crops[index] for index in batch_indices]
                     output = self._model(
@@ -277,7 +279,9 @@ class VisRAGDirectRetrieverProvider:
                 "raw_scores": final_scores,
                 "regions_xyxy": boxes,
                 "batch_size": self.batch_size,
+                "crop_batch_count": crop_batch_count,
                 "query_cache_hit": query_cache_hit,
+                "query_cache_size": len(self._query_cache),
                 "score_cache_hits": cache_hits,
                 "model_load_ms": self._model_load_ms,
                 "device": self._resolved_device,

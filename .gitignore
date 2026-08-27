@@ -43,6 +43,7 @@ sat-rs-vlm-local-plugins/
 plugin_checkpoints/
 plugin_reports/
 reports/debug/multitask_loss_bias/
+artifacts/uhr_locator_sweeps/
 
 # Locally generated evaluation tier JSONL files. Historical files already
 # tracked under data/evaluation/tiers/ remain versioned and are not removed.

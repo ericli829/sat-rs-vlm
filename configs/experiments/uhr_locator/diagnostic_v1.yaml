@@ -1,0 +1,88 @@
+experiment_id: UHR_LOCATOR_DIAGNOSTIC_V1
+description: Small staged search-mechanics diagnostics; not formal benchmark tuning.
+max_samples: 5
+
+# Every family starts from E0. A preset changes only the parameter named by its
+# family, so the file is a staged diagnostic rather than a Cartesian sweep.
+base_overrides:
+  detector:
+    enabled: true
+    provider: lae_dino_lae1m
+  retriever:
+    enabled: true
+    provider: visrag
+  search:
+    grid_size: 3
+    halo_ratio: 0.15
+    target_view_size: 1280
+    max_depth: 3
+    temperature: 1.0
+    cumulative_mass: 0.85
+    max_beam: 3
+
+presets:
+  E0_baseline:
+    description: Post-correctness initial baseline; values are not tuned.
+    overrides: {}
+
+  H0_halo_005:
+    description: Small observation halo.
+    overrides: {search: {halo_ratio: 0.05}}
+  H1_halo_010:
+    description: Moderate observation halo.
+    overrides: {search: {halo_ratio: 0.10}}
+  H2_halo_020:
+    description: Broad observation halo.
+    overrides: {search: {halo_ratio: 0.20}}
+
+  T1_tile_1024_o15:
+    description: Tiled detector with 1024-pixel tiles and 15 percent overlap.
+    overrides:
+      detector:
+        provider: tiled
+        base_provider: lae_dino_lae1m
+        tiled: {tile_size: 1024, overlap_ratio: 0.15, global_nms_iou: 0.4}
+  T2_tile_1333_o15:
+    description: Tiled detector with 1333-pixel tiles and 15 percent overlap.
+    overrides:
+      detector:
+        provider: tiled
+        base_provider: lae_dino_lae1m
+        tiled: {tile_size: 1333, overlap_ratio: 0.15, global_nms_iou: 0.4}
+  T3_tile_1333_o25:
+    description: Tiled detector with broader overlap for boundary diagnostics.
+    overrides:
+      detector:
+        provider: tiled
+        base_provider: lae_dino_lae1m
+        tiled: {tile_size: 1333, overlap_ratio: 0.25, global_nms_iou: 0.4}
+
+  B1_narrow:
+    description: Narrow global beam after standardized logits.
+    overrides: {search: {temperature: 0.7, cumulative_mass: 0.70, max_beam: 2}}
+  B2_balanced:
+    description: Balanced global beam after standardized logits.
+    overrides: {search: {temperature: 1.0, cumulative_mass: 0.85, max_beam: 3}}
+  B3_recall:
+    description: Recall-oriented global beam after standardized logits.
+    overrides: {search: {temperature: 1.4, cumulative_mass: 0.95, max_beam: 5}}
+
+  Z1_view_1536:
+    description: Preserve context with an earlier zoom stop.
+    overrides: {search: {target_view_size: 1536, max_depth: 2}}
+  Z2_view_1280:
+    description: Baseline observation target.
+    overrides: {search: {target_view_size: 1280, max_depth: 3}}
+  Z3_view_1024:
+    description: Finer observation target.
+    overrides: {search: {target_view_size: 1024, max_depth: 3}}
+  Z4_view_768:
+    description: Deepest initial zoom diagnostic.
+    overrides: {search: {target_view_size: 768, max_depth: 3}}
+
+  F1_context_005:
+    description: Small final context expansion.
+    overrides: {fusion: {context_margin: 0.05}}
+  F2_context_015:
+    description: Broad final context expansion.
+    overrides: {fusion: {context_margin: 0.15}}

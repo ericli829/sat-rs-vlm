@@ -46,13 +46,33 @@ def create_locator(name: str, config: Mapping[str, Any]) -> LocatorProvider:
             from sat_rs_vlm.integrations.detectors.registry import create_proposal_provider
 
             detector_name = str(detector_section.get("provider", "mock"))
-            detector_provider = create_proposal_provider(
-                detector_name,
-                selected_provider_config(
+            if detector_name == "tiled":
+                base_name = str(detector_section.get("base_provider", "")).strip()
+                if not base_name or base_name == "tiled":
+                    raise LocatorError(
+                        "detector.provider=tiled requires a non-tiled detector.base_provider"
+                    )
+                tiled_values = detector_section.get("tiled", {})
+                if not isinstance(tiled_values, Mapping):
+                    raise LocatorError("detector.tiled must be a mapping")
+                detector_config = {
+                    **dict(tiled_values),
+                    "base_provider": base_name,
+                    "base_config": selected_provider_config(
+                        config,
+                        kind="detector",
+                        provider_name=base_name,
+                    ),
+                }
+            else:
+                detector_config = selected_provider_config(
                     config,
                     kind="detector",
                     provider_name=detector_name,
-                ),
+                )
+            detector_provider = create_proposal_provider(
+                detector_name,
+                detector_config,
             )
         if bool(retriever_section.get("enabled", True)):
             from sat_rs_vlm.integrations.retrievers.registry import (

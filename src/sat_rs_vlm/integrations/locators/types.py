@@ -78,7 +78,9 @@ class LocatorResult:
     task_spec: TaskSpec
     search_plan: SearchPlan
     search_trace: tuple[dict[str, Any], ...]
-    inspected_area_ratio: float
+    processed_area_ratio: float
+    selected_union_area_ratio: float
+    processed_union_area_ratio: float
     depth_reached: int
     latency_ms: dict[str, float]
     provider_provenance: dict[str, Any]
@@ -88,10 +90,22 @@ class LocatorResult:
     def __post_init__(self) -> None:
         if len(self.regions_xyxy) != len(self.scores):
             raise LocatorError("locator regions and scores must have equal lengths")
-        if not math.isfinite(self.inspected_area_ratio) or self.inspected_area_ratio < 0.0:
-            raise LocatorError("inspected_area_ratio must be finite and non-negative")
+        if not math.isfinite(self.processed_area_ratio) or self.processed_area_ratio < 0.0:
+            raise LocatorError("processed_area_ratio must be finite and non-negative")
+        for label, value in (
+            ("selected_union_area_ratio", self.selected_union_area_ratio),
+            ("processed_union_area_ratio", self.processed_union_area_ratio),
+        ):
+            if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+                raise LocatorError(f"{label} must be finite and between 0 and 1")
         if self.depth_reached < 0:
             raise LocatorError("depth_reached must be non-negative")
+
+    @property
+    def inspected_area_ratio(self) -> float:
+        """Deprecated compatibility alias for cumulative processed crop work."""
+
+        return self.processed_area_ratio
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -100,7 +114,10 @@ class LocatorResult:
             "task_spec": self.task_spec.to_dict(),
             "search_plan": self.search_plan.to_dict(),
             "search_trace": [dict(item) for item in self.search_trace],
-            "inspected_area_ratio": self.inspected_area_ratio,
+            "processed_area_ratio": self.processed_area_ratio,
+            "selected_union_area_ratio": self.selected_union_area_ratio,
+            "processed_union_area_ratio": self.processed_union_area_ratio,
+            "inspected_area_ratio": self.processed_area_ratio,
             "depth_reached": self.depth_reached,
             "latency_ms": dict(self.latency_ms),
             "provider_provenance": dict(self.provider_provenance),

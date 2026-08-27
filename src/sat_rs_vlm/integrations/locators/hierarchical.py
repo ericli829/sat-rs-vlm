@@ -19,7 +19,13 @@ from sat_rs_vlm.semantics import QueryParser, TaskSpec
 
 from .beam import StopPolicyConfig, adaptive_beam_select, evaluate_stop
 from .fusion import RegionFusion
-from .geometry import bbox_area, clamp_bbox, expand_with_halo, subdivide_core
+from .geometry import (
+    bbox_area,
+    clamp_bbox,
+    expand_with_halo,
+    rectangle_union_area,
+    subdivide_core,
+)
 from .router import TaskRouter
 from .scoring import (
     CompositeRegionScorer,
@@ -128,6 +134,9 @@ class HierarchicalLocator:
                     "provider": result.provider,
                     "model_id": result.model_id,
                     "latency_ms": result.latency_ms,
+                    "proposal_count": len(result.boxes_xyxy),
+                    "boxes_xyxy": [list(box) for box in result.boxes_xyxy],
+                    "scores": list(result.scores),
                     "metadata": dict(result.metadata),
                 }
             )
@@ -140,7 +149,13 @@ class HierarchicalLocator:
                 latency_ms=latency,
                 provider=self.detector_provider.provider_name,
                 model_id=str(getattr(self.detector_provider, "model_id", "unknown")),
-                metadata={"queries": sources, "coordinate_mode": "absolute_pixel_xyxy"},
+                metadata={
+                    "queries": sources,
+                    "coordinate_mode": "absolute_pixel_xyxy",
+                    "proposal_count": len(boxes),
+                    "boxes_xyxy": boxes,
+                    "scores": scores,
+                },
             ),
             latency,
         )
@@ -155,7 +170,7 @@ class HierarchicalLocator:
         proposals: ProposalResult | None,
         image_width: int,
         image_height: int,
-        parent_score: float,
+        parent_scores: Sequence[float],
         warnings: list[str],
     ) -> tuple[tuple[float, ...], tuple[dict[str, Any], ...], float, tuple[str, ...]]:
         batches: list[ScoreBatch] = []
@@ -198,7 +213,7 @@ class HierarchicalLocator:
         composite = self.composite_scorer.score(
             children,
             batches,
-            parent_score=parent_score,
+            parent_scores=parent_scores,
         )
         return (
             composite.scores,
@@ -237,7 +252,9 @@ class HierarchicalLocator:
                     "reason": plan.route,
                 },
             ),
-            inspected_area_ratio=bbox_area(box) / (image_width * image_height),
+            processed_area_ratio=bbox_area(box) / (image_width * image_height),
+            selected_union_area_ratio=bbox_area(box) / (image_width * image_height),
+            processed_union_area_ratio=bbox_area(box) / (image_width * image_height),
             depth_reached=0,
             latency_ms={
                 "parser": parser_latency,
@@ -302,20 +319,30 @@ class HierarchicalLocator:
         trace: list[dict[str, Any]] = []
         evaluated_regions = 0
         cumulative_inspected_area = 0.0
+        processed_views: list[BBox] = []
         image_area = float(image_width * image_height)
         retrieval_latency = 0.0
         search_started = time.perf_counter()
 
         while frontier:
-            next_frontier: list[SearchRegion] = []
+            child_count = self.search_config.grid_size**2
+            depth_candidate_count = len(frontier) * child_count
+            remaining_budget = self.stop_config.max_regions - evaluated_regions
+            if remaining_budget < depth_candidate_count:
+                for parent in frontier:
+                    parent.metadata["stop_reasons"] = [
+                        "max_regions_before_depth_expansion"
+                    ]
+                leaves.extend(frontier)
+                break
+
+            candidate_children: list[SearchRegion] = []
+            parent_scores: list[float] = []
             for parent in frontier:
-                remaining_budget = self.stop_config.max_regions - evaluated_regions
-                child_count = self.search_config.grid_size**2
-                if remaining_budget < child_count:
-                    parent.metadata["stop_reasons"] = ["max_regions_before_subdivision"]
-                    leaves.append(parent)
-                    continue
-                parent_boxes = subdivide_core(parent.core_xyxy, self.search_config.grid_size)
+                parent_boxes = subdivide_core(
+                    parent.core_xyxy,
+                    self.search_config.grid_size,
+                )
                 children = [
                     SearchRegion(
                         region_id=f"{parent.region_id}.{index}",
@@ -328,90 +355,102 @@ class HierarchicalLocator:
                             image_width,
                             image_height,
                         ),
-                        metadata={"coordinate_mode": "absolute_original_pixel_xyxy"},
+                        metadata={
+                            "coordinate_mode": "absolute_original_pixel_xyxy",
+                            "parent_score": parent.score,
+                        },
                     )
                     for index, box in enumerate(parent_boxes)
                 ]
                 parent.children.extend(child.region_id for child in children)
-                evaluated_regions += len(children)
-                cumulative_inspected_area += sum(
-                    bbox_area(child.view_xyxy) for child in children
+                candidate_children.extend(children)
+                parent_scores.extend([parent.score] * len(children))
+
+            evaluated_regions += len(candidate_children)
+            processed_views.extend(child.view_xyxy for child in candidate_children)
+            cumulative_inspected_area += sum(
+                bbox_area(child.view_xyxy) for child in candidate_children
+            )
+            processed_ratio = cumulative_inspected_area / image_area
+            scores, components, batch_latency, active_scorers = self._score_children(
+                image_path=resolved_image,
+                task=task,
+                plan=plan,
+                children=candidate_children,
+                proposals=proposals,
+                image_width=image_width,
+                image_height=image_height,
+                parent_scores=parent_scores,
+                warnings=warnings,
+            )
+            retrieval_latency += batch_latency
+            for child, score, detail in zip(
+                candidate_children,
+                scores,
+                components,
+                strict=True,
+            ):
+                child.score = score
+                child.score_components = detail
+
+            selection = adaptive_beam_select(
+                candidate_children,
+                scores,
+                temperature=self.search_config.temperature,
+                cumulative_mass=self.search_config.cumulative_mass,
+                max_beam=self.search_config.max_beam,
+                redundancy_weight=self.composite_scorer.weights["redundancy"],
+            )
+            selected_set = set(selection.selected_indices)
+            next_frontier: list[SearchRegion] = []
+            selected_count = len(selected_set)
+            for index, child in enumerate(candidate_children):
+                decision = evaluate_stop(
+                    child,
+                    self.stop_config,
+                    evaluated_regions=evaluated_regions,
+                    processed_area_ratio=processed_ratio,
                 )
-                inspected_ratio = cumulative_inspected_area / image_area
-                scores, components, batch_latency, active_scorers = self._score_children(
-                    image_path=resolved_image,
-                    task=task,
-                    plan=plan,
-                    children=children,
-                    proposals=proposals,
-                    image_width=image_width,
-                    image_height=image_height,
-                    parent_score=parent.score,
-                    warnings=warnings,
+                selected = index in selected_set
+                child.metadata.update(
+                    {
+                        "selected": selected,
+                        "selection_probability": selection.probabilities[index],
+                        "beam_standardized_logit": selection.standardized_logits[index],
+                        "selection_effective_logit": selection.effective_scores[index],
+                        "redundancy_penalty": selection.redundancy_penalties[index],
+                        "stop_reasons": list(decision.reasons) if selected else [],
+                    }
                 )
-                retrieval_latency += batch_latency
-                for child, score, detail in zip(children, scores, components, strict=True):
-                    child.score = score
-                    child.score_components = detail
-                selection = adaptive_beam_select(
-                    children,
-                    scores,
-                    temperature=self.search_config.temperature,
-                    cumulative_mass=self.search_config.cumulative_mass,
-                    max_beam=self.search_config.max_beam,
-                    redundancy_weight=self.composite_scorer.weights["redundancy"],
+                trace.append(
+                    {
+                        "region_id": child.region_id,
+                        "parent_id": child.parent_id,
+                        "depth": child.depth,
+                        "core_xyxy": list(child.core_xyxy),
+                        "view_xyxy": list(child.view_xyxy),
+                        "fused_score": child.score,
+                        "beam_standardized_logit": selection.standardized_logits[index],
+                        "score_components": child.score_components,
+                        "active_scorers": list(active_scorers),
+                        "selection_probability": selection.probabilities[index],
+                        "selection_effective_logit": selection.effective_scores[index],
+                        "redundancy_penalty": selection.redundancy_penalties[index],
+                        "selected": selected,
+                        "stop_reasons": list(decision.reasons) if selected else [],
+                        "depth_cumulative_mass": selection.cumulative_probability,
+                        "depth_candidate_count": len(candidate_children),
+                        "depth_selected_count": selected_count,
+                        "beam_entropy": selection.entropy,
+                        "processed_area_ratio": processed_ratio,
+                    }
                 )
-                selected_set = set(selection.selected_indices)
-                posterior_max = max(selection.probabilities)
-                for index, child in enumerate(children):
-                    score_gain = child.score - parent.score if parent.depth > 0 else None
-                    decision = evaluate_stop(
-                        child,
-                        self.stop_config,
-                        evaluated_regions=evaluated_regions,
-                        inspected_area_ratio=inspected_ratio,
-                        score_gain=score_gain,
-                        posterior_max=(
-                            posterior_max
-                            if index in selected_set
-                            and selection.probabilities[index] == posterior_max
-                            else None
-                        ),
-                    )
-                    selected = index in selected_set
-                    child.metadata.update(
-                        {
-                            "selected": selected,
-                            "selection_probability": selection.probabilities[index],
-                            "selection_effective_score": selection.effective_scores[index],
-                            "redundancy_penalty": selection.redundancy_penalties[index],
-                            "stop_reasons": list(decision.reasons) if selected else [],
-                        }
-                    )
-                    trace.append(
-                        {
-                            "region_id": child.region_id,
-                            "parent_id": child.parent_id,
-                            "depth": child.depth,
-                            "core_xyxy": list(child.core_xyxy),
-                            "view_xyxy": list(child.view_xyxy),
-                            "fused_score": child.score,
-                            "score_components": child.score_components,
-                            "active_scorers": list(active_scorers),
-                            "selection_probability": selection.probabilities[index],
-                            "selection_effective_score": selection.effective_scores[index],
-                            "redundancy_penalty": selection.redundancy_penalties[index],
-                            "selected": selected,
-                            "stop_reasons": list(decision.reasons) if selected else [],
-                            "sibling_cumulative_mass": selection.cumulative_probability,
-                        }
-                    )
-                    if not selected:
-                        continue
-                    if decision.stop:
-                        leaves.append(child)
-                    else:
-                        next_frontier.append(child)
+                if not selected:
+                    continue
+                if decision.stop:
+                    leaves.append(child)
+                else:
+                    next_frontier.append(child)
             frontier = next_frontier
         if not leaves:
             leaves = [root]
@@ -420,6 +459,15 @@ class HierarchicalLocator:
         fusion_started = time.perf_counter()
         fused = self.fusion.fuse(leaves, image_width, image_height)
         fusion_latency = (time.perf_counter() - fusion_started) * 1000.0
+        processed_area_ratio = cumulative_inspected_area / image_area
+        processed_union_area_ratio = (
+            rectangle_union_area(processed_views) / image_area if processed_views else 0.0
+        )
+        selected_union_area_ratio = (
+            rectangle_union_area(region.view_xyxy for region in fused) / image_area
+            if fused
+            else 0.0
+        )
         total_latency = (time.perf_counter() - started) * 1000.0
         provenance: dict[str, Any] = {
             "locator": self.provider_name,
@@ -448,7 +496,9 @@ class HierarchicalLocator:
             task_spec=task,
             search_plan=plan,
             search_trace=tuple(trace),
-            inspected_area_ratio=cumulative_inspected_area / image_area,
+            processed_area_ratio=processed_area_ratio,
+            selected_union_area_ratio=min(selected_union_area_ratio, 1.0),
+            processed_union_area_ratio=min(processed_union_area_ratio, 1.0),
             depth_reached=max((item["depth"] for item in trace), default=0),
             latency_ms={
                 "parser": parser_latency,

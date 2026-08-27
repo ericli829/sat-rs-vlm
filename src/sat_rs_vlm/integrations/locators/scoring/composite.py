@@ -1,4 +1,4 @@
-"""Locally normalized, auditable multi-source score composition."""
+"""Depth-pool-normalized, auditable multi-source score composition."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from ..types import LocatorError, SearchRegion
 from .protocol import ScoreBatch
 
 
-def sibling_normalize(scores: Sequence[float]) -> tuple[float, ...]:
+def depth_pool_normalize(scores: Sequence[float]) -> tuple[float, ...]:
     values = tuple(float(score) for score in scores)
     if not values:
         return ()
@@ -47,9 +47,11 @@ class CompositeRegionScorer:
         regions: Sequence[SearchRegion],
         batches: Sequence[ScoreBatch],
         *,
-        parent_score: float,
+        parent_scores: Sequence[float],
     ) -> CompositeScoreResult:
         count = len(regions)
+        if len(parent_scores) != count:
+            raise LocatorError("parent score length mismatch")
         for batch in batches:
             if len(batch.scores) != count:
                 raise LocatorError(f"{batch.name} scorer output length mismatch")
@@ -59,23 +61,26 @@ class CompositeRegionScorer:
             if batch.available and self.weights.get(batch.name, 0.0) > 0.0
         }
         normalized = {
-            name: sibling_normalize(batch.scores) for name, batch in available.items()
+            name: depth_pool_normalize(batch.scores) for name, batch in available.items()
         }
         active_weights = sum(self.weights[name] for name in available)
         if self.weights["parent"] > 0.0:
             active_weights += self.weights["parent"]
         if active_weights <= 0.0:
             active_weights = 1.0
+        normalized_parent_scores = depth_pool_normalize(parent_scores)
 
         scores: list[float] = []
         details: list[dict[str, Any]] = []
         for index in range(count):
-            weighted_sum = self.weights["parent"] * float(parent_score)
+            parent_score = float(parent_scores[index])
+            normalized_parent = normalized_parent_scores[index]
+            weighted_sum = self.weights["parent"] * normalized_parent
             component_detail: dict[str, Any] = {
                 "parent": {
                     "available": self.weights["parent"] > 0.0,
-                    "raw": float(parent_score),
-                    "normalized": float(parent_score),
+                    "raw": parent_score,
+                    "normalized": normalized_parent,
                     "weight": self.weights["parent"],
                 }
             }
@@ -106,3 +111,7 @@ class CompositeRegionScorer:
             components=tuple(details),
             active_scorers=tuple(sorted(available)),
         )
+
+
+# Compatibility for external callers from the original per-parent implementation.
+sibling_normalize = depth_pool_normalize

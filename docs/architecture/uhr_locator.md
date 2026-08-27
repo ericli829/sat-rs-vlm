@@ -11,12 +11,14 @@ Question -> QueryParser -> TaskSpec -> TaskRouter -> SearchPlan
                                               |
                          HierarchicalLocator -+
                            |       |       |
-             ProposalProvider  Retriever  deterministic spatial prior
-             (object evidence) (question)        (geometry)
+        TiledProposalProvider  Retriever  deterministic spatial prior
+              |                (question)        (geometry)
+        ProposalProvider
+        (object evidence)
                            \       |       /
                            CompositeScorer
                                   |
-                 local normalization + adaptive beam
+           depth-pool normalization + global adaptive beam
                                   |
                     Core+Halo refinement and stop policy
                                   |
@@ -48,9 +50,13 @@ compatibility wrappers around this common layer.
 Explicit bounding boxes and global-scene questions bypass hierarchical search.
 
 `LocatorResult` returns absolute original-image `xyxy` regions, scores,
-`TaskSpec`, `SearchPlan`, the complete search trace, cumulative inspected-area
-ratio, maximum depth, latency, provider/model provenance, warnings, and final
-region details.
+`TaskSpec`, `SearchPlan`, the complete search trace, three explicit area
+metrics, maximum depth, latency, provider/model provenance, warnings, and final
+region details. `processed_area_ratio` is cumulative scored-view work and may
+exceed one. `selected_union_area_ratio` is the union of final ROIs and is always
+in `[0, 1]`; `processed_union_area_ratio` is the union footprint of every scored
+view. `inspected_area_ratio` remains a deprecated JSON/property alias for
+`processed_area_ratio` only.
 
 ## Providers and scoring
 
@@ -66,6 +72,15 @@ score(R)       = sum(confidence(B_i) * coverage(B_i, R))
 This preserves evidence for objects crossing grid boundaries. Existing LAE-DINO
 and Grounding DINO providers are reused through their registry; the Locator does
 not import either implementation.
+
+For ultra-high-resolution images, a whole-image detector resize can erase tiny
+objects before proposal generation. `TiledProposalProvider` is therefore a
+generic wrapper around any proposal provider. It crops configurable overlapping
+tiles, calls an unaware base provider, converts tile-local boxes back to absolute
+original-image coordinates, and performs query-local global NMS. Its model/cache
+identity includes tile size, overlap, NMS threshold, and top-K. Metadata retains
+tile boundaries, local/global raw proposals, deduplicated proposals, kept raw
+indices, and base/wrapper latency. Per-tile counts must never be added directly.
 
 `RetrieverProvider` answers *which crop is relevant to the complete question*.
 It must return one finite score per input region in the same order. The current
@@ -91,7 +106,7 @@ w_detector * detector + w_retrieval * retrieval + w_spatial * spatial
 ```
 
 Unavailable components are omitted and the active positive weights are
-renormalized. Raw and sibling-normalized component values remain in each trace
+renormalized. Raw and depth-pool-normalized component values remain in each trace
 entry.
 
 ## Core + Halo and hierarchical search
@@ -101,15 +116,30 @@ observation `view_xyxy`. The view expands the core by `halo_ratio` and clamps it
 to image bounds. Every coordinate crossing a module boundary is an absolute
 original-image pixel `xyxy`; crop-local and resized coordinates are not exposed.
 
-Each parent is divided by configurable `grid_size` (3 by default). Scores are
-normalized only among siblings. A temperature softmax is sorted and the smallest
-number of children reaching `cumulative_mass` is selected, bounded by
-`1 <= K <= max_beam`; an overlap penalty encourages diversity. Raw VisRAG scores
-from different depths are therefore never compared as a single global ranking.
+At each depth, every current parent is divided by configurable `grid_size` (3 by
+default). All children from all parents form one candidate pool and are scored
+in one batch where possible. Component normalization and adaptive selection are
+global within that depth, while `parent_id` and child lists preserve the tree.
+Consequently `max_beam` caps the entire next frontier, not each parent.
 
-Refinement can stop on target view size, maximum depth, crop budget, cumulative
-area budget, insufficient score gain, or concentrated posterior. These values
-are initial engineering defaults only, not tuned hyperparameters.
+Fused scores are standardized within the depth pool before softmax:
+
+```text
+z_i = (score_i - mean(score)) / max(std(score), epsilon)
+p_i = softmax(z_i / temperature)
+```
+
+Equal scores yield uniform finite probabilities. The smallest selection reaching
+`cumulative_mass` is retained, bounded by `1 <= K <= max_beam`; an overlap
+penalty encourages diversity. Trace rows retain the raw fused score,
+standardized logit, probability, effective logit, entropy, and selected K. Raw
+scores from different depths are not treated as calibrated cross-level values.
+
+Refinement stops only on target view size, maximum depth, maximum evaluated
+regions, or cumulative processed-area budget. Posterior concentration controls
+beam width rather than stopping a promising branch. Raw parent/child score gain
+is intentionally excluded because independently normalized depths are not
+comparable. These are diagnostic defaults, not tuned hyperparameters.
 
 ## Multi-ROI fusion
 
@@ -164,6 +194,21 @@ $env:LAE_DINO_PYTHON = 'C:\path\lae-python.exe'
 python scripts/locator/run_uhr_locator.py --config configs/locator/uhr_hierarchical.yaml --image C:\path\image.png --question "How many aircraft are visible?" --detector-provider lae_dino_lae1m --disable-retriever
 ```
 
+For UHR tiny-object work, select the tiled wrapper through configuration:
+
+```yaml
+detector:
+  enabled: true
+  provider: tiled
+  base_provider: lae_dino_lae1m
+  tiled:
+    tile_size: 1333
+    overlap_ratio: 0.15
+    global_nms_iou: 0.4
+```
+
+The values above are a diagnostic preset, not an optimum.
+
 VisRAG-only:
 
 ```powershell
@@ -203,6 +248,6 @@ detector/retrieval/spatial/fused scores, selection flag, latency, and provenance
   XLRS-Bench or MME-RealWorld-RS.
 - Object-object relation anchoring and cross-crop counting deduplication are
   reserved for a future planner/consumer.
-- The inspected-area ratio measures cumulative crop work and may exceed 1.0 when
-  overlapping halo views or multiple depths are inspected.
+- `processed_area_ratio` measures cumulative crop work and may exceed 1.0;
+  selected and processed union footprints remain bounded by one.
 - The framework produces Multi-ROI crops and trace data, not final VQA answers.

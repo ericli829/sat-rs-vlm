@@ -10,6 +10,7 @@ from .protocol import ProposalError, ProposalProvider
 
 PROVIDER_NAMES = (
     "mock",
+    "tiled",
     "grounding_dino",
     "lae_dino_lae1m",
     "lae_dino_dior",
@@ -26,6 +27,25 @@ def create_proposal_provider(name: str, config: Mapping[str, Any]) -> ProposalPr
         from .mock import MockProposalProvider
 
         return MockProposalProvider(normalized_config)
+    if provider_name == "tiled":
+        from .tiled import TiledProposalProvider
+
+        base_provider_name = str(normalized_config.get("base_provider", "")).strip()
+        if not base_provider_name or base_provider_name == "tiled":
+            raise ProposalError("tiled detector requires a non-tiled base_provider")
+        base_config = normalized_config.get("base_config", {})
+        if not isinstance(base_config, Mapping):
+            raise ProposalError("tiled detector base_config must be a mapping")
+        base_provider = create_proposal_provider(base_provider_name, base_config)
+        try:
+            return TiledProposalProvider(
+                base_provider,
+                normalized_config,
+                base_provider_name=base_provider_name,
+            )
+        except Exception:
+            base_provider.close()
+            raise
     if provider_name == "grounding_dino":
         from .grounding_dino import GroundingDinoProvider
 
