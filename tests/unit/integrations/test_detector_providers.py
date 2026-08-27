@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import builtins
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
 import pytest
+from scripts.integrations import lae_dino_worker
 from scripts.integrations import precompute_vlm_fo1_proposals as precompute
 from scripts.integrations.lae_dino_worker import (
     _extract_predictions,
@@ -14,6 +16,7 @@ from scripts.integrations.lae_dino_worker import (
 )
 from scripts.integrations.vlm_fo1_worker import validate_request
 
+from sat_rs_vlm.integrations.detectors import protocol as detector_protocol
 from sat_rs_vlm.integrations.detectors.cache import ProposalCache
 from sat_rs_vlm.integrations.detectors.config import expand_config_value, resolve_config_path
 from sat_rs_vlm.integrations.detectors.grounding_dino import GroundingDinoProvider, _nms
@@ -425,6 +428,31 @@ def test_lae_worker_applies_nms_before_final_top_k(tmp_path: Path) -> None:
         inference_detector,
     )
     assert response["bbox_scores"] == [0.9, 0.7]
+
+
+def test_lae_worker_proposal_path_is_compatible_with_python39_zip(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from PIL import Image
+
+    image_path = tmp_path / "image.png"
+    Image.new("RGB", (20, 20), color="white").save(image_path)
+
+    def legacy_zip(*iterables):
+        """Model Python 3.9's zip, which rejects the strict keyword."""
+
+        return builtins.zip(*iterables)  # noqa: B905 - deliberately models Python 3.9
+
+    monkeypatch.setattr(lae_dino_worker, "zip", legacy_zip, raising=False)
+    monkeypatch.setattr(detector_protocol, "zip", legacy_zip, raising=False)
+    response = lae_dino_worker._predict(
+        object(),
+        {"id": "py39", "image": str(image_path), "target_phrase": "airplanes"},
+        SimpleNamespace(score_threshold=0.3, top_k=10, nms_threshold=None),
+        lambda *_args, **_kwargs: [[[0.0, 0.0, 5.0, 5.0, 0.9]]],
+    )
+    assert response["bbox_scores"] == [0.9]
 
 
 def test_lae_config_patch_sets_absolute_local_bert_path_without_disk_write(tmp_path: Path) -> None:

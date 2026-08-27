@@ -21,7 +21,7 @@ class ProposalProvider(Protocol):
 
     provider_name: str
 
-    def predict(self, image_path: Path, target_phrase: str) -> "ProposalResult":
+    def predict(self, image_path: Path, target_phrase: str) -> ProposalResult:
         """Return absolute pixel ``xyxy`` proposals for one image/query."""
 
     def close(self) -> None:
@@ -157,11 +157,16 @@ def canonicalize_proposals(
 
     stats = {"invalid_count": 0, "reordered_count": 0, "clamped_count": 0}
     valid: list[tuple[float, list[float], int]] = []
-    for index, (box, score) in enumerate(zip(raw_boxes, raw_scores, strict=True)):
+    # This helper is imported by the Python 3.9 LAE sidecar. Length equality is
+    # validated above, so Python 3.10's zip(strict=...) is neither needed nor
+    # compatible with that isolated runtime.
+    for index, (box, score) in enumerate(
+        zip(raw_boxes, raw_scores)  # noqa: B905 - Python 3.9 LAE sidecar
+    ):
         try:
             values = [float(value) for value in box]
             score_value = float(score)
-        except (TypeError, ValueError) as exc:
+        except (TypeError, ValueError):
             stats["invalid_count"] += 1
             continue
         if len(values) != 4 or not all(math.isfinite(value) for value in values):

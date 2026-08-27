@@ -225,9 +225,15 @@ def _predict(
             custom_entities=True,
         )
     boxes, scores = _extract_predictions(result)
+    if len(boxes) != len(scores):
+        raise ProposalError(
+            f"LAE-DINO boxes/scores length mismatch: {len(boxes)} != {len(scores)}"
+        )
     filtered = [
         (box, score)
-        for box, score in zip(boxes, scores, strict=True)
+        # The isolated official LAE runtime uses Python 3.9.  Length equality
+        # is checked above instead of relying on Python 3.10's zip(strict=...).
+        for box, score in zip(boxes, scores)  # noqa: B905 - Python 3.9 sidecar
         if float(score) >= args.score_threshold
     ]
     boxes = [item[0] for item in filtered]
