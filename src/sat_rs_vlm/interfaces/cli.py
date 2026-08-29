@@ -13,8 +13,10 @@ import typer
 from sat_rs_vlm.application.inference_service import InferenceService
 from sat_rs_vlm.domain.entities import RemoteSensingInput
 from sat_rs_vlm.infrastructure.config import load_config
+from sat_rs_vlm.taskgraph.cli import app as taskgraph_app
 
 app = typer.Typer(help="sat-rs-vlm command line interface")
+app.add_typer(taskgraph_app, name="taskgraph")
 
 
 def _jsonable(value: Any) -> dict[str, Any]:

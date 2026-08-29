@@ -1,0 +1,26 @@
+{
+  "count-demo": {
+    "version": "taskgraph-v1.1",
+    "question": "How many ships are there?",
+    "question_type": "MULTIPLE_CHOICE_SINGLE",
+    "choices": ["A 5", "B 6", "C 7", "D 8"],
+    "inputs": {"image0": {"type": "image", "uri_or_key": "dataset:image0"}},
+    "intent": "SIMPLE_COUNT",
+    "nodes": [
+      {
+        "id": "n1",
+        "op": "COUNT",
+        "inputs": {"image": "$image0"},
+        "params": {
+          "target": {"category": "ship", "attributes": {}},
+          "entire": true
+        }
+      }
+    ],
+    "final": {
+      "sources": ["$n1"],
+      "question": "Which option matches this count?",
+      "answer_type": "CHOICE_SINGLE"
+    }
+  }
+}

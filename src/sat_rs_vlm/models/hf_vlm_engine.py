@@ -167,6 +167,18 @@ class HuggingFaceVLMEngine:
             },
         )
 
+    def generate_text(self, prompt: str, image_paths: list[str]) -> str:
+        """Generate from arbitrary multi-image or text-only input.
+
+        This public boundary lets higher-level runtimes reuse the existing Qwen
+        processor/model/generation stack without constructing another transformers
+        loader.  An empty image list is intentionally supported for authoritative
+        structured results such as detector counts.
+        """
+
+        images = [self._open_image(path) for path in image_paths]
+        return self._generate(prompt=prompt, images=images)
+
     def _resolve_device(self, device: str) -> str:
         """解析运行设备。
 

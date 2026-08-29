@@ -1,0 +1,63 @@
+dataset_policy:
+  VRSBench:
+    caption: DIRECT_VLM
+    vqa: DIRECT_VLM
+    count: DIRECT_DETECTION
+    default: DIRECT_VLM
+  LEVIR_CC:
+    default: DIRECT_VLM
+  MME_RealWorld_RS:
+    default: TASKGRAPH_UHR
+  XLRS_Bench:
+    default: TASKGRAPH_UHR
+
+providers:
+  detection:
+    kind: tiled
+    tile_size: 1333
+    overlap_ratio: 0.15
+    global_nms_iou: 0.4
+    base_provider: lae_dino_lae1m
+    base_config:
+      source_root: ${LAE_DINO_SOURCE_ROOT}
+      config_path: ${LAE_DINO_CONFIG_LAE1M}
+      checkpoint: ${LAE_DINO_CHECKPOINT_LAE1M}
+      bert_root: ${LAE_DINO_BERT_ROOT}
+      worker_python: ${LAE_DINO_PYTHON}
+  semantic_2b:
+    kind: qwen3_vl
+    backend: huggingface
+    model_id: ${QWEN3VL_2B_MODEL_DIR}
+    device: auto
+    dtype: auto
+    local_files_only: true
+    max_new_tokens: 128
+  route_4b:
+    kind: qwen3_vl
+    backend: huggingface
+    model_id: ${QWEN3VL_4B_MODEL_DIR}
+    device: auto
+    dtype: bfloat16
+    local_files_only: true
+    max_new_tokens: 192
+  choice:
+    kind: qwen3_vl
+    backend: huggingface
+    model_id: ${QWEN3VL_2B_MODEL_DIR}
+    device: auto
+    dtype: auto
+    local_files_only: true
+    max_new_tokens: 32
+  region_retriever:
+    kind: uhr_locator
+    # The remaining keys follow configs/locator/uhr_hierarchical.yaml.
+    parser:
+      ontology_path: configs/eval/semantic/remote_sensing_ontology.json
+    retriever:
+      enabled: false
+    detector:
+      enabled: false
+
+semantic_region_categories:
+  - harbor
+  - industrial area

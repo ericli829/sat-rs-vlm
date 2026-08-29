@@ -1,0 +1,44 @@
+dataset_policy:
+  VRSBench:
+    caption: DIRECT_VLM
+    vqa: DIRECT_VLM
+    count: DIRECT_DETECTION
+    detection: DIRECT_DETECTION
+    default: DIRECT_VLM
+  LEVIR_CC:
+    default: DIRECT_VLM
+  MME_RealWorld_RS:
+    default: TASKGRAPH_UHR
+  XLRS_Bench:
+    default: TASKGRAPH_UHR
+
+providers:
+  planner:
+    kind: fixture
+    fixture_file: tests/fixtures/taskgraph/planner_fixtures.json
+  detection:
+    kind: fake
+    boxes:
+      - [0.0, 0.0, 1.0, 1.0]
+      - [1.0, 0.0, 2.0, 1.0]
+      - [2.0, 0.0, 3.0, 1.0]
+      - [3.0, 0.0, 4.0, 1.0]
+      - [4.0, 0.0, 5.0, 1.0]
+      - [5.0, 0.0, 6.0, 1.0]
+      - [6.0, 0.0, 7.0, 1.0]
+  semantic_2b:
+    kind: fake
+    default: A
+  route_4b:
+    kind: fake
+    default: A
+  choice:
+    kind: fake
+    default: A
+  region_retriever:
+    kind: fake
+    candidates: []
+
+semantic_region_categories:
+  - harbor
+  - industrial area
