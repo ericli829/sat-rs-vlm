@@ -8,7 +8,7 @@ import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from PIL import Image
 
@@ -19,12 +19,37 @@ from sat_rs_vlm.integrations.retrievers.protocol import RetrieverProvider
 from sat_rs_vlm.models.hf_vlm_engine import HuggingFaceVLMEngine
 
 from .runtime_types import (
+    BBox,
     Entity,
     EntitySet,
     ImageRef,
     Region,
+    RuntimeObject,
 )
 from .schema import TargetSpec, TaskGraph
+
+
+def _bbox_contains(
+    outer: Sequence[float], inner: Sequence[float], *, tolerance: float = 1e-6
+) -> bool:
+    return (
+        float(inner[0]) >= float(outer[0]) - tolerance
+        and float(inner[1]) >= float(outer[1]) - tolerance
+        and float(inner[2]) <= float(outer[2]) + tolerance
+        and float(inner[3]) <= float(outer[3]) + tolerance
+    )
+
+
+def _bbox_intersection(
+    left: Sequence[float], right: Sequence[float]
+) -> tuple[float, float, float, float] | None:
+    box = (
+        max(float(left[0]), float(right[0])),
+        max(float(left[1]), float(right[1])),
+        min(float(left[2]), float(right[2])),
+        min(float(left[3]), float(right[3])),
+    )
+    return box if box[0] < box[2] and box[1] < box[3] else None
 
 
 @dataclass(frozen=True)
@@ -57,6 +82,26 @@ class RegionRetrievalRequest:
     search_scope: Region | None = None
     max_candidates: int | None = None
 
+    def __post_init__(self) -> None:
+        if not self.query.strip():
+            raise ValueError("region retrieval query must not be empty")
+        if self.max_candidates is not None and self.max_candidates < 1:
+            raise ValueError("max_candidates must be positive")
+        if self.search_scope is None:
+            return
+        image = self.image if isinstance(self.image, ImageRef) else self.image.image
+        if self.search_scope.image.uri_or_key != image.uri_or_key:
+            raise ValueError("search_scope must reference the same image")
+        if isinstance(self.image, Region) and not _bbox_contains(
+            self.image.bbox_xyxy_global, self.search_scope.bbox_xyxy_global
+        ):
+            raise ValueError("nested search_scope must be contained by input Region")
+
+    def effective_scope(self) -> Region | None:
+        if self.search_scope is not None:
+            return self.search_scope
+        return self.image if isinstance(self.image, Region) else None
+
 
 @dataclass(frozen=True)
 class RegionCandidate:
@@ -81,11 +126,18 @@ class RegionRetrieverProvider(Protocol):
 
 
 @dataclass(frozen=True)
+class ModelSource:
+    role: str
+    value: RuntimeObject
+
+
+@dataclass(frozen=True)
 class ModelInput:
     visual_inputs: tuple[str, ...]
     structured_context: str
     question: str
     options: tuple[str, ...] = ()
+    visual_roles: tuple[str, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -221,7 +273,7 @@ class FakeDetectionProvider:
     provider_name = "fake_lae"
 
     def __init__(self, boxes: Sequence[Sequence[float]] | None = None) -> None:
-        self.boxes = [tuple(float(item) for item in box) for box in (boxes or [])]
+        self.boxes = [cast(BBox, tuple(float(item) for item in box)) for box in (boxes or [])]
         self.calls: list[DetectionRequest] = []
 
     def detect(self, request: DetectionRequest) -> DetectionSet:
@@ -256,18 +308,62 @@ class LocatorRegionRetrieverAdapter:
 
     def retrieve(self, request: RegionRetrievalRequest) -> RegionCandidates:
         image = request.image if isinstance(request.image, ImageRef) else request.image.image
-        result = self._locator.locate(image.path, request.query)
-        limit = request.max_candidates or len(result.regions_xyxy)
-        candidates = tuple(
-            RegionCandidate(
-                Region(image, tuple(box), {"locator": self.provider_name}),
-                float(score),
-                {"locator": self.provider_name, "details": dict(result.region_details[index])},
+        source_path = image.path.resolve()
+        scope = request.effective_scope()
+        offset = (0.0, 0.0)
+        if scope is None:
+            result = self._locator.locate(source_path, request.query)
+        else:
+            offset = scope.bbox_xyxy_global[:2]
+            with tempfile.TemporaryDirectory(prefix="taskgraph_retrieval_") as temp_dir:
+                crop_path = Path(temp_dir) / "scope.png"
+                with Image.open(source_path) as source:
+                    source.convert("RGB").crop(scope.bbox_xyxy_global).save(crop_path)
+                result = self._locator.locate(crop_path, request.query)
+        candidates_list = []
+        for index, (box, score) in enumerate(zip(result.regions_xyxy, result.scores, strict=True)):
+            global_box = (
+                float(box[0]) + offset[0],
+                float(box[1]) + offset[1],
+                float(box[2]) + offset[0],
+                float(box[3]) + offset[1],
             )
-            for index, (box, score) in enumerate(
-                zip(result.regions_xyxy[:limit], result.scores[:limit], strict=True)
+            if scope is not None:
+                clipped = _bbox_intersection(global_box, scope.bbox_xyxy_global)
+                if clipped is None:
+                    continue
+                global_box = clipped
+            details = (
+                dict(result.region_details[index]) if index < len(result.region_details) else {}
             )
-        )
+            candidates_list.append(
+                RegionCandidate(
+                    Region(
+                        image,
+                        global_box,
+                        {
+                            "locator": self.provider_name,
+                            "coordinate_mode": "absolute_original_pixel_xyxy",
+                            "search_scope": (
+                                list(scope.bbox_xyxy_global) if scope is not None else None
+                            ),
+                        },
+                    ),
+                    float(score),
+                    {
+                        "locator": self.provider_name,
+                        "local_bbox_xyxy": list(box),
+                        "global_bbox_xyxy": list(global_box),
+                        "details": details,
+                    },
+                )
+            )
+            if (
+                request.max_candidates is not None
+                and len(candidates_list) >= request.max_candidates
+            ):
+                break
+        candidates = tuple(candidates_list)
         return RegionCandidates(candidates, self.provider_name, result.latency_ms.get("total", 0.0))
 
     def close(self) -> None:
@@ -286,11 +382,10 @@ class ScoredGridRegionRetrieverAdapter:
         image = request.image if isinstance(request.image, ImageRef) else request.image.image
         with Image.open(image.path) as source:
             width, height = source.size
+        effective_scope = request.effective_scope()
         scope = (
-            request.search_scope.bbox_xyxy_global
-            if request.search_scope is not None
-            else request.image.bbox_xyxy_global
-            if isinstance(request.image, Region)
+            effective_scope.bbox_xyxy_global
+            if effective_scope is not None
             else (0.0, 0.0, float(width), float(height))
         )
         cell_width = (scope[2] - scope[0]) / self.grid_size
@@ -330,16 +425,35 @@ class FakeRegionRetriever:
 
     def retrieve(self, request: RegionRetrievalRequest) -> RegionCandidates:
         image = request.image if isinstance(request.image, ImageRef) else request.image.image
-        items = self._candidates[: request.max_candidates or len(self._candidates)]
-        return RegionCandidates(
-            tuple(
+        scope = request.effective_scope()
+        candidates = []
+        for box, score in self._candidates:
+            global_box = cast(BBox, tuple(float(value) for value in box))
+            if scope is not None:
+                clipped = _bbox_intersection(global_box, scope.bbox_xyxy_global)
+                if clipped is None:
+                    continue
+                global_box = clipped
+            candidates.append(
                 RegionCandidate(
-                    Region(image, tuple(float(value) for value in box), {"fake": True}),
+                    Region(
+                        image,
+                        global_box,
+                        {
+                            "fake": True,
+                            "search_scope": (
+                                list(scope.bbox_xyxy_global) if scope is not None else None
+                            ),
+                        },
+                    ),
                     float(score),
                     {"provider": self.provider_name},
                 )
-                for box, score in items
-            ),
+            )
+            if request.max_candidates is not None and len(candidates) >= request.max_candidates:
+                break
+        return RegionCandidates(
+            tuple(candidates),
             self.provider_name,
         )
 
@@ -372,6 +486,14 @@ class LazyQwenSemanticProvider:
     def infer(self, request: VLMRequest) -> VLMResult:
         model_input = request.model_input
         prompt_parts = []
+        if model_input.visual_inputs:
+            roles = model_input.visual_roles or tuple(
+                f"VISUAL_{index}" for index in range(1, len(model_input.visual_inputs) + 1)
+            )
+            manifest = "\n".join(
+                f"[image_{index}] role: {role}" for index, role in enumerate(roles, start=1)
+            )
+            prompt_parts.append("Visual inputs:\n" + manifest)
         if model_input.structured_context:
             prompt_parts.append("Structured results:\n" + model_input.structured_context)
         prompt_parts.append("Question:\n" + model_input.question)
@@ -456,8 +578,14 @@ class FakeEvidenceSufficiencyProvider:
 
 
 def parse_selection_indices(text: str, count: int) -> tuple[int, ...]:
-    """Parse 0/1-based candidate ids from a provider response."""
+    """Parse stable letter ids, with numeric ids retained for compatibility."""
 
+    letters = re.findall(r"(?<![A-Z0-9])([A-Z])(?![A-Z0-9])", text.upper())
+    if letters:
+        values = [ord(item) - ord("A") for item in letters]
+        if any(item < 0 or item >= count for item in values):
+            raise ValueError(f"selection provider returned out-of-range candidate ids: {letters}")
+        return tuple(dict.fromkeys(values))
     values = [int(item) for item in re.findall(r"\d+", text)]
     if not values:
         raise ValueError(f"selection provider returned no candidate ids: {text!r}")

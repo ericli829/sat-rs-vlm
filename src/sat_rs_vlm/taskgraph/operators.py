@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from math import hypot
+from statistics import median
 from typing import Protocol
 
 from PIL import Image
@@ -71,22 +73,13 @@ def _image(value: RuntimeObject) -> ImageRef:
     raise TypeError(f"cannot resolve image from {type(value).__name__}")
 
 
-def _region(value: RuntimeObject) -> Region:
-    if isinstance(value, Region):
-        return value
-    if isinstance(value, Entity):
-        return value.region
-    if isinstance(value, EntitySet) and value.entities:
-        return value.entities[0].region
-    raise TypeError(f"cannot resolve region from {type(value).__name__}")
-
-
 def _dimensions(value: ImageRef | Region) -> tuple[int, int]:
     image = value if isinstance(value, ImageRef) else value.image
     if image.width and image.height:
         return image.width, image.height
     with Image.open(image.path.resolve()) as source:
-        return source.size
+        width, height = source.size
+        return int(width), int(height)
 
 
 def _scope_box(value: ImageRef | Region) -> tuple[float, float, float, float]:
@@ -130,41 +123,227 @@ class GeometryExecutor:
     def _marker(source: ImageRef | Region, color: str | None) -> RegionSet:
         image = source if isinstance(source, ImageRef) else source.image
         scope = _scope_box(source)
-        named = {
-            "red": (255, 0, 0),
-            "green": (0, 255, 0),
-            "blue": (0, 0, 255),
-            "yellow": (255, 255, 0),
-        }
-        target = named.get((color or "red").casefold(), named["red"])
+        marker_color = (color or "red").casefold()
+
+        def matches(pixel: tuple[int, int, int]) -> bool:
+            red, green, blue = pixel
+            if marker_color == "green":
+                return green >= 140 and green >= red + 40 and green >= blue + 40
+            if marker_color == "blue":
+                return blue >= 140 and blue >= red + 40 and blue >= green + 40
+            if marker_color == "yellow":
+                return red >= 150 and green >= 150 and blue <= 130
+            return red >= 160 and red >= green + 60 and red >= blue + 60
+
         with Image.open(image.path.resolve()) as raw:
             crop = raw.convert("RGB").crop(scope)
             pixels = crop.load()
-            hits = []
+            hits: set[tuple[int, int]] = set()
             for y in range(crop.height):
                 for x in range(crop.width):
-                    pixel = pixels[x, y]
-                    if all(pixel[index] >= target[index] - 60 for index in range(3)) and (
-                        max(pixel) - min(pixel) >= 80
-                    ):
-                        hits.append((x, y))
+                    if matches(pixels[x, y]):
+                        hits.add((x, y))
         if not hits:
             return RegionSet((), {"operator": "FIND_MARKER", "color": color})
+
+        components: list[set[tuple[int, int]]] = []
+        remaining = set(hits)
+        while remaining:
+            seed = min(remaining, key=lambda point: (point[1], point[0]))
+            remaining.remove(seed)
+            component = {seed}
+            stack = [seed]
+            while stack:
+                x, y = stack.pop()
+                for delta_y in (-1, 0, 1):
+                    for delta_x in (-1, 0, 1):
+                        neighbor = (x + delta_x, y + delta_y)
+                        if neighbor in remaining:
+                            remaining.remove(neighbor)
+                            component.add(neighbor)
+                            stack.append(neighbor)
+            components.append(component)
+
         offset_x, offset_y = scope[0], scope[1]
-        box = (
-            min(item[0] for item in hits) + offset_x,
-            min(item[1] for item in hits) + offset_y,
-            max(item[0] for item in hits) + offset_x + 1,
-            max(item[1] for item in hits) + offset_y + 1,
+        regions = tuple(
+            Region(
+                image,
+                (
+                    min(point[0] for point in component) + offset_x,
+                    min(point[1] for point in component) + offset_y,
+                    max(point[0] for point in component) + offset_x + 1,
+                    max(point[1] for point in component) + offset_y + 1,
+                ),
+                {
+                    "operator": "FIND_MARKER",
+                    "color": marker_color,
+                    "component_pixels": len(component),
+                },
+            )
+            for component in sorted(
+                components,
+                key=lambda item: (
+                    min(point[1] for point in item),
+                    min(point[0] for point in item),
+                ),
+            )
         )
-        return RegionSet((Region(image, box, {"operator": "FIND_MARKER"}),))
+        return RegionSet(
+            regions,
+            {"operator": "FIND_MARKER", "color": marker_color, "component_count": len(regions)},
+        )
+
+    @staticmethod
+    def _group(entities: EntitySet, mode: str) -> EntitySet:
+        if not entities.entities:
+            return EntitySet((), {**entities.provenance, "group": mode, "groups": []})
+        indexed = list(enumerate(entities.entities))
+
+        def center(item: tuple[int, Entity]) -> tuple[float, float]:
+            box = item[1].region.bbox_xyxy_global
+            return (box[0] + box[2]) / 2.0, (box[1] + box[3]) / 2.0
+
+        widths = [
+            item.region.bbox_xyxy_global[2] - item.region.bbox_xyxy_global[0]
+            for item in entities.entities
+        ]
+        heights = [
+            item.region.bbox_xyxy_global[3] - item.region.bbox_xyxy_global[1]
+            for item in entities.entities
+        ]
+        groups: list[list[tuple[int, Entity]]] = []
+        if mode in {"ROW", "COLUMN"}:
+            axis = 1 if mode == "ROW" else 0
+            tolerance = 0.75 * median(heights if mode == "ROW" else widths)
+            for item in sorted(
+                indexed, key=lambda value: (center(value)[axis], center(value)[1 - axis])
+            ):
+                coordinate = center(item)[axis]
+                if not groups:
+                    groups.append([item])
+                    continue
+                group_coordinate = sum(center(member)[axis] for member in groups[-1]) / len(
+                    groups[-1]
+                )
+                if abs(coordinate - group_coordinate) <= tolerance:
+                    groups[-1].append(item)
+                else:
+                    groups.append([item])
+            secondary_axis = 0 if mode == "ROW" else 1
+            for group in groups:
+                group.sort(key=lambda value: center(value)[secondary_axis])
+        else:
+            threshold = 2.5 * median(
+                hypot(width, height) for width, height in zip(widths, heights, strict=True)
+            )
+            remaining = set(range(len(indexed)))
+            while remaining:
+                seed = min(remaining)
+                remaining.remove(seed)
+                member_indices = [seed]
+                stack = [seed]
+                while stack:
+                    current = stack.pop()
+                    current_center = center(indexed[current])
+                    neighbors = [
+                        other
+                        for other in sorted(remaining)
+                        if hypot(
+                            current_center[0] - center(indexed[other])[0],
+                            current_center[1] - center(indexed[other])[1],
+                        )
+                        <= threshold
+                    ]
+                    for other in neighbors:
+                        remaining.remove(other)
+                        member_indices.append(other)
+                        stack.append(other)
+                groups.append([indexed[item] for item in member_indices])
+            groups.sort(
+                key=lambda group: (
+                    min(center(item)[1] for item in group),
+                    min(center(item)[0] for item in group),
+                )
+            )
+            for group in groups:
+                group.sort(key=lambda item: (center(item)[1], center(item)[0]))
+
+        ordered: list[Entity] = []
+        group_metadata: list[dict[str, object]] = []
+        for group_id, group in enumerate(groups):
+            member_indices = [index for index, _ in group]
+            boxes = [entity.region.bbox_xyxy_global for _, entity in group]
+            group_metadata.append(
+                {
+                    "group_id": group_id,
+                    "source_indices": member_indices,
+                    "bbox_xyxy_global": [
+                        min(box[0] for box in boxes),
+                        min(box[1] for box in boxes),
+                        max(box[2] for box in boxes),
+                        max(box[3] for box in boxes),
+                    ],
+                }
+            )
+            ordered.extend(
+                replace(
+                    entity,
+                    provenance={**entity.provenance, "group_id": group_id, "group_mode": mode},
+                )
+                for _, entity in group
+            )
+        return EntitySet(
+            tuple(ordered),
+            {
+                **entities.provenance,
+                "group": mode,
+                "group_count": len(groups),
+                "groups": group_metadata,
+            },
+        )
+
+    @staticmethod
+    def _resolve_route_endpoint(
+        value: RuntimeObject, role: str
+    ) -> tuple[Entity | Region, dict[str, object]]:
+        if isinstance(value, (Entity, Region)):
+            return value, {"policy": "single", "selected_index": 0}
+        if not isinstance(value, EntitySet):
+            raise TypeError(f"BUILD_ROUTE_CONTEXT.{role} must be Entity, EntitySet, or Region")
+        if not value.entities:
+            raise ValueError(f"BUILD_ROUTE_CONTEXT.{role} EntitySet is empty")
+        if len(value.entities) == 1:
+            return value.entities[0], {"policy": "single", "selected_index": 0}
+        scored = [
+            (index, entity)
+            for index, entity in enumerate(value.entities)
+            if entity.score is not None
+        ]
+        if not scored:
+            raise ValueError(f"BUILD_ROUTE_CONTEXT.{role} is ambiguous: multiple unscored entities")
+        selected_index, selected = max(scored, key=lambda item: (item[1].score, -item[0]))
+        return selected, {
+            "policy": "highest_score",
+            "selected_index": selected_index,
+            "selected_score": selected.score,
+        }
 
     @staticmethod
     def _route_context(
         image_value: RuntimeObject, start: RuntimeObject, goal: RuntimeObject
     ) -> RouteContext:
         image = _image(image_value)
-        start_region, goal_region = _region(start), _region(goal)
+        selected_start, start_selection = GeometryExecutor._resolve_route_endpoint(start, "start")
+        selected_goal, goal_selection = GeometryExecutor._resolve_route_endpoint(goal, "goal")
+        start_region = (
+            selected_start.region if isinstance(selected_start, Entity) else selected_start
+        )
+        goal_region = selected_goal.region if isinstance(selected_goal, Entity) else selected_goal
+        if (
+            start_region.image.uri_or_key != image.uri_or_key
+            or goal_region.image.uri_or_key != image.uri_or_key
+        ):
+            raise ValueError("route endpoints must reference BUILD_ROUTE_CONTEXT.image")
         width, height = _dimensions(image)
         x0 = max(0.0, min(start_region.bbox_xyxy_global[0], goal_region.bbox_xyxy_global[0]))
         y0 = max(0.0, min(start_region.bbox_xyxy_global[1], goal_region.bbox_xyxy_global[1]))
@@ -175,17 +354,28 @@ class GeometryExecutor:
             float(height), max(start_region.bbox_xyxy_global[3], goal_region.bbox_xyxy_global[3])
         )
         pad = max(8.0, 0.1 * max(x1 - x0, y1 - y0))
+        context_box = (
+            max(0.0, x0 - pad),
+            max(0.0, y0 - pad),
+            min(width, x1 + pad),
+            min(height, y1 + pad),
+        )
         context_region = Region(
             image,
-            (max(0.0, x0 - pad), max(0.0, y0 - pad), min(width, x1 + pad), min(height, y1 + pad)),
-            {"coordinate_transform": {"origin_global": [x0, y0]}},
+            context_box,
+            {"coordinate_transform": {"origin_global": list(context_box[:2])}},
         )
         return RouteContext(
             image=image,
-            start=start,  # type: ignore[arg-type]
-            goal=goal,  # type: ignore[arg-type]
+            start=selected_start,
+            goal=selected_goal,
             context_region=context_region,
-            provenance={"provider": "geometry", "ambiguity_policy": "highest_score_first"},
+            provenance={
+                "provider": "geometry",
+                "ambiguity_policy": "single_or_highest_score_else_error",
+                "start_selection": start_selection,
+                "goal_selection": goal_selection,
+            },
         )
 
     def execute(
@@ -196,23 +386,52 @@ class GeometryExecutor:
     ) -> OperatorOutcome:
         if node.op is OperatorName.REGION:
             source = inputs["image"]
-            assert isinstance(source, (ImageRef, Region))
+            if not isinstance(source, (ImageRef, Region)):
+                raise TypeError("REGION.image must be ImageRef or Region")
             value: RuntimeObject = self._position_region(source, str(node.params["position"]))
         elif node.op is OperatorName.REGION_FROM_BBOX:
             image = inputs["image"]
-            assert isinstance(image, ImageRef)
-            value = Region(image, tuple(node.params["bbox"]), {"operator": node.op.value})
+            if not isinstance(image, ImageRef):
+                raise TypeError("REGION_FROM_BBOX.image must be ImageRef")
+            width, height = _dimensions(image)
+            source_size = node.params.get("image_size")
+            bbox = tuple(float(item) for item in node.params["bbox"])
+            scale_x = scale_y = 1.0
+            if source_size is not None:
+                scale_x = width / float(source_size[0])
+                scale_y = height / float(source_size[1])
+                bbox = (
+                    bbox[0] * scale_x,
+                    bbox[1] * scale_y,
+                    bbox[2] * scale_x,
+                    bbox[3] * scale_y,
+                )
+            bbox = (
+                max(0.0, min(float(width), bbox[0])),
+                max(0.0, min(float(height), bbox[1])),
+                max(0.0, min(float(width), bbox[2])),
+                max(0.0, min(float(height), bbox[3])),
+            )
+            value = Region(
+                image,
+                bbox,
+                {
+                    "operator": node.op.value,
+                    "source_image_size": list(source_size) if source_size is not None else None,
+                    "actual_image_size": [width, height],
+                    "scale_xy": [scale_x, scale_y],
+                },
+            )
         elif node.op is OperatorName.FIND_MARKER:
             source = inputs["image"]
-            assert isinstance(source, (ImageRef, Region))
+            if not isinstance(source, (ImageRef, Region)):
+                raise TypeError("FIND_MARKER.image must be ImageRef or Region")
             value = self._marker(source, node.params["marker"].get("color"))
         elif node.op is OperatorName.GROUP:
             entities = inputs["entities"]
             if not isinstance(entities, EntitySet):
                 raise TypeError("GROUP.entities must be EntitySet")
-            value = EntitySet(
-                entities.entities, {**entities.provenance, "group": node.params["mode"]}
-            )
+            value = self._group(entities, str(node.params["mode"]))
         elif node.op is OperatorName.ABS_DIFF:
             left, right = inputs["a"], inputs["b"]
             if not isinstance(left, ScalarInt) or not isinstance(right, ScalarInt):
@@ -253,7 +472,12 @@ class LocateExecutor:
         target = TargetSpec.model_validate(node.params["target"])
         if target.category.casefold() in self.semantic_categories:
             result = self.retriever.retrieve(
-                RegionRetrievalRequest(scope, target.phrase(), max_candidates=8)
+                RegionRetrievalRequest(
+                    scope,
+                    target.phrase(),
+                    search_scope=scope if isinstance(scope, Region) else None,
+                    max_candidates=8,
+                )
             )
             entities = EntitySet(
                 tuple(
@@ -372,17 +596,15 @@ class SelectExecutor:
                     EntitySet(tuple(ranked[index : index + 1]), {"select": mode}), "geometry"
                 )
             if mode == "RELATION":
-                sources: list[RuntimeObject] = [candidates]
                 reference = inputs.get("reference")
-                if isinstance(reference, list):
-                    sources.extend(reference)
-                elif reference is not None:
-                    sources.append(reference)
-                model_input = context.composer.compose(
-                    sources,
+                named: dict[str, RuntimeObject | list[RuntimeObject]] = {"candidates": candidates}
+                if reference is not None:
+                    named["reference"] = reference
+                model_input = context.composer.compose_named(
+                    named,
                     question=(
                         f"Select candidate ids satisfying relation {node.params['relation']}. "
-                        "Return only numeric candidate ids."
+                        "Return only candidate ids such as A, B, or C."
                     ),
                 )
                 result = self.semantic.infer(VLMRequest(model_input, "selection"))
@@ -424,9 +646,6 @@ class SemanticExecutor:
         inputs: dict[str, RuntimeObject | list[RuntimeObject]],
         context: OperatorContext,
     ) -> OperatorOutcome:
-        sources = []
-        for value in inputs.values():
-            sources.extend(value if isinstance(value, list) else [value])
         if node.op is OperatorName.ATTRIBUTE:
             question = f"Determine the {node.params['attribute']} of the selected object."
         elif node.op is OperatorName.CLASSIFY:
@@ -447,7 +666,7 @@ class SemanticExecutor:
             if node.op in {OperatorName.ROUTE_REASON, OperatorName.MATCH_CHOICE}
             else ()
         )
-        model_input = context.composer.compose(sources, question=question, options=options)
+        model_input = context.composer.compose_named(inputs, question=question, options=options)
         result = self.provider.infer(VLMRequest(model_input, node.op.value.casefold()))
         if node.op in {OperatorName.ATTRIBUTE, OperatorName.CLASSIFY, OperatorName.RELATION}:
             value: RuntimeObject = Label(result.text, {"provider": result.provider})

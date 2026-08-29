@@ -12,6 +12,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .contracts import DEPRECATED_OPERATORS, OPERATOR_INPUT_CONTRACTS
+
 
 class StringEnum(str, Enum):
     pass
@@ -351,14 +353,14 @@ class GraphNode(StrictModel):
 
     @model_validator(mode="after")
     def validate_operator(self) -> GraphNode:
-        for name, value in self.inputs.items():
-            if isinstance(value, list) and (
-                not value or not (self.op is OperatorName.VLM_REASON and name == "evidence")
-            ):
-                raise ValueError("list references are only allowed for VLM_REASON.evidence")
+        OPERATOR_INPUT_CONTRACTS[self.op.value].validate_keys(self.inputs, operator=self.op.value)
         parsed = PARAM_MODELS[self.op].model_validate(self.params)
         self.params = parsed.model_dump(mode="json", exclude_none=False)
         return self
+
+    @property
+    def deprecated(self) -> bool:
+        return self.op.value in DEPRECATED_OPERATORS
 
 
 class FinalSpec(StrictModel):

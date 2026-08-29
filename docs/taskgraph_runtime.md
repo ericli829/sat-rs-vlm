@@ -63,12 +63,28 @@ Every node reads and writes a runtime object: `ImageRef`, `Region`, `RegionSet`,
 `Entity`, `EntitySet`, `ScalarInt`, `ScalarFloat`, `Boolean`, `Label`, `LabelSet`,
 `RouteContext`, `Evidence`, `EvidenceSet`, or `Answer`. Named input roles are
 preserved, and variable-length `VLM_REASON.evidence` lists are resolved item by item.
+The schema rejects missing, unexpected, mutually exclusive, and illegal list inputs;
+the executor validates resolved runtime types before capability fallback is considered.
+
+`MATCH_CHOICE` is deprecated and retained only for loading older fixtures. New planner
+exports end at `final.sources` and use the runtime's single final `ChoiceResolver` stage.
 
 `InputComposer` materializes visual values as original-coordinate crops or marked
 views and emits structured values in a typed format. It supports mixed and multi-image
 inputs without concatenating arbitrary `str(object)` values. If all final sources are
 authoritative structured results, it adds no image. Consequently, an LAE count cannot
 be silently overridden by asking Qwen to count the original image again.
+
+Fuzzy `SELECT` and `RELATION` inputs use a local candidate canvas: the union of the
+named entities is expanded by a configurable halo, cropped, and marked with stable
+`A/B/C`, `REF`, `SUBJECT`, and `REFERENCE` labels. Canvas metadata retains the crop's
+global origin, every global bbox, and the candidate-ID-to-entity mapping. Configure the
+halo with `input_composer.candidate_halo_ratio` (default `0.2`).
+
+Region retrieval treats a `Region` input as a hard search scope. Crop-local provider
+boxes are mapped back to absolute original-image pixel coordinates and clipped to the
+scope. `REGION_FROM_BBOX` uses the same coordinate convention and scales dataset boxes
+when `params.image_size` differs from the loaded image.
 
 ## Operator mapping
 

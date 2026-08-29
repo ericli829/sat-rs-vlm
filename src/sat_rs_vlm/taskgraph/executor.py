@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 
+from .contracts import validate_runtime_inputs
 from .operators import OperatorContext, OperatorExecutor, OperatorOutcome
 from .runtime_types import RuntimeObject, runtime_summary, runtime_type_name
 from .schema import GraphNode, OperatorName, TaskGraph
@@ -56,6 +57,16 @@ class CapabilityRouter:
             binding = self.bindings[node.op]
         except KeyError as exc:
             raise KeyError(f"no capability binding for operator {node.op.value}") from exc
+        try:
+            validate_runtime_inputs(node.op.value, inputs)
+        except Exception as contract_error:
+            raise TaskGraphExecutionError(
+                node_id=node.id,
+                operator=node.op.value,
+                provider="input_contract",
+                input_refs=node.inputs,
+                exception=contract_error,
+            ) from contract_error
         try:
             return binding.primary.execute(node, inputs, context), None
         except Exception as primary_error:

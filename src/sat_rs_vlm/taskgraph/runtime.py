@@ -366,8 +366,15 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
         planner = FixturePlannerProvider(payload)
 
     policy = DatasetExecutionPolicy.from_mapping(config.get("dataset_policy"))
+    composer_cfg = config.get("input_composer", {})
+    if not isinstance(composer_cfg, dict):
+        raise TypeError("input_composer config must be a mapping")
+    composer = InputComposer(
+        candidate_halo_ratio=float(composer_cfg.get("candidate_halo_ratio", 0.2))
+    )
     return TaskGraphRuntime(
         RuntimeProviders(detection, semantic_2b, route_4b, retriever, choice, planner),
         policy=policy,
+        composer=composer,
         semantic_categories=set(config.get("semantic_region_categories", [])),
     )
