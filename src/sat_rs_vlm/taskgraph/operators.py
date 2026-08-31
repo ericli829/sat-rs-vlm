@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, replace
-from math import hypot
+from math import hypot, isfinite
 from statistics import median
 from typing import Protocol
 
@@ -306,7 +306,7 @@ class GeometryExecutor:
     def _resolve_route_endpoint(
         value: RuntimeObject, role: str
     ) -> tuple[Entity | Region, dict[str, object]]:
-        if isinstance(value, (Entity, Region)):
+        if isinstance(value, Entity | Region):
             return value, {"policy": "single", "selected_index": 0}
         if not isinstance(value, EntitySet):
             raise TypeError(f"BUILD_ROUTE_CONTEXT.{role} must be Entity, EntitySet, or Region")
@@ -386,7 +386,7 @@ class GeometryExecutor:
     ) -> OperatorOutcome:
         if node.op is OperatorName.REGION:
             source = inputs["image"]
-            if not isinstance(source, (ImageRef, Region)):
+            if not isinstance(source, ImageRef | Region):
                 raise TypeError("REGION.image must be ImageRef or Region")
             value: RuntimeObject = self._position_region(source, str(node.params["position"]))
         elif node.op is OperatorName.REGION_FROM_BBOX:
@@ -424,7 +424,7 @@ class GeometryExecutor:
             )
         elif node.op is OperatorName.FIND_MARKER:
             source = inputs["image"]
-            if not isinstance(source, (ImageRef, Region)):
+            if not isinstance(source, ImageRef | Region):
                 raise TypeError("FIND_MARKER.image must be ImageRef or Region")
             value = self._marker(source, node.params["marker"].get("color"))
         elif node.op is OperatorName.GROUP:
@@ -454,10 +454,14 @@ class LocateExecutor:
         retriever: RegionRetrieverProvider,
         *,
         semantic_categories: set[str] | None = None,
+        max_candidates: int = 5,
     ) -> None:
         self.detection = detection
         self.retriever = retriever
         self.semantic_categories = {item.casefold() for item in (semantic_categories or set())}
+        if max_candidates < 1:
+            raise ValueError("LOCATE max_candidates must be positive")
+        self.max_candidates = max_candidates
         self.provider_name = "locate"
 
     def execute(
@@ -467,7 +471,7 @@ class LocateExecutor:
         context: OperatorContext,
     ) -> OperatorOutcome:
         scope = inputs["image"]
-        if not isinstance(scope, (ImageRef, Region)):
+        if not isinstance(scope, ImageRef | Region):
             raise TypeError("LOCATE.image must be ImageRef or Region")
         target = TargetSpec.model_validate(node.params["target"])
         if target.category.casefold() in self.semantic_categories:
@@ -476,7 +480,7 @@ class LocateExecutor:
                     scope,
                     target.phrase(),
                     search_scope=scope if isinstance(scope, Region) else None,
-                    max_candidates=8,
+                    max_candidates=self.max_candidates,
                 )
             )
             entities = EntitySet(
@@ -492,9 +496,59 @@ class LocateExecutor:
 
 
 class CountExecutor:
-    def __init__(self, detection: DetectionProvider) -> None:
+    def __init__(
+        self,
+        detection: DetectionProvider,
+        retriever: RegionRetrieverProvider | None = None,
+        *,
+        gate_enabled: bool = False,
+        gate_threshold: float = 0.0,
+        gate_max_regions: int = 9,
+        gate_nms_iou: float = 0.5,
+    ) -> None:
         self.detection = detection
+        self.retriever = retriever
+        if not isfinite(gate_threshold):
+            raise ValueError("Count gate threshold must be finite")
+        if gate_max_regions < 1:
+            raise ValueError("Count gate max_regions must be positive")
+        if not 0.0 <= gate_nms_iou <= 1.0:
+            raise ValueError("Count gate nms_iou must be in [0, 1]")
+        self.gate_enabled = gate_enabled
+        self.gate_threshold = gate_threshold
+        self.gate_max_regions = gate_max_regions
+        self.gate_nms_iou = gate_nms_iou
         self.provider_name = detection.provider_name
+
+    @staticmethod
+    def _iou(left: Entity, right: Entity) -> float:
+        a, b = left.region.bbox_xyxy_global, right.region.bbox_xyxy_global
+        intersection = (
+            max(a[0], b[0]),
+            max(a[1], b[1]),
+            min(a[2], b[2]),
+            min(a[3], b[3]),
+        )
+        if intersection[0] >= intersection[2] or intersection[1] >= intersection[3]:
+            return 0.0
+        intersection_area = (intersection[2] - intersection[0]) * (
+            intersection[3] - intersection[1]
+        )
+        left_area = (a[2] - a[0]) * (a[3] - a[1])
+        right_area = (b[2] - b[0]) * (b[3] - b[1])
+        return intersection_area / (left_area + right_area - intersection_area)
+
+    def _merge_detections(self, entities: list[Entity]) -> tuple[Entity, ...]:
+        ordered = sorted(
+            entities,
+            key=lambda item: float(item.score) if item.score is not None else 0.0,
+            reverse=True,
+        )
+        kept: list[Entity] = []
+        for entity in ordered:
+            if all(self._iou(entity, previous) <= self.gate_nms_iou for previous in kept):
+                kept.append(entity)
+        return tuple(kept)
 
     def execute(
         self,
@@ -513,9 +567,50 @@ class CountExecutor:
                 "cardinality",
             )
         scope = inputs.get("image")
-        if not isinstance(scope, (ImageRef, Region)):
+        if not isinstance(scope, ImageRef | Region):
             raise TypeError("COUNT requires image/Region or EntitySet")
         target = TargetSpec.model_validate(node.params["target"])
+        if self.gate_enabled and self.retriever is not None:
+            retrieved = self.retriever.retrieve(
+                RegionRetrievalRequest(
+                    scope,
+                    target.phrase(),
+                    search_scope=scope if isinstance(scope, Region) else None,
+                    max_candidates=self.gate_max_regions,
+                )
+            )
+            retained = [
+                candidate
+                for candidate in retrieved.candidates
+                if candidate.relevance_score >= self.gate_threshold
+            ]
+            all_entities: list[Entity] = []
+            provider_names: list[str] = []
+            for candidate in retained:
+                detected = self.detection.detect(
+                    DetectionRequest(candidate.region, target, "COUNT_RETRIEVER_GATE")
+                )
+                provider_names.append(detected.provider)
+                all_entities.extend(detected.detections.entities)
+            merged = self._merge_detections(all_entities)
+            return OperatorOutcome(
+                ScalarInt(
+                    len(merged),
+                    {
+                        "provider": self.detection.provider_name,
+                        "detection_providers": list(dict.fromkeys(provider_names)),
+                        "gate": {
+                            "provider": retrieved.provider,
+                            "threshold": self.gate_threshold,
+                            "candidate_regions": len(retrieved.candidates),
+                            "retained_regions": len(retained),
+                            "rejected_regions": len(retrieved.candidates) - len(retained),
+                            "nms_iou": self.gate_nms_iou,
+                        },
+                    },
+                ),
+                self.detection.provider_name,
+            )
         detected = self.detection.detect(DetectionRequest(scope, target, "COUNT"))
         return OperatorOutcome(
             ScalarInt(

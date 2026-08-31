@@ -14,15 +14,20 @@ from sat_rs_vlm.taskgraph.executor import (
 )
 from sat_rs_vlm.taskgraph.input_composer import InputComposer
 from sat_rs_vlm.taskgraph.operators import (
+    CountExecutor,
     GeometryExecutor,
     OperatorContext,
     SelectExecutor,
     SemanticExecutor,
 )
 from sat_rs_vlm.taskgraph.providers import (
+    DetectionRequest,
+    DetectionSet,
     FakeRegionRetriever,
     FakeSemanticVLMProvider,
     LocatorRegionRetrieverAdapter,
+    RegionCandidate,
+    RegionCandidates,
     RegionRetrievalRequest,
     ScoredGridRegionRetrieverAdapter,
 )
@@ -149,6 +154,18 @@ def test_fake_retriever_clips_candidates_to_region_and_nested_scope(tmp_path: Pa
         RegionRetrievalRequest(parent, "target", search_scope=Region(image, (0, 0, 20, 20)))
 
 
+def test_region_candidates_reject_non_finite_scores_and_latency(tmp_path: Path) -> None:
+    image = _image(tmp_path / "candidate.png", (32, 32))
+    region = Region(image, (0, 0, 16, 16))
+
+    with pytest.raises(ValueError, match="relevance_score"):
+        RegionCandidate(region, float("nan"))
+    with pytest.raises(ValueError, match="latency_ms"):
+        RegionCandidates((), "fixture", float("inf"))
+    with pytest.raises(ValueError, match="provider"):
+        RegionCandidates((), " ", 0.0)
+
+
 def test_locator_retriever_maps_local_crop_boxes_to_global(tmp_path: Path) -> None:
     image = _image(tmp_path / "locator.png", (100, 80))
 
@@ -212,11 +229,110 @@ def test_scored_grid_retriever_uses_region_scope(tmp_path: Path) -> None:
         RegionRetrievalRequest(scope, "object")
     )
     assert scorer.boxes[0] == (20.0, 10.0, 50.0, 40.0)
+    assert len(result.candidates) == 4
+    assert result.candidates[0].provenance["tile"] == {
+        "level": 1,
+        "index": 3,
+        "row": 1,
+        "column": 1,
+        "grid_size": 2,
+    }
+    assert result.candidates[0].provenance["bbox_xyxy_global"] == [50.0, 40.0, 80.0, 70.0]
     assert all(
         scope.bbox_xyxy_global[0] <= candidate.region.bbox_xyxy_global[0]
         and candidate.region.bbox_xyxy_global[2] <= scope.bbox_xyxy_global[2]
         for candidate in result.candidates
     )
+
+
+def test_scored_grid_retriever_supports_overlapping_windows(tmp_path: Path) -> None:
+    image = _image(tmp_path / "sliding.png", (100, 100))
+
+    class Scorer:
+        provider_name = "recording_scorer"
+
+        def __init__(self) -> None:
+            self.boxes: list[tuple[float, float, float, float]] = []
+
+        def score_regions(self, image_path: Path, query: str, regions_xyxy: list) -> object:
+            self.boxes = list(regions_xyxy)
+            return SimpleNamespace(
+                scores=[float(index) for index in range(len(regions_xyxy))],
+                model_id="fake",
+                latency_ms=0.0,
+                metadata={},
+            )
+
+        def close(self) -> None:
+            return None
+
+    scorer = Scorer()
+    result = ScoredGridRegionRetrieverAdapter(
+        scorer,
+        grid_size=3,
+        candidate_window_ratio=0.5,
+    ).retrieve(RegionRetrievalRequest(image, "harbor"))
+    assert scorer.boxes[0] == (0.0, 0.0, 50.0, 50.0)
+    assert scorer.boxes[4] == (25.0, 25.0, 75.0, 75.0)
+    assert scorer.boxes[-1] == (50.0, 50.0, 100.0, 100.0)
+    assert result.candidates[0].provenance["candidate_geometry"] == {
+        "layout": "uniform_sliding_grid",
+        "window_ratio": 0.5,
+        "overlapping": True,
+    }
+
+
+def test_count_retriever_gate_filters_regions_and_deduplicates(tmp_path: Path) -> None:
+    image = _image(tmp_path / "count_gate.png", (90, 90))
+    retriever = FakeRegionRetriever(
+        [
+            ((0, 0, 30, 30), 0.25),
+            ((30, 0, 60, 30), 0.10),
+            ((60, 0, 90, 30), 0.20),
+        ]
+    )
+
+    class Detection:
+        provider_name = "fake_detector"
+
+        def __init__(self) -> None:
+            self.calls: list[DetectionRequest] = []
+
+        def detect(self, request: DetectionRequest) -> DetectionSet:
+            self.calls.append(request)
+            assert isinstance(request.scope, Region)
+            box = request.scope.bbox_xyxy_global
+            entity = Entity(Region(image, box), "aircraft", 0.9)
+            return DetectionSet(EntitySet((entity, entity)), 0.0, self.provider_name)
+
+        def close(self) -> None:
+            return None
+
+    detection = Detection()
+    executor = CountExecutor(
+        detection,
+        retriever,
+        gate_enabled=True,
+        gate_threshold=0.17203009128570557,
+        gate_max_regions=3,
+    )
+    node = _node(
+        "COUNT",
+        {"image": "$image0"},
+        {"target": {"category": "aircraft", "attributes": {}}, "entire": True},
+    )
+    composer = InputComposer(tmp_path / "count_inputs")
+    try:
+        outcome = executor.execute(
+            node,
+            {"image": image},
+            OperatorContext("count", (), composer),
+        )
+    finally:
+        composer.close()
+    assert outcome.value.value == 2
+    assert len(detection.calls) == 2
+    assert outcome.value.provenance["gate"]["rejected_regions"] == 1
 
 
 def test_candidate_canvas_is_local_and_has_stable_global_mapping(tmp_path: Path) -> None:

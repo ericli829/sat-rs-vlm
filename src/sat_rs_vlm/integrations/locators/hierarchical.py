@@ -44,6 +44,10 @@ class HierarchicalSearchConfig:
     temperature: float = 1.0
     cumulative_mass: float = 0.9
     max_beam: int = 4
+    min_beam: int = 1
+    score_threshold: float | None = None
+    spatial_prefilter: bool = False
+    spatial_first_depth_only: bool = False
 
     @classmethod
     def from_mapping(cls, config: Mapping[str, Any] | None) -> HierarchicalSearchConfig:
@@ -54,13 +58,27 @@ class HierarchicalSearchConfig:
             temperature=float(values.get("temperature", cls.temperature)),
             cumulative_mass=float(values.get("cumulative_mass", cls.cumulative_mass)),
             max_beam=int(values.get("max_beam", cls.max_beam)),
+            min_beam=int(values.get("min_beam", cls.min_beam)),
+            score_threshold=(
+                float(values["score_threshold"])
+                if values.get("score_threshold") is not None
+                else None
+            ),
+            spatial_prefilter=bool(values.get("spatial_prefilter", cls.spatial_prefilter)),
+            spatial_first_depth_only=bool(
+                values.get("spatial_first_depth_only", cls.spatial_first_depth_only)
+            ),
         )
-        if result.grid_size < 2 or result.max_beam < 1:
-            raise LocatorError("search grid_size/max_beam values are invalid")
+        if result.grid_size < 2 or result.max_beam < 1 or result.min_beam < 1:
+            raise LocatorError("search grid_size/max_beam/min_beam values are invalid")
+        if result.min_beam > result.max_beam:
+            raise LocatorError("search min_beam must not exceed max_beam")
         if result.halo_ratio < 0.0 or result.temperature <= 0.0:
             raise LocatorError("search halo_ratio/temperature values are invalid")
         if not 0.0 < result.cumulative_mass <= 1.0:
             raise LocatorError("search cumulative_mass must be in (0, 1]")
+        if result.score_threshold is not None and not 0.0 <= result.score_threshold <= 1.0:
+            raise LocatorError("search score_threshold must be between 0 and 1")
         return result
 
 
@@ -101,6 +119,31 @@ class HierarchicalLocator:
         self.composite_scorer = CompositeRegionScorer(scorer_config.get("weights", {}))
         self.fusion = RegionFusion(self.config.get("fusion", {}))
         self.fail_on_provider_error = bool(self.config.get("fail_on_provider_error", True))
+
+    def _initial_search_box(self, scope: str, image_width: int, image_height: int) -> BBox:
+        """Use a soft directional window before the first grid expansion."""
+
+        full = (0.0, 0.0, float(image_width), float(image_height))
+        if not self.search_config.spatial_prefilter or scope == "global":
+            return full
+        x1, y1, x2, y2 = 0.0, 0.0, 1.0, 1.0
+        if scope in {"left", "west", "upper_left", "lower_left", "center_left"}:
+            x2 = 2.0 / 3.0
+        elif scope in {"right", "east", "upper_right", "lower_right", "center_right"}:
+            x1 = 1.0 / 3.0
+        if scope in {"upper", "north", "upper_left", "upper_right"}:
+            y2 = 2.0 / 3.0
+        elif scope in {"lower", "south", "lower_left", "lower_right"}:
+            y1 = 1.0 / 3.0
+        if scope == "center":
+            x1, y1, x2, y2 = 0.25, 0.25, 0.75, 0.75
+        core = (x1 * image_width, y1 * image_height, x2 * image_width, y2 * image_height)
+        return expand_with_halo(
+            core,
+            self.search_config.halo_ratio,
+            image_width,
+            image_height,
+        )
 
     def _collect_proposals(
         self,
@@ -160,6 +203,16 @@ class HierarchicalLocator:
             latency,
         )
 
+    @staticmethod
+    def _retrieval_query(task: TaskSpec, depth: int) -> str:
+        """Use direction only for the coarse pass, then retrieve by target class."""
+
+        if depth <= 1 or task.spatial_scope == "global":
+            return task.raw_question
+        if task.targets:
+            return ", ".join(target.replace("_", " ") for target in task.targets)
+        return task.raw_question
+
     def _score_children(
         self,
         *,
@@ -185,7 +238,7 @@ class HierarchicalLocator:
             try:
                 retrieval_batch = self.retrieval_scorer.score(
                     image_path,
-                    task.raw_question,
+                    self._retrieval_query(task, children[0].depth if children else 1),
                     children,
                 )
             except Exception as exc:
@@ -202,13 +255,29 @@ class HierarchicalLocator:
             batches.append(
                 ScoreBatch.unavailable("retrieval", len(children), "disabled_by_plan_or_config")
             )
-        if plan.use_spatial and self.spatial_enabled:
+        # Direction words are most useful for the coarse first partition. Once a
+        # branch has been selected, semantic retrieval should be free to refine
+        # it without repeatedly pulling it toward the original image quadrant.
+        spatial_allowed = not self.search_config.spatial_first_depth_only or (
+            bool(children) and all(child.depth == 1 for child in children)
+        )
+        if plan.use_spatial and self.spatial_enabled and spatial_allowed:
             batches.append(
                 self.spatial_scorer.score(task, children, image_width, image_height)
             )
         else:
             batches.append(
-                ScoreBatch.unavailable("spatial", len(children), "disabled_by_plan_or_config")
+                ScoreBatch.unavailable(
+                    "spatial",
+                    len(children),
+                    (
+                        "spatial_only_first_depth"
+                        if plan.use_spatial
+                        and self.spatial_enabled
+                        and self.search_config.spatial_first_depth_only
+                        else "disabled_by_plan_or_config"
+                    ),
+                )
             )
         composite = self.composite_scorer.score(
             children,
@@ -304,7 +373,11 @@ class HierarchicalLocator:
             plan,
             warnings,
         )
-        root_box: BBox = (0.0, 0.0, float(image_width), float(image_height))
+        root_box = self._initial_search_box(
+            task.spatial_scope,
+            image_width,
+            image_height,
+        )
         root = SearchRegion(
             region_id="root",
             parent_id=None,
@@ -312,7 +385,11 @@ class HierarchicalLocator:
             core_xyxy=root_box,
             view_xyxy=root_box,
             score=0.0,
-            metadata={"coordinate_mode": "absolute_original_pixel_xyxy"},
+            metadata={
+                "coordinate_mode": "absolute_original_pixel_xyxy",
+                "spatial_prefilter": self.search_config.spatial_prefilter,
+                "spatial_scope": task.spatial_scope,
+            },
         )
         frontier = [root]
         leaves: list[SearchRegion] = []
@@ -400,6 +477,8 @@ class HierarchicalLocator:
                 cumulative_mass=self.search_config.cumulative_mass,
                 max_beam=self.search_config.max_beam,
                 redundancy_weight=self.composite_scorer.weights["redundancy"],
+                score_threshold=self.search_config.score_threshold,
+                min_beam=self.search_config.min_beam,
             )
             selected_set = set(selection.selected_indices)
             next_frontier: list[SearchRegion] = []

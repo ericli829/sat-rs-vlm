@@ -116,6 +116,10 @@ def spatial_prior(
         return (1.0 - x) * y
     if scope == "lower_right":
         return x * y
+    if scope in {"center_left", "center_right"}:
+        vertical_center = max(0.0, 1.0 - abs(y - 0.5) / 0.5)
+        horizontal = 1.0 - x if scope == "center_left" else x
+        return horizontal * vertical_center
     if scope == "center":
         distance = math.hypot(x - 0.5, y - 0.5) / math.hypot(0.5, 0.5)
         return max(0.0, 1.0 - distance)

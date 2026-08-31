@@ -50,6 +50,16 @@ CLOUD_ENV = {
     "ADAPTER_PATH": "/workspace/outputs/adapter",
     "REPLAY_ADAPTER_DIR": "/workspace/outputs/replay-generalist-adapter",
     "QWEN3VL_4B_REPLAY_ADAPTER_DIR": "/workspace/outputs/qwen3vl-4b-replay-adapter",
+    "CLIP_MODEL_PATH": "/workspace/models/clip",
+    "SIGLIP_MODEL_PATH": "/workspace/models/siglip",
+    "REMOTECLIP_CHECKPOINT": "/workspace/models/RemoteCLIP/RemoteCLIP-ViT-B-32.pt",
+    "GEORSCLIP_CHECKPOINT": "/workspace/models/GeoRSCLIP/GeoRSCLIP-ViT-B-32.pt",
+    "FARSLIP_CHECKPOINT": "/workspace/models/FarSLIP/FarSLIP1_ViT-B-32.pt",
+    "SATELLITECLIP_MODEL_PATH": "/workspace/models/SatelliteCLIP",
+    "GIT_RSCLIP_MODEL_PATH": "/workspace/models/Git-RSCLIP-base",
+    "RS_CLIP_DATA_ROOT": "/workspace/data/VRSBench",
+    "RS_CLIP_MANIFEST": "/workspace/data/VRSBench/retriever.jsonl",
+    "RS_CLIP_OUTPUT_ROOT": "/workspace/outputs/rs-clip",
 }
 
 

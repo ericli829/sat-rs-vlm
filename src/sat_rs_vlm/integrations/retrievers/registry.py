@@ -8,7 +8,18 @@ from typing import Any
 from .config import expand_config_value
 from .protocol import RetrievalError, RetrieverProvider
 
-PROVIDER_NAMES = ("mock", "visrag")
+PROVIDER_NAMES = (
+    "mock",
+    "visrag",
+    "clip",
+    "siglip",
+    "git_rsclip",
+    "satelliteclip",
+    "remoteclip",
+    "farslip",
+    "georsclip",
+    "rs5m",
+)
 
 
 def create_retriever_provider(
@@ -25,6 +36,18 @@ def create_retriever_provider(
         from .visrag import VisRAGRetrieverProvider
 
         return VisRAGRetrieverProvider(normalized_config)
+    if provider_name in {"clip", "siglip", "git_rsclip", "satelliteclip"}:
+        from .clip import CLIPRetrieverProvider
+
+        provider = CLIPRetrieverProvider(normalized_config)
+        provider.provider_name = provider_name
+        return provider
+    if provider_name in {"remoteclip", "farslip", "georsclip", "rs5m"}:
+        from .openclip import OpenCLIPRetrieverProvider
+
+        provider = OpenCLIPRetrieverProvider(normalized_config)
+        provider.provider_name = provider_name
+        return provider
     raise RetrievalError(
         f"unsupported retriever provider {provider_name!r}; "
         f"choose one of {', '.join(PROVIDER_NAMES)}"

@@ -35,13 +35,27 @@ class RegionFusion:
         values = dict(config or {})
         self.overlap_iou_threshold = float(values.get("overlap_iou_threshold", 0.65))
         self.max_regions = int(values.get("max_regions", 6))
+        self.min_regions = int(values.get("min_regions", 1))
+        self.score_threshold = (
+            float(values["score_threshold"])
+            if values.get("score_threshold") is not None
+            else None
+        )
         self.merge_adjacent = bool(values.get("merge_adjacent", False))
         self.adjacent_gap = float(values.get("adjacent_gap", 4.0))
         self.context_margin = float(values.get("context_margin", 0.08))
         if not 0.0 <= self.overlap_iou_threshold <= 1.0:
             raise LocatorError("fusion overlap_iou_threshold must be between 0 and 1")
-        if self.max_regions < 1 or self.adjacent_gap < 0.0 or self.context_margin < 0.0:
+        if (
+            self.max_regions < 1
+            or self.min_regions < 1
+            or self.min_regions > self.max_regions
+            or self.adjacent_gap < 0.0
+            or self.context_margin < 0.0
+        ):
             raise LocatorError("fusion region/gap/margin values are invalid")
+        if self.score_threshold is not None and not 0.0 <= self.score_threshold <= 1.0:
+            raise LocatorError("fusion score_threshold must be between 0 and 1")
 
     def fuse(
         self,
@@ -58,15 +72,28 @@ class RegionFusion:
             valid.append(replace(region, core_xyxy=core))
         valid.sort(key=lambda item: (-item.score, item.depth, item.region_id))
         selected: list[SearchRegion] = []
-        for region in valid:
-            if any(
-                bbox_iou(region.core_xyxy, kept.core_xyxy) > self.overlap_iou_threshold
-                for kept in selected
-            ):
-                continue
-            selected.append(region)
-            if len(selected) >= self.max_regions:
-                break
+        eligible = (
+            [region for region in valid if region.score >= self.score_threshold]
+            if self.score_threshold is not None
+            else valid
+        )
+        fallback = [region for region in valid if region not in eligible]
+
+        def select_from(candidates: Sequence[SearchRegion], target: int) -> None:
+            for region in candidates:
+                if any(
+                    bbox_iou(region.core_xyxy, kept.core_xyxy)
+                    > self.overlap_iou_threshold
+                    for kept in selected
+                ):
+                    continue
+                selected.append(region)
+                if len(selected) >= target:
+                    break
+
+        select_from(eligible, self.max_regions)
+        if self.score_threshold is not None and len(selected) < self.min_regions:
+            select_from(fallback, self.min_regions)
 
         if self.merge_adjacent:
             merged: list[SearchRegion] = []
@@ -117,6 +144,14 @@ class RegionFusion:
                     **region.metadata,
                     "coordinate_mode": "absolute_original_pixel_xyxy",
                     "context_margin": self.context_margin,
+                    "selection_policy": (
+                        "score_threshold_then_min_fill"
+                        if self.score_threshold is not None
+                        else "top_score"
+                    ),
+                    "score_threshold": self.score_threshold,
+                    "min_regions": self.min_regions,
+                    "max_regions": self.max_regions,
                 },
             )
             for region in selected[: self.max_regions]

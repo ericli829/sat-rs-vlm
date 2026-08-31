@@ -49,15 +49,28 @@ providers:
     local_files_only: true
     max_new_tokens: 32
   region_retriever:
-    kind: uhr_locator
-    # The remaining keys follow configs/locator/uhr_hierarchical.yaml.
-    parser:
-      ontology_path: configs/eval/semantic/remote_sensing_ontology.json
-    retriever:
-      enabled: false
-    detector:
-      enabled: false
+    # Selected RS-CLIP baseline. TaskGraph depends only on the capability name.
+    kind: georsclip
+    checkpoint: ${GEORSCLIP_CHECKPOINT}
+    model_id: GeoRSCLIP-ViT-B-32
+    arch: ViT-B-32
+    device: cuda
+    batch_size: 16
+    grid_size: 3
+    candidate_window_ratio: 0.5
+    max_candidates: 5
+    cache_dir: reports/cache/georsclip
+    decoded_image_cache_size: 2
+    image_embedding_cache_size: 1024
 
 semantic_region_categories:
   - harbor
   - industrial area
+
+# Optional Count reject gate; calibrate on the production domain before enabling.
+count_gate:
+  # Enable only after calibrating GeoRSCLIP scores on the deployment domain.
+  enabled: false
+  threshold: 0.0
+  max_regions: 9
+  nms_iou: 0.5

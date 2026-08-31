@@ -103,6 +103,8 @@ class TaskGraphRuntime:
         policy: DatasetExecutionPolicy | None = None,
         composer: InputComposer | None = None,
         semantic_categories: set[str] | None = None,
+        retrieval_max_candidates: int = 5,
+        count_gate_config: dict[str, Any] | None = None,
     ) -> None:
         self.providers = providers
         self.composer = composer or InputComposer()
@@ -112,8 +114,17 @@ class TaskGraphRuntime:
             providers.detection,
             providers.retriever,
             semantic_categories=semantic_categories,
+            max_candidates=retrieval_max_candidates,
         )
-        count = CountExecutor(providers.detection)
+        gate = dict(count_gate_config or {})
+        count = CountExecutor(
+            providers.detection,
+            providers.retriever,
+            gate_enabled=bool(gate.get("enabled", False)),
+            gate_threshold=float(gate.get("threshold", 0.0)),
+            gate_max_regions=int(gate.get("max_regions", 9)),
+            gate_nms_iou=float(gate.get("nms_iou", 0.5)),
+        )
         select = SelectExecutor(providers.semantic_2b)
         semantic = SemanticExecutor(providers.semantic_2b)
         route = SemanticExecutor(providers.route_4b, provider_name="route_vlm")
@@ -352,7 +363,14 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
 
         scorer = create_retriever_provider(retriever_kind, retriever_cfg)
         retriever = ScoredGridRegionRetrieverAdapter(
-            scorer, grid_size=int(retriever_cfg.get("grid_size", 3))
+            scorer,
+            grid_size=int(retriever_cfg.get("grid_size", 3)),
+            default_max_candidates=int(retriever_cfg.get("max_candidates", 5)),
+            candidate_window_ratio=(
+                float(retriever_cfg["candidate_window_ratio"])
+                if retriever_cfg.get("candidate_window_ratio") is not None
+                else None
+            ),
         )
 
     planner = None
@@ -377,4 +395,6 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
         policy=policy,
         composer=composer,
         semantic_categories=set(config.get("semantic_region_categories", [])),
+        retrieval_max_candidates=int(retriever_cfg.get("max_candidates", 5)),
+        count_gate_config=dict(config.get("count_gate", {})),
     )

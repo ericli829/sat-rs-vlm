@@ -8,6 +8,7 @@
     "building": ["building", "buildings", "structure", "structures", "建筑", "建筑物"],
     "farmland": ["farmland", "farmlands", "cropland", "croplands", "farm field", "farm fields", "农田", "耕地"],
     "forest": ["forest", "forests", "woodland", "woodlands", "林地", "森林"],
+    "green_land": ["green land", "green lands", "vegetated land", "vegetation", "绿化土地", "绿色土地", "植被"],
     "harbor": ["harbor", "harbors", "harbour", "harbours", "port", "ports", "港口", "港湾"],
     "parking_lot": ["parking lot", "parking lots", "car park", "car parks", "停车场"],
     "residential_area": ["residential area", "residential areas", "residential district", "residential districts", "居民区", "住宅区"],
@@ -16,6 +17,7 @@
     "runway": ["runway", "runways", "airstrip", "airstrips", "跑道"],
     "ship": ["ship", "ships", "vessel", "vessels", "boat", "boats", "船", "船只", "舰船"],
     "storage_tank": ["storage tank", "storage tanks", "oil tank", "oil tanks", "tank", "tanks", "储罐", "油罐"],
+    "tree": ["tree", "trees", "木", "树", "树木"],
     "vehicle": ["vehicle", "vehicles", "car", "cars", "truck", "trucks", "automobile", "automobiles", "车辆", "汽车", "卡车"],
     "water": ["water", "water body", "water bodies", "水体", "水域"]
   },

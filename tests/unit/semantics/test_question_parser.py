@@ -56,6 +56,26 @@ def test_parser_reuses_ontology_objects_relations_and_spatial_scope(
     }
 
 
+def test_parser_distinguishes_center_right_from_center(
+    parser: RuleBasedQueryParser,
+) -> None:
+    task = parser.parse("ships in the center-right area")
+    assert task.targets == ("ship",)
+    assert task.spatial_scope == "center_right"
+
+    green_land = parser.parse("green land at the bottom of the image")
+    assert green_land.targets == ("green_land",)
+    assert green_land.spatial_scope == "lower"
+
+    chinese = parser.parse("中间左侧的船只")
+    assert chinese.targets == ("ship",)
+    assert chinese.spatial_scope == "center_left"
+
+    trees = parser.parse("trees in the lower-left corner")
+    assert trees.targets == ("tree",)
+    assert trees.spatial_scope == "lower_left"
+
+
 def test_unresolved_question_is_explicit(parser: RuleBasedQueryParser) -> None:
     task = parser.parse("Could this be important?")
     assert task.operation == "unknown"
