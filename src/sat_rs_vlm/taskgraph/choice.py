@@ -181,7 +181,8 @@ class ChoiceResolver:
                 answer_type=request.answer_type.value,
                 choice_ids=self._choice_ids(request.options),
                 option_texts=request.options,
-                final_suffix=self.config.final_suffix,
+                single_choice_suffix=self.config.single_choice_suffix,
+                multi_verify_template=self.config.multi_verify_template,
                 multi_select_threshold=self.config.multi_select_threshold,
                 purpose="final_choice",
             )
@@ -204,6 +205,7 @@ class ChoiceResolver:
         }
         return ChoiceResult(
             selected_ids=score.selected_ids,
+            answer_type=score.answer_type,
             raw_response=score.reasoning_text or "",
             confidence=None,
             provenance=provenance,

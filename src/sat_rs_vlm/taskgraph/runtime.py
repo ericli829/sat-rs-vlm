@@ -216,13 +216,7 @@ class TaskGraphRuntime:
         )
         if isinstance(output, ChoiceResult):
             trace.choice_provider = str(output.provenance.get("provider", "unknown"))
-            trace.choice_result = {
-                "choice_id": output.choice_id,
-                "selected_ids": list(output.selected_ids),
-                "raw_response": output.raw_response,
-                "confidence": output.confidence,
-                "provenance": output.provenance,
-            }
+            trace.choice_result = runtime_summary(output)
         else:
             trace.result = (
                 runtime_summary(output)
@@ -245,11 +239,7 @@ class TaskGraphRuntime:
             )
             output: RuntimeObject | ChoiceResult = choice_output
             trace.choice_provider = str(choice_output.provenance.get("provider", "unknown"))
-            trace.choice_result = {
-                "choice_id": choice_output.choice_id,
-                "selected_ids": list(choice_output.selected_ids),
-                "raw_response": choice_output.raw_response,
-            }
+            trace.choice_result = runtime_summary(choice_output)
         else:
             model_input = self.composer.compose(list(sources), question=request.question)
             result = self.providers.semantic_2b.infer(VLMRequest(model_input, "direct_vlm"))
@@ -287,11 +277,7 @@ class TaskGraphRuntime:
             )
             output: RuntimeObject | ChoiceResult = choice_output
             trace.choice_provider = str(choice_output.provenance.get("provider", "unknown"))
-            trace.choice_result = {
-                "choice_id": choice_output.choice_id,
-                "selected_ids": list(choice_output.selected_ids),
-                "raw_response": choice_output.raw_response,
-            }
+            trace.choice_result = runtime_summary(choice_output)
         else:
             output = source
             trace.result = runtime_summary(source)

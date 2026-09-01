@@ -20,6 +20,7 @@ from sat_rs_vlm.taskgraph.runtime_types import (
     ImageRef,
     Label,
     ScalarInt,
+    runtime_summary,
 )
 from sat_rs_vlm.taskgraph.schema import AnswerType
 
@@ -41,6 +42,7 @@ def test_structured_authoritative_value_maps_without_model_call(tmp_path: Path) 
 
     assert result.selected_ids == ("B",)
     assert result.choice_id == "B"
+    assert result.answer_type == "CHOICE_SINGLE"
     assert result.provenance["method"] == "structured_exact_option_mapping"
     assert provider.choice_calls == []
     assert provider.calls == []
@@ -57,6 +59,8 @@ def test_reasoning_letters_never_determine_single_choice(tmp_path: Path) -> None
     result = resolver.resolve(ChoiceRequest((ImageRef(IMAGE),), "Choose.", OPTIONS[:3]))
 
     assert result.selected_ids == ("B",)
+    assert result.choice_id == "B"
+    assert result.answer_type == "CHOICE_SINGLE"
     assert result.raw_response.startswith("A looks possible")
     assert result.provenance["cache_reused"] is True
     assert result.provenance["method"] == "fake_kv_cached_logits"
@@ -101,7 +105,7 @@ def test_single_choice_tracks_option_semantics_after_reordering(tmp_path: Path) 
     assert second.selected_ids == ("C",)
 
 
-def test_multi_choice_supports_one_or_many_and_canonicalizes_original_order(
+def test_multi_choice_supports_many_and_canonicalizes_original_order(
     tmp_path: Path,
 ) -> None:
     provider = OptionAwareFake({"lake": 0.8, "farm": -0.2, "mall": 0.6})
@@ -122,7 +126,12 @@ def test_multi_choice_supports_one_or_many_and_canonicalizes_original_order(
 
     assert result.selected_ids == ("A", "C")
     assert result.choice_id is None
+    assert result.answer_type == "CHOICE_MULTI"
     assert result.provenance["method"] == "fake_kv_cached_binary_verification"
+    scoring_request = provider.choice_calls[-1]
+    assert scoring_request.single_choice_suffix.endswith("Final choice:")
+    assert "Final choice:" not in scoring_request.multi_verify_template
+    assert "Candidate option {choice_id}: {option_text}" in scoring_request.multi_verify_template
 
     reordered = resolver.resolve(
         ChoiceRequest(
@@ -134,7 +143,10 @@ def test_multi_choice_supports_one_or_many_and_canonicalizes_original_order(
     )
     assert reordered.selected_ids == ("A", "B")
 
-    one = ChoiceResolver(
+
+def test_multi_choice_with_one_selected_remains_multi(tmp_path: Path) -> None:
+    provider = OptionAwareFake({"lake": 0.8, "farm": -0.2, "mall": 0.6})
+    result = ChoiceResolver(
         provider,
         InputComposer(tmp_path / "multi-one"),
         ChoiceSystemConfig(multi_select_threshold=0.7),
@@ -146,7 +158,12 @@ def test_multi_choice_supports_one_or_many_and_canonicalizes_original_order(
             AnswerType.CHOICE_MULTI,
         )
     )
-    assert one.selected_ids == ("C",)
+
+    assert result.selected_ids == ("C",)
+    assert result.choice_id is None
+    assert result.answer_type == "CHOICE_MULTI"
+    assert runtime_summary(result)["choice_id"] is None
+    assert runtime_summary(result)["answer_type"] == "CHOICE_MULTI"
 
 
 def test_multi_choice_empty_policy_never_secretly_argmaxes(tmp_path: Path) -> None:
@@ -168,6 +185,7 @@ def test_multi_choice_empty_policy_never_secretly_argmaxes(tmp_path: Path) -> No
 
     assert result.selected_ids == ()
     assert result.choice_id is None
+    assert result.answer_type == "CHOICE_MULTI"
     assert result.provenance["empty_multi_status"] == "UNRESOLVED"
 
 
@@ -191,6 +209,8 @@ def test_precomputed_cached_decision_is_reused_without_second_provider_call(
     )
 
     assert result.selected_ids == ("C",)
+    assert result.choice_id == "C"
+    assert result.answer_type == "CHOICE_SINGLE"
     assert result.raw_response == "route reasoning"
     assert provider.choice_calls == []
     assert provider.calls == []
@@ -225,6 +245,7 @@ def test_legacy_parser_is_explicitly_disabled_by_default(tmp_path: Path) -> None
     )
     result = enabled.resolve(ChoiceRequest((Label("unknown"),), "Choose.", OPTIONS))
     assert result.selected_ids == ("C",)
+    assert result.answer_type == "CHOICE_SINGLE"
     assert result.provenance["method"] == "legacy_exact_text_parser"
 
 

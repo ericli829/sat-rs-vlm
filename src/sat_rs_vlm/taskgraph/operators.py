@@ -628,7 +628,8 @@ class SelectExecutor:
                             f"Candidate {choice_id}: {entity.label}"
                             for choice_id, entity in zip(choice_ids, entities, strict=True)
                         ),
-                        final_suffix=self.choice_config.final_suffix,
+                        single_choice_suffix=self.choice_config.single_choice_suffix,
+                        multi_verify_template=self.choice_config.multi_verify_template,
                         multi_select_threshold=self.choice_config.multi_select_threshold,
                         purpose="select_relation",
                     )
@@ -721,7 +722,8 @@ class SemanticExecutor:
                     answer_type=str(node.params.get("answer_type") or "CHOICE_SINGLE"),
                     choice_ids=choice_ids,
                     option_texts=context.choices,
-                    final_suffix=self.choice_config.final_suffix,
+                    single_choice_suffix=self.choice_config.single_choice_suffix,
+                    multi_verify_template=self.choice_config.multi_verify_template,
                     multi_select_threshold=self.choice_config.multi_select_threshold,
                     purpose="route_choice",
                 )

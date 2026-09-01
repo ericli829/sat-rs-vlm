@@ -133,6 +133,9 @@ def test_taskgraph_choice_multi_is_indeterminate_and_not_blocked_by_legacy_label
         )
         assert result.output.choice_ids == ("A", "B", "C")
         assert result.output.choice_id is None
+        assert result.output.answer_type == "CHOICE_MULTI"
+        assert result.trace.choice_result["answer_type"] == "CHOICE_MULTI"
+        assert result.trace.choice_result["choice_id"] is None
         assert result.trace.choice_result["selected_ids"] == ["A", "B", "C"]
         assert runtime.choice_resolver.last_score_result.cache_reused is True
     finally:

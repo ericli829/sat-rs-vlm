@@ -1,4 +1,4 @@
-"""Compare recomputed two-pass choice with KV-cached constrained scoring."""
+"""Benchmark the frozen same-model reasoning-to-choice KV-cache path."""
 
 from __future__ import annotations
 
@@ -10,18 +10,24 @@ from pathlib import Path
 from typing import Any
 
 from sat_rs_vlm.models.hf_vlm_engine import HuggingFaceVLMEngine
+from sat_rs_vlm.taskgraph.choice_config import ChoiceSystemConfig
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-id")
-    parser.add_argument("--legacy-choice-model-id")
     parser.add_argument("--role", choices=("2b", "route_4b"), default="2b")
+    parser.add_argument(
+        "--answer-type",
+        choices=("CHOICE_SINGLE", "CHOICE_MULTI"),
+        default="CHOICE_SINGLE",
+    )
     parser.add_argument("--image", action="append", default=[])
     parser.add_argument("--prompt", required=True)
     parser.add_argument("--options-json", required=True)
     parser.add_argument("--sample-id", default="choice-cache-benchmark")
     parser.add_argument("--reasoning-max-new-tokens", type=int, default=128)
+    parser.add_argument("--multi-select-threshold", type=float, default=0.0)
     parser.add_argument("--output")
     return parser
 
@@ -54,54 +60,62 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     options = tuple(str(item) for item in json.loads(args.options_json))
     if not options:
         raise SystemExit("--options-json must contain at least one option")
+    if len(options) > 26:
+        raise SystemExit("--options-json supports at most 26 options")
     choice_ids = tuple(chr(ord("A") + index) for index in range(len(options)))
     model_id = _model_id(args)
     engine = _engine(model_id, args.reasoning_max_new_tokens)
-    legacy_choice_engine = (
-        _engine(args.legacy_choice_model_id, 16) if args.legacy_choice_model_id else engine
+    config = ChoiceSystemConfig(multi_select_threshold=args.multi_select_threshold)
+    role_instruction = (
+        "Analyze the route, obstacles, and supplied route options carefully."
+        if args.role == "route_4b"
+        else "Analyze the evidence and supplied options carefully."
     )
     reasoning_prompt = (
-        f"{args.prompt}\n\nOptions:\n" + "\n".join(options) + "\n\n"
-        "Analyze the evidence and options carefully. The final option will be selected "
-        "in a separate constrained step."
+        f"{args.prompt}\n\nOptions:\n"
+        + "\n".join(options)
+        + f"\n\n{role_instruction} The final decision will use the same model's KV cache."
     )
 
-    baseline_started = time.perf_counter()
-    baseline_reasoning = engine.generate_text(reasoning_prompt, list(args.image))
-    baseline_choice_prompt = (
-        f"{reasoning_prompt}\n\nReasoning:\n{baseline_reasoning}\n\n"
-        "Return exactly one legal option id.\nFinal choice:"
-    )
-    baseline_choice = legacy_choice_engine.generate_text(baseline_choice_prompt, list(args.image))
-    baseline_total_ms = (time.perf_counter() - baseline_started) * 1000.0
-
-    cached_started = time.perf_counter()
-    cached = engine.reason_and_choose(
-        reasoning_prompt,
-        list(args.image),
-        choice_ids=choice_ids,
-        option_texts=options,
-        answer_type="CHOICE_SINGLE",
-        suffix="\n\nFinal choice:",
-        reasoning_max_new_tokens=args.reasoning_max_new_tokens,
-    )
-    cached_total_ms = (time.perf_counter() - cached_started) * 1000.0
-    choice_incremental_ms = float(cached.latency_ms.get("choice_suffix_prefill_ms") or 0.0)
-    choice_incremental_ms += float(cached.latency_ms.get("choice_scoring_ms") or 0.0)
+    wall_started = time.perf_counter()
+    try:
+        cached = engine.reason_and_choose(
+            reasoning_prompt,
+            list(args.image),
+            choice_ids=choice_ids,
+            option_texts=options,
+            answer_type=args.answer_type,
+            single_choice_suffix=config.single_choice_suffix,
+            multi_verify_template=config.multi_verify_template,
+            multi_select_threshold=config.multi_select_threshold,
+            reasoning_max_new_tokens=args.reasoning_max_new_tokens,
+        )
+        active_sessions = engine.active_session_count
+    finally:
+        engine.close()
+    overall_wall_ms = (time.perf_counter() - wall_started) * 1000.0
+    reasoning_total_ms = cached.latency_ms.get("reasoning_total_ms")
+    choice_total_ms = cached.latency_ms.get("choice_total_ms")
+    ratio = None
+    if reasoning_total_ms and choice_total_ms is not None:
+        ratio = float(choice_total_ms) / float(reasoning_total_ms)
     return {
         "sample_id": args.sample_id,
         "role": args.role,
+        "architecture": f"{args.role}_reasoning_to_same_model_kv_choice",
+        "answer_type": args.answer_type,
         "model": model_id,
-        "legacy_choice_model": args.legacy_choice_model_id or model_id,
-        "reasoning_tokens": cached.metadata.get("reasoning_tokens"),
-        "baseline_total_ms": baseline_total_ms,
-        "cached_total_ms": cached_total_ms,
-        "choice_incremental_ms": choice_incremental_ms,
-        "speedup": baseline_total_ms / cached_total_ms if cached_total_ms else None,
+        "reasoning_total_ms": reasoning_total_ms,
+        "choice_total_ms": choice_total_ms,
+        "choice_reasoning_ratio": ratio,
+        "overall_wall_ms": overall_wall_ms,
         "cache_reused": cached.cache_reused,
+        "reasoning_tokens": cached.metadata.get("reasoning_tokens"),
+        "choice_suffix_tokens": cached.metadata.get("choice_suffix_tokens"),
+        "choice_scored_tokens": cached.metadata.get("choice_scored_tokens"),
         "peak_vram_mb": cached.metadata.get("peak_vram_mb"),
-        "choice_old": baseline_choice,
-        "choice_new": list(cached.selected_ids),
+        "active_session_count_after_inference": active_sessions,
+        "selected_ids": list(cached.selected_ids),
         "scores": cached.scores,
         "method": cached.method,
         "latency_ms": cached.latency_ms,
