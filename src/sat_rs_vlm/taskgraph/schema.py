@@ -96,6 +96,11 @@ class SelectMode(StringEnum):
     SUBREGION = "SUBREGION"
 
 
+class SelectionCardinality(StringEnum):
+    SINGLE = "SINGLE"
+    MULTI = "MULTI"
+
+
 class SpatialRelation(StringEnum):
     LEFT_OF = "LEFT_OF"
     RIGHT_OF = "RIGHT_OF"
@@ -234,6 +239,7 @@ class SelectParams(StrictModel):
     # resolved deterministically from the current scope and recorded in output.
     margin: float | None = Field(default=None, ge=0.0)
     overlap_iou_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
+    selection_type: SelectionCardinality | None = None
 
     @model_validator(mode="after")
     def validate_mode_shape(self) -> SelectParams:
@@ -246,11 +252,11 @@ class SelectParams(StrictModel):
         }[self.mode]
         fields = {
             "relation", "criterion", "rank", "order", "index", "direction", "subregion",
-            "margin", "overlap_iou_threshold",
+            "margin", "overlap_iou_threshold", "selection_type",
         }
         present = {name for name in fields if getattr(self, name) is not None}
         allowed_optional = {
-            SelectMode.RELATION: {"margin", "overlap_iou_threshold"},
+            SelectMode.RELATION: {"margin", "overlap_iou_threshold", "selection_type"},
             SelectMode.SUBREGION: {"margin"},
         }[self.mode] if self.mode in {SelectMode.RELATION, SelectMode.SUBREGION} else set()
         if not required.issubset(present) or present - required - allowed_optional:

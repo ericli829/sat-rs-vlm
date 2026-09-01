@@ -10,6 +10,7 @@ from typing import Any
 from sat_rs_vlm.infrastructure.config import ModelConfig
 
 from .choice import ChoiceRequest, ChoiceResolver
+from .choice_config import ChoiceSystemConfig
 from .executor import CapabilityRouter, ExecutorBinding, GraphExecutor
 from .input_composer import InputComposer
 from .operators import (
@@ -60,6 +61,7 @@ class RuntimeRequest:
     image_paths: tuple[str, ...]
     options: tuple[str, ...] = ()
     question_type: QuestionType = QuestionType.FREE_FORM
+    choice_answer_type: AnswerType | None = None
     target_category: str | None = None
     graph: TaskGraph | dict[str, Any] | str | None = None
 
@@ -103,9 +105,11 @@ class TaskGraphRuntime:
         policy: DatasetExecutionPolicy | None = None,
         composer: InputComposer | None = None,
         semantic_categories: set[str] | None = None,
+        choice_config: ChoiceSystemConfig | None = None,
     ) -> None:
         self.providers = providers
         self.composer = composer or InputComposer()
+        self.choice_config = choice_config or ChoiceSystemConfig()
         self.mode_router = ExecutionModeRouter(policy)
         geometry = GeometryExecutor()
         locate = LocateExecutor(
@@ -114,9 +118,13 @@ class TaskGraphRuntime:
             semantic_categories=semantic_categories,
         )
         count = CountExecutor(providers.detection)
-        select = SelectExecutor(providers.semantic_2b)
-        semantic = SemanticExecutor(providers.semantic_2b)
-        route = SemanticExecutor(providers.route_4b, provider_name="route_vlm")
+        select = SelectExecutor(providers.semantic_2b, self.choice_config)
+        semantic = SemanticExecutor(providers.semantic_2b, choice_config=self.choice_config)
+        route = SemanticExecutor(
+            providers.route_4b,
+            provider_name="route_vlm",
+            choice_config=self.choice_config,
+        )
         bindings = {
             OperatorName.REGION: ExecutorBinding(geometry),
             OperatorName.REGION_FROM_BBOX: ExecutorBinding(geometry),
@@ -137,7 +145,7 @@ class TaskGraphRuntime:
             OperatorName.MATCH_CHOICE: ExecutorBinding(semantic),
         }
         self.graph_executor = GraphExecutor(CapabilityRouter(bindings))
-        self.choice_resolver = ChoiceResolver(providers.choice, self.composer)
+        self.choice_resolver = ChoiceResolver(providers.choice, self.composer, self.choice_config)
 
     @staticmethod
     def _images(request: RuntimeRequest) -> dict[str, ImageRef]:
@@ -154,8 +162,18 @@ class TaskGraphRuntime:
         answer_type: AnswerType,
     ) -> RuntimeObject | ChoiceResult | tuple[RuntimeObject, ...]:
         if answer_type in {AnswerType.CHOICE_SINGLE, AnswerType.CHOICE_MULTI}:
-            return self.choice_resolver.resolve(ChoiceRequest(sources, question, options))
+            return self.choice_resolver.resolve(
+                ChoiceRequest(sources, question, options, answer_type)
+            )
         return sources[0] if len(sources) == 1 else sources
+
+    @staticmethod
+    def _direct_choice_answer_type(request: RuntimeRequest) -> AnswerType:
+        if request.choice_answer_type is not None:
+            return request.choice_answer_type
+        if request.question_type is QuestionType.MULTIPLE_CHOICE_MULTI:
+            return AnswerType.CHOICE_MULTI
+        return AnswerType.CHOICE_SINGLE
 
     def _taskgraph(self, request: RuntimeRequest, images: dict[str, ImageRef]) -> RuntimeResult:
         if request.graph is not None:
@@ -191,12 +209,16 @@ class TaskGraphRuntime:
         )
         sources = tuple(store.get(ref) for ref in graph.final.sources)
         output = self._choice_or_answer(
-            sources, graph.final.question, request.options, graph.final.answer_type
+            sources,
+            graph.final.question or request.question,
+            request.options,
+            graph.final.answer_type,
         )
         if isinstance(output, ChoiceResult):
             trace.choice_provider = str(output.provenance.get("provider", "unknown"))
             trace.choice_result = {
                 "choice_id": output.choice_id,
+                "selected_ids": list(output.selected_ids),
                 "raw_response": output.raw_response,
                 "confidence": output.confidence,
                 "provenance": output.provenance,
@@ -213,13 +235,20 @@ class TaskGraphRuntime:
         sources = tuple(images.values())
         trace = ExecutionTrace(request.sample_id, ExecutionMode.DIRECT_VLM.value)
         if request.options:
-            output: RuntimeObject | ChoiceResult = self.choice_resolver.resolve(
-                ChoiceRequest(sources, request.question, request.options)
+            choice_output = self.choice_resolver.resolve(
+                ChoiceRequest(
+                    sources,
+                    request.question,
+                    request.options,
+                    self._direct_choice_answer_type(request),
+                )
             )
-            trace.choice_provider = str(output.provenance.get("provider", "unknown"))
+            output: RuntimeObject | ChoiceResult = choice_output
+            trace.choice_provider = str(choice_output.provenance.get("provider", "unknown"))
             trace.choice_result = {
-                "choice_id": output.choice_id,
-                "raw_response": output.raw_response,
+                "choice_id": choice_output.choice_id,
+                "selected_ids": list(choice_output.selected_ids),
+                "raw_response": choice_output.raw_response,
             }
         else:
             model_input = self.composer.compose(list(sources), question=request.question)
@@ -248,13 +277,20 @@ class TaskGraphRuntime:
         )
         trace = ExecutionTrace(request.sample_id, ExecutionMode.DIRECT_DETECTION.value)
         if request.options:
-            output: RuntimeObject | ChoiceResult = self.choice_resolver.resolve(
-                ChoiceRequest((source,), request.question, request.options)
+            choice_output = self.choice_resolver.resolve(
+                ChoiceRequest(
+                    (source,),
+                    request.question,
+                    request.options,
+                    self._direct_choice_answer_type(request),
+                )
             )
-            trace.choice_provider = str(output.provenance.get("provider", "unknown"))
+            output: RuntimeObject | ChoiceResult = choice_output
+            trace.choice_provider = str(choice_output.provenance.get("provider", "unknown"))
             trace.choice_result = {
-                "choice_id": output.choice_id,
-                "raw_response": output.raw_response,
+                "choice_id": choice_output.choice_id,
+                "selected_ids": list(choice_output.selected_ids),
+                "raw_response": choice_output.raw_response,
             }
         else:
             output = source
@@ -283,20 +319,28 @@ def fake_runtime(
     semantic_responses: dict[str, str] | None = None,
     route_responses: dict[str, str] | None = None,
     choice_responses: dict[str, str] | None = None,
+    semantic_choice_scores: dict[str, dict[str, float]] | None = None,
+    route_choice_scores: dict[str, dict[str, float]] | None = None,
     retrieval_candidates: list[tuple[list[float], float]] | None = None,
     planner_fixtures: dict[str, TaskGraph | dict[str, Any]] | None = None,
     policy: DatasetExecutionPolicy | None = None,
+    choice_config: ChoiceSystemConfig | None = None,
 ) -> TaskGraphRuntime:
+    shared_2b = FakeSemanticVLMProvider(
+        {**(semantic_responses or {}), **(choice_responses or {})},
+        choice_scores=semantic_choice_scores,
+    )
     return TaskGraphRuntime(
         RuntimeProviders(
             detection=FakeDetectionProvider(detection_boxes),
-            semantic_2b=FakeSemanticVLMProvider(semantic_responses),
-            route_4b=FakeSemanticVLMProvider(route_responses),
+            semantic_2b=shared_2b,
+            route_4b=FakeSemanticVLMProvider(route_responses, choice_scores=route_choice_scores),
             retriever=FakeRegionRetriever(retrieval_candidates),
-            choice=FakeSemanticVLMProvider(choice_responses),
+            choice=shared_2b,
             planner=FixturePlannerProvider(planner_fixtures or {}) if planner_fixtures else None,
         ),
         policy=policy,
+        choice_config=choice_config,
     )
 
 
@@ -328,7 +372,9 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
         kind = str(section.pop("kind", "fake"))
         if kind == "fake":
             return FakeSemanticVLMProvider(
-                section.get("responses"), str(section.get("default", "A"))
+                section.get("responses"),
+                str(section.get("default", "A")),
+                choice_scores=section.get("choice_scores"),
             )
         if kind == "qwen3_vl":
             return LazyQwenSemanticProvider(ModelConfig.model_validate(section), role=role)
@@ -336,7 +382,18 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
 
     semantic_2b = semantic_provider("semantic_2b", "general_2b")
     route_4b = semantic_provider("route_4b", "route_4b")
-    choice = semantic_provider("choice", "choice_2b")
+    choice_section = providers.get("choice", {"reuse": "semantic_2b"})
+    if not isinstance(choice_section, dict):
+        raise TypeError("providers.choice config must be a mapping")
+    reuse = choice_section.get("reuse")
+    if reuse is not None:
+        reusable = {"semantic_2b": semantic_2b, "route_4b": route_4b}
+        try:
+            choice = reusable[str(reuse)]
+        except KeyError as exc:
+            raise ValueError("providers.choice.reuse must name semantic_2b or route_4b") from exc
+    else:
+        choice = semantic_provider("choice", "choice_2b")
 
     retriever_cfg = dict(providers.get("region_retriever", {"kind": "fake"}))
     retriever_kind = str(retriever_cfg.pop("kind", "fake"))
@@ -366,6 +423,7 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
         planner = FixturePlannerProvider(payload)
 
     policy = DatasetExecutionPolicy.from_mapping(config.get("dataset_policy"))
+    choice_config = ChoiceSystemConfig.from_mapping(config.get("choice"))
     composer_cfg = config.get("input_composer", {})
     if not isinstance(composer_cfg, dict):
         raise TypeError("input_composer config must be a mapping")
@@ -377,4 +435,5 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
         policy=policy,
         composer=composer,
         semantic_categories=set(config.get("semantic_region_categories", [])),
+        choice_config=choice_config,
     )

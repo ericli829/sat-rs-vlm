@@ -10,8 +10,10 @@ from typing import Protocol, cast
 
 from PIL import Image
 
+from .choice_config import ChoiceSystemConfig
 from .input_composer import InputComposer
 from .providers import (
+    ChoiceScoringRequest,
     DetectionProvider,
     DetectionRequest,
     RegionRetrievalRequest,
@@ -542,9 +544,14 @@ class CountExecutor:
 
 
 class SelectExecutor:
-    def __init__(self, semantic: SemanticVLMProvider) -> None:
+    def __init__(
+        self,
+        semantic: SemanticVLMProvider,
+        choice_config: ChoiceSystemConfig | None = None,
+    ) -> None:
         self.semantic = semantic
         self.provider_name = semantic.provider_name
+        self.choice_config = choice_config or ChoiceSystemConfig()
 
     @staticmethod
     def _sort_entities(entities: tuple[Entity, ...], order: str) -> list[Entity]:
@@ -761,6 +768,7 @@ class SelectExecutor:
         candidates: EntitySet | Region | RegionSet,
         reference: RuntimeObject | None,
         relation: str,
+        node: GraphNode,
         context: OperatorContext,
         provenance: dict[str, object],
     ) -> OperatorOutcome:
@@ -771,47 +779,118 @@ class SelectExecutor:
         model_input = context.composer.compose_named(
             named,
             question=(
-                f"Select candidate ids satisfying relation {relation}. "
-                "Return only candidate ids such as A or A,C; "
-                "return NONE when no candidate qualifies."
+                f"Determine which candidate objects satisfy relation {relation} "
+                "relative to the marked reference."
             ),
         )
-        try:
-            result = self.semantic.infer(VLMRequest(model_input, "selection"))
-            if result.text.strip().casefold() in {"none", "no", "empty", "null"}:
-                return self._result(
-                    self._empty_like(candidates),
-                    status=SelectStatus.EMPTY,
-                    method="qwen3_vl",
-                    confidence=result.confidence,
-                    provenance={**provenance, "provider": result.provider},
-                )
-            indices = parse_selection_indices(result.text, len(items))
-        except Exception as exc:
+        candidate_mapping = model_input.metadata.get("candidate_mapping")
+        if not isinstance(candidate_mapping, dict) or not candidate_mapping:
             return self._result(
                 self._empty_like(candidates),
-                status=SelectStatus.UNRESOLVED,
-                method="qwen3_vl",
-                reason=f"semantic_selection_unresolved: {exc}",
+                status=SelectStatus.ERROR,
+                method="qwen3_vl_kv_cached_choice",
+                reason="semantic selection canvas has no stable candidate mapping",
                 provenance=provenance,
             )
-        selected = self._selected_like(
-            candidates, indices, provenance={"provider": result.provider}
+        choice_ids = tuple(str(choice_id) for choice_id in candidate_mapping)
+        selection_type = getattr(node.params.get("selection_type"), "value", None) or str(
+            node.params.get("selection_type") or "MULTI"
         )
-        status = SelectStatus.OK if indices else SelectStatus.EMPTY
-        candidate_ids = self._candidate_ids(items, indices)
-        return self._result(
-            selected,
-            status=status,
-            method="qwen3_vl",
-            confidence=result.confidence,
-            provenance={
-                **provenance,
-                "provider": result.provider,
-                "raw_response": result.text,
-                "candidate_ids": candidate_ids,
-            },
-        )
+        answer_type = "CHOICE_SINGLE" if selection_type == "SINGLE" else "CHOICE_MULTI"
+        try:
+            scored = self.semantic.reason_and_choose(
+                ChoiceScoringRequest(
+                    model_input=model_input,
+                    answer_type=answer_type,
+                    choice_ids=choice_ids,
+                    option_texts=tuple(
+                        f"Candidate {choice_id}: "
+                        f"{item.label if isinstance(item, Entity) else 'region'}"
+                        for choice_id, item in zip(choice_ids, items, strict=True)
+                    ),
+                    final_suffix=self.choice_config.final_suffix,
+                    multi_select_threshold=self.choice_config.multi_select_threshold,
+                    purpose="select_relation",
+                )
+            )
+            indices: tuple[int, ...] = tuple(
+                int(candidate_mapping[choice_id]["index"])
+                for choice_id in scored.selected_ids
+                if isinstance(candidate_mapping.get(choice_id), dict)
+                and isinstance(candidate_mapping[choice_id].get("index"), int)
+            )
+            if len(indices) != len(scored.selected_ids):
+                raise RuntimeError("choice score returned an invalid SELECT candidate id")
+            selected = self._selected_like(
+                candidates, indices, provenance={"provider": scored.provider}
+            )
+            status = SelectStatus.OK if indices else SelectStatus.EMPTY
+            stable_candidate_ids = self._candidate_ids(items, indices)
+            return self._result(
+                selected,
+                status=status,
+                method="qwen3_vl_kv_cached_choice",
+                provenance={
+                    **provenance,
+                    "provider": scored.provider,
+                    "candidate_ids": stable_candidate_ids,
+                    "choice_labels": list(scored.selected_ids),
+                    "scores": dict(scored.scores),
+                    "score_method": scored.method,
+                    "cache_reused": scored.cache_reused,
+                    "latency_ms": dict(scored.latency_ms),
+                    "reasoning_text": (
+                        scored.reasoning_text
+                        if self.choice_config.preserve_reasoning_text
+                        else None
+                    ),
+                    "choice_metadata": dict(scored.metadata),
+                },
+            )
+        except Exception as exc:
+            # The finite-output mask is retained strictly as a compatibility
+            # fallback for a backend that cannot expose a valid KV cache.
+            try:
+                result = self.semantic.infer(VLMRequest(model_input, "selection"))
+                if result.text.strip().casefold() in {"none", "no", "empty", "null"}:
+                    return self._result(
+                        self._empty_like(candidates),
+                        status=SelectStatus.EMPTY,
+                        method="qwen3_vl_token_mask_fallback",
+                        confidence=result.confidence,
+                        provenance={
+                            **provenance,
+                            "provider": result.provider,
+                            "fallback_reason": str(exc),
+                        },
+                    )
+                indices = parse_selection_indices(result.text, len(items))
+            except Exception as fallback_exc:
+                return self._result(
+                    self._empty_like(candidates),
+                    status=SelectStatus.UNRESOLVED,
+                    method="qwen3_vl_kv_cached_choice",
+                    reason=f"semantic_selection_unresolved: {fallback_exc}",
+                    provenance={**provenance, "cached_choice_error": str(exc)},
+                )
+            selected = self._selected_like(
+                candidates, indices, provenance={"provider": result.provider}
+            )
+            status = SelectStatus.OK if indices else SelectStatus.EMPTY
+            candidate_ids = self._candidate_ids(items, indices)
+            return self._result(
+                selected,
+                status=status,
+                method="qwen3_vl_token_mask_fallback",
+                confidence=result.confidence,
+                provenance={
+                    **provenance,
+                    "provider": result.provider,
+                    "raw_response": result.text,
+                    "candidate_ids": candidate_ids,
+                    "fallback_reason": str(exc),
+                },
+            )
 
     def _direct_relation(
         self,
@@ -1040,6 +1119,7 @@ class SelectExecutor:
                         candidates,
                         reference_value,
                         relation,
+                        node,
                         context,
                         {
                             "relation": relation,
@@ -1067,7 +1147,7 @@ class SelectExecutor:
             }
             if needs_semantic:
                 return self._semantic_select(
-                    candidates, reference_value, relation, context, provenance
+                    candidates, reference_value, relation, node, context, provenance
                 )
             relation_selected = self._selected_like(
                 candidates, indices, provenance={"select": "RELATION", **provenance}
@@ -1091,9 +1171,16 @@ class SelectExecutor:
 
 
 class SemanticExecutor:
-    def __init__(self, provider: SemanticVLMProvider, *, provider_name: str | None = None) -> None:
+    def __init__(
+        self,
+        provider: SemanticVLMProvider,
+        *,
+        provider_name: str | None = None,
+        choice_config: ChoiceSystemConfig | None = None,
+    ) -> None:
         self.provider = provider
         self.provider_name = provider_name or provider.provider_name
+        self.choice_config = choice_config or ChoiceSystemConfig()
 
     @staticmethod
     def _label_set(text: str) -> tuple[str, ...]:
@@ -1126,6 +1213,25 @@ class SemanticExecutor:
             else ()
         )
         model_input = context.composer.compose_named(inputs, question=question, options=options)
+        if node.op is OperatorName.ROUTE_REASON:
+            choice_ids = tuple(chr(ord("A") + index) for index in range(len(context.choices)))
+            answer_type = getattr(node.params.get("answer_type"), "value", None) or str(
+                node.params.get("answer_type") or "CHOICE_SINGLE"
+            )
+            scored = self.provider.reason_and_choose(
+                ChoiceScoringRequest(
+                    model_input=model_input,
+                    answer_type=answer_type,
+                    choice_ids=choice_ids,
+                    option_texts=context.choices,
+                    final_suffix=self.choice_config.final_suffix,
+                    multi_select_threshold=self.choice_config.multi_select_threshold,
+                    purpose="route_choice",
+                )
+            )
+            if not self.choice_config.preserve_reasoning_text:
+                scored = replace(scored, reasoning_text=None)
+            return OperatorOutcome(scored, scored.provider)
         result = self.provider.infer(VLMRequest(model_input, node.op.value.casefold()))
         if node.op in {OperatorName.ATTRIBUTE, OperatorName.CLASSIFY, OperatorName.RELATION}:
             value: RuntimeObject = Label(result.text, {"provider": result.provider})

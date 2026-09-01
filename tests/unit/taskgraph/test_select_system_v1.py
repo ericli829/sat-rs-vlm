@@ -79,7 +79,7 @@ def test_clear_left_relation_uses_geometry_and_preserves_candidate_ids(tmp_path:
         composer.close()
 
 
-def test_boundary_relation_and_near_use_qwen_fallback(tmp_path: Path) -> None:
+def test_boundary_relation_and_near_use_kv_cached_choice(tmp_path: Path) -> None:
     image = _image(tmp_path)
     candidates = EntitySet((_entity(image, (98, 40, 118, 60), "det-1"),))
     reference = _entity(image, (100, 40, 120, 60), "ref-1")
@@ -92,9 +92,9 @@ def test_boundary_relation_and_near_use_qwen_fallback(tmp_path: Path) -> None:
             context,
         )
         assert isinstance(boundary.value, SelectResult)
-        assert boundary.value.method == "qwen3_vl"
+        assert boundary.value.method == "qwen3_vl_kv_cached_choice"
         assert (
-            provider.calls[0].model_input.metadata["candidate_mapping"]["A"]["candidate_id"]
+            provider.choice_calls[0].model_input.metadata["candidate_mapping"]["A"]["candidate_id"]
             == "det-1"
         )
 
@@ -104,8 +104,9 @@ def test_boundary_relation_and_near_use_qwen_fallback(tmp_path: Path) -> None:
             context,
         )
         assert isinstance(near.value, SelectResult)
-        assert near.value.method == "qwen3_vl"
-        assert len(provider.calls) == 2
+        assert near.value.method == "qwen3_vl_kv_cached_choice"
+        assert len(provider.choice_calls) == 2
+        assert provider.calls == []
     finally:
         composer.close()
 
@@ -238,4 +239,3 @@ def test_real_selection_provider_enables_finite_candidate_constraint() -> None:
         "B,C",
         "A,B,C",
     )
-

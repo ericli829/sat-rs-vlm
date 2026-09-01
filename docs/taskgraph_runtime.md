@@ -129,8 +129,9 @@ for deterministic geometry must resolve to exactly one entity or region. A plura
 reference is retained only as visual context for semantic fallback.
 
 Every execution returns `SelectResult`, containing `selected`, a status (`OK`, `EMPTY`,
-`AMBIGUOUS`, `UNRESOLVED`, or `ERROR`), method (`geometry` or `qwen3_vl`), optional
-confidence, and trace provenance. `COUNT` accepts `OK`/`EMPTY` selection results and
+`AMBIGUOUS`, `UNRESOLVED`, or `ERROR`), method (`geometry`, `qwen3_vl_kv_cached_choice`,
+or a clearly marked compatibility fallback), optional confidence, and trace provenance.
+`COUNT` accepts `OK`/`EMPTY` selection results and
 refuses unresolved or ambiguous ones, preventing an uncertain model answer from being
 silently converted into a count.
 
@@ -140,14 +141,17 @@ box: `LEFT_SIDE`, `RIGHT_SIDE`, `ABOVE`, `BELOW`, `INSIDE`, and `AROUND` are sup
 arbitrary complements, multi-hop selection, generic learned ranking, and SELECT-to-
 retriever calls are outside this operator's scope.
 
-For a semantic fallback, the Qwen3-VL provider uses finite-set constrained decoding by
-default. Given candidate labels `A/B/C`, its next-token mask permits only canonical
-selections (`NONE`, `A`, `B`, `A,C`, and so on) rather than relying only on an instruction
-in the prompt. The exact strings are tokenized at runtime through the loaded processor, so
-the mask is valid even when a label or comma spans multiple tokens. It is limited to at most
-eight candidates (256 possible complete strings); a larger legacy canvas uses strict tolerant
-parsing and becomes `UNRESOLVED` if it cannot be mapped uniquely. Set
-`selection_constrained_decoding: false` only for diagnosing a model/backend incompatibility.
+For a semantic fallback, Qwen3-VL first performs free visual reasoning. The runtime then
+reuses the same Transformer KV cache to score the legal candidate labels, so the final
+selection comes from candidate scores rather than regex-parsing the reasoning text. The
+trace records the scores, selected stable candidate IDs, cache reuse, and latency. This is
+also the standard mechanism used for final benchmark choices and route options.
+
+Finite-set token-masked decoding remains only as a compatibility fallback when a configured
+backend cannot provide a usable KV cache. Given candidate labels `A/B/C`, the mask permits
+only canonical selections (`NONE`, `A`, `B`, `A,C`, and so on); it is limited to eight
+candidates. A fallback is explicitly labeled `qwen3_vl_token_mask_fallback` in the trace
+and must not be confused with the normal cached-choice path.
 
 ## Provider status
 

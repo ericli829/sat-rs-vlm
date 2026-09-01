@@ -149,11 +149,47 @@ class Answer:
 
 
 @dataclass(frozen=True)
+class ChoiceScoreResult:
+    selected_ids: tuple[str, ...]
+    scores: dict[str, float]
+    answer_type: str
+    reasoning_text: str | None
+    provider: str
+    model_id: str
+    method: str
+    cache_reused: bool
+    latency_ms: dict[str, float | None] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.answer_type not in {"CHOICE_SINGLE", "CHOICE_MULTI"}:
+            raise ValueError("choice score answer_type must be CHOICE_SINGLE or CHOICE_MULTI")
+        if self.answer_type == "CHOICE_SINGLE" and len(self.selected_ids) != 1:
+            raise ValueError("CHOICE_SINGLE requires exactly one selected id")
+        if len(self.selected_ids) != len(set(self.selected_ids)):
+            raise ValueError("selected choice ids must be unique")
+        if any(choice_id not in self.scores for choice_id in self.selected_ids):
+            raise ValueError("every selected choice id must have a score")
+
+
+@dataclass(frozen=True)
 class ChoiceResult:
-    choice_id: str
+    selected_ids: tuple[str, ...]
     raw_response: str
     confidence: float | None = None
     provenance: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def choice_id(self) -> str | None:
+        """Legacy single-choice view; multi-choice is never flattened to a string."""
+
+        return self.selected_ids[0] if len(self.selected_ids) == 1 else None
+
+    @property
+    def choice_ids(self) -> tuple[str, ...]:
+        """Compatibility alias for callers migrated before ``selected_ids`` was frozen."""
+
+        return self.selected_ids
 
 
 RuntimeObject: TypeAlias = (
@@ -172,6 +208,7 @@ RuntimeObject: TypeAlias = (
     | Evidence
     | EvidenceSet
     | Answer
+    | ChoiceScoreResult
 )
 
 STRUCTURED_AUTHORITATIVE_TYPES = (ScalarInt, ScalarFloat, Boolean, Label, LabelSet)
@@ -217,4 +254,17 @@ def runtime_summary(value: RuntimeObject) -> dict[str, Any]:
         summary["text"] = value.text[:256]
     elif isinstance(value, RouteContext):
         summary["bbox_xyxy_global"] = list(value.context_region.bbox_xyxy_global)
+    elif isinstance(value, ChoiceScoreResult):
+        summary.update(
+            selected_ids=list(value.selected_ids),
+            scores=dict(value.scores),
+            answer_type=value.answer_type,
+            reasoning_text=(value.reasoning_text or "")[:256],
+            provider=value.provider,
+            model_id=value.model_id,
+            method=value.method,
+            cache_reused=value.cache_reused,
+            latency_ms=dict(value.latency_ms),
+            metadata=dict(value.metadata),
+        )
     return summary

@@ -15,8 +15,12 @@
 
 from __future__ import annotations
 
+import copy
 import importlib
+import time
+import uuid
 from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +40,68 @@ MODEL_CLASS_NAMES = (
     "AutoModelForImageTextToText",
     "AutoModelForVision2Seq",
 )
+
+
+@dataclass
+class CachedGenerationSession:
+    """Opaque, model-bound KV state retained between reasoning and constrained choice."""
+
+    session_id: str
+    model_identity: str
+    model_id: str
+    reasoning_text: str
+    initial_prefill_tokens: int
+    reasoning_tokens: int
+    latency_ms: dict[str, float | None]
+    metadata: dict[str, Any] = field(default_factory=dict)
+    closed: bool = False
+    _past_key_values: Any = field(default=None, repr=False)
+    _sequence_ids: Any = field(default=None, repr=False)
+    _attention_mask: Any = field(default=None, repr=False)
+    _rope_deltas: Any = field(default=None, repr=False)
+    _release_callback: Callable[[str], None] | None = field(default=None, repr=False)
+
+    def close(self) -> None:
+        if self.closed:
+            return
+        self._past_key_values = None
+        self._sequence_ids = None
+        self._attention_mask = None
+        self._rope_deltas = None
+        self.closed = True
+        if self._release_callback is not None:
+            self._release_callback(self.session_id)
+            self._release_callback = None
+
+    release = close
+
+    def __enter__(self) -> CachedGenerationSession:
+        if self.closed:
+            raise RuntimeError("cached generation session is closed")
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
+
+@dataclass(frozen=True)
+class CachedReasoningResult:
+    reasoning_text: str
+    session: CachedGenerationSession
+    latency_ms: dict[str, float | None]
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class CachedChoiceEngineResult:
+    selected_ids: tuple[str, ...]
+    scores: dict[str, float]
+    answer_type: str
+    reasoning_text: str
+    method: str
+    cache_reused: bool
+    latency_ms: dict[str, float | None]
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class HuggingFaceVLMEngine:
@@ -113,6 +179,16 @@ class HuggingFaceVLMEngine:
         model_device = getattr(self._model, "device", None)
         if model_device is not None:
             self.device = str(model_device)
+        self._model_identity = f"{self.model_id}:{self._model_class_name}:{id(self._model)}"
+        self._active_sessions: dict[str, CachedGenerationSession] = {}
+
+    @property
+    def model_identity(self) -> str:
+        return self._model_identity
+
+    @property
+    def active_session_count(self) -> int:
+        return len(self._active_sessions)
 
     @staticmethod
     def _resolve_model_class(transformers: Any) -> Any:
@@ -185,6 +261,428 @@ class HuggingFaceVLMEngine:
 
         images = [self._open_image(path) for path in image_paths]
         return self._generate(prompt=prompt, images=images, allowed_outputs=allowed_outputs)
+
+    def _release_session(self, session_id: str) -> None:
+        self._active_sessions.pop(session_id, None)
+
+    def _restore_rope_state(self, session: CachedGenerationSession) -> None:
+        model = getattr(self._model, "model", None)
+        if model is not None and hasattr(model, "rope_deltas"):
+            model.rope_deltas = session._rope_deltas
+
+    def _peak_vram_mb(self) -> float | None:
+        cuda = getattr(self._torch, "cuda", None)
+        if cuda is None or not bool(cuda.is_available()):
+            return None
+        try:
+            return float(cuda.max_memory_allocated()) / (1024.0 * 1024.0)
+        except (AttributeError, RuntimeError):
+            return None
+
+    def reason_with_cache(
+        self,
+        prompt: str,
+        image_paths: list[str],
+        *,
+        max_new_tokens: int | None = None,
+    ) -> CachedReasoningResult:
+        """Generate free reasoning once and retain its actual Transformers KV cache."""
+
+        images = [self._open_image(path) for path in image_paths]
+        apply_chat_template = getattr(self._processor, "apply_chat_template", None)
+        if apply_chat_template is None:
+            raise RuntimeError("The selected processor does not support multimodal chat templates.")
+        encoded = apply_chat_template(
+            self._build_messages(prompt, images),
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+        )
+        if hasattr(encoded, "to"):
+            model_device = getattr(self._model, "device", self.device)
+            encoded = encoded.to(model_device)
+        input_ids = encoded["input_ids"]
+        initial_prefill_tokens = int(input_ids.shape[-1])
+        started = time.perf_counter()
+        with self._torch.inference_mode():
+            generated = self._model.generate(
+                **encoded,
+                max_new_tokens=max_new_tokens or self.max_new_tokens,
+                do_sample=False,
+                use_cache=True,
+                return_dict_in_generate=True,
+            )
+        reasoning_generate_ms = (time.perf_counter() - started) * 1000.0
+        cache = getattr(generated, "past_key_values", None)
+        sequences = getattr(generated, "sequences", None)
+        if cache is None or sequences is None:
+            raise RuntimeError(
+                "cached reasoning requires generate() to return sequences and past_key_values"
+            )
+        terminal_ids: set[int] = set()
+        generation_config = getattr(self._model, "generation_config", None)
+        eos_token_id = getattr(generation_config, "eos_token_id", None)
+        if isinstance(eos_token_id, int):
+            terminal_ids.add(eos_token_id)
+        elif eos_token_id is not None:
+            terminal_ids.update(int(value) for value in eos_token_id)
+        tokenizer = getattr(self._processor, "tokenizer", None)
+        tokenizer_eos = getattr(tokenizer, "eos_token_id", None)
+        if isinstance(tokenizer_eos, int):
+            terminal_ids.add(tokenizer_eos)
+        if (
+            int(sequences.shape[-1]) > initial_prefill_tokens
+            and int(sequences[0, -1].item()) in terminal_ids
+        ):
+            # Transformers' returned cache excludes the just-selected final token. Drop a
+            # terminal EOS so the constrained suffix remains in the same assistant turn.
+            sequences = sequences[:, :-1]
+        reasoning_ids = sequences[:, initial_prefill_tokens:]
+        reasoning_tokens = int(reasoning_ids.shape[-1])
+        decoded = self._processor.batch_decode(
+            reasoning_ids,
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=False,
+        )
+        reasoning_text = str(decoded[0]).strip() if decoded else ""
+        attention_mask = encoded.get("attention_mask")
+        if attention_mask is None:
+            attention_mask = self._torch.ones_like(input_ids)
+        if reasoning_tokens:
+            attention_mask = self._torch.cat(
+                [
+                    attention_mask,
+                    attention_mask.new_ones((attention_mask.shape[0], reasoning_tokens)),
+                ],
+                dim=-1,
+            )
+        model = getattr(self._model, "model", None)
+        rope_deltas = getattr(model, "rope_deltas", None)
+        clone_rope = getattr(rope_deltas, "clone", None)
+        if callable(clone_rope):
+            rope_deltas = clone_rope()
+        session_id = uuid.uuid4().hex
+        latency: dict[str, float | None] = {
+            "vision_prefill_ms": None,
+            "text_prefill_ms": None,
+            "total_prefill_ms": None,
+            "reasoning_decode_ms": reasoning_generate_ms,
+        }
+        session = CachedGenerationSession(
+            session_id=session_id,
+            model_identity=self._model_identity,
+            model_id=self.model_id,
+            reasoning_text=reasoning_text,
+            initial_prefill_tokens=initial_prefill_tokens,
+            reasoning_tokens=reasoning_tokens,
+            latency_ms=latency,
+            metadata={
+                "device": self.device,
+                "dtype": self.dtype,
+                "reasoning_generate_includes_prefill": True,
+                "peak_vram_mb": self._peak_vram_mb(),
+            },
+            _past_key_values=cache,
+            _sequence_ids=sequences,
+            _attention_mask=attention_mask,
+            _rope_deltas=rope_deltas,
+            _release_callback=self._release_session,
+        )
+        self._active_sessions[session_id] = session
+        return CachedReasoningResult(
+            reasoning_text,
+            session,
+            dict(latency),
+            {
+                "initial_prefill_tokens": initial_prefill_tokens,
+                "reasoning_tokens": reasoning_tokens,
+                **session.metadata,
+            },
+        )
+
+    def _validate_session(self, session: CachedGenerationSession) -> None:
+        if session.closed:
+            raise RuntimeError("cached generation session is closed")
+        if session.model_identity != self._model_identity:
+            raise ValueError("cached generation session belongs to a different model")
+        if session.session_id not in self._active_sessions:
+            raise RuntimeError("cached generation session is not active")
+
+    def _token_ids(self, text: str) -> list[int]:
+        tokenizer = getattr(self._processor, "tokenizer", self._processor)
+        encode = getattr(tokenizer, "encode", None)
+        if encode is None:
+            raise RuntimeError("choice scoring requires a processor tokenizer.encode API")
+        values = encode(text, add_special_tokens=False)
+        if hasattr(values, "tolist"):
+            values = values.tolist()
+        ids = [int(value) for value in values]
+        if not ids:
+            raise ValueError(f"choice continuation tokenized to an empty sequence: {text!r}")
+        return ids
+
+    @staticmethod
+    def _continuation(prefix: str, label: str) -> str:
+        return label if prefix[-1:].isspace() else " " + label
+
+    def _prepare_cached_prefix(
+        self,
+        session: CachedGenerationSession,
+        suffix: str,
+    ) -> tuple[Any, Any, Any, int, int, float]:
+        suffix_ids = self._token_ids(suffix)
+        sequence_ids = session._sequence_ids
+        if sequence_ids is None:
+            raise RuntimeError("cached generation session has no sequence state")
+        suffix_tensor = self._torch.tensor(
+            [suffix_ids], dtype=sequence_ids.dtype, device=sequence_ids.device
+        )
+        full_ids = self._torch.cat([sequence_ids, suffix_tensor], dim=-1)
+        attention_mask = self._torch.cat(
+            [
+                session._attention_mask,
+                session._attention_mask.new_ones(
+                    (session._attention_mask.shape[0], len(suffix_ids))
+                ),
+            ],
+            dim=-1,
+        )
+        cache = copy.deepcopy(session._past_key_values)
+        past_length = int(cache.get_seq_length())
+        next_sequence_length = int(full_ids.shape[-1]) - past_length
+        if next_sequence_length < 1:
+            raise RuntimeError("cached prefix has no unprocessed continuation tokens")
+        self._restore_rope_state(session)
+        prepared = self._model.prepare_inputs_for_generation(
+            full_ids,
+            next_sequence_length=next_sequence_length,
+            past_key_values=cache,
+            attention_mask=attention_mask,
+            use_cache=True,
+            is_first_iteration=False,
+        )
+        started = time.perf_counter()
+        with self._torch.inference_mode():
+            outputs = self._model(**prepared, return_dict=True)
+        elapsed_ms = (time.perf_counter() - started) * 1000.0
+        return (
+            outputs.logits[:, -1, :],
+            outputs.past_key_values,
+            attention_mask,
+            int(full_ids.shape[-1]),
+            len(suffix_ids),
+            elapsed_ms,
+        )
+
+    def _score_continuations(
+        self,
+        session: CachedGenerationSession,
+        *,
+        prefix: str,
+        continuations: tuple[str, ...],
+    ) -> tuple[dict[str, float], str, int, int, float, float]:
+        (
+            base_logits,
+            base_cache,
+            base_attention_mask,
+            _,
+            suffix_tokens,
+            suffix_ms,
+        ) = self._prepare_cached_prefix(session, prefix)
+        tokenizations = {
+            label: self._token_ids(self._continuation(prefix, label)) for label in continuations
+        }
+        scoring_started = time.perf_counter()
+        scored_tokens = sum(len(values) for values in tokenizations.values())
+        if all(len(values) == 1 for values in tokenizations.values()):
+            scores = {
+                label: float(base_logits[0, values[0]].float().item())
+                for label, values in tokenizations.items()
+            }
+            method = "single_token_logits"
+        else:
+            scores = {}
+            length_normalize = len({len(values) for values in tokenizations.values()}) > 1
+            for label, values in tokenizations.items():
+                candidate_cache = copy.deepcopy(base_cache)
+                log_probs = self._torch.log_softmax(base_logits.float(), dim=-1)
+                score = float(log_probs[0, values[0]].item())
+                candidate_attention = base_attention_mask
+                for index in range(1, len(values)):
+                    previous = self._torch.tensor(
+                        [[values[index - 1]]],
+                        dtype=session._sequence_ids.dtype,
+                        device=session._sequence_ids.device,
+                    )
+                    candidate_attention = self._torch.cat(
+                        [
+                            candidate_attention,
+                            candidate_attention.new_ones((candidate_attention.shape[0], 1)),
+                        ],
+                        dim=-1,
+                    )
+                    self._restore_rope_state(session)
+                    with self._torch.inference_mode():
+                        outputs = self._model(
+                            input_ids=previous,
+                            attention_mask=candidate_attention,
+                            past_key_values=candidate_cache,
+                            use_cache=True,
+                            return_dict=True,
+                        )
+                    candidate_cache = outputs.past_key_values
+                    log_probs = self._torch.log_softmax(outputs.logits[:, -1, :].float(), dim=-1)
+                    score += float(log_probs[0, values[index]].item())
+                scores[label] = score / len(values) if length_normalize else score
+            method = "multi_token_continuation_logprob"
+        scoring_ms = (time.perf_counter() - scoring_started) * 1000.0
+        return scores, method, suffix_tokens, scored_tokens, suffix_ms, scoring_ms
+
+    def score_choice_from_cache(
+        self,
+        session: CachedGenerationSession,
+        *,
+        suffix: str,
+        choice_ids: tuple[str, ...],
+        option_texts: tuple[str, ...],
+        answer_type: str,
+        multi_select_threshold: float = 0.0,
+    ) -> CachedChoiceEngineResult:
+        """Score legal choices from a model-bound reasoning cache without visual replay."""
+
+        self._validate_session(session)
+        if answer_type not in {"CHOICE_SINGLE", "CHOICE_MULTI"}:
+            raise ValueError("answer_type must be CHOICE_SINGLE or CHOICE_MULTI")
+        if not choice_ids or len(choice_ids) != len(option_texts):
+            raise ValueError("choice ids and option texts must be non-empty and aligned")
+        if len(choice_ids) != len(set(choice_ids)):
+            raise ValueError("choice ids must be unique")
+        total_started = time.perf_counter()
+        suffix_tokens = 0
+        scored_tokens = 0
+        suffix_ms = 0.0
+        scoring_ms = 0.0
+        methods: set[str] = set()
+        selected_ids: tuple[str, ...]
+        if answer_type == "CHOICE_SINGLE":
+            (
+                scores,
+                method,
+                current_suffix_tokens,
+                current_scored_tokens,
+                current_suffix_ms,
+                current_scoring_ms,
+            ) = self._score_continuations(
+                session,
+                prefix=suffix,
+                continuations=choice_ids,
+            )
+            methods.add(method)
+            suffix_tokens += current_suffix_tokens
+            scored_tokens += current_scored_tokens
+            suffix_ms += current_suffix_ms
+            scoring_ms += current_scoring_ms
+            selected_ids = (max(choice_ids, key=lambda item: scores[item]),)
+            result_method = f"kv_cached_{method}"
+        else:
+            scores = {}
+            for choice_id, option_text in zip(choice_ids, option_texts, strict=True):
+                verification_suffix = (
+                    f"{suffix}\nCandidate option {choice_id}: {option_text}\n"
+                    "Is this option a correct answer to the original question? Answer:"
+                )
+                (
+                    binary_scores,
+                    method,
+                    current_suffix_tokens,
+                    current_scored_tokens,
+                    current_suffix_ms,
+                    current_scoring_ms,
+                ) = self._score_continuations(
+                    session,
+                    prefix=verification_suffix,
+                    continuations=("YES", "NO"),
+                )
+                methods.add(method)
+                scores[choice_id] = binary_scores["YES"] - binary_scores["NO"]
+                suffix_tokens += current_suffix_tokens
+                scored_tokens += current_scored_tokens
+                suffix_ms += current_suffix_ms
+                scoring_ms += current_scoring_ms
+            selected_ids = tuple(
+                choice_id for choice_id in choice_ids if scores[choice_id] > multi_select_threshold
+            )
+            result_method = "kv_cached_binary_verification"
+        total_ms = (
+            float(session.latency_ms["reasoning_decode_ms"] or 0.0)
+            + (time.perf_counter() - total_started) * 1000.0
+        )
+        latency = {
+            **session.latency_ms,
+            "choice_suffix_prefill_ms": suffix_ms,
+            "choice_scoring_ms": scoring_ms,
+            "total_ms": total_ms,
+        }
+        return CachedChoiceEngineResult(
+            selected_ids=selected_ids,
+            scores=scores,
+            answer_type=answer_type,
+            reasoning_text=session.reasoning_text,
+            method=result_method,
+            cache_reused=True,
+            latency_ms=latency,
+            metadata={
+                "initial_prefill_tokens": session.initial_prefill_tokens,
+                "reasoning_tokens": session.reasoning_tokens,
+                "choice_suffix_tokens": suffix_tokens,
+                "choice_scored_tokens": scored_tokens,
+                "continuation_methods": sorted(methods),
+                "multi_select_threshold": multi_select_threshold,
+                "model_id": self.model_id,
+                "model_identity": self._model_identity,
+                "device": self.device,
+                "dtype": self.dtype,
+                "peak_vram_mb": self._peak_vram_mb(),
+            },
+        )
+
+    def reason_and_choose(
+        self,
+        prompt: str,
+        image_paths: list[str],
+        *,
+        choice_ids: tuple[str, ...],
+        option_texts: tuple[str, ...],
+        answer_type: str,
+        suffix: str,
+        multi_select_threshold: float = 0.0,
+        reasoning_max_new_tokens: int | None = None,
+    ) -> CachedChoiceEngineResult:
+        reasoning = self.reason_with_cache(
+            prompt,
+            image_paths,
+            max_new_tokens=reasoning_max_new_tokens,
+        )
+        try:
+            result = self.score_choice_from_cache(
+                reasoning.session,
+                suffix=suffix,
+                choice_ids=choice_ids,
+                option_texts=option_texts,
+                answer_type=answer_type,
+                multi_select_threshold=multi_select_threshold,
+            )
+            return replace(
+                result,
+                metadata={**result.metadata, "session_released": True},
+            )
+        finally:
+            reasoning.session.close()
+
+    def close(self) -> None:
+        for session in list(self._active_sessions.values()):
+            session.close()
 
     def _resolve_device(self, device: str) -> str:
         """解析运行设备。
@@ -284,11 +782,7 @@ class HuggingFaceVLMEngine:
         allowed_outputs: tuple[str, ...],
         prompt_token_count: int,
     ) -> Callable[[int, Any], list[int]]:
-        """Build a finite-state token mask for a small set of exact outputs.
-
-        The mask is derived from the processor tokenizer at runtime, so it does
-        not assume that labels such as ``A,C`` are single tokens for Qwen3-VL.
-        """
+        """Return a tokenizer-aware finite-state mask for compatibility fallback only."""
 
         tokenizer = getattr(self._processor, "tokenizer", self._processor)
         encode = getattr(tokenizer, "encode", None)
@@ -301,8 +795,7 @@ class HuggingFaceVLMEngine:
             )
         if eos_token_id is None:
             raise RuntimeError("selection constrained decoding requires an EOS token id")
-
-        sequences: tuple[tuple[int, ...], ...] = tuple(
+        sequences = tuple(
             tuple(int(token) for token in encode(value, add_special_tokens=False))
             for value in allowed_outputs
         )
@@ -320,8 +813,6 @@ class HuggingFaceVLMEngine:
             }
             if any(len(sequence) == len(generated) for sequence in matching):
                 next_tokens.add(int(eos_token_id))
-            # An impossible prefix should end generation; the SELECT parser
-            # will mark its resulting empty/invalid string UNRESOLVED.
             return sorted(next_tokens) or [int(eos_token_id)]
 
         return allowed_next_tokens
@@ -363,13 +854,10 @@ class HuggingFaceVLMEngine:
             encoded = encoded.to(model_device)
         generation_kwargs: dict[str, Any] = {"max_new_tokens": self.max_new_tokens}
         if allowed_outputs:
-            prompt_token_count = len(input_ids[0])
             generation_kwargs["prefix_allowed_tokens_fn"] = self._selection_prefix_constraint(
                 allowed_outputs=allowed_outputs,
-                prompt_token_count=prompt_token_count,
+                prompt_token_count=len(input_ids[0]),
             )
-            # Exact outputs are short; a bound reduces latency and prevents an
-            # accidental unconstrained continuation from becoming expensive.
             generation_kwargs["max_new_tokens"] = min(
                 self.max_new_tokens,
                 max(len(value) for value in allowed_outputs) + 2,
