@@ -108,6 +108,7 @@ class SpatialRelation(StringEnum):
     NEAR = "NEAR"
     NEXT_TO = "NEXT_TO"
     INSIDE = "INSIDE"
+    OVERLAP = "OVERLAP"
     OUTSIDE = "OUTSIDE"
     BETWEEN = "BETWEEN"
     AROUND = "AROUND"
@@ -229,6 +230,10 @@ class SelectParams(StrictModel):
     index: int | None = Field(default=None, ge=1)
     direction: ExtremeDirection | None = None
     subregion: SubregionType | None = None
+    # All SELECT geometry uses original-image pixels.  A missing margin is
+    # resolved deterministically from the current scope and recorded in output.
+    margin: float | None = Field(default=None, ge=0.0)
+    overlap_iou_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
 
     @model_validator(mode="after")
     def validate_mode_shape(self) -> SelectParams:
@@ -239,9 +244,16 @@ class SelectParams(StrictModel):
             SelectMode.EXTREME: {"direction"},
             SelectMode.SUBREGION: {"subregion"},
         }[self.mode]
-        fields = {"relation", "criterion", "rank", "order", "index", "direction", "subregion"}
+        fields = {
+            "relation", "criterion", "rank", "order", "index", "direction", "subregion",
+            "margin", "overlap_iou_threshold",
+        }
         present = {name for name in fields if getattr(self, name) is not None}
-        if required != present:
+        allowed_optional = {
+            SelectMode.RELATION: {"margin", "overlap_iou_threshold"},
+            SelectMode.SUBREGION: {"margin"},
+        }[self.mode] if self.mode in {SelectMode.RELATION, SelectMode.SUBREGION} else set()
+        if not required.issubset(present) or present - required - allowed_optional:
             raise ValueError(
                 f"SELECT {self.mode.value} params mismatch; "
                 f"missing={sorted(required - present)}, unexpected={sorted(present - required)}"

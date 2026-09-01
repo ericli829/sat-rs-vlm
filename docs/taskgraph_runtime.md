@@ -76,10 +76,13 @@ authoritative structured results, it adds no image. Consequently, an LAE count c
 be silently overridden by asking Qwen to count the original image again.
 
 Fuzzy `SELECT` and `RELATION` inputs use a local candidate canvas: the union of the
-named entities is expanded by a configurable halo, cropped, and marked with stable
-`A/B/C`, `REF`, `SUBJECT`, and `REFERENCE` labels. Canvas metadata retains the crop's
-global origin, every global bbox, and the candidate-ID-to-entity mapping. Configure the
-halo with `input_composer.candidate_halo_ratio` (default `0.2`).
+named entities is expanded by a configurable halo, cropped, and marked with temporary
+canvas labels `A/B/C`, `REF`, `SUBJECT`, and `REFERENCE`. Canvas metadata retains the
+crop's global origin, every global bbox, the canvas-to-global transform, and each
+upstream `candidate_id`. `A/B/C` are never persistent IDs: `SELECT` assigns or preserves
+`Entity.provenance["candidate_id"]` at its boundary, then maps the model's letters back
+to those entities. Configure the halo with `input_composer.candidate_halo_ratio`
+(default `0.2`).
 
 Region retrieval treats a `Region` input as a hard search scope. Crop-local provider
 boxes are mapped back to absolute original-image pixel coordinates and clipped to the
@@ -99,7 +102,8 @@ when `params.image_size` differs from the loaded image.
 | `COUNT(image/Region)` | tiled detection/count | **REAL:** existing LAE-DINO; existing tiled wrapper handles global transform/NMS |
 | `COUNT(EntitySet)` | cardinality | deterministic Python; detector is not called again |
 | `SELECT` rank/ordinal/extreme | geometry | deterministic Python |
-| `SELECT` fuzzy relation | semantic selection | **REAL:** Qwen3-VL-2B |
+| `SELECT` `LEFT_OF`/`RIGHT_OF`/`ABOVE`/`BELOW`/`INSIDE`/`OVERLAP` | geometry first | deterministic Python; boundary cases fall back to Qwen3-VL-2B |
+| `SELECT` `NEAR`/`NEXT_TO`/`AROUND`/`BETWEEN` | semantic selection | **REAL:** Qwen3-VL-2B |
 | `ATTRIBUTE`, `CLASSIFY`, `MULTILABEL_CLASSIFY`, `MOTION` | visual semantics | **REAL:** Qwen3-VL-2B |
 | `RELATION`, `VLM_REASON` | semantic reasoning | **REAL:** Qwen3-VL-2B |
 | `ROUTE_REASON` | route semantics | **REAL:** Qwen3-VL-4B route role |
@@ -111,6 +115,39 @@ to absolute original-image coordinates and retains model/tile provenance. The Qw
 adapter lazily creates the existing `HuggingFaceVLMEngine` and reuses its processor,
 model loading, device/dtype configuration, multi-image chat template, and generation
 stack. No checkpoint is hard-coded and model files are never downloaded by this runtime.
+
+## SELECT v1 contract
+
+`SELECT` is a TaskGraph operator, not a retriever and not a new top-level task type.
+It only filters candidates supplied by an upstream node such as `LOCATE` or an existing
+Region Retriever. It never imports, invokes, or recursively searches a retriever.
+
+Inputs are `candidates: EntitySet | Region | RegionSet`, optional `reference`, and an
+optional current `scope: ImageRef | Region`. All coordinates are absolute original-image
+pixels in `bbox_xyxy_global`; normalized coordinates are not accepted. A reference used
+for deterministic geometry must resolve to exactly one entity or region. A plural
+reference is retained only as visual context for semantic fallback.
+
+Every execution returns `SelectResult`, containing `selected`, a status (`OK`, `EMPTY`,
+`AMBIGUOUS`, `UNRESOLVED`, or `ERROR`), method (`geometry` or `qwen3_vl`), optional
+confidence, and trace provenance. `COUNT` accepts `OK`/`EMPTY` selection results and
+refuses unresolved or ambiguous ones, preventing an uncertain model answer from being
+silently converted into a count.
+
+`SUBREGION` constructs a global rectangle from the current search scope and the reference
+box: `LEFT_SIDE`, `RIGHT_SIDE`, `ABOVE`, `BELOW`, `INSIDE`, and `AROUND` are supported.
+`OUTSIDE` and `BOTH_SIDES` intentionally return `UNRESOLVED` in v1; polygon ROI,
+arbitrary complements, multi-hop selection, generic learned ranking, and SELECT-to-
+retriever calls are outside this operator's scope.
+
+For a semantic fallback, the Qwen3-VL provider uses finite-set constrained decoding by
+default. Given candidate labels `A/B/C`, its next-token mask permits only canonical
+selections (`NONE`, `A`, `B`, `A,C`, and so on) rather than relying only on an instruction
+in the prompt. The exact strings are tokenized at runtime through the loaded processor, so
+the mask is valid even when a label or comma spans multiple tokens. It is limited to at most
+eight candidates (256 possible complete strings); a larger legacy canvas uses strict tolerant
+parsing and becomes `UNRESOLVED` if it cannot be mapped uniquely. Set
+`selection_constrained_decoding: false` only for diagnosing a model/backend incompatibility.
 
 ## Provider status
 

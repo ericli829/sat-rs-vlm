@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass, replace
 from math import hypot
 from statistics import median
-from typing import Protocol
+from typing import Protocol, cast
 
 from PIL import Image
 
@@ -33,6 +33,8 @@ from .runtime_types import (
     RouteContext,
     RuntimeObject,
     ScalarInt,
+    SelectResult,
+    SelectStatus,
 )
 from .schema import GraphNode, OperatorName, TargetSpec
 
@@ -62,6 +64,8 @@ class OperatorExecutor(Protocol):
 
 
 def _image(value: RuntimeObject) -> ImageRef:
+    if isinstance(value, SelectResult):
+        return _image(value.selected)
     if isinstance(value, ImageRef):
         return value
     if isinstance(value, Region):
@@ -504,6 +508,17 @@ class CountExecutor:
     ) -> OperatorOutcome:
         if "entities" in inputs:
             entities = inputs["entities"]
+            if isinstance(entities, SelectResult):
+                if entities.status in {
+                    SelectStatus.UNRESOLVED,
+                    SelectStatus.ERROR,
+                    SelectStatus.AMBIGUOUS,
+                }:
+                    raise ValueError(
+                        f"COUNT refuses SELECT status {entities.status.value}; "
+                        "resolve the selection in the graph before counting"
+                    )
+                entities = entities.selected
             if not isinstance(entities, EntitySet):
                 raise TypeError("COUNT.entities must be EntitySet")
             return OperatorOutcome(
@@ -547,24 +562,421 @@ class SelectExecutor:
             reverse = order == "RIGHT_TO_LEFT"
         return sorted(entities, key=key, reverse=reverse)
 
+    @staticmethod
+    def _empty_like(value: EntitySet | Region | RegionSet) -> EntitySet | RegionSet:
+        if isinstance(value, EntitySet):
+            return EntitySet((), {"select_empty": True})
+        return RegionSet((), {"select_empty": True})
+
+    @staticmethod
+    def _items(value: EntitySet | Region | RegionSet) -> tuple[Entity | Region, ...]:
+        if isinstance(value, EntitySet):
+            return value.entities
+        if isinstance(value, RegionSet):
+            return value.regions
+        return (value,)
+
+    @staticmethod
+    def _item_region(item: Entity | Region) -> Region:
+        return item.region if isinstance(item, Entity) else item
+
+    @staticmethod
+    def _candidate_ids(items: tuple[Entity | Region, ...], indices: tuple[int, ...]) -> list[str]:
+        return [str(items[index].provenance.get("candidate_id")) for index in indices]
+
+    @staticmethod
+    def _ordinal_key(item: Entity, order: str) -> tuple[float, float]:
+        box = item.region.bbox_xyxy_global
+        if order in {"TOP_TO_BOTTOM", "BOTTOM_TO_TOP"}:
+            return box[1], box[0]
+        return box[0], box[1]
+
+    @staticmethod
+    def _rank_value(item: Entity, criterion: str) -> float:
+        if "score" in criterion:
+            return item.score or 0.0
+        box = item.region.bbox_xyxy_global
+        return (box[2] - box[0]) * (box[3] - box[1])
+
+    @staticmethod
+    def _selected_like(
+        source: EntitySet | Region | RegionSet,
+        indices: tuple[int, ...],
+        *,
+        provenance: dict[str, object],
+    ) -> EntitySet | Region | RegionSet:
+        items = SelectExecutor._items(source)
+        selected = tuple(items[index] for index in indices)
+        if isinstance(source, EntitySet):
+            return EntitySet(
+                tuple(item for item in selected if isinstance(item, Entity)), provenance
+            )
+        if isinstance(source, RegionSet):
+            return RegionSet(
+                tuple(item for item in selected if isinstance(item, Region)), provenance
+            )
+        if selected:
+            return cast(Region, selected[0])  # A singleton Region is its own selected value.
+        return RegionSet((), provenance)
+
+    @staticmethod
+    def _with_candidate_ids(
+        value: EntitySet | Region | RegionSet,
+    ) -> EntitySet | Region | RegionSet:
+        """Guarantee a stable ID at the SELECT boundary without changing Entity."""
+
+        def region_with_id(region: Region, index: int) -> Region:
+            provenance = dict(region.provenance)
+            provenance.setdefault("candidate_id", f"candidate_{index + 1:04d}")
+            return replace(region, provenance=provenance)
+
+        if isinstance(value, EntitySet):
+            entities = []
+            for index, entity in enumerate(value.entities):
+                provenance = dict(entity.provenance)
+                provenance.setdefault("candidate_id", f"candidate_{index + 1:04d}")
+                entities.append(replace(entity, provenance=provenance))
+            return EntitySet(tuple(entities), dict(value.provenance))
+        if isinstance(value, RegionSet):
+            return RegionSet(
+                tuple(region_with_id(region, index) for index, region in enumerate(value.regions)),
+                dict(value.provenance),
+            )
+        return region_with_id(value, 0)
+
+    @staticmethod
+    def _unwrap(value: RuntimeObject, *, role: str) -> EntitySet | Region | RegionSet:
+        if isinstance(value, SelectResult):
+            if value.status in {
+                SelectStatus.UNRESOLVED,
+                SelectStatus.ERROR,
+                SelectStatus.AMBIGUOUS,
+            }:
+                raise ValueError(
+                    f"SELECT.{role} has unresolved upstream status {value.status.value}"
+                )
+            return value.selected
+        if isinstance(value, (EntitySet, Region, RegionSet)):
+            return value
+        raise TypeError(f"SELECT.{role} must be EntitySet, Region, or RegionSet")
+
+    @staticmethod
+    def _single_reference(value: RuntimeObject | None) -> Region | None:
+        if value is None:
+            return None
+        if isinstance(value, SelectResult):
+            if value.status is not SelectStatus.OK:
+                return None
+            value = value.selected
+        if isinstance(value, Entity):
+            return value.region
+        if isinstance(value, Region):
+            return value
+        if isinstance(value, EntitySet) and len(value.entities) == 1:
+            return value.entities[0].region
+        if isinstance(value, RegionSet) and len(value.regions) == 1:
+            return value.regions[0]
+        return None
+
+    @staticmethod
+    def _box_center(box: tuple[float, float, float, float]) -> tuple[float, float]:
+        return (box[0] + box[2]) / 2.0, (box[1] + box[3]) / 2.0
+
+    @staticmethod
+    def _iou(
+        left: tuple[float, float, float, float], right: tuple[float, float, float, float]
+    ) -> float:
+        intersection_width = max(0.0, min(left[2], right[2]) - max(left[0], right[0]))
+        intersection_height = max(0.0, min(left[3], right[3]) - max(left[1], right[1]))
+        intersection = intersection_width * intersection_height
+        if not intersection:
+            return 0.0
+        left_area = (left[2] - left[0]) * (left[3] - left[1])
+        right_area = (right[2] - right[0]) * (right[3] - right[1])
+        return intersection / (left_area + right_area - intersection)
+
+    @staticmethod
+    def _intersects(
+        left: tuple[float, float, float, float], right: tuple[float, float, float, float]
+    ) -> bool:
+        return max(left[0], right[0]) < min(left[2], right[2]) and max(left[1], right[1]) < min(
+            left[3], right[3]
+        )
+
+    @staticmethod
+    def _contains(
+        outer: tuple[float, float, float, float], inner: tuple[float, float, float, float]
+    ) -> bool:
+        return (
+            outer[0] <= inner[0]
+            and outer[1] <= inner[1]
+            and outer[2] >= inner[2]
+            and outer[3] >= inner[3]
+        )
+
+    @staticmethod
+    def _default_margin(scope: ImageRef | Region, requested: object | None) -> float:
+        if requested is not None:
+            if not isinstance(requested, (int, float)):
+                raise TypeError("SELECT margin must be numeric")
+            return float(requested)
+        width, height = _dimensions(scope)
+        return max(4.0, min(width, height) * 0.02)
+
+    @staticmethod
+    def _scope_for(
+        inputs: dict[str, RuntimeObject | list[RuntimeObject]],
+        candidates: EntitySet | Region | RegionSet,
+        reference: Region | None,
+    ) -> ImageRef | Region:
+        scope = inputs.get("scope")
+        if isinstance(scope, (ImageRef, Region)):
+            return scope
+        if isinstance(candidates, Region):
+            return candidates
+        if reference is not None:
+            return reference.image
+        items = SelectExecutor._items(candidates)
+        if items:
+            return SelectExecutor._item_region(items[0]).image
+        raise ValueError("SELECT cannot infer a scope from empty candidates without scope input")
+
+    def _result(
+        self,
+        selected: EntitySet | Region | RegionSet,
+        *,
+        status: SelectStatus,
+        method: str,
+        reason: str | None = None,
+        confidence: float | None = None,
+        provenance: dict[str, object] | None = None,
+    ) -> OperatorOutcome:
+        return OperatorOutcome(
+            SelectResult(selected, status, method, reason, confidence, dict(provenance or {})),
+            method,
+        )
+
+    def _semantic_select(
+        self,
+        candidates: EntitySet | Region | RegionSet,
+        reference: RuntimeObject | None,
+        relation: str,
+        context: OperatorContext,
+        provenance: dict[str, object],
+    ) -> OperatorOutcome:
+        items = self._items(candidates)
+        named: dict[str, RuntimeObject | list[RuntimeObject]] = {"candidates": candidates}
+        if reference is not None:
+            named["reference"] = reference
+        model_input = context.composer.compose_named(
+            named,
+            question=(
+                f"Select candidate ids satisfying relation {relation}. "
+                "Return only candidate ids such as A or A,C; "
+                "return NONE when no candidate qualifies."
+            ),
+        )
+        try:
+            result = self.semantic.infer(VLMRequest(model_input, "selection"))
+            if result.text.strip().casefold() in {"none", "no", "empty", "null"}:
+                return self._result(
+                    self._empty_like(candidates),
+                    status=SelectStatus.EMPTY,
+                    method="qwen3_vl",
+                    confidence=result.confidence,
+                    provenance={**provenance, "provider": result.provider},
+                )
+            indices = parse_selection_indices(result.text, len(items))
+        except Exception as exc:
+            return self._result(
+                self._empty_like(candidates),
+                status=SelectStatus.UNRESOLVED,
+                method="qwen3_vl",
+                reason=f"semantic_selection_unresolved: {exc}",
+                provenance=provenance,
+            )
+        selected = self._selected_like(
+            candidates, indices, provenance={"provider": result.provider}
+        )
+        status = SelectStatus.OK if indices else SelectStatus.EMPTY
+        candidate_ids = self._candidate_ids(items, indices)
+        return self._result(
+            selected,
+            status=status,
+            method="qwen3_vl",
+            confidence=result.confidence,
+            provenance={
+                **provenance,
+                "provider": result.provider,
+                "raw_response": result.text,
+                "candidate_ids": candidate_ids,
+            },
+        )
+
+    def _direct_relation(
+        self,
+        candidates: EntitySet | Region | RegionSet,
+        reference: Region,
+        relation: str,
+        *,
+        margin: float,
+        overlap_iou_threshold: float,
+    ) -> tuple[tuple[int, ...], bool]:
+        """Return clear matches plus whether a boundary case needs semantic fallback."""
+        ref_box = reference.bbox_xyxy_global
+        ref_x, ref_y = self._box_center(ref_box)
+        selected: list[int] = []
+        grey = False
+        for index, item in enumerate(self._items(candidates)):
+            box = self._item_region(item).bbox_xyxy_global
+            x, y = self._box_center(box)
+            if relation == "LEFT_OF":
+                selected.extend([index] if x < ref_x - margin else [])
+                grey = grey or abs(x - ref_x) <= margin
+            elif relation == "RIGHT_OF":
+                selected.extend([index] if x > ref_x + margin else [])
+                grey = grey or abs(x - ref_x) <= margin
+            elif relation == "ABOVE":
+                selected.extend([index] if y < ref_y - margin else [])
+                grey = grey or abs(y - ref_y) <= margin
+            elif relation == "BELOW":
+                selected.extend([index] if y > ref_y + margin else [])
+                grey = grey or abs(y - ref_y) <= margin
+            elif relation == "INSIDE":
+                if self._contains(ref_box, box):
+                    selected.append(index)
+                elif self._intersects(ref_box, box):
+                    grey = True
+            elif relation == "OVERLAP":
+                iou = self._iou(box, ref_box)
+                if iou >= overlap_iou_threshold:
+                    selected.append(index)
+                elif iou > 0.0:
+                    grey = True
+            else:
+                return (), True
+        return tuple(selected), grey
+
+    @staticmethod
+    def _clip_box(
+        box: tuple[float, float, float, float], scope: tuple[float, float, float, float]
+    ) -> tuple[float, float, float, float]:
+        clipped = (
+            max(scope[0], box[0]),
+            max(scope[1], box[1]),
+            min(scope[2], box[2]),
+            min(scope[3], box[3]),
+        )
+        if clipped[0] >= clipped[2] or clipped[1] >= clipped[3]:
+            raise ValueError("requested subregion has no positive area inside current scope")
+        return clipped
+
+    def _subregion(
+        self,
+        inputs: dict[str, RuntimeObject | list[RuntimeObject]],
+        candidates: EntitySet | Region | RegionSet,
+        node: GraphNode,
+    ) -> OperatorOutcome:
+        input_reference = inputs.get("reference")
+        reference = self._single_reference(
+            input_reference if not isinstance(input_reference, list) else None
+        )
+        if reference is None:
+            return self._result(
+                self._empty_like(candidates),
+                status=SelectStatus.UNRESOLVED,
+                method="geometry",
+                reason="SUBREGION requires one reference",
+            )
+        scope = self._scope_for(inputs, candidates, reference)
+        scope_box = _scope_box(scope)
+        margin = self._default_margin(scope, node.params.get("margin"))
+        bx0, by0, bx1, by1 = reference.bbox_xyxy_global
+        subregion = str(node.params["subregion"])
+        mapping = {
+            "LEFT_SIDE": (scope_box[0], scope_box[1], bx0 + margin, scope_box[3]),
+            "RIGHT_SIDE": (bx1 - margin, scope_box[1], scope_box[2], scope_box[3]),
+            "ABOVE": (scope_box[0], scope_box[1], scope_box[2], by0 + margin),
+            "BELOW": (scope_box[0], by1 - margin, scope_box[2], scope_box[3]),
+            "INSIDE": reference.bbox_xyxy_global,
+            "AROUND": (bx0 - margin, by0 - margin, bx1 + margin, by1 + margin),
+        }
+        if subregion not in mapping:
+            return self._result(
+                self._empty_like(candidates),
+                status=SelectStatus.UNRESOLVED,
+                method="geometry",
+                reason=f"SUBREGION {subregion} is outside SELECT v1 scope",
+            )
+        try:
+            region = Region(
+                scope.image if isinstance(scope, Region) else scope,
+                self._clip_box(mapping[subregion], scope_box),
+                {
+                    "coordinate_system": "bbox_xyxy_global",
+                    "select_mode": "SUBREGION",
+                    "subregion": subregion,
+                    "scope_bbox_xyxy_global": list(scope_box),
+                    "reference_bbox_xyxy_global": list(reference.bbox_xyxy_global),
+                    "margin_px": margin,
+                },
+            )
+        except ValueError as exc:
+            return self._result(
+                self._empty_like(candidates),
+                status=SelectStatus.UNRESOLVED,
+                method="geometry",
+                reason=str(exc),
+            )
+        return self._result(
+            region, status=SelectStatus.OK, method="geometry", provenance=dict(region.provenance)
+        )
+
     def execute(
         self,
         node: GraphNode,
         inputs: dict[str, RuntimeObject | list[RuntimeObject]],
         context: OperatorContext,
     ) -> OperatorOutcome:
-        candidates = inputs["candidates"]
+        raw_candidates = inputs["candidates"]
+        if isinstance(raw_candidates, list):
+            raise TypeError("SELECT.candidates does not allow reference lists")
+        candidates = self._with_candidate_ids(self._unwrap(raw_candidates, role="candidates"))
         mode = str(node.params["mode"])
+        items = self._items(candidates)
+        if not items:
+            return self._result(
+                self._empty_like(candidates),
+                status=SelectStatus.EMPTY,
+                method="geometry",
+                reason="empty_candidates",
+            )
+        if mode == "SUBREGION":
+            return self._subregion(inputs, candidates, node)
         if isinstance(candidates, EntitySet):
             entities = candidates.entities
-            if not entities:
-                return OperatorOutcome(
-                    candidates, "geometry" if mode != "RELATION" else self.provider_name
-                )
             if mode == "ORDINAL":
-                ordered = self._sort_entities(entities, str(node.params["order"]))
-                selected = ordered[int(node.params["index"]) - 1 : int(node.params["index"])]
-                return OperatorOutcome(EntitySet(tuple(selected), {"select": mode}), "geometry")
+                order = str(node.params["order"])
+                ordered = self._sort_entities(entities, order)
+                index = int(node.params["index"]) - 1
+                if index >= len(ordered):
+                    return self._result(
+                        self._empty_like(candidates),
+                        status=SelectStatus.UNRESOLVED,
+                        method="geometry",
+                        reason="ordinal_out_of_range",
+                    )
+                selected_key = self._ordinal_key(ordered[index], order)
+                selected = tuple(
+                    entity for entity in ordered if self._ordinal_key(entity, order) == selected_key
+                )
+                status = SelectStatus.AMBIGUOUS if len(selected) > 1 else SelectStatus.OK
+                return self._result(
+                    EntitySet(tuple(selected), {"select": mode}),
+                    status=status,
+                    method="geometry",
+                    reason="ordinal_tie" if status is SelectStatus.AMBIGUOUS else None,
+                )
             if mode == "EXTREME":
                 direction = str(node.params["direction"])
                 order = {
@@ -573,62 +985,109 @@ class SelectExecutor:
                     "TOPMOST": "TOP_TO_BOTTOM",
                     "BOTTOMMOST": "BOTTOM_TO_TOP",
                 }[direction]
-                return OperatorOutcome(
-                    EntitySet((self._sort_entities(entities, order)[0],), {"select": mode}),
-                    "geometry",
+                ordered = self._sort_entities(entities, order)
+                best_key = self._ordinal_key(ordered[0], order)[0]
+                selected = tuple(
+                    entity for entity in ordered if self._ordinal_key(entity, order)[0] == best_key
+                )
+                status = SelectStatus.AMBIGUOUS if len(selected) > 1 else SelectStatus.OK
+                return self._result(
+                    EntitySet(selected, {"select": mode}),
+                    status=status,
+                    method="geometry",
+                    reason="extreme_tie" if status is SelectStatus.AMBIGUOUS else None,
                 )
             if mode == "RANK":
                 criterion = str(node.params["criterion"]).casefold()
-                if "score" in criterion:
-                    ranked = sorted(entities, key=lambda item: item.score or 0.0)
-                else:
-                    ranked = sorted(
-                        entities,
-                        key=lambda item: (
-                            (item.region.bbox_xyxy_global[2] - item.region.bbox_xyxy_global[0])
-                            * (item.region.bbox_xyxy_global[3] - item.region.bbox_xyxy_global[1])
-                        ),
-                    )
+                ranked = sorted(entities, key=lambda item: self._rank_value(item, criterion))
                 if str(node.params["order"]) == "DESCENDING":
                     ranked.reverse()
                 index = int(node.params["rank"]) - 1
-                return OperatorOutcome(
-                    EntitySet(tuple(ranked[index : index + 1]), {"select": mode}), "geometry"
+                if index >= len(ranked):
+                    return self._result(
+                        self._empty_like(candidates),
+                        status=SelectStatus.UNRESOLVED,
+                        method="geometry",
+                        reason="rank_out_of_range",
+                    )
+                selected_value = self._rank_value(ranked[index], criterion)
+                selected = tuple(
+                    entity
+                    for entity in ranked
+                    if self._rank_value(entity, criterion) == selected_value
                 )
-            if mode == "RELATION":
-                reference = inputs.get("reference")
-                named: dict[str, RuntimeObject | list[RuntimeObject]] = {"candidates": candidates}
-                if reference is not None:
-                    named["reference"] = reference
-                model_input = context.composer.compose_named(
-                    named,
-                    question=(
-                        f"Select candidate ids satisfying relation {node.params['relation']}. "
-                        "Return only candidate ids such as A, B, or C."
-                    ),
+                status = SelectStatus.AMBIGUOUS if len(selected) > 1 else SelectStatus.OK
+                return self._result(
+                    EntitySet(selected, {"select": mode}),
+                    status=status,
+                    method="geometry",
+                    reason="rank_tie" if status is SelectStatus.AMBIGUOUS else None,
                 )
-                result = self.semantic.infer(VLMRequest(model_input, "selection"))
-                indices = parse_selection_indices(result.text, len(entities))
-                return OperatorOutcome(
-                    EntitySet(
-                        tuple(entities[index] for index in indices), {"provider": result.provider}
-                    ),
-                    result.provider,
+        if mode == "RELATION":
+            raw_reference = inputs.get("reference")
+            reference_value = raw_reference if not isinstance(raw_reference, list) else None
+            reference = self._single_reference(reference_value)
+            relation = str(node.params["relation"])
+            if reference is None:
+                # A plural upstream reference is still a valid visual context
+                # for fuzzy relations.  It is not valid for a deterministic
+                # one-to-one geometry calculation.
+                if (
+                    relation in {"NEAR", "NEXT_TO", "AROUND", "BETWEEN"}
+                    and reference_value is not None
+                ):
+                    return self._semantic_select(
+                        candidates,
+                        reference_value,
+                        relation,
+                        context,
+                        {
+                            "relation": relation,
+                            "coordinate_system": "bbox_xyxy_global",
+                            "reference_cardinality": "multiple",
+                        },
+                    )
+                return self._result(
+                    self._empty_like(candidates),
+                    status=SelectStatus.UNRESOLVED,
+                    method="geometry",
+                    reason="RELATION requires exactly one reference",
                 )
-        if mode == "SUBREGION" and isinstance(candidates, Region):
-            helper = GeometryExecutor()
-            mapping = {
-                "LEFT_SIDE": "LEFT",
-                "RIGHT_SIDE": "RIGHT",
-                "ABOVE": "TOP",
-                "BELOW": "BOTTOM",
-                "INSIDE": "CENTER",
-                "AROUND": "CENTER",
+            scope = self._scope_for(inputs, candidates, reference)
+            margin = self._default_margin(scope, node.params.get("margin"))
+            threshold = float(node.params.get("overlap_iou_threshold") or 0.10)
+            indices, needs_semantic = self._direct_relation(
+                candidates, reference, relation, margin=margin, overlap_iou_threshold=threshold
+            )
+            provenance = {
+                "relation": relation,
+                "coordinate_system": "bbox_xyxy_global",
+                "margin_px": margin,
+                "overlap_iou_threshold": threshold,
             }
-            position = mapping.get(str(node.params["subregion"]))
-            if position:
-                return OperatorOutcome(helper._position_region(candidates, position), "geometry")
-        raise TypeError(f"SELECT {mode} does not support {type(candidates).__name__}")
+            if needs_semantic:
+                return self._semantic_select(
+                    candidates, reference_value, relation, context, provenance
+                )
+            relation_selected = self._selected_like(
+                candidates, indices, provenance={"select": "RELATION", **provenance}
+            )
+            status = SelectStatus.OK if indices else SelectStatus.EMPTY
+            return self._result(
+                relation_selected,
+                status=status,
+                method="geometry",
+                provenance={
+                    **provenance,
+                    "candidate_ids": self._candidate_ids(self._items(candidates), indices),
+                },
+            )
+        return self._result(
+            self._empty_like(candidates),
+            status=SelectStatus.UNRESOLVED,
+            method="geometry",
+            reason=f"unsupported SELECT mode {mode}",
+        )
 
 
 class SemanticExecutor:

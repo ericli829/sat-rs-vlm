@@ -35,6 +35,8 @@ from sat_rs_vlm.taskgraph.runtime_types import (
     RegionSet,
     RouteContext,
     ScalarInt,
+    SelectResult,
+    SelectStatus,
 )
 from sat_rs_vlm.taskgraph.schema import GraphNode, OperatorName
 
@@ -270,8 +272,15 @@ def test_fuzzy_select_restores_letter_ids_to_entities(tmp_path: Path) -> None:
             {"candidates": candidates, "reference": reference},
             OperatorContext("select", (), composer),
         )
-        assert isinstance(result.value, EntitySet)
-        assert result.value.entities == (candidates.entities[0], candidates.entities[2])
+        assert isinstance(result.value, SelectResult)
+        assert result.value.status is SelectStatus.OK
+        assert result.value.method == "qwen3_vl"
+        assert isinstance(result.value.selected, EntitySet)
+        assert [item.region.bbox_xyxy_global for item in result.value.selected.entities] == [
+            candidates.entities[0].region.bbox_xyxy_global,
+            candidates.entities[2].region.bbox_xyxy_global,
+        ]
+        assert result.value.provenance["candidate_ids"] == ["candidate_0001", "candidate_0003"]
         assert provider.calls[0].model_input.metadata["canvas_kind"] == "CANDIDATE_CANVAS"
     finally:
         composer.close()

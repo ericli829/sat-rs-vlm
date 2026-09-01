@@ -7,6 +7,7 @@ import tempfile
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from itertools import combinations
 from pathlib import Path
 from typing import Any, Protocol, cast
 
@@ -502,17 +503,44 @@ class LazyQwenSemanticProvider:
             prompt_parts.append("Return only the option id.")
         prompt = "\n\n".join(prompt_parts)
         engine = self._load()
+        allowed_outputs: tuple[str, ...] | None = None
+        if (
+            request.output_contract == "selection"
+            and self.model_config.selection_constrained_decoding
+        ):
+            candidate_mapping = model_input.metadata.get("candidate_mapping")
+            if isinstance(candidate_mapping, Mapping):
+                labels = tuple(str(label) for label in candidate_mapping)
+                # SELECT v1 intentionally keeps the candidate canvas small.
+                # 2^8 produces only 256 valid complete strings and is practical
+                # for a trie-like token mask; larger sets fall back to parsing.
+                if 0 < len(labels) <= 8 and all(
+                    len(label) == 1 and label.isalpha() for label in labels
+                ):
+                    allowed_outputs = ("NONE",) + tuple(
+                        ",".join(group)
+                        for size in range(1, len(labels) + 1)
+                        for group in combinations(labels, size)
+                    )
         if not model_input.visual_inputs:
             # Qwen is a VLM, but structured authoritative choice must remain text-only.
-            generated = engine.generate_text(prompt=prompt, image_paths=[])
+            generated = engine.generate_text(
+                prompt=prompt, image_paths=[], allowed_outputs=allowed_outputs
+            )
         else:
             generated = engine.generate_text(
-                prompt=prompt, image_paths=list(model_input.visual_inputs)
+                prompt=prompt,
+                image_paths=list(model_input.visual_inputs),
+                allowed_outputs=allowed_outputs,
             )
         return VLMResult(
             generated,
             f"{self.provider_name}:{self.role}",
-            metadata={"output_contract": request.output_contract},
+            metadata={
+                "output_contract": request.output_contract,
+                "constrained_decoding": allowed_outputs is not None,
+                "allowed_output_count": len(allowed_outputs or ()),
+            },
         )
 
     def close(self) -> None:
@@ -578,15 +606,35 @@ class FakeEvidenceSufficiencyProvider:
 
 
 def parse_selection_indices(text: str, count: int) -> tuple[int, ...]:
-    """Parse stable letter ids, with numeric ids retained for compatibility."""
+    """Parse a candidate selection without mistaking prose numbers for ids.
 
-    letters = re.findall(r"(?<![A-Z0-9])([A-Z])(?![A-Z0-9])", text.upper())
+    Constrained decoding normally yields canonical ``A,C`` or ``NONE``.  This
+    parser deliberately remains tolerant for model/back-end compatibility, but
+    numeric ids are accepted only when the entire reply is a numeric list or
+    they are explicitly introduced as candidate/option identifiers.
+    """
+
+    normalized = text.strip()
+    if normalized.casefold() in {"none", "no", "empty", "null"}:
+        return ()
+
+    letters = re.findall(r"(?<![A-Z0-9])([A-Z])(?![A-Z0-9])", normalized.upper())
     if letters:
         values = [ord(item) - ord("A") for item in letters]
         if any(item < 0 or item >= count for item in values):
             raise ValueError(f"selection provider returned out-of-range candidate ids: {letters}")
         return tuple(dict.fromkeys(values))
-    values = [int(item) for item in re.findall(r"\d+", text)]
+    numeric_list = re.fullmatch(r"\s*\[?\s*\d+(?:\s*[,，]\s*\d+)*\s*\]?\s*", normalized)
+    explicit_numeric = re.findall(
+        r"(?:candidate|candidates|option|options|候选|选项)\s*#?\s*(\d+)",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    values = (
+        [int(item) for item in re.findall(r"\d+", normalized)]
+        if numeric_list
+        else [int(item) for item in explicit_numeric]
+    )
     if not values:
         raise ValueError(f"selection provider returned no candidate ids: {text!r}")
     if 0 not in values and all(1 <= item <= count for item in values):

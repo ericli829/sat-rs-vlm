@@ -56,6 +56,7 @@ ANY_RUNTIME_TYPES = frozenset(
         "RegionSet",
         "Entity",
         "EntitySet",
+        "SelectResult",
         "ScalarInt",
         "ScalarFloat",
         "Boolean",
@@ -76,14 +77,17 @@ OPERATOR_INPUT_CONTRACTS: dict[str, OperatorInputContract] = {
     "LOCATE": OperatorInputContract({"image": _role(*VISUAL_SCOPE)}, frozenset({"image"})),
     "SELECT": OperatorInputContract(
         {
-            "candidates": _role("EntitySet", "Region", "RegionSet"),
-            "reference": _role(*ENTITY_OR_REGION),
+            "candidates": _role("EntitySet", "Region", "RegionSet", "SelectResult"),
+            "reference": _role(*ENTITY_OR_REGION, "SelectResult"),
+            # Current global search scope.  Required by precise SUBREGION
+            # composition, optional for backwards compatible graphs.
+            "scope": _role(*VISUAL_SCOPE),
         },
         frozenset({"candidates"}),
     ),
     "GROUP": OperatorInputContract({"entities": _role("EntitySet")}, frozenset({"entities"})),
     "COUNT": OperatorInputContract(
-        {"image": _role(*VISUAL_SCOPE), "entities": _role("EntitySet")},
+        {"image": _role(*VISUAL_SCOPE), "entities": _role("EntitySet", "SelectResult")},
         exactly_one=(frozenset({"image", "entities"}),),
     ),
     "ATTRIBUTE": OperatorInputContract({"entity": _role(*ENTITY_OR_REGION)}, frozenset({"entity"})),

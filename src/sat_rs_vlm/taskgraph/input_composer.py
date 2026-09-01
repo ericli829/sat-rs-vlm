@@ -27,6 +27,7 @@ from .runtime_types import (
     RuntimeObject,
     ScalarFloat,
     ScalarInt,
+    SelectResult,
 )
 
 
@@ -74,6 +75,8 @@ class InputComposer:
 
     @staticmethod
     def _regions(value: RuntimeObject) -> list[tuple[Region, Entity | None]]:
+        if isinstance(value, SelectResult):
+            return InputComposer._regions(value.selected)
         if isinstance(value, Region):
             return [(value, None)]
         if isinstance(value, RegionSet):
@@ -157,6 +160,10 @@ class InputComposer:
                 "bbox_xyxy_global": list(global_box),
                 "bbox_xyxy_canvas": list(local_box),
             }
+            source_provenance = entity.provenance if entity is not None else region.provenance
+            candidate_id = source_provenance.get("candidate_id")
+            if candidate_id is not None:
+                entry["candidate_id"] = str(candidate_id)
             if entity is not None:
                 entry.update({"label": entity.label, "score": entity.score})
             role_mapping.setdefault(role, []).append({"id": marker, **entry})
@@ -224,6 +231,8 @@ class InputComposer:
         return str(output)
 
     def _visuals(self, value: RuntimeObject) -> list[str]:
+        if isinstance(value, SelectResult):
+            return self._visuals(value.selected)
         if isinstance(value, ImageRef):
             return [str(value.path.resolve())]
         if isinstance(value, Region):

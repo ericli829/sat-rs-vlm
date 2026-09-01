@@ -32,6 +32,9 @@ providers:
     dtype: auto
     local_files_only: true
     max_new_tokens: 128
+    # Applies only to SELECT semantic fallback: exact candidate strings are
+    # token-masked at generation time; Caption/VQA remain unconstrained.
+    selection_constrained_decoding: true
   route_4b:
     kind: qwen3_vl
     backend: huggingface

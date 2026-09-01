@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import importlib
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -167,7 +168,13 @@ class HuggingFaceVLMEngine:
             },
         )
 
-    def generate_text(self, prompt: str, image_paths: list[str]) -> str:
+    def generate_text(
+        self,
+        prompt: str,
+        image_paths: list[str],
+        *,
+        allowed_outputs: tuple[str, ...] | None = None,
+    ) -> str:
         """Generate from arbitrary multi-image or text-only input.
 
         This public boundary lets higher-level runtimes reuse the existing Qwen
@@ -177,7 +184,7 @@ class HuggingFaceVLMEngine:
         """
 
         images = [self._open_image(path) for path in image_paths]
-        return self._generate(prompt=prompt, images=images)
+        return self._generate(prompt=prompt, images=images, allowed_outputs=allowed_outputs)
 
     def _resolve_device(self, device: str) -> str:
         """解析运行设备。
@@ -271,7 +278,61 @@ class HuggingFaceVLMEngine:
         content.append({"type": "text", "text": prompt})
         return [{"role": "user", "content": content}]
 
-    def _generate(self, prompt: str, images: list[Any]) -> str:
+    def _selection_prefix_constraint(
+        self,
+        *,
+        allowed_outputs: tuple[str, ...],
+        prompt_token_count: int,
+    ) -> Callable[[int, Any], list[int]]:
+        """Build a finite-state token mask for a small set of exact outputs.
+
+        The mask is derived from the processor tokenizer at runtime, so it does
+        not assume that labels such as ``A,C`` are single tokens for Qwen3-VL.
+        """
+
+        tokenizer = getattr(self._processor, "tokenizer", self._processor)
+        encode = getattr(tokenizer, "encode", None)
+        if encode is None:
+            raise RuntimeError("selection constrained decoding requires processor.tokenizer.encode")
+        eos_token_id = getattr(tokenizer, "eos_token_id", None)
+        if eos_token_id is None:
+            eos_token_id = getattr(
+                getattr(self._model, "generation_config", None), "eos_token_id", None
+            )
+        if eos_token_id is None:
+            raise RuntimeError("selection constrained decoding requires an EOS token id")
+
+        sequences: tuple[tuple[int, ...], ...] = tuple(
+            tuple(int(token) for token in encode(value, add_special_tokens=False))
+            for value in allowed_outputs
+        )
+        if not sequences or any(not sequence for sequence in sequences):
+            raise ValueError("allowed selection outputs must tokenize to non-empty sequences")
+
+        def allowed_next_tokens(_: int, input_ids: Any) -> list[int]:
+            values = input_ids.tolist() if hasattr(input_ids, "tolist") else list(input_ids)
+            generated = tuple(int(token) for token in values[prompt_token_count:])
+            matching = [
+                sequence for sequence in sequences if sequence[: len(generated)] == generated
+            ]
+            next_tokens = {
+                sequence[len(generated)] for sequence in matching if len(sequence) > len(generated)
+            }
+            if any(len(sequence) == len(generated) for sequence in matching):
+                next_tokens.add(int(eos_token_id))
+            # An impossible prefix should end generation; the SELECT parser
+            # will mark its resulting empty/invalid string UNRESOLVED.
+            return sorted(next_tokens) or [int(eos_token_id)]
+
+        return allowed_next_tokens
+
+    def _generate(
+        self,
+        prompt: str,
+        images: list[Any],
+        *,
+        allowed_outputs: tuple[str, ...] | None = None,
+    ) -> str:
         """调用 transformers generate 完成文本生成。
 
         参数：
@@ -300,8 +361,21 @@ class HuggingFaceVLMEngine:
         if hasattr(encoded, "to"):
             model_device = getattr(self._model, "device", self.device)
             encoded = encoded.to(model_device)
+        generation_kwargs: dict[str, Any] = {"max_new_tokens": self.max_new_tokens}
+        if allowed_outputs:
+            prompt_token_count = len(input_ids[0])
+            generation_kwargs["prefix_allowed_tokens_fn"] = self._selection_prefix_constraint(
+                allowed_outputs=allowed_outputs,
+                prompt_token_count=prompt_token_count,
+            )
+            # Exact outputs are short; a bound reduces latency and prevents an
+            # accidental unconstrained continuation from becoming expensive.
+            generation_kwargs["max_new_tokens"] = min(
+                self.max_new_tokens,
+                max(len(value) for value in allowed_outputs) + 2,
+            )
         with self._torch.inference_mode():
-            output_ids = self._model.generate(**encoded, max_new_tokens=self.max_new_tokens)
+            output_ids = self._model.generate(**encoded, **generation_kwargs)
         if hasattr(self._processor, "batch_decode"):
             generated_ids = [
                 output[len(input_row) :]

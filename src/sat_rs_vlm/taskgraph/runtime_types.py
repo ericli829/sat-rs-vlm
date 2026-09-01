@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Any, TypeAlias
 
@@ -58,6 +59,32 @@ class Entity:
 @dataclass(frozen=True)
 class EntitySet:
     entities: tuple[Entity, ...]
+    provenance: dict[str, Any] = field(default_factory=dict)
+
+
+class SelectStatus(str, Enum):
+    """Explicit terminal state for a SELECT operator.
+
+    SELECT is allowed to return an empty set, but must never conceal an
+    unresolved or ambiguous decision as an ordinary empty result.
+    """
+
+    OK = "OK"
+    EMPTY = "EMPTY"
+    AMBIGUOUS = "AMBIGUOUS"
+    UNRESOLVED = "UNRESOLVED"
+    ERROR = "ERROR"
+
+
+@dataclass(frozen=True)
+class SelectResult:
+    """A selection together with the method and decision state used to obtain it."""
+
+    selected: EntitySet | Region | RegionSet
+    status: SelectStatus
+    method: str
+    reason: str | None = None
+    confidence: float | None = None
     provenance: dict[str, Any] = field(default_factory=dict)
 
 
@@ -135,6 +162,7 @@ RuntimeObject: TypeAlias = (
     | RegionSet
     | Entity
     | EntitySet
+    | SelectResult
     | ScalarInt
     | ScalarFloat
     | Boolean
@@ -147,7 +175,7 @@ RuntimeObject: TypeAlias = (
 )
 
 STRUCTURED_AUTHORITATIVE_TYPES = (ScalarInt, ScalarFloat, Boolean, Label, LabelSet)
-VISUAL_TYPES = (ImageRef, Region, RegionSet, Entity, EntitySet, RouteContext)
+VISUAL_TYPES = (ImageRef, Region, RegionSet, Entity, EntitySet, SelectResult, RouteContext)
 
 
 def runtime_type_name(value: RuntimeObject) -> str:
@@ -177,6 +205,14 @@ def runtime_summary(value: RuntimeObject) -> dict[str, Any]:
             {"label": item.label, "score": item.score, "bbox": list(item.region.bbox_xyxy_global)}
             for item in value.entities
         ]
+    elif isinstance(value, SelectResult):
+        summary.update(
+            status=value.status.value,
+            method=value.method,
+            reason=value.reason,
+            confidence=value.confidence,
+            selected=runtime_summary(value.selected),
+        )
     elif isinstance(value, Answer):
         summary["text"] = value.text[:256]
     elif isinstance(value, RouteContext):
