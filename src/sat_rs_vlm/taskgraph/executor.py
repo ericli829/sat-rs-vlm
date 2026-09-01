@@ -7,7 +7,12 @@ from dataclasses import dataclass
 
 from .contracts import validate_runtime_inputs
 from .operators import OperatorContext, OperatorExecutor, OperatorOutcome
-from .runtime_types import RuntimeObject, runtime_summary, runtime_type_name
+from .runtime_types import (
+    RuntimeObject,
+    runtime_summary,
+    runtime_type_name,
+    unwrap_select_result,
+)
 from .schema import GraphNode, OperatorName, TaskGraph
 from .store import RuntimeStore
 from .tracing import ExecutionTrace, NodeTrace
@@ -44,8 +49,68 @@ class ExecutorBinding:
 class CapabilityRouter:
     """Explicit operator-to-capability registry; graphs never contain model names."""
 
+    _SELECT_INPUT_POLICIES: dict[
+        OperatorName, dict[str, tuple[bool, bool]]
+    ] = {
+        OperatorName.SELECT: {
+            "candidates": (True, False),
+            "reference": (False, False),
+            "scope": (False, True),
+        },
+        OperatorName.GROUP: {"entities": (True, False)},
+        OperatorName.COUNT: {"entities": (True, False)},
+        OperatorName.ATTRIBUTE: {"entity": (False, True)},
+        OperatorName.CLASSIFY: {"source": (False, True)},
+        OperatorName.MULTILABEL_CLASSIFY: {"source": (False, True)},
+        OperatorName.MOTION: {"source": (False, True)},
+        OperatorName.RELATION: {
+            "subject": (False, True),
+            "reference": (False, True),
+        },
+        OperatorName.VLM_REASON: {
+            "image": (False, True),
+            "evidence": (False, False),
+        },
+    }
+
     def __init__(self, bindings: dict[OperatorName, ExecutorBinding]) -> None:
         self.bindings = dict(bindings)
+
+    @classmethod
+    def _materialize_select_inputs(
+        cls,
+        node: GraphNode,
+        inputs: dict[str, RuntimeObject | list[RuntimeObject]],
+    ) -> dict[str, RuntimeObject | list[RuntimeObject]]:
+        policies = cls._SELECT_INPUT_POLICIES.get(node.op, {})
+        materialized: dict[str, RuntimeObject | list[RuntimeObject]] = {}
+        for role, value in inputs.items():
+            policy = policies.get(role)
+            if policy is None:
+                materialized[role] = value
+                continue
+            allow_empty, require_single = policy
+
+            def unwrap(
+                item: RuntimeObject,
+                *,
+                _allow_empty: bool = allow_empty,
+                _require_single: bool = require_single,
+                _role: str = role,
+            ) -> RuntimeObject:
+                return unwrap_select_result(
+                    item,
+                    allow_empty=_allow_empty,
+                    require_single=_require_single,
+                    consumer=f"{node.op.value}.{_role}",
+                )
+
+            materialized[role] = (
+                [unwrap(item) for item in value]
+                if isinstance(value, list)
+                else unwrap(value)
+            )
+        return materialized
 
     def execute(
         self,
@@ -58,6 +123,8 @@ class CapabilityRouter:
         except KeyError as exc:
             raise KeyError(f"no capability binding for operator {node.op.value}") from exc
         try:
+            validate_runtime_inputs(node.op.value, inputs)
+            inputs = self._materialize_select_inputs(node, inputs)
             validate_runtime_inputs(node.op.value, inputs)
         except Exception as contract_error:
             raise TaskGraphExecutionError(

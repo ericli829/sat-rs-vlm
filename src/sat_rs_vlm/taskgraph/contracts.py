@@ -79,32 +79,39 @@ OPERATOR_INPUT_CONTRACTS: dict[str, OperatorInputContract] = {
     "SELECT": OperatorInputContract(
         {
             "candidates": _role("EntitySet", "Region", "RegionSet", "SelectResult"),
-            "reference": _role(*ENTITY_OR_REGION, "SelectResult"),
+            "reference": _role(*ENTITY_OR_REGION, "RegionSet", "SelectResult"),
             # Current global search scope.  Required by precise SUBREGION
             # composition, optional for backwards compatible graphs.
-            "scope": _role(*VISUAL_SCOPE),
+            "scope": _role(*VISUAL_SCOPE, "SelectResult"),
         },
         frozenset({"candidates"}),
     ),
-    "GROUP": OperatorInputContract({"entities": _role("EntitySet")}, frozenset({"entities"})),
+    "GROUP": OperatorInputContract(
+        {"entities": _role("EntitySet", "SelectResult")}, frozenset({"entities"})
+    ),
     "COUNT": OperatorInputContract(
         {"image": _role(*VISUAL_SCOPE), "entities": _role("EntitySet", "SelectResult")},
         exactly_one=(frozenset({"image", "entities"}),),
     ),
-    "ATTRIBUTE": OperatorInputContract({"entity": _role(*ENTITY_OR_REGION)}, frozenset({"entity"})),
+    "ATTRIBUTE": OperatorInputContract(
+        {"entity": _role(*ENTITY_OR_REGION, "SelectResult")}, frozenset({"entity"})
+    ),
     "CLASSIFY": OperatorInputContract(
-        {"source": _role("ImageRef", "Region", "Entity")}, frozenset({"source"})
+        {"source": _role("ImageRef", "Region", "Entity", "SelectResult")},
+        frozenset({"source"}),
     ),
     "MULTILABEL_CLASSIFY": OperatorInputContract(
-        {"source": _role("ImageRef", "Region")}, frozenset({"source"})
+        {"source": _role("ImageRef", "Region", "Entity", "SelectResult")},
+        frozenset({"source"}),
     ),
     "MOTION": OperatorInputContract(
-        {"source": _role("Region", "Entity", "EntitySet")}, frozenset({"source"})
+        {"source": _role("Region", "Entity", "EntitySet", "SelectResult")},
+        frozenset({"source"}),
     ),
     "RELATION": OperatorInputContract(
         {
-            "subject": _role(*ENTITY_OR_REGION),
-            "reference": _role(*ENTITY_OR_REGION),
+            "subject": _role(*ENTITY_OR_REGION, "SelectResult"),
+            "reference": _role(*ENTITY_OR_REGION, "SelectResult"),
         },
         frozenset({"subject", "reference"}),
     ),

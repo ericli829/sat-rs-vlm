@@ -28,6 +28,7 @@ from .runtime_types import (
     ScalarFloat,
     ScalarInt,
     SelectResult,
+    unwrap_select_result,
 )
 
 
@@ -76,7 +77,12 @@ class InputComposer:
     @staticmethod
     def _regions(value: RuntimeObject) -> list[tuple[Region, Entity | None]]:
         if isinstance(value, SelectResult):
-            return InputComposer._regions(value.selected)
+            materialized = unwrap_select_result(
+                value,
+                allow_empty=False,
+                consumer="InputComposer visual regions",
+            )
+            return InputComposer._regions(materialized)
         if isinstance(value, Region):
             return [(value, None)]
         if isinstance(value, RegionSet):
@@ -232,7 +238,12 @@ class InputComposer:
 
     def _visuals(self, value: RuntimeObject) -> list[str]:
         if isinstance(value, SelectResult):
-            return self._visuals(value.selected)
+            materialized = unwrap_select_result(
+                value,
+                allow_empty=False,
+                consumer="InputComposer visuals",
+            )
+            return self._visuals(materialized)
         if isinstance(value, ImageRef):
             return [str(value.path.resolve())]
         if isinstance(value, Region):
@@ -279,6 +290,24 @@ class InputComposer:
                 sources.append(ModelSource(item_role.upper(), item))
         return tuple(sources)
 
+    @staticmethod
+    def _materialize_select_values(
+        named: Mapping[str, RuntimeObject | list[RuntimeObject]],
+    ) -> dict[str, RuntimeObject | list[RuntimeObject]]:
+        materialized: dict[str, RuntimeObject | list[RuntimeObject]] = {}
+        for role, value in named.items():
+            values = value if isinstance(value, list) else [value]
+            safe_values = [
+                unwrap_select_result(
+                    item,
+                    allow_empty=False,
+                    consumer=f"InputComposer.{role}",
+                )
+                for item in values
+            ]
+            materialized[role] = safe_values if isinstance(value, list) else safe_values[0]
+        return materialized
+
     def compose_named(
         self,
         named: Mapping[str, RuntimeObject | list[RuntimeObject]],
@@ -286,6 +315,7 @@ class InputComposer:
         question: str,
         options: list[str] | tuple[str, ...] | None = None,
     ) -> ModelInput:
+        named = self._materialize_select_values(named)
         visuals: list[str] = []
         visual_roles: list[str] = []
         structured: list[str] = []

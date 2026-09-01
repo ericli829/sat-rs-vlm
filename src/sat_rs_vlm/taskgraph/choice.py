@@ -8,7 +8,13 @@ from typing import cast
 
 from .choice_config import ChoiceSystemConfig
 from .input_composer import InputComposer
-from .providers import ChoiceScoringRequest, ModelInput, SemanticVLMProvider, VLMRequest
+from .providers import (
+    CachedChoiceUnavailableError,
+    ChoiceScoringRequest,
+    ModelInput,
+    SemanticVLMProvider,
+    VLMRequest,
+)
 from .runtime_types import (
     Boolean,
     ChoiceResult,
@@ -175,7 +181,9 @@ class ChoiceResolver:
         if scorer is None:
             if self.config.legacy_regex_fallback:
                 return self._legacy_score(request)
-            raise RuntimeError("choice provider does not implement cached choice scoring")
+            raise CachedChoiceUnavailableError(
+                "choice provider does not implement cached choice scoring"
+            )
         return cast(
             ChoiceScoreResult,
             scorer(

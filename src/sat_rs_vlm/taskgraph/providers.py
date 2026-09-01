@@ -157,6 +157,10 @@ class VLMResult:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+class CachedChoiceUnavailableError(RuntimeError):
+    """The configured backend explicitly lacks cached choice capability."""
+
+
 @dataclass(frozen=True)
 class ChoiceScoringRequest:
     model_input: ModelInput
@@ -600,7 +604,12 @@ class LazyQwenSemanticProvider:
                 "will be selected in a separate constrained step."
             )
         engine = self._load()
-        result = engine.reason_and_choose(
+        scorer = getattr(engine, "reason_and_choose", None)
+        if not callable(scorer):
+            raise CachedChoiceUnavailableError(
+                "Qwen engine does not expose cached reasoning-to-choice scoring"
+            )
+        result = scorer(
             self._prompt(request.model_input, reasoning_instruction=instruction),
             list(request.model_input.visual_inputs),
             choice_ids=request.choice_ids,

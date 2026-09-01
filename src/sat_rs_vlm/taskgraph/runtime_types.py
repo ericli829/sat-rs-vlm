@@ -222,6 +222,58 @@ RuntimeObject: TypeAlias = (
     | ChoiceScoreResult
 )
 
+
+class SelectResultConsumptionError(ValueError):
+    """A downstream consumer attempted to use an unsafe SELECT state."""
+
+
+def unwrap_select_result(
+    value: RuntimeObject,
+    *,
+    allow_empty: bool,
+    require_single: bool = False,
+    consumer: str = "downstream",
+) -> RuntimeObject:
+    """Materialize a SELECT result according to one explicit downstream policy.
+
+    ``OK`` always exposes ``selected``. ``EMPTY`` is exposed only to set-aware
+    consumers that opt in. Unresolved, ambiguous, and error states never flow
+    into another operator or VLM implicitly.
+    """
+
+    if not isinstance(value, SelectResult):
+        return value
+    if value.status is SelectStatus.EMPTY:
+        if not allow_empty:
+            raise SelectResultConsumptionError(
+                f"{consumer} refuses SELECT status {value.status.value}"
+            )
+    elif value.status is not SelectStatus.OK:
+        raise SelectResultConsumptionError(
+            f"{consumer} refuses SELECT status {value.status.value}"
+        )
+
+    selected: RuntimeObject = value.selected
+    if not require_single:
+        return selected
+    if isinstance(selected, EntitySet):
+        if len(selected.entities) == 1:
+            return selected.entities[0]
+        cardinality = len(selected.entities)
+    elif isinstance(selected, RegionSet):
+        if len(selected.regions) == 1:
+            return selected.regions[0]
+        cardinality = len(selected.regions)
+    elif isinstance(selected, Region):
+        return selected
+    else:  # pragma: no cover - SelectResult.selected is a closed union.
+        raise SelectResultConsumptionError(
+            f"{consumer} cannot consume SELECT payload {type(selected).__name__}"
+        )
+    raise SelectResultConsumptionError(
+        f"{consumer} requires one selected object, got {cardinality}"
+    )
+
 STRUCTURED_AUTHORITATIVE_TYPES = (ScalarInt, ScalarFloat, Boolean, Label, LabelSet)
 VISUAL_TYPES = (ImageRef, Region, RegionSet, Entity, EntitySet, SelectResult, RouteContext)
 
@@ -260,6 +312,7 @@ def runtime_summary(value: RuntimeObject | ChoiceResult) -> dict[str, Any]:
             reason=value.reason,
             confidence=value.confidence,
             selected=runtime_summary(value.selected),
+            provenance=dict(value.provenance),
         )
     elif isinstance(value, Answer):
         summary["text"] = value.text[:256]

@@ -131,9 +131,17 @@ reference is retained only as visual context for semantic fallback.
 Every execution returns `SelectResult`, containing `selected`, a status (`OK`, `EMPTY`,
 `AMBIGUOUS`, `UNRESOLVED`, or `ERROR`), method (`geometry`, `qwen3_vl_kv_cached_choice`,
 or a clearly marked compatibility fallback), optional confidence, and trace provenance.
-`COUNT` accepts `OK`/`EMPTY` selection results and
-refuses unresolved or ambiguous ones, preventing an uncertain model answer from being
-silently converted into a count.
+The capability router applies one shared unwrap policy. `COUNT`, `GROUP`, and a second
+`SELECT` explicitly accept empty sets; single-object consumers such as `ATTRIBUTE` and
+`CLASSIFY` unwrap a singleton set to its entity or region. `AMBIGUOUS`, `UNRESOLVED`,
+and `ERROR` are rejected before another operator, `InputComposer`, or `final.sources`
+can materialize them. A multi-item result is also rejected by a single-object consumer.
+
+All candidates, reference objects, and the current scope must resolve to one source image.
+Mixed-image inputs return `UNRESOLVED` with `cross_image_select_inputs`; coordinates from
+different images are never compared. The default relation margin is `max(4 px, 2% of the
+smaller current-scope dimension)`. For a Region scope, its bbox width and height are used,
+not the dimensions of the full UHR image.
 
 `SUBREGION` constructs a global rectangle from the current search scope and the reference
 box: `LEFT_SIDE`, `RIGHT_SIDE`, `ABOVE`, `BELOW`, `INSIDE`, and `AROUND` are supported.
@@ -141,17 +149,32 @@ box: `LEFT_SIDE`, `RIGHT_SIDE`, `ABOVE`, `BELOW`, `INSIDE`, and `AROUND` are sup
 arbitrary complements, multi-hop selection, generic learned ranking, and SELECT-to-
 retriever calls are outside this operator's scope.
 
-For a semantic fallback, Qwen3-VL first performs free visual reasoning. The runtime then
-reuses the same Transformer KV cache to score the legal candidate labels, so the final
-selection comes from candidate scores rather than regex-parsing the reasoning text. The
-trace records the scores, selected stable candidate IDs, cache reuse, and latency. This is
-also the standard mechanism used for final benchmark choices and route options.
+Relations are partitioned into deterministic positive, grey, and negative candidates.
+Only grey candidates appear on the Qwen candidate canvas. Clear positives are retained,
+clear negatives are never re-evaluated, and canvas labels are mapped back to stable
+`candidate_id` values. Qwen3-VL first performs free visual reasoning and then reuses the
+same Transformer KV cache for independent per-candidate YES/NO verification. Both
+`selection_type=SINGLE` and `MULTI` use this `CHOICE_MULTI`-style verification primitive;
+SELECT applies its own cardinality policy afterward: SINGLE maps 0/1/N matches to
+EMPTY/OK/AMBIGUOUS, while MULTI maps 0/N to EMPTY/OK.
 
-Finite-set token-masked decoding remains only as a compatibility fallback when a configured
-backend cannot provide a usable KV cache. Given candidate labels `A/B/C`, the mask permits
-only canonical selections (`NONE`, `A`, `B`, `A,C`, and so on); it is limited to eight
-candidates. A fallback is explicitly labeled `qwen3_vl_token_mask_fallback` in the trace
-and must not be confused with the normal cached-choice path.
+This is intentionally different from final benchmark `CHOICE_SINGLE`. A benchmark single
+choice guarantees one legal answer and uses argmax. SELECT SINGLE does not guarantee that
+any candidate satisfies the predicate and therefore must be able to return EMPTY or
+AMBIGUOUS instead of forcing one object.
+
+Finite-set token-masked decoding remains only as a compatibility fallback when the backend
+explicitly raises `CachedChoiceUnavailableError`. Runtime, CUDA, mapping, Transformers, and
+other unexpected failures propagate. Given at most eight candidate labels, the fallback
+accepts only canonical finite outputs (`NONE`, `A`, `B`, `A,C`, and so on) and records its
+reason and type. With more than eight candidates, or without confirmed constrained
+decoding, SELECT returns `UNRESOLVED` with `safe_fallback_unavailable`; unrestricted prose
+generation plus regex parsing is never a production fallback.
+
+RANK accepts only the serialized criteria `bbox_area` and `score`; missing scores produce
+`UNRESOLVED/rank_score_missing`. ORDINAL and EXTREME ties compare only their primary axis.
+The full frozen design and provenance fields are documented in
+[SELECT System](architecture/select_system.md).
 
 Choice details are frozen in [Choice System](architecture/choice_system.md). The default
 2B choice capability aliases `semantic_2b`, fuzzy SELECT reuses that model's reasoning KV

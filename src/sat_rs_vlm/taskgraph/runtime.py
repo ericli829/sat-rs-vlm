@@ -46,6 +46,7 @@ from .runtime_types import (
     RuntimeObject,
     ScalarInt,
     runtime_summary,
+    unwrap_select_result,
 )
 from .schema import AnswerType, OperatorName, QuestionType, TargetSpec, TaskGraph, parse_taskgraph
 from .store import RuntimeStore
@@ -207,7 +208,14 @@ class TaskGraphRuntime:
             execution_mode=ExecutionMode.TASKGRAPH_UHR.value,
             context=context,
         )
-        sources = tuple(store.get(ref) for ref in graph.final.sources)
+        sources = tuple(
+            unwrap_select_result(
+                store.get(ref),
+                allow_empty=False,
+                consumer=f"final.sources[{ref}]",
+            )
+            for ref in graph.final.sources
+        )
         output = self._choice_or_answer(
             sources,
             graph.final.question or request.question,

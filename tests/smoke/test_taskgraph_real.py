@@ -8,10 +8,21 @@ import yaml
 from PIL import Image
 
 from sat_rs_vlm.taskgraph.choice import ChoiceRequest
+from sat_rs_vlm.taskgraph.input_composer import InputComposer
+from sat_rs_vlm.taskgraph.operators import OperatorContext, SelectExecutor
 from sat_rs_vlm.taskgraph.providers import ChoiceScoringRequest
 from sat_rs_vlm.taskgraph.runtime import runtime_from_config
-from sat_rs_vlm.taskgraph.runtime_types import ImageRef, Region, RouteContext, ScalarInt
-from sat_rs_vlm.taskgraph.schema import AnswerType
+from sat_rs_vlm.taskgraph.runtime_types import (
+    Entity,
+    EntitySet,
+    ImageRef,
+    Region,
+    RouteContext,
+    ScalarInt,
+    SelectResult,
+    SelectStatus,
+)
+from sat_rs_vlm.taskgraph.schema import AnswerType, GraphNode
 
 
 def _config(kind: str) -> dict:
@@ -166,6 +177,118 @@ def test_real_qwen_visual_and_structured_choice_contracts() -> None:
         assert engine is not None
         assert engine.active_session_count == 0
     finally:
+        runtime.close()
+
+
+@pytest.mark.real_model
+def test_real_qwen_select_geometry_and_cached_verification_contracts(tmp_path: Path) -> None:
+    if os.environ.get("RUN_REAL_QWEN") != "1":
+        pytest.skip("set RUN_REAL_QWEN=1 for the Qwen smoke")
+    image_path = os.environ.get("TASKGRAPH_SMOKE_IMAGE")
+    if not image_path or not Path(image_path).is_file():
+        pytest.skip("TASKGRAPH_SMOKE_IMAGE is missing")
+    _local_model("QWEN3VL_2B_MODEL_DIR")
+    with Image.open(image_path) as source:
+        width, height = source.size
+    image = ImageRef(image_path, width=width, height=height)
+    candidates = EntitySet(
+        (
+            Entity(
+                Region(
+                    image,
+                    (width * 0.10, height * 0.35, width * 0.25, height * 0.55),
+                ),
+                "candidate object",
+                0.9,
+                {"candidate_id": "smoke-a"},
+            ),
+            Entity(
+                Region(
+                    image,
+                    (width * 0.55, height * 0.35, width * 0.70, height * 0.55),
+                ),
+                "candidate object",
+                0.8,
+                {"candidate_id": "smoke-b"},
+            ),
+        )
+    )
+    reference = Entity(
+        Region(
+            image,
+            (width * 0.78, height * 0.35, width * 0.92, height * 0.55),
+        ),
+        "reference object",
+        0.95,
+        {"candidate_id": "smoke-ref"},
+    )
+
+    def node(relation: str, selection_type: str) -> GraphNode:
+        return GraphNode.model_validate(
+            {
+                "id": "n1",
+                "op": "SELECT",
+                "inputs": {"candidates": "$candidates", "reference": "$reference"},
+                "params": {
+                    "mode": "RELATION",
+                    "relation": relation,
+                    "selection_type": selection_type,
+                },
+            }
+        )
+
+    runtime = runtime_from_config(_config("qwen_2b"))
+    composer = InputComposer(tmp_path / "select-smoke-inputs")
+    executor = SelectExecutor(runtime.providers.semantic_2b, runtime.choice_config)
+    context = OperatorContext("SELECT smoke", (), composer)
+    try:
+        geometry = executor.execute(
+            node("LEFT_OF", "MULTI"),
+            {"candidates": candidates, "reference": reference},
+            context,
+        )
+        assert isinstance(geometry.value, SelectResult)
+        assert geometry.value.method == "geometry"
+        assert geometry.value.status is SelectStatus.OK
+        assert runtime.providers.semantic_2b._engine is None
+
+        multi = executor.execute(
+            node("NEXT_TO", "MULTI"),
+            {"candidates": candidates, "reference": reference},
+            context,
+        )
+        assert isinstance(multi.value, SelectResult)
+        assert multi.value.status in {SelectStatus.EMPTY, SelectStatus.OK}
+        assert multi.value.method == "qwen3_vl_kv_cached_choice"
+        assert multi.value.provenance["score_method"] == "kv_cached_binary_verification"
+        assert multi.value.provenance["cache_reused"] is True
+        assert multi.value.provenance["fallback_used"] is False
+        assert multi.value.provenance["choice_metadata"]["session_released"] is True
+        assert set(multi.value.provenance["final_candidate_ids"]) <= {
+            "smoke-a",
+            "smoke-b",
+        }
+
+        single = executor.execute(
+            node("NEAR", "SINGLE"),
+            {"candidates": candidates, "reference": reference},
+            context,
+        )
+        assert isinstance(single.value, SelectResult)
+        assert single.value.status in {
+            SelectStatus.EMPTY,
+            SelectStatus.OK,
+            SelectStatus.AMBIGUOUS,
+        }
+        assert single.value.method == "qwen3_vl_kv_cached_choice"
+        assert single.value.provenance["score_method"] == "kv_cached_binary_verification"
+        assert single.value.provenance["cache_reused"] is True
+        assert single.value.provenance["choice_metadata"]["session_released"] is True
+        engine = runtime.providers.semantic_2b._engine
+        assert engine is not None
+        assert engine.active_session_count == 0
+    finally:
+        composer.close()
         runtime.close()
 
 

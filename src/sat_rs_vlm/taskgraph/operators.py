@@ -13,6 +13,7 @@ from PIL import Image
 from .choice_config import ChoiceSystemConfig
 from .input_composer import InputComposer
 from .providers import (
+    CachedChoiceUnavailableError,
     ChoiceScoringRequest,
     DetectionProvider,
     DetectionRequest,
@@ -37,6 +38,7 @@ from .runtime_types import (
     ScalarInt,
     SelectResult,
     SelectStatus,
+    unwrap_select_result,
 )
 from .schema import GraphNode, OperatorName, TargetSpec
 
@@ -67,7 +69,14 @@ class OperatorExecutor(Protocol):
 
 def _image(value: RuntimeObject) -> ImageRef:
     if isinstance(value, SelectResult):
-        return _image(value.selected)
+        return _image(
+            unwrap_select_result(
+                value,
+                allow_empty=False,
+                require_single=True,
+                consumer="geometry image resolution",
+            )
+        )
     if isinstance(value, ImageRef):
         return value
     if isinstance(value, Region):
@@ -93,6 +102,14 @@ def _scope_box(value: ImageRef | Region) -> tuple[float, float, float, float]:
         return value.bbox_xyxy_global
     width, height = _dimensions(value)
     return 0.0, 0.0, float(width), float(height)
+
+
+def _scope_dimensions(value: ImageRef | Region) -> tuple[float, float]:
+    if isinstance(value, Region):
+        x0, y0, x1, y1 = value.bbox_xyxy_global
+        return x1 - x0, y1 - y0
+    width, height = _dimensions(value)
+    return float(width), float(height)
 
 
 class GeometryExecutor:
@@ -509,18 +526,14 @@ class CountExecutor:
         context: OperatorContext,
     ) -> OperatorOutcome:
         if "entities" in inputs:
-            entities = inputs["entities"]
-            if isinstance(entities, SelectResult):
-                if entities.status in {
-                    SelectStatus.UNRESOLVED,
-                    SelectStatus.ERROR,
-                    SelectStatus.AMBIGUOUS,
-                }:
-                    raise ValueError(
-                        f"COUNT refuses SELECT status {entities.status.value}; "
-                        "resolve the selection in the graph before counting"
-                    )
-                entities = entities.selected
+            raw_entities = inputs["entities"]
+            if isinstance(raw_entities, list):
+                raise TypeError("COUNT.entities must be a single EntitySet")
+            entities = unwrap_select_result(
+                raw_entities,
+                allow_empty=True,
+                consumer="COUNT.entities",
+            )
             if not isinstance(entities, EntitySet):
                 raise TypeError("COUNT.entities must be EntitySet")
             return OperatorOutcome(
@@ -541,6 +554,13 @@ class CountExecutor:
             ),
             detected.provider,
         )
+
+
+@dataclass(frozen=True)
+class RelationPartition:
+    positive: tuple[int, ...]
+    grey: tuple[int, ...]
+    negative: tuple[int, ...]
 
 
 class SelectExecutor:
@@ -592,16 +612,20 @@ class SelectExecutor:
         return [str(items[index].provenance.get("candidate_id")) for index in indices]
 
     @staticmethod
-    def _ordinal_key(item: Entity, order: str) -> tuple[float, float]:
+    def _ordinal_primary(item: Entity, order: str) -> float:
         box = item.region.bbox_xyxy_global
         if order in {"TOP_TO_BOTTOM", "BOTTOM_TO_TOP"}:
-            return box[1], box[0]
-        return box[0], box[1]
+            return box[1]
+        return box[0]
 
     @staticmethod
     def _rank_value(item: Entity, criterion: str) -> float:
-        if "score" in criterion:
-            return item.score or 0.0
+        if criterion == "score":
+            if item.score is None:
+                raise ValueError("rank_score_missing")
+            return item.score
+        if criterion != "bbox_area":
+            raise ValueError(f"unsupported SELECT RANK criterion {criterion}")
         box = item.region.bbox_xyxy_global
         return (box[2] - box[0]) * (box[3] - box[1])
 
@@ -653,18 +677,13 @@ class SelectExecutor:
 
     @staticmethod
     def _unwrap(value: RuntimeObject, *, role: str) -> EntitySet | Region | RegionSet:
-        if isinstance(value, SelectResult):
-            if value.status in {
-                SelectStatus.UNRESOLVED,
-                SelectStatus.ERROR,
-                SelectStatus.AMBIGUOUS,
-            }:
-                raise ValueError(
-                    f"SELECT.{role} has unresolved upstream status {value.status.value}"
-                )
-            return value.selected
-        if isinstance(value, (EntitySet, Region, RegionSet)):
-            return value
+        materialized = unwrap_select_result(
+            value,
+            allow_empty=role == "candidates",
+            consumer=f"SELECT.{role}",
+        )
+        if isinstance(materialized, (EntitySet, Region, RegionSet)):
+            return materialized
         raise TypeError(f"SELECT.{role} must be EntitySet, Region, or RegionSet")
 
     @staticmethod
@@ -727,7 +746,7 @@ class SelectExecutor:
             if not isinstance(requested, (int, float)):
                 raise TypeError("SELECT margin must be numeric")
             return float(requested)
-        width, height = _dimensions(scope)
+        width, height = _scope_dimensions(scope)
         return max(4.0, min(width, height) * 0.02)
 
     @staticmethod
@@ -747,6 +766,60 @@ class SelectExecutor:
         if items:
             return SelectExecutor._item_region(items[0]).image
         raise ValueError("SELECT cannot infer a scope from empty candidates without scope input")
+
+    @staticmethod
+    def _selection_type(node: GraphNode) -> str:
+        return str(node.params.get("selection_type") or "MULTI")
+
+    @staticmethod
+    def _cardinality_status(count: int, selection_type: str) -> SelectStatus:
+        if count == 0:
+            return SelectStatus.EMPTY
+        if selection_type == "SINGLE" and count > 1:
+            return SelectStatus.AMBIGUOUS
+        return SelectStatus.OK
+
+    @staticmethod
+    def _image_key(image: ImageRef) -> str:
+        return str(image.path.resolve()).casefold()
+
+    @classmethod
+    def _image_keys(cls, value: RuntimeObject | None) -> set[str]:
+        if value is None:
+            return set()
+        if isinstance(value, ImageRef):
+            return {cls._image_key(value)}
+        if isinstance(value, Region):
+            return {cls._image_key(value.image)}
+        if isinstance(value, Entity):
+            return {cls._image_key(value.region.image)}
+        if isinstance(value, RegionSet):
+            return {cls._image_key(item.image) for item in value.regions}
+        if isinstance(value, EntitySet):
+            return {cls._image_key(item.region.image) for item in value.entities}
+        return set()
+
+    @classmethod
+    def _same_image_inputs(
+        cls,
+        candidates: EntitySet | Region | RegionSet,
+        reference: RuntimeObject | None,
+        scope: RuntimeObject | None,
+    ) -> bool:
+        keys = cls._image_keys(candidates)
+        keys.update(cls._image_keys(reference))
+        keys.update(cls._image_keys(scope))
+        return len(keys) <= 1
+
+    @staticmethod
+    def _stable_index(items: tuple[Entity | Region, ...]) -> dict[str, int]:
+        mapping = {
+            str(item.provenance.get("candidate_id")): index
+            for index, item in enumerate(items)
+        }
+        if len(mapping) != len(items) or "None" in mapping:
+            raise ValueError("SELECT candidate_id values must be present and unique")
+        return mapping
 
     def _result(
         self,
@@ -771,16 +844,60 @@ class SelectExecutor:
         node: GraphNode,
         context: OperatorContext,
         provenance: dict[str, object],
+        *,
+        clear_positive_indices: tuple[int, ...] = (),
+        grey_indices: tuple[int, ...] | None = None,
     ) -> OperatorOutcome:
         items = self._items(candidates)
-        named: dict[str, RuntimeObject | list[RuntimeObject]] = {"candidates": candidates}
+        stable_index = self._stable_index(items)
+        all_indices = tuple(range(len(items)))
+        semantic_indices = all_indices if grey_indices is None else grey_indices
+        selection_type = self._selection_type(node)
+        clear_ids = self._candidate_ids(items, clear_positive_indices)
+        grey_ids = self._candidate_ids(items, semantic_indices)
+        common_provenance = {
+            **provenance,
+            "selection_type": selection_type,
+            "all_candidate_ids": self._candidate_ids(items, all_indices),
+            "clear_positive_candidate_ids": clear_ids,
+            "grey_candidate_ids": grey_ids,
+        }
+        if selection_type == "SINGLE" and len(clear_positive_indices) >= 2:
+            selected = self._selected_like(
+                candidates,
+                clear_positive_indices,
+                provenance={"select": "RELATION", **provenance},
+            )
+            return self._result(
+                selected,
+                status=SelectStatus.AMBIGUOUS,
+                method="geometry",
+                reason="single_selection_multiple_matches",
+                provenance={
+                    **common_provenance,
+                    "semantic_positive_candidate_ids": [],
+                    "final_candidate_ids": clear_ids,
+                    "candidate_ids": clear_ids,
+                },
+            )
+
+        semantic_candidates = self._selected_like(
+            candidates,
+            semantic_indices,
+            provenance={"select": "RELATION_GREY_SUBSET", **provenance},
+        )
+        named: dict[str, RuntimeObject | list[RuntimeObject]] = {
+            "candidates": semantic_candidates
+        }
         if reference is not None:
             named["reference"] = reference
         model_input = context.composer.compose_named(
             named,
             question=(
-                f"Determine which candidate objects satisfy relation {relation} "
-                "relative to the marked reference."
+                f"Analyze which candidate objects satisfy relation {relation} relative to "
+                "the marked reference. Use candidate labels only as visual references during "
+                "reasoning. A separate constrained verification step will determine the final "
+                "selection."
             ),
         )
         candidate_mapping = model_input.metadata.get("candidate_mapping")
@@ -790,23 +907,53 @@ class SelectExecutor:
                 status=SelectStatus.ERROR,
                 method="qwen3_vl_kv_cached_choice",
                 reason="semantic selection canvas has no stable candidate mapping",
-                provenance=provenance,
+                provenance=common_provenance,
             )
         choice_ids = tuple(str(choice_id) for choice_id in candidate_mapping)
-        selection_type = getattr(node.params.get("selection_type"), "value", None) or str(
-            node.params.get("selection_type") or "MULTI"
-        )
-        answer_type = "CHOICE_SINGLE" if selection_type == "SINGLE" else "CHOICE_MULTI"
+        subset_items = self._items(semantic_candidates)
+        if len(choice_ids) != len(subset_items):
+            raise RuntimeError("semantic SELECT canvas mapping is not aligned with its grey subset")
+
+        def restore_indices(selected_labels: tuple[str, ...]) -> tuple[int, ...]:
+            restored: list[int] = []
+            for choice_id in selected_labels:
+                entry = candidate_mapping.get(choice_id)
+                if not isinstance(entry, dict):
+                    raise RuntimeError("choice score returned an invalid SELECT candidate label")
+                candidate_id = entry.get("candidate_id")
+                if not isinstance(candidate_id, str) or candidate_id not in stable_index:
+                    raise RuntimeError("SELECT candidate mapping lost a stable candidate_id")
+                restored.append(stable_index[candidate_id])
+            if len(restored) != len(set(restored)):
+                raise RuntimeError("choice score returned duplicate SELECT candidates")
+            return tuple(restored)
+
+        fallback_used = False
+        fallback_reason: str | None = None
+        fallback_type: str | None = None
+        confidence: float | None = None
+        semantic_provider: str
+        scores: dict[str, float] = {}
+        score_method: str
+        cache_reused = False
+        latency_ms: dict[str, float | None] = {}
+        reasoning_text: str | None = None
+        choice_metadata: dict[str, object] = {}
         try:
-            scored = self.semantic.reason_and_choose(
+            scorer = getattr(self.semantic, "reason_and_choose", None)
+            if not callable(scorer):
+                raise CachedChoiceUnavailableError(
+                    "semantic provider does not implement cached choice scoring"
+                )
+            scored = scorer(
                 ChoiceScoringRequest(
                     model_input=model_input,
-                    answer_type=answer_type,
+                    answer_type="CHOICE_MULTI",
                     choice_ids=choice_ids,
                     option_texts=tuple(
                         f"Candidate {choice_id}: "
                         f"{item.label if isinstance(item, Entity) else 'region'}"
-                        for choice_id, item in zip(choice_ids, items, strict=True)
+                        for choice_id, item in zip(choice_ids, subset_items, strict=True)
                     ),
                     single_choice_suffix=self.choice_config.single_choice_suffix,
                     multi_verify_template=self.choice_config.multi_verify_template,
@@ -814,84 +961,144 @@ class SelectExecutor:
                     purpose="select_relation",
                 )
             )
-            indices: tuple[int, ...] = tuple(
-                int(candidate_mapping[choice_id]["index"])
-                for choice_id in scored.selected_ids
-                if isinstance(candidate_mapping.get(choice_id), dict)
-                and isinstance(candidate_mapping[choice_id].get("index"), int)
+            if scored.answer_type != "CHOICE_MULTI":
+                raise RuntimeError("semantic SELECT must use independent binary verification")
+            semantic_positive_indices = restore_indices(scored.selected_ids)
+            semantic_provider = scored.provider
+            scores = dict(scored.scores)
+            score_method = scored.method
+            cache_reused = scored.cache_reused
+            latency_ms = dict(scored.latency_ms)
+            reasoning_text = (
+                scored.reasoning_text if self.choice_config.preserve_reasoning_text else None
             )
-            if len(indices) != len(scored.selected_ids):
-                raise RuntimeError("choice score returned an invalid SELECT candidate id")
-            selected = self._selected_like(
-                candidates, indices, provenance={"provider": scored.provider}
-            )
-            status = SelectStatus.OK if indices else SelectStatus.EMPTY
-            stable_candidate_ids = self._candidate_ids(items, indices)
-            return self._result(
-                selected,
-                status=status,
-                method="qwen3_vl_kv_cached_choice",
-                provenance={
-                    **provenance,
-                    "provider": scored.provider,
-                    "candidate_ids": stable_candidate_ids,
-                    "choice_labels": list(scored.selected_ids),
-                    "scores": dict(scored.scores),
-                    "score_method": scored.method,
-                    "cache_reused": scored.cache_reused,
-                    "latency_ms": dict(scored.latency_ms),
-                    "reasoning_text": (
-                        scored.reasoning_text
-                        if self.choice_config.preserve_reasoning_text
-                        else None
-                    ),
-                    "choice_metadata": dict(scored.metadata),
-                },
-            )
-        except Exception as exc:
-            # The finite-output mask is retained strictly as a compatibility
-            # fallback for a backend that cannot expose a valid KV cache.
-            try:
-                result = self.semantic.infer(VLMRequest(model_input, "selection"))
-                if result.text.strip().casefold() in {"none", "no", "empty", "null"}:
-                    return self._result(
-                        self._empty_like(candidates),
-                        status=SelectStatus.EMPTY,
-                        method="qwen3_vl_token_mask_fallback",
-                        confidence=result.confidence,
-                        provenance={
-                            **provenance,
-                            "provider": result.provider,
-                            "fallback_reason": str(exc),
-                        },
-                    )
-                indices = parse_selection_indices(result.text, len(items))
-            except Exception as fallback_exc:
+            choice_metadata = dict(scored.metadata)
+        except CachedChoiceUnavailableError as exc:
+            fallback_reason = str(exc)
+            fallback_type = type(exc).__name__
+            if len(choice_ids) > 8:
                 return self._result(
-                    self._empty_like(candidates),
+                    self._selected_like(
+                        candidates,
+                        clear_positive_indices,
+                        provenance={"select": "RELATION", **provenance},
+                    ),
                     status=SelectStatus.UNRESOLVED,
-                    method="qwen3_vl_kv_cached_choice",
-                    reason=f"semantic_selection_unresolved: {fallback_exc}",
-                    provenance={**provenance, "cached_choice_error": str(exc)},
+                    method="qwen3_vl_token_mask_fallback",
+                    reason="safe_fallback_unavailable",
+                    provenance={
+                        **common_provenance,
+                        "semantic_positive_candidate_ids": [],
+                        "final_candidate_ids": clear_ids,
+                        "candidate_ids": clear_ids,
+                        "fallback_used": False,
+                        "fallback_reason": fallback_reason,
+                        "fallback_type": fallback_type,
+                    },
                 )
-            selected = self._selected_like(
-                candidates, indices, provenance={"provider": result.provider}
-            )
-            status = SelectStatus.OK if indices else SelectStatus.EMPTY
-            candidate_ids = self._candidate_ids(items, indices)
-            return self._result(
-                selected,
-                status=status,
-                method="qwen3_vl_token_mask_fallback",
-                confidence=result.confidence,
-                provenance={
-                    **provenance,
-                    "provider": result.provider,
-                    "raw_response": result.text,
-                    "candidate_ids": candidate_ids,
-                    "fallback_reason": str(exc),
-                },
-            )
+            result = self.semantic.infer(VLMRequest(model_input, "selection"))
+            if result.metadata.get("constrained_decoding") is not True:
+                return self._result(
+                    self._selected_like(
+                        candidates,
+                        clear_positive_indices,
+                        provenance={"select": "RELATION", **provenance},
+                    ),
+                    status=SelectStatus.UNRESOLVED,
+                    method="qwen3_vl_token_mask_fallback",
+                    reason="safe_fallback_unavailable",
+                    provenance={
+                        **common_provenance,
+                        "semantic_positive_candidate_ids": [],
+                        "final_candidate_ids": clear_ids,
+                        "candidate_ids": clear_ids,
+                        "fallback_used": False,
+                        "fallback_reason": fallback_reason,
+                        "fallback_type": fallback_type,
+                        "provider": result.provider,
+                    },
+                )
+            try:
+                local_indices = parse_selection_indices(result.text, len(choice_ids))
+            except ValueError:
+                return self._result(
+                    self._selected_like(
+                        candidates,
+                        clear_positive_indices,
+                        provenance={"select": "RELATION", **provenance},
+                    ),
+                    status=SelectStatus.UNRESOLVED,
+                    method="qwen3_vl_token_mask_fallback",
+                    reason="safe_fallback_invalid_output",
+                    provenance={
+                        **common_provenance,
+                        "semantic_positive_candidate_ids": [],
+                        "final_candidate_ids": clear_ids,
+                        "candidate_ids": clear_ids,
+                        "fallback_used": True,
+                        "fallback_reason": fallback_reason,
+                        "fallback_type": fallback_type,
+                        "provider": result.provider,
+                    },
+                )
+            selected_labels = tuple(choice_ids[index] for index in local_indices)
+            semantic_positive_indices = restore_indices(selected_labels)
+            fallback_used = True
+            confidence = result.confidence
+            semantic_provider = result.provider
+            score_method = "finite_token_mask"
+            choice_metadata = {"raw_response": result.text, **result.metadata}
+
+        final_indices = tuple(
+            index
+            for index in all_indices
+            if index in set(clear_positive_indices).union(semantic_positive_indices)
+        )
+        semantic_ids = self._candidate_ids(items, semantic_positive_indices)
+        final_ids = self._candidate_ids(items, final_indices)
+        status = self._cardinality_status(len(final_indices), selection_type)
+        method = (
+            "qwen3_vl_token_mask_fallback"
+            if fallback_used
+            else "qwen3_vl_kv_cached_choice"
+        )
+        return self._result(
+            self._selected_like(
+                candidates,
+                final_indices,
+                provenance={"provider": semantic_provider, "select": "RELATION"},
+            ),
+            status=status,
+            method=method,
+            reason=(
+                "single_selection_multiple_matches"
+                if status is SelectStatus.AMBIGUOUS
+                else None
+            ),
+            confidence=confidence,
+            provenance={
+                **common_provenance,
+                "provider": semantic_provider,
+                "candidate_ids": final_ids,
+                "semantic_positive_candidate_ids": semantic_ids,
+                "final_candidate_ids": final_ids,
+                "choice_labels": [
+                    choice_id
+                    for choice_id, entry in candidate_mapping.items()
+                    if isinstance(entry, dict)
+                    and entry.get("candidate_id") in set(semantic_ids)
+                ],
+                "scores": scores,
+                "score_method": score_method,
+                "cache_reused": cache_reused,
+                "latency_ms": latency_ms,
+                "reasoning_text": reasoning_text,
+                "choice_metadata": choice_metadata,
+                "fallback_used": fallback_used,
+                "fallback_reason": fallback_reason,
+                "fallback_type": fallback_type,
+            },
+        )
 
     def _direct_relation(
         self,
@@ -901,41 +1108,59 @@ class SelectExecutor:
         *,
         margin: float,
         overlap_iou_threshold: float,
-    ) -> tuple[tuple[int, ...], bool]:
-        """Return clear matches plus whether a boundary case needs semantic fallback."""
+    ) -> RelationPartition:
+        """Partition candidates into deterministic yes, uncertain, and no sets."""
         ref_box = reference.bbox_xyxy_global
         ref_x, ref_y = self._box_center(ref_box)
-        selected: list[int] = []
-        grey = False
+        positive: list[int] = []
+        grey: list[int] = []
+        negative: list[int] = []
         for index, item in enumerate(self._items(candidates)):
             box = self._item_region(item).bbox_xyxy_global
             x, y = self._box_center(box)
             if relation == "LEFT_OF":
-                selected.extend([index] if x < ref_x - margin else [])
-                grey = grey or abs(x - ref_x) <= margin
+                bucket = (
+                    positive
+                    if x < ref_x - margin
+                    else grey if abs(x - ref_x) <= margin else negative
+                )
             elif relation == "RIGHT_OF":
-                selected.extend([index] if x > ref_x + margin else [])
-                grey = grey or abs(x - ref_x) <= margin
+                bucket = (
+                    positive
+                    if x > ref_x + margin
+                    else grey if abs(x - ref_x) <= margin else negative
+                )
             elif relation == "ABOVE":
-                selected.extend([index] if y < ref_y - margin else [])
-                grey = grey or abs(y - ref_y) <= margin
+                bucket = (
+                    positive
+                    if y < ref_y - margin
+                    else grey if abs(y - ref_y) <= margin else negative
+                )
             elif relation == "BELOW":
-                selected.extend([index] if y > ref_y + margin else [])
-                grey = grey or abs(y - ref_y) <= margin
+                bucket = (
+                    positive
+                    if y > ref_y + margin
+                    else grey if abs(y - ref_y) <= margin else negative
+                )
             elif relation == "INSIDE":
                 if self._contains(ref_box, box):
-                    selected.append(index)
+                    bucket = positive
                 elif self._intersects(ref_box, box):
-                    grey = True
+                    bucket = grey
+                else:
+                    bucket = negative
             elif relation == "OVERLAP":
                 iou = self._iou(box, ref_box)
                 if iou >= overlap_iou_threshold:
-                    selected.append(index)
+                    bucket = positive
                 elif iou > 0.0:
-                    grey = True
+                    bucket = grey
+                else:
+                    bucket = negative
             else:
-                return (), True
-        return tuple(selected), grey
+                bucket = grey
+            bucket.append(index)
+        return RelationPartition(tuple(positive), tuple(grey), tuple(negative))
 
     @staticmethod
     def _clip_box(
@@ -1022,8 +1247,48 @@ class SelectExecutor:
         if isinstance(raw_candidates, list):
             raise TypeError("SELECT.candidates does not allow reference lists")
         candidates = self._with_candidate_ids(self._unwrap(raw_candidates, role="candidates"))
+        safe_inputs = dict(inputs)
+        safe_inputs["candidates"] = candidates
+        for role in ("reference", "scope"):
+            raw_value = inputs.get(role)
+            if isinstance(raw_value, list):
+                raise TypeError(f"SELECT.{role} does not allow reference lists")
+            if raw_value is not None:
+                safe_inputs[role] = unwrap_select_result(
+                    raw_value,
+                    allow_empty=False,
+                    require_single=role == "scope",
+                    consumer=f"SELECT.{role}",
+                )
         mode = str(node.params["mode"])
         items = self._items(candidates)
+        reference_input = safe_inputs.get("reference")
+        scope_input = safe_inputs.get("scope")
+        reference_value = (
+            reference_input if not isinstance(reference_input, list) else None
+        )
+        scope_value = scope_input if not isinstance(scope_input, list) else None
+        if not self._same_image_inputs(candidates, reference_value, scope_value):
+            return self._result(
+                self._empty_like(candidates),
+                status=SelectStatus.UNRESOLVED,
+                method="geometry",
+                reason="cross_image_select_inputs",
+                provenance={
+                    "mode": mode,
+                    "coordinate_system": "bbox_xyxy_global",
+                },
+            )
+        try:
+            self._stable_index(items)
+        except ValueError as exc:
+            return self._result(
+                self._empty_like(candidates),
+                status=SelectStatus.ERROR,
+                method="geometry",
+                reason="invalid_candidate_ids",
+                provenance={"error": str(exc)},
+            )
         if not items:
             return self._result(
                 self._empty_like(candidates),
@@ -1032,7 +1297,7 @@ class SelectExecutor:
                 reason="empty_candidates",
             )
         if mode == "SUBREGION":
-            return self._subregion(inputs, candidates, node)
+            return self._subregion(safe_inputs, candidates, node)
         if isinstance(candidates, EntitySet):
             entities = candidates.entities
             if mode == "ORDINAL":
@@ -1046,9 +1311,11 @@ class SelectExecutor:
                         method="geometry",
                         reason="ordinal_out_of_range",
                     )
-                selected_key = self._ordinal_key(ordered[index], order)
+                selected_key = self._ordinal_primary(ordered[index], order)
                 selected = tuple(
-                    entity for entity in ordered if self._ordinal_key(entity, order) == selected_key
+                    entity
+                    for entity in ordered
+                    if self._ordinal_primary(entity, order) == selected_key
                 )
                 status = SelectStatus.AMBIGUOUS if len(selected) > 1 else SelectStatus.OK
                 return self._result(
@@ -1066,9 +1333,11 @@ class SelectExecutor:
                     "BOTTOMMOST": "BOTTOM_TO_TOP",
                 }[direction]
                 ordered = self._sort_entities(entities, order)
-                best_key = self._ordinal_key(ordered[0], order)[0]
+                best_key = self._ordinal_primary(ordered[0], order)
                 selected = tuple(
-                    entity for entity in ordered if self._ordinal_key(entity, order)[0] == best_key
+                    entity
+                    for entity in ordered
+                    if self._ordinal_primary(entity, order) == best_key
                 )
                 status = SelectStatus.AMBIGUOUS if len(selected) > 1 else SelectStatus.OK
                 return self._result(
@@ -1079,7 +1348,18 @@ class SelectExecutor:
                 )
             if mode == "RANK":
                 criterion = str(node.params["criterion"]).casefold()
-                ranked = sorted(entities, key=lambda item: self._rank_value(item, criterion))
+                if criterion == "score" and any(entity.score is None for entity in entities):
+                    return self._result(
+                        self._empty_like(candidates),
+                        status=SelectStatus.UNRESOLVED,
+                        method="geometry",
+                        reason="rank_score_missing",
+                        provenance={"mode": mode, "criterion": criterion},
+                    )
+                ranked = sorted(
+                    entities,
+                    key=lambda item: self._rank_value(item, criterion),
+                )
                 if str(node.params["order"]) == "DESCENDING":
                     ranked.reverse()
                 index = int(node.params["rank"]) - 1
@@ -1104,8 +1384,6 @@ class SelectExecutor:
                     reason="rank_tie" if status is SelectStatus.AMBIGUOUS else None,
                 )
         if mode == "RELATION":
-            raw_reference = inputs.get("reference")
-            reference_value = raw_reference if not isinstance(raw_reference, list) else None
             reference = self._single_reference(reference_value)
             relation = str(node.params["relation"])
             if reference is None:
@@ -1134,33 +1412,67 @@ class SelectExecutor:
                     method="geometry",
                     reason="RELATION requires exactly one reference",
                 )
-            scope = self._scope_for(inputs, candidates, reference)
+            scope = self._scope_for(safe_inputs, candidates, reference)
             margin = self._default_margin(scope, node.params.get("margin"))
-            threshold = float(node.params.get("overlap_iou_threshold") or 0.10)
-            indices, needs_semantic = self._direct_relation(
+            configured_threshold = node.params.get("overlap_iou_threshold")
+            threshold = float(
+                0.10 if configured_threshold is None else configured_threshold
+            )
+            partition = self._direct_relation(
                 candidates, reference, relation, margin=margin, overlap_iou_threshold=threshold
             )
+            all_indices = tuple(range(len(items)))
             provenance = {
+                "mode": mode,
                 "relation": relation,
+                "selection_type": self._selection_type(node),
                 "coordinate_system": "bbox_xyxy_global",
+                "scope_bbox_xyxy_global": list(_scope_box(scope)),
                 "margin_px": margin,
                 "overlap_iou_threshold": threshold,
+                "all_candidate_ids": self._candidate_ids(items, all_indices),
+                "clear_positive_candidate_ids": self._candidate_ids(
+                    items, partition.positive
+                ),
+                "grey_candidate_ids": self._candidate_ids(items, partition.grey),
+                "clear_negative_candidate_ids": self._candidate_ids(
+                    items, partition.negative
+                ),
             }
-            if needs_semantic:
+            if partition.grey:
                 return self._semantic_select(
-                    candidates, reference_value, relation, node, context, provenance
+                    candidates,
+                    reference_value,
+                    relation,
+                    node,
+                    context,
+                    provenance,
+                    clear_positive_indices=partition.positive,
+                    grey_indices=partition.grey,
                 )
             relation_selected = self._selected_like(
-                candidates, indices, provenance={"select": "RELATION", **provenance}
+                candidates,
+                partition.positive,
+                provenance={"select": "RELATION", **provenance},
             )
-            status = SelectStatus.OK if indices else SelectStatus.EMPTY
+            status = self._cardinality_status(
+                len(partition.positive), self._selection_type(node)
+            )
+            final_ids = self._candidate_ids(items, partition.positive)
             return self._result(
                 relation_selected,
                 status=status,
                 method="geometry",
+                reason=(
+                    "single_selection_multiple_matches"
+                    if status is SelectStatus.AMBIGUOUS
+                    else None
+                ),
                 provenance={
                     **provenance,
-                    "candidate_ids": self._candidate_ids(self._items(candidates), indices),
+                    "semantic_positive_candidate_ids": [],
+                    "final_candidate_ids": final_ids,
+                    "candidate_ids": final_ids,
                 },
             )
         return self._result(

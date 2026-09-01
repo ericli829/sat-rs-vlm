@@ -177,7 +177,7 @@ def test_case_b_compound_color_keeps_original_options_and_selected_visual() -> N
         intent="ATTRIBUTE_QUERY",
     )
     runtime = fake_runtime(
-        detection_boxes=[[1, 1, 6, 6], [8, 1, 12, 6]],
+        detection_boxes=[[1, 1, 6, 6], [8, 5, 12, 10]],
         choice_responses={"choice": "A"},
     )
     try:

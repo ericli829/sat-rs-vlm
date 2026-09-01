@@ -101,6 +101,11 @@ class SelectionCardinality(StringEnum):
     MULTI = "MULTI"
 
 
+class RankCriterion(StringEnum):
+    BBOX_AREA = "bbox_area"
+    SCORE = "score"
+
+
 class SpatialRelation(StringEnum):
     LEFT_OF = "LEFT_OF"
     RIGHT_OF = "RIGHT_OF"
@@ -229,7 +234,7 @@ class LocateParams(StrictModel):
 class SelectParams(StrictModel):
     mode: SelectMode
     relation: SpatialRelation | None = None
-    criterion: str | None = None
+    criterion: RankCriterion | None = None
     rank: int | None = Field(default=None, ge=1)
     order: SortOrder | None = None
     index: int | None = Field(default=None, ge=1)
