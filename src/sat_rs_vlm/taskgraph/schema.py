@@ -20,6 +20,7 @@ class StringEnum(str, Enum):
 
 
 class QuestionType(StringEnum):
+    MULTIPLE_CHOICE = "MULTIPLE_CHOICE"
     MULTIPLE_CHOICE_SINGLE = "MULTIPLE_CHOICE_SINGLE"
     MULTIPLE_CHOICE_MULTI = "MULTIPLE_CHOICE_MULTI"
     FREE_FORM = "FREE_FORM"
@@ -94,6 +95,11 @@ class SelectMode(StringEnum):
     ORDINAL = "ORDINAL"
     EXTREME = "EXTREME"
     SUBREGION = "SUBREGION"
+
+
+class SelectionCardinality(StringEnum):
+    SINGLE = "SINGLE"
+    MULTI = "MULTI"
 
 
 class SpatialRelation(StringEnum):
@@ -229,6 +235,7 @@ class SelectParams(StrictModel):
     index: int | None = Field(default=None, ge=1)
     direction: ExtremeDirection | None = None
     subregion: SubregionType | None = None
+    selection_type: SelectionCardinality | None = None
 
     @model_validator(mode="after")
     def validate_mode_shape(self) -> SelectParams:
@@ -258,6 +265,8 @@ class SelectParams(StrictModel):
             SortOrder.RIGHT_TO_LEFT,
         }:
             raise ValueError("SELECT ORDINAL requires a spatial order")
+        if self.mode is not SelectMode.RELATION and self.selection_type is not None:
+            raise ValueError("SELECT selection_type is only valid for RELATION mode")
         return self
 
 
@@ -301,6 +310,14 @@ class VLMReasonParams(StrictModel):
 
 class RouteReasonParams(VLMReasonParams):
     choices: str | list[str]
+    answer_type: AnswerType = AnswerType.CHOICE_SINGLE
+
+    @field_validator("answer_type")
+    @classmethod
+    def choice_answer_type(cls, value: AnswerType) -> AnswerType:
+        if value not in {AnswerType.CHOICE_SINGLE, AnswerType.CHOICE_MULTI}:
+            raise ValueError("ROUTE_REASON answer_type must be a choice type")
+        return value
 
 
 class MatchChoiceParams(StrictModel):
@@ -407,6 +424,7 @@ class TaskGraph(StrictModel):
         if (
             self.question_type
             in {
+                QuestionType.MULTIPLE_CHOICE,
                 QuestionType.MULTIPLE_CHOICE_SINGLE,
                 QuestionType.MULTIPLE_CHOICE_MULTI,
             }

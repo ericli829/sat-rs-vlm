@@ -41,13 +41,7 @@ providers:
     local_files_only: true
     max_new_tokens: 192
   choice:
-    kind: qwen3_vl
-    backend: huggingface
-    model_id: ${QWEN3VL_2B_MODEL_DIR}
-    device: auto
-    dtype: auto
-    local_files_only: true
-    max_new_tokens: 32
+    reuse: semantic_2b
   region_retriever:
     kind: uhr_locator
     # The remaining keys follow configs/locator/uhr_hierarchical.yaml.
@@ -61,3 +55,11 @@ providers:
 semantic_region_categories:
   - harbor
   - industrial area
+
+choice:
+  backend: kv_cached_logits
+  final_suffix: "\n\nFinal choice:"
+  legacy_regex_fallback: false
+  multi_select_threshold: 0.0
+  multi_empty_policy: EMPTY
+  preserve_reasoning_text: true

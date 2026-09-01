@@ -33,8 +33,7 @@ providers:
     kind: fake
     default: A
   choice:
-    kind: fake
-    default: A
+    reuse: semantic_2b
   region_retriever:
     kind: fake
     candidates: []
@@ -42,3 +41,11 @@ providers:
 semantic_region_categories:
   - harbor
   - industrial area
+
+choice:
+  backend: kv_cached_logits
+  final_suffix: "\n\nFinal choice:"
+  legacy_regex_fallback: false
+  multi_select_threshold: 0.0
+  multi_empty_policy: EMPTY
+  preserve_reasoning_text: true

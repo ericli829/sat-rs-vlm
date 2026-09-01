@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -87,6 +88,53 @@ def test_case_a_high_res_count_is_structured_text_only_choice() -> None:
         assert result.store.get("$n1").value == 7
         assert runtime.choice_resolver.last_model_input.visual_inputs == ()
         assert "value: 7" in runtime.choice_resolver.last_model_input.structured_context
+        assert runtime.providers.choice.choice_calls == []
+    finally:
+        runtime.close()
+
+
+def test_taskgraph_choice_multi_is_indeterminate_and_not_blocked_by_legacy_label() -> None:
+    question = "Select all statements that apply to the number of ships."
+    options = ["A At least 1", "B At least 2", "C At least 4", "D More than 10"]
+    graph = _graph(
+        question=question,
+        options=options,
+        nodes=[
+            {
+                "id": "n1",
+                "op": "COUNT",
+                "inputs": {"image": "$image0"},
+                "params": {
+                    "target": {"category": "ship", "attributes": {}},
+                    "entire": True,
+                },
+            }
+        ],
+        sources=["$n1"],
+        final_question="Select every statement supported by the resolved count.",
+        intent="SIMPLE_COUNT",
+    )
+    graph["final"]["answer_type"] = "CHOICE_MULTI"
+    runtime = fake_runtime(
+        detection_boxes=[[0, 0, 1, 1]] * 4,
+        choice_responses={"choice_multi": json.dumps({"choice_ids": ["A", "B", "C"]})},
+    )
+    try:
+        result = runtime.run(
+            RuntimeRequest(
+                "case-a-multi",
+                "MME_RealWorld_RS",
+                "count",
+                question,
+                (IMAGE,),
+                tuple(options),
+                graph=graph,
+            )
+        )
+        assert result.output.choice_ids == ("A", "B", "C")
+        assert result.output.choice_id is None
+        assert result.trace.choice_result["selected_ids"] == ["A", "B", "C"]
+        assert runtime.choice_resolver.last_score_result.cache_reused is True
     finally:
         runtime.close()
 
@@ -146,6 +194,7 @@ def test_case_b_compound_color_keeps_original_options_and_selected_visual() -> N
         assert model_input.options == tuple(options)
         assert model_input.question == "What colors are visible on the selected house?"
         assert len(model_input.visual_inputs) == 1
+        assert len(runtime.providers.semantic_2b.choice_calls) == 1
     finally:
         runtime.close()
 
@@ -302,6 +351,12 @@ def test_case_e_route_accepts_entityset_start_and_goal() -> None:
         )
         assert result.output.choice_id == "A"
         assert result.trace.nodes[-1].provider == "fake_vlm"
+        assert len(runtime.providers.route_4b.choice_calls) == 1
+        assert runtime.providers.route_4b.choice_calls[0].purpose == "route_choice"
+        assert runtime.providers.route_4b.choice_calls[0].model_input.options == tuple(options)
+        assert runtime.providers.semantic_2b.choice_calls == []
+        route_output = result.store.get("$n6")
+        assert route_output.cache_reused is True
     finally:
         runtime.close()
 

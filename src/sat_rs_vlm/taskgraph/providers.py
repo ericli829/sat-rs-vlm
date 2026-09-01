@@ -20,6 +20,7 @@ from sat_rs_vlm.models.hf_vlm_engine import HuggingFaceVLMEngine
 
 from .runtime_types import (
     BBox,
+    ChoiceScoreResult,
     Entity,
     EntitySet,
     ImageRef,
@@ -155,10 +156,29 @@ class VLMResult:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class ChoiceScoringRequest:
+    model_input: ModelInput
+    answer_type: str
+    choice_ids: tuple[str, ...]
+    option_texts: tuple[str, ...]
+    final_suffix: str
+    multi_select_threshold: float = 0.0
+    purpose: str = "final_choice"
+
+    def __post_init__(self) -> None:
+        if self.answer_type not in {"CHOICE_SINGLE", "CHOICE_MULTI"}:
+            raise ValueError("choice scoring answer_type is invalid")
+        if not self.choice_ids or len(self.choice_ids) != len(self.option_texts):
+            raise ValueError("choice ids and option texts must be non-empty and aligned")
+
+
 class SemanticVLMProvider(Protocol):
     provider_name: str
 
     def infer(self, request: VLMRequest) -> VLMResult: ...
+
+    def reason_and_choose(self, request: ChoiceScoringRequest) -> ChoiceScoreResult: ...
 
     def close(self) -> None: ...
 
@@ -483,8 +503,12 @@ class LazyQwenSemanticProvider:
             )
         return self._engine
 
-    def infer(self, request: VLMRequest) -> VLMResult:
-        model_input = request.model_input
+    @property
+    def engine_identity(self) -> str | None:
+        return self._engine.model_identity if self._engine is not None else None
+
+    @staticmethod
+    def _prompt(model_input: ModelInput, *, reasoning_instruction: str | None = None) -> str:
         prompt_parts = []
         if model_input.visual_inputs:
             roles = model_input.visual_roles or tuple(
@@ -499,8 +523,13 @@ class LazyQwenSemanticProvider:
         prompt_parts.append("Question:\n" + model_input.question)
         if model_input.options:
             prompt_parts.append("Options:\n" + "\n".join(model_input.options))
-            prompt_parts.append("Return only the option id.")
-        prompt = "\n\n".join(prompt_parts)
+        if reasoning_instruction:
+            prompt_parts.append(reasoning_instruction)
+        return "\n\n".join(prompt_parts)
+
+    def infer(self, request: VLMRequest) -> VLMResult:
+        model_input = request.model_input
+        prompt = self._prompt(model_input)
         engine = self._load()
         if not model_input.visual_inputs:
             # Qwen is a VLM, but structured authoritative choice must remain text-only.
@@ -515,22 +544,88 @@ class LazyQwenSemanticProvider:
             metadata={"output_contract": request.output_contract},
         )
 
+    def reason_and_choose(self, request: ChoiceScoringRequest) -> ChoiceScoreResult:
+        if request.purpose == "route_choice":
+            instruction = (
+                "Analyze the route-planning problem using the marked start, goal, obstacles, "
+                "spatial layout, and supplied route options. Compare feasible routes carefully. "
+                "The final option will be selected in a separate constrained step."
+            )
+        elif request.purpose == "select_relation":
+            instruction = (
+                "Analyze which candidate object or objects satisfy the requested relation. "
+                "Use candidate labels only as visual references during reasoning. A separate "
+                "constrained step will determine the final selection."
+            )
+        else:
+            instruction = (
+                "Analyze the visual evidence, question, and all candidate options carefully. "
+                "Reason through the problem before making the final decision. The final option "
+                "will be selected in a separate constrained step."
+            )
+        engine = self._load()
+        result = engine.reason_and_choose(
+            self._prompt(request.model_input, reasoning_instruction=instruction),
+            list(request.model_input.visual_inputs),
+            choice_ids=request.choice_ids,
+            option_texts=request.option_texts,
+            answer_type=request.answer_type,
+            suffix=request.final_suffix,
+            multi_select_threshold=request.multi_select_threshold,
+            reasoning_max_new_tokens=self.model_config.max_new_tokens,
+        )
+        return ChoiceScoreResult(
+            selected_ids=result.selected_ids,
+            scores=result.scores,
+            answer_type=result.answer_type,
+            reasoning_text=result.reasoning_text,
+            provider=f"{self.provider_name}:{self.role}",
+            model_id=engine.model_id,
+            method=result.method,
+            cache_reused=result.cache_reused,
+            latency_ms=result.latency_ms,
+            metadata={**result.metadata, "purpose": request.purpose},
+        )
+
     def close(self) -> None:
+        if self._engine is not None:
+            self._engine.close()
         self._engine = None
 
 
 class FakeSemanticVLMProvider:
     provider_name = "fake_vlm"
 
-    def __init__(self, responses: Mapping[str, str] | None = None, default: str = "A") -> None:
+    def __init__(
+        self,
+        responses: Mapping[str, str] | None = None,
+        default: str = "A",
+        *,
+        choice_scores: Mapping[str, Mapping[str, float]] | None = None,
+    ) -> None:
         self.responses = dict(responses or {})
         self.default = default
+        self.choice_scores = {
+            purpose: {choice_id: float(score) for choice_id, score in scores.items()}
+            for purpose, scores in (choice_scores or {}).items()
+        }
         self.calls: list[VLMRequest] = []
+        self.choice_calls: list[ChoiceScoringRequest] = []
 
     def infer(self, request: VLMRequest) -> VLMResult:
         self.calls.append(request)
         response = self.responses.get(request.output_contract)
-        if response is None and request.output_contract == "choice":
+        if response is None and request.output_contract in {
+            "choice",
+            "choice_single",
+            "choice_multi",
+        }:
+            response = self.responses.get("choice")
+        if response is None and request.output_contract in {
+            "choice",
+            "choice_single",
+            "choice_multi",
+        }:
             match = re.search(r"^value:\s*(.+)$", request.model_input.structured_context, re.M)
             if match:
                 value = match.group(1).strip().casefold()
@@ -541,6 +636,101 @@ class FakeSemanticVLMProvider:
                         break
         response = response or self.default
         return VLMResult(response, self.provider_name, 1.0, {"deterministic": True})
+
+    def _fixture_selected_ids(self, request: ChoiceScoringRequest) -> tuple[str, ...]:
+        response = self.responses.get(request.purpose)
+        if response is None and request.purpose == "select_relation":
+            response = self.responses.get("selection")
+        if response is None:
+            response = self.responses.get(request.answer_type.casefold())
+        if response is None:
+            response = self.responses.get("choice")
+        response = (response or self.default).strip()
+        try:
+            import json
+
+            payload = json.loads(response)
+        except (ValueError, TypeError):
+            payload = None
+        values: list[str] = []
+        if isinstance(payload, dict):
+            raw = payload.get("selected_ids", payload.get("choice_ids"))
+            if isinstance(raw, list):
+                values = [str(item).strip().upper() for item in raw]
+        if not values and response.upper() in request.choice_ids:
+            values = [response.upper()]
+        if not values and request.purpose == "select_relation":
+            raw_items = [item.strip().upper() for item in response.split(",")]
+            if raw_items and all(item in request.choice_ids for item in raw_items):
+                values = raw_items
+            elif raw_items and all(item.isdigit() for item in raw_items):
+                indices = [int(item) for item in raw_items]
+                if 0 not in indices and all(
+                    1 <= item <= len(request.choice_ids) for item in indices
+                ):
+                    indices = [item - 1 for item in indices]
+                if all(0 <= item < len(request.choice_ids) for item in indices):
+                    values = [request.choice_ids[item] for item in indices]
+        return tuple(dict.fromkeys(item for item in values if item in request.choice_ids))
+
+    def reason_and_choose(self, request: ChoiceScoringRequest) -> ChoiceScoreResult:
+        self.choice_calls.append(request)
+        fixture_scores = self.choice_scores.get(request.purpose)
+        if fixture_scores is None:
+            fixture_scores = self.choice_scores.get(request.answer_type.casefold())
+        selected_fixture = self._fixture_selected_ids(request)
+        scores = {
+            choice_id: (
+                float(fixture_scores[choice_id])
+                if fixture_scores is not None and choice_id in fixture_scores
+                else (1.0 if choice_id in selected_fixture else -1.0)
+            )
+            for choice_id in request.choice_ids
+        }
+        selected_ids: tuple[str, ...]
+        if request.answer_type == "CHOICE_SINGLE":
+            selected_ids = (max(request.choice_ids, key=lambda item: scores[item]),)
+            method = "fake_kv_cached_logits"
+        else:
+            selected_ids = tuple(
+                choice_id
+                for choice_id in request.choice_ids
+                if scores[choice_id] > request.multi_select_threshold
+            )
+            method = "fake_kv_cached_binary_verification"
+        reasoning = self.responses.get(
+            f"{request.purpose}_reasoning",
+            self.responses.get("reasoning", "Fake free reasoning; letters A/B/C are not parsed."),
+        )
+        return ChoiceScoreResult(
+            selected_ids=selected_ids,
+            scores=scores,
+            answer_type=request.answer_type,
+            reasoning_text=reasoning,
+            provider=self.provider_name,
+            model_id="fake-model",
+            method=method,
+            cache_reused=True,
+            latency_ms={
+                "vision_prefill_ms": 0.0,
+                "text_prefill_ms": 0.0,
+                "total_prefill_ms": 0.0,
+                "reasoning_decode_ms": 0.0,
+                "choice_suffix_prefill_ms": 0.0,
+                "choice_scoring_ms": 0.0,
+                "total_ms": 0.0,
+            },
+            metadata={
+                "initial_prefill_tokens": 1,
+                "reasoning_tokens": 1,
+                "choice_suffix_tokens": 1,
+                "choice_scored_tokens": len(request.choice_ids),
+                "visual_prefill_count": 1 if request.model_input.visual_inputs else 0,
+                "reasoning_pass_count": 1,
+                "session_released": True,
+                "purpose": request.purpose,
+            },
+        )
 
     def close(self) -> None:
         return None

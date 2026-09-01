@@ -7,6 +7,7 @@ import pytest
 from PIL import Image, ImageDraw
 from pydantic import ValidationError
 
+from sat_rs_vlm.taskgraph.choice_config import ChoiceSystemConfig
 from sat_rs_vlm.taskgraph.executor import (
     CapabilityRouter,
     ExecutorBinding,
@@ -272,7 +273,64 @@ def test_fuzzy_select_restores_letter_ids_to_entities(tmp_path: Path) -> None:
         )
         assert isinstance(result.value, EntitySet)
         assert result.value.entities == (candidates.entities[0], candidates.entities[2])
-        assert provider.calls[0].model_input.metadata["canvas_kind"] == "CANDIDATE_CANVAS"
+        assert provider.choice_calls[0].model_input.metadata["canvas_kind"] == "CANDIDATE_CANVAS"
+        assert result.value.provenance["cache_reused"] is True
+    finally:
+        composer.close()
+
+
+@pytest.mark.parametrize(
+    ("selection_type", "threshold", "expected"),
+    [
+        ("SINGLE", 0.0, (2,)),
+        ("MULTI", 0.5, (0, 2)),
+    ],
+)
+def test_fuzzy_select_uses_cached_single_or_independent_multi_scoring(
+    tmp_path: Path,
+    selection_type: str,
+    threshold: float,
+    expected: tuple[int, ...],
+) -> None:
+    image = _image(tmp_path / f"select_{selection_type}.png", (500, 300))
+    candidates = EntitySet(
+        tuple(
+            _entity(image, (50 + index * 50, 80, 80 + index * 50, 120), 0.8) for index in range(3)
+        )
+    )
+    reference = _entity(image, (220, 100, 260, 140), 0.9)
+    scores = (
+        {"A": 0.1, "B": 0.2, "C": 0.9}
+        if selection_type == "SINGLE"
+        else {"A": 0.8, "B": 0.2, "C": 0.7}
+    )
+    provider = FakeSemanticVLMProvider(
+        {"select_relation_reasoning": "A and B appear in reasoning; do not parse them."},
+        choice_scores={"select_relation": scores},
+    )
+    composer = InputComposer(tmp_path / f"select_{selection_type}_inputs")
+    node = _node(
+        "SELECT",
+        {"candidates": "$n1", "reference": "$n2"},
+        {
+            "mode": "RELATION",
+            "relation": "NEXT_TO",
+            "selection_type": selection_type,
+        },
+    )
+    try:
+        result = SelectExecutor(
+            provider, ChoiceSystemConfig(multi_select_threshold=threshold)
+        ).execute(
+            node,
+            {"candidates": candidates, "reference": reference},
+            OperatorContext("select", (), composer),
+        )
+        assert isinstance(result.value, EntitySet)
+        assert result.value.entities == tuple(candidates.entities[index] for index in expected)
+        assert len(provider.choice_calls) == 1
+        assert provider.choice_calls[0].answer_type == f"CHOICE_{selection_type}"
+        assert provider.calls == []
     finally:
         composer.close()
 

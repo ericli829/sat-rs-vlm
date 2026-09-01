@@ -10,15 +10,16 @@ from typing import Protocol
 
 from PIL import Image
 
+from .choice_config import ChoiceSystemConfig
 from .input_composer import InputComposer
 from .providers import (
+    ChoiceScoringRequest,
     DetectionProvider,
     DetectionRequest,
     RegionRetrievalRequest,
     RegionRetrieverProvider,
     SemanticVLMProvider,
     VLMRequest,
-    parse_selection_indices,
 )
 from .runtime_types import (
     Answer,
@@ -527,9 +528,14 @@ class CountExecutor:
 
 
 class SelectExecutor:
-    def __init__(self, semantic: SemanticVLMProvider) -> None:
+    def __init__(
+        self,
+        semantic: SemanticVLMProvider,
+        choice_config: ChoiceSystemConfig | None = None,
+    ) -> None:
         self.semantic = semantic
         self.provider_name = semantic.provider_name
+        self.choice_config = choice_config or ChoiceSystemConfig()
 
     @staticmethod
     def _sort_entities(entities: tuple[Entity, ...], order: str) -> list[Entity]:
@@ -603,17 +609,50 @@ class SelectExecutor:
                 model_input = context.composer.compose_named(
                     named,
                     question=(
-                        f"Select candidate ids satisfying relation {node.params['relation']}. "
-                        "Return only candidate ids such as A, B, or C."
+                        f"Determine which candidates satisfy relation {node.params['relation']} "
+                        "relative to the marked reference."
                     ),
                 )
-                result = self.semantic.infer(VLMRequest(model_input, "selection"))
-                indices = parse_selection_indices(result.text, len(entities))
+                candidate_mapping = model_input.metadata.get("candidate_mapping")
+                if not isinstance(candidate_mapping, dict) or not candidate_mapping:
+                    raise RuntimeError("SELECT candidate canvas is missing its stable id mapping")
+                choice_ids = tuple(str(choice_id) for choice_id in candidate_mapping)
+                selection_type = str(node.params.get("selection_type") or "MULTI")
+                answer_type = "CHOICE_SINGLE" if selection_type == "SINGLE" else "CHOICE_MULTI"
+                scored = self.semantic.reason_and_choose(
+                    ChoiceScoringRequest(
+                        model_input=model_input,
+                        answer_type=answer_type,
+                        choice_ids=choice_ids,
+                        option_texts=tuple(
+                            f"Candidate {choice_id}: {entity.label}"
+                            for choice_id, entity in zip(choice_ids, entities, strict=True)
+                        ),
+                        final_suffix=self.choice_config.final_suffix,
+                        multi_select_threshold=self.choice_config.multi_select_threshold,
+                        purpose="select_relation",
+                    )
+                )
+                indices = []
+                for choice_id in scored.selected_ids:
+                    entry = candidate_mapping.get(choice_id)
+                    if not isinstance(entry, dict) or not isinstance(entry.get("index"), int):
+                        raise RuntimeError(f"SELECT candidate mapping is invalid for {choice_id}")
+                    indices.append(entry["index"])
                 return OperatorOutcome(
                     EntitySet(
-                        tuple(entities[index] for index in indices), {"provider": result.provider}
+                        tuple(entities[index] for index in indices),
+                        {
+                            "provider": scored.provider,
+                            "selected_ids": list(scored.selected_ids),
+                            "scores": dict(scored.scores),
+                            "method": scored.method,
+                            "cache_reused": scored.cache_reused,
+                            "latency_ms": dict(scored.latency_ms),
+                            "choice_metadata": dict(scored.metadata),
+                        },
                     ),
-                    result.provider,
+                    scored.provider,
                 )
         if mode == "SUBREGION" and isinstance(candidates, Region):
             helper = GeometryExecutor()
@@ -632,9 +671,16 @@ class SelectExecutor:
 
 
 class SemanticExecutor:
-    def __init__(self, provider: SemanticVLMProvider, *, provider_name: str | None = None) -> None:
+    def __init__(
+        self,
+        provider: SemanticVLMProvider,
+        *,
+        provider_name: str | None = None,
+        choice_config: ChoiceSystemConfig | None = None,
+    ) -> None:
         self.provider = provider
         self.provider_name = provider_name or provider.provider_name
+        self.choice_config = choice_config or ChoiceSystemConfig()
 
     @staticmethod
     def _label_set(text: str) -> tuple[str, ...]:
@@ -667,6 +713,22 @@ class SemanticExecutor:
             else ()
         )
         model_input = context.composer.compose_named(inputs, question=question, options=options)
+        if node.op is OperatorName.ROUTE_REASON:
+            choice_ids = tuple(chr(ord("A") + index) for index in range(len(context.choices)))
+            scored = self.provider.reason_and_choose(
+                ChoiceScoringRequest(
+                    model_input=model_input,
+                    answer_type=str(node.params.get("answer_type") or "CHOICE_SINGLE"),
+                    choice_ids=choice_ids,
+                    option_texts=context.choices,
+                    final_suffix=self.choice_config.final_suffix,
+                    multi_select_threshold=self.choice_config.multi_select_threshold,
+                    purpose="route_choice",
+                )
+            )
+            if not self.choice_config.preserve_reasoning_text:
+                scored = replace(scored, reasoning_text=None)
+            return OperatorOutcome(scored, scored.provider)
         result = self.provider.infer(VLMRequest(model_input, node.op.value.casefold()))
         if node.op in {OperatorName.ATTRIBUTE, OperatorName.CLASSIFY, OperatorName.RELATION}:
             value: RuntimeObject = Label(result.text, {"provider": result.provider})

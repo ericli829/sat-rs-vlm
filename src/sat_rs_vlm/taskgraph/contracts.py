@@ -65,6 +65,7 @@ ANY_RUNTIME_TYPES = frozenset(
         "Evidence",
         "EvidenceSet",
         "Answer",
+        "ChoiceScoreResult",
     }
 )
 
@@ -134,6 +135,7 @@ OPERATOR_INPUT_CONTRACTS: dict[str, OperatorInputContract] = {
                 "Label",
                 "LabelSet",
                 "Answer",
+                "ChoiceScoreResult",
             )
         },
         frozenset({"value"}),
