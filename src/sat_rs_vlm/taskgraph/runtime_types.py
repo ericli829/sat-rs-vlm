@@ -175,14 +175,25 @@ class ChoiceScoreResult:
 @dataclass(frozen=True)
 class ChoiceResult:
     selected_ids: tuple[str, ...]
+    answer_type: str
     raw_response: str
     confidence: float | None = None
     provenance: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.answer_type not in {"CHOICE_SINGLE", "CHOICE_MULTI"}:
+            raise ValueError("choice result answer_type must be CHOICE_SINGLE or CHOICE_MULTI")
+        if self.answer_type == "CHOICE_SINGLE" and len(self.selected_ids) != 1:
+            raise ValueError("CHOICE_SINGLE requires exactly one selected id")
+        if len(self.selected_ids) != len(set(self.selected_ids)):
+            raise ValueError("selected choice ids must be unique")
 
     @property
     def choice_id(self) -> str | None:
         """Legacy single-choice view; multi-choice is never flattened to a string."""
 
+        if self.answer_type != "CHOICE_SINGLE":
+            return None
         return self.selected_ids[0] if len(self.selected_ids) == 1 else None
 
     @property
@@ -215,11 +226,11 @@ STRUCTURED_AUTHORITATIVE_TYPES = (ScalarInt, ScalarFloat, Boolean, Label, LabelS
 VISUAL_TYPES = (ImageRef, Region, RegionSet, Entity, EntitySet, SelectResult, RouteContext)
 
 
-def runtime_type_name(value: RuntimeObject) -> str:
+def runtime_type_name(value: RuntimeObject | ChoiceResult) -> str:
     return type(value).__name__
 
 
-def runtime_summary(value: RuntimeObject) -> dict[str, Any]:
+def runtime_summary(value: RuntimeObject | ChoiceResult) -> dict[str, Any]:
     """Return trace-safe metadata, never image bytes or tensors."""
 
     summary: dict[str, Any] = {"type": runtime_type_name(value)}
@@ -266,5 +277,14 @@ def runtime_summary(value: RuntimeObject) -> dict[str, Any]:
             cache_reused=value.cache_reused,
             latency_ms=dict(value.latency_ms),
             metadata=dict(value.metadata),
+        )
+    elif isinstance(value, ChoiceResult):
+        summary.update(
+            answer_type=value.answer_type,
+            selected_ids=list(value.selected_ids),
+            choice_id=value.choice_id,
+            raw_response=value.raw_response,
+            confidence=value.confidence,
+            provenance=dict(value.provenance),
         )
     return summary

@@ -44,7 +44,13 @@ semantic_region_categories:
 
 choice:
   backend: kv_cached_logits
-  final_suffix: "\n\nFinal choice:"
+  single_choice_suffix: "\n\nFinal choice:"
+  multi_verify_template: |-
+    Verify the following option independently.
+
+    Candidate option {choice_id}: {option_text}
+    Is this option a correct answer to the original question?
+    Answer YES or NO:
   legacy_regex_fallback: false
   multi_select_threshold: 0.0
   multi_empty_policy: EMPTY

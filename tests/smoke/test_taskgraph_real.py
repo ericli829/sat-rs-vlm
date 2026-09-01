@@ -11,6 +11,7 @@ from sat_rs_vlm.taskgraph.choice import ChoiceRequest
 from sat_rs_vlm.taskgraph.providers import ChoiceScoringRequest
 from sat_rs_vlm.taskgraph.runtime import runtime_from_config
 from sat_rs_vlm.taskgraph.runtime_types import ImageRef, Region, RouteContext, ScalarInt
+from sat_rs_vlm.taskgraph.schema import AnswerType
 
 
 def _config(kind: str) -> dict:
@@ -86,8 +87,71 @@ def test_real_qwen_visual_and_structured_choice_contracts() -> None:
             )
         )
         assert visual.choice_id in {"A", "B"}
+        assert visual.answer_type == "CHOICE_SINGLE"
         assert visual.provenance["cache_reused"] is True
         assert visual.provenance["method"].startswith("kv_cached_")
+        assert "legacy" not in visual.provenance["method"]
+        multi_question = "Select every mathematically true statement; image content is irrelevant."
+        multi_options = ("A One plus one equals two", "B One plus one equals three")
+        multi_probe = runtime.choice_resolver.resolve(
+            ChoiceRequest(
+                (ImageRef(image),),
+                multi_question,
+                multi_options,
+                AnswerType.CHOICE_MULTI,
+            )
+        )
+        assert set(multi_probe.selected_ids) <= {"A", "B"}
+        assert multi_probe.choice_id is None
+        assert multi_probe.answer_type == "CHOICE_MULTI"
+        assert multi_probe.provenance["cache_reused"] is True
+        assert multi_probe.provenance["method"] == "kv_cached_binary_verification"
+        probe_score = runtime.choice_resolver.last_score_result
+        model_input = runtime.choice_resolver.last_model_input
+        assert probe_score is not None
+        assert model_input is not None
+        ranked_scores = sorted(probe_score.scores.values(), reverse=True)
+        assert ranked_scores[0] > ranked_scores[1]
+        one_threshold = (ranked_scores[0] + ranked_scores[1]) / 2.0
+        multi_one_score = runtime.providers.semantic_2b.reason_and_choose(
+            ChoiceScoringRequest(
+                model_input=model_input,
+                answer_type="CHOICE_MULTI",
+                choice_ids=("A", "B"),
+                option_texts=multi_options,
+                single_choice_suffix=runtime.choice_config.single_choice_suffix,
+                multi_verify_template=runtime.choice_config.multi_verify_template,
+                multi_select_threshold=one_threshold,
+                purpose="final_choice",
+            )
+        )
+        assert len(multi_one_score.selected_ids) == 1
+        assert multi_one_score.cache_reused is True
+        multi_one = runtime.choice_resolver.resolve(
+            ChoiceRequest(
+                (multi_one_score,),
+                multi_question,
+                multi_options,
+                AnswerType.CHOICE_MULTI,
+            )
+        )
+        assert len(multi_one.selected_ids) == 1
+        assert multi_one.choice_id is None
+        assert multi_one.answer_type == "CHOICE_MULTI"
+        multi_many_score = runtime.providers.semantic_2b.reason_and_choose(
+            ChoiceScoringRequest(
+                model_input=model_input,
+                answer_type="CHOICE_MULTI",
+                choice_ids=("A", "B"),
+                option_texts=multi_options,
+                single_choice_suffix=runtime.choice_config.single_choice_suffix,
+                multi_verify_template=runtime.choice_config.multi_verify_template,
+                multi_select_threshold=min(probe_score.scores.values()) - 1.0,
+                purpose="final_choice",
+            )
+        )
+        assert multi_many_score.selected_ids == ("A", "B")
+        assert multi_many_score.cache_reused is True
         structured = runtime.choice_resolver.resolve(
             ChoiceRequest(
                 (ScalarInt(7),),
@@ -98,6 +162,9 @@ def test_real_qwen_visual_and_structured_choice_contracts() -> None:
         assert structured.choice_id == "B"
         assert structured.provenance["method"] == "structured_exact_option_mapping"
         assert runtime.choice_resolver.last_model_input.visual_inputs == ()
+        engine = runtime.providers.semantic_2b._engine
+        assert engine is not None
+        assert engine.active_session_count == 0
     finally:
         runtime.close()
 
@@ -133,14 +200,22 @@ def test_real_qwen_route_uses_same_4b_cached_choice() -> None:
                 answer_type="CHOICE_SINGLE",
                 choice_ids=("A", "B"),
                 option_texts=options,
-                final_suffix=runtime.choice_config.final_suffix,
+                single_choice_suffix=runtime.choice_config.single_choice_suffix,
+                multi_verify_template=runtime.choice_config.multi_verify_template,
                 purpose="route_choice",
             )
         )
         assert result.selected_ids[0] in {"A", "B"}
         assert result.cache_reused is True
         assert result.provider.endswith(":route_4b")
+        assert result.metadata["session_released"] is True
+        assert "legacy" not in result.method
         assert runtime.providers.choice is runtime.providers.semantic_2b
         assert runtime.providers.choice is not runtime.providers.route_4b
+        assert runtime.providers.semantic_2b.choice_calls == []
+        assert runtime.providers.semantic_2b.calls == []
+        route_engine = runtime.providers.route_4b._engine
+        assert route_engine is not None
+        assert route_engine.active_session_count == 0
     finally:
         runtime.close()

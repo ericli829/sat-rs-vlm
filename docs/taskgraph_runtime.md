@@ -107,7 +107,7 @@ when `params.image_size` differs from the loaded image.
 | `ATTRIBUTE`, `CLASSIFY`, `MULTILABEL_CLASSIFY`, `MOTION` | visual semantics | **REAL:** Qwen3-VL-2B |
 | `RELATION`, `VLM_REASON` | semantic reasoning | **REAL:** Qwen3-VL-2B |
 | `ROUTE_REASON` | route semantics | **REAL:** Qwen3-VL-4B route role |
-| final choice | visual/structured/mixed choice | **REAL:** Qwen3-VL-2B |
+| final choice | deterministic mapping or same-model KV-cached constrained choice | **REAL:** shared 2B, or the active 4B Route session |
 
 The LAE adapter consumes the existing dependency-light `ProposalProvider`, including
 the isolated LAE sidecar and generic tiled wrapper. It converts crop-local boxes back
@@ -152,6 +152,14 @@ backend cannot provide a usable KV cache. Given candidate labels `A/B/C`, the ma
 only canonical selections (`NONE`, `A`, `B`, `A,C`, and so on); it is limited to eight
 candidates. A fallback is explicitly labeled `qwen3_vl_token_mask_fallback` in the trace
 and must not be confused with the normal cached-choice path.
+
+Choice details are frozen in [Choice System](architecture/choice_system.md). The default
+2B choice capability aliases `semantic_2b`, fuzzy SELECT reuses that model's reasoning KV
+cache, and Route reasoning plus final option scoring stays entirely inside one 4B session.
+Free reasoning is retained for traceability but never regex-parsed into the final answer.
+Choice results and trace summaries always include `answer_type`, `selected_ids`, and the
+legacy scalar `choice_id`. The scalar is non-null only for `CHOICE_SINGLE`; a
+`CHOICE_MULTI` result with exactly one selected option still reports `choice_id: null`.
 
 ## Provider status
 

@@ -270,6 +270,28 @@ class HuggingFaceVLMEngine:
         if model is not None and hasattr(model, "rope_deltas"):
             model.rope_deltas = session._rope_deltas
 
+    def _cached_position_ids(
+        self,
+        session: CachedGenerationSession,
+        attention_mask: Any,
+        next_sequence_length: int,
+    ) -> Any:
+        """Build query-length Qwen M-RoPE positions for an external cache continuation."""
+
+        rope_deltas = session._rope_deltas
+        if rope_deltas is None:
+            return None
+        batch_size = int(attention_mask.shape[0])
+        position_ids = attention_mask.long().cumsum(-1) - 1
+        position_ids = position_ids.masked_fill(attention_mask == 0, 0)
+        position_ids = position_ids[..., -next_sequence_length:]
+        position_ids = position_ids.view(1, batch_size, -1).repeat(3, 1, 1)
+        delta_batch = int(rope_deltas.shape[0])
+        if delta_batch < 1 or batch_size % delta_batch != 0:
+            raise RuntimeError("cached Qwen rope_deltas batch does not match the continuation")
+        deltas = rope_deltas.repeat_interleave(batch_size // delta_batch, dim=0)
+        return position_ids + deltas.to(device=position_ids.device)
+
     def _peak_vram_mb(self) -> float | None:
         cuda = getattr(self._torch, "cuda", None)
         if cuda is None or not bool(cuda.is_available()):
@@ -368,6 +390,7 @@ class HuggingFaceVLMEngine:
             "text_prefill_ms": None,
             "total_prefill_ms": None,
             "reasoning_decode_ms": reasoning_generate_ms,
+            "reasoning_total_ms": reasoning_generate_ms,
         }
         session = CachedGenerationSession(
             session_id=session_id,
@@ -430,8 +453,12 @@ class HuggingFaceVLMEngine:
         self,
         session: CachedGenerationSession,
         suffix: str,
-    ) -> tuple[Any, Any, Any, int, int, float]:
+        *,
+        fork_cache: bool,
+    ) -> tuple[Any, Any, Any, int, int, float, float, float]:
+        tokenize_started = time.perf_counter()
         suffix_ids = self._token_ids(suffix)
+        suffix_tokenize_ms = (time.perf_counter() - tokenize_started) * 1000.0
         sequence_ids = session._sequence_ids
         if sequence_ids is None:
             raise RuntimeError("cached generation session has no sequence state")
@@ -448,17 +475,25 @@ class HuggingFaceVLMEngine:
             ],
             dim=-1,
         )
-        cache = copy.deepcopy(session._past_key_values)
+        clone_started = time.perf_counter()
+        cache = copy.deepcopy(session._past_key_values) if fork_cache else session._past_key_values
+        cache_clone_ms = (time.perf_counter() - clone_started) * 1000.0
         past_length = int(cache.get_seq_length())
         next_sequence_length = int(full_ids.shape[-1]) - past_length
         if next_sequence_length < 1:
             raise RuntimeError("cached prefix has no unprocessed continuation tokens")
         self._restore_rope_state(session)
+        position_ids = self._cached_position_ids(
+            session,
+            attention_mask,
+            next_sequence_length,
+        )
         prepared = self._model.prepare_inputs_for_generation(
             full_ids,
             next_sequence_length=next_sequence_length,
             past_key_values=cache,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             use_cache=True,
             is_first_iteration=False,
         )
@@ -472,6 +507,8 @@ class HuggingFaceVLMEngine:
             attention_mask,
             int(full_ids.shape[-1]),
             len(suffix_ids),
+            suffix_tokenize_ms,
+            cache_clone_ms,
             elapsed_ms,
         )
 
@@ -481,31 +518,41 @@ class HuggingFaceVLMEngine:
         *,
         prefix: str,
         continuations: tuple[str, ...],
-    ) -> tuple[dict[str, float], str, int, int, float, float]:
+        fork_reasoning_cache: bool,
+    ) -> tuple[dict[str, float], str, int, int, float, float, float, float]:
         (
             base_logits,
             base_cache,
             base_attention_mask,
             _,
             suffix_tokens,
+            suffix_tokenize_ms,
+            cache_clone_ms,
             suffix_ms,
-        ) = self._prepare_cached_prefix(session, prefix)
+        ) = self._prepare_cached_prefix(session, prefix, fork_cache=fork_reasoning_cache)
+        continuation_tokenize_started = time.perf_counter()
         tokenizations = {
             label: self._token_ids(self._continuation(prefix, label)) for label in continuations
         }
-        scoring_started = time.perf_counter()
+        suffix_tokenize_ms += (time.perf_counter() - continuation_tokenize_started) * 1000.0
         scored_tokens = sum(len(values) for values in tokenizations.values())
+        scoring_ms = 0.0
         if all(len(values) == 1 for values in tokenizations.values()):
+            scoring_started = time.perf_counter()
             scores = {
                 label: float(base_logits[0, values[0]].float().item())
                 for label, values in tokenizations.items()
             }
+            scoring_ms = (time.perf_counter() - scoring_started) * 1000.0
             method = "single_token_logits"
         else:
             scores = {}
             length_normalize = len({len(values) for values in tokenizations.values()}) > 1
             for label, values in tokenizations.items():
+                candidate_clone_started = time.perf_counter()
                 candidate_cache = copy.deepcopy(base_cache)
+                cache_clone_ms += (time.perf_counter() - candidate_clone_started) * 1000.0
+                candidate_scoring_started = time.perf_counter()
                 log_probs = self._torch.log_softmax(base_logits.float(), dim=-1)
                 score = float(log_probs[0, values[0]].item())
                 candidate_attention = base_attention_mask
@@ -523,11 +570,13 @@ class HuggingFaceVLMEngine:
                         dim=-1,
                     )
                     self._restore_rope_state(session)
+                    position_ids = self._cached_position_ids(session, candidate_attention, 1)
                     with self._torch.inference_mode():
                         outputs = self._model(
                             input_ids=previous,
                             attention_mask=candidate_attention,
                             past_key_values=candidate_cache,
+                            position_ids=position_ids,
                             use_cache=True,
                             return_dict=True,
                         )
@@ -535,15 +584,25 @@ class HuggingFaceVLMEngine:
                     log_probs = self._torch.log_softmax(outputs.logits[:, -1, :].float(), dim=-1)
                     score += float(log_probs[0, values[index]].item())
                 scores[label] = score / len(values) if length_normalize else score
+                scoring_ms += (time.perf_counter() - candidate_scoring_started) * 1000.0
             method = "multi_token_continuation_logprob"
-        scoring_ms = (time.perf_counter() - scoring_started) * 1000.0
-        return scores, method, suffix_tokens, scored_tokens, suffix_ms, scoring_ms
+        return (
+            scores,
+            method,
+            suffix_tokens,
+            scored_tokens,
+            suffix_tokenize_ms,
+            cache_clone_ms,
+            suffix_ms,
+            scoring_ms,
+        )
 
     def score_choice_from_cache(
         self,
         session: CachedGenerationSession,
         *,
-        suffix: str,
+        single_choice_suffix: str,
+        multi_verify_template: str,
         choice_ids: tuple[str, ...],
         option_texts: tuple[str, ...],
         answer_type: str,
@@ -551,6 +610,7 @@ class HuggingFaceVLMEngine:
     ) -> CachedChoiceEngineResult:
         """Score legal choices from a model-bound reasoning cache without visual replay."""
 
+        choice_started = time.perf_counter()
         self._validate_session(session)
         if answer_type not in {"CHOICE_SINGLE", "CHOICE_MULTI"}:
             raise ValueError("answer_type must be CHOICE_SINGLE or CHOICE_MULTI")
@@ -558,9 +618,10 @@ class HuggingFaceVLMEngine:
             raise ValueError("choice ids and option texts must be non-empty and aligned")
         if len(choice_ids) != len(set(choice_ids)):
             raise ValueError("choice ids must be unique")
-        total_started = time.perf_counter()
         suffix_tokens = 0
         scored_tokens = 0
+        suffix_tokenize_ms = 0.0
+        cache_clone_ms = 0.0
         suffix_ms = 0.0
         scoring_ms = 0.0
         methods: set[str] = set()
@@ -571,16 +632,21 @@ class HuggingFaceVLMEngine:
                 method,
                 current_suffix_tokens,
                 current_scored_tokens,
+                current_tokenize_ms,
+                current_clone_ms,
                 current_suffix_ms,
                 current_scoring_ms,
             ) = self._score_continuations(
                 session,
-                prefix=suffix,
+                prefix=single_choice_suffix,
                 continuations=choice_ids,
+                fork_reasoning_cache=False,
             )
             methods.add(method)
             suffix_tokens += current_suffix_tokens
             scored_tokens += current_scored_tokens
+            suffix_tokenize_ms += current_tokenize_ms
+            cache_clone_ms += current_clone_ms
             suffix_ms += current_suffix_ms
             scoring_ms += current_scoring_ms
             selected_ids = (max(choice_ids, key=lambda item: scores[item]),)
@@ -588,40 +654,52 @@ class HuggingFaceVLMEngine:
         else:
             scores = {}
             for choice_id, option_text in zip(choice_ids, option_texts, strict=True):
-                verification_suffix = (
-                    f"{suffix}\nCandidate option {choice_id}: {option_text}\n"
-                    "Is this option a correct answer to the original question? Answer:"
+                verification_suffix = multi_verify_template.format(
+                    choice_id=choice_id,
+                    option_text=option_text,
                 )
                 (
                     binary_scores,
                     method,
                     current_suffix_tokens,
                     current_scored_tokens,
+                    current_tokenize_ms,
+                    current_clone_ms,
                     current_suffix_ms,
                     current_scoring_ms,
                 ) = self._score_continuations(
                     session,
                     prefix=verification_suffix,
                     continuations=("YES", "NO"),
+                    fork_reasoning_cache=True,
                 )
                 methods.add(method)
                 scores[choice_id] = binary_scores["YES"] - binary_scores["NO"]
                 suffix_tokens += current_suffix_tokens
                 scored_tokens += current_scored_tokens
+                suffix_tokenize_ms += current_tokenize_ms
+                cache_clone_ms += current_clone_ms
                 suffix_ms += current_suffix_ms
                 scoring_ms += current_scoring_ms
             selected_ids = tuple(
                 choice_id for choice_id in choice_ids if scores[choice_id] > multi_select_threshold
             )
             result_method = "kv_cached_binary_verification"
-        total_ms = (
-            float(session.latency_ms["reasoning_decode_ms"] or 0.0)
-            + (time.perf_counter() - total_started) * 1000.0
+        peak_vram_mb = self._peak_vram_mb()
+        choice_total_ms = (time.perf_counter() - choice_started) * 1000.0
+        reasoning_total_ms = float(
+            session.latency_ms.get("reasoning_total_ms")
+            or session.latency_ms.get("reasoning_decode_ms")
+            or 0.0
         )
+        total_ms = reasoning_total_ms + choice_total_ms
         latency = {
             **session.latency_ms,
+            "cache_clone_ms": cache_clone_ms,
+            "suffix_tokenize_ms": suffix_tokenize_ms,
             "choice_suffix_prefill_ms": suffix_ms,
             "choice_scoring_ms": scoring_ms,
+            "choice_total_ms": choice_total_ms,
             "total_ms": total_ms,
         }
         return CachedChoiceEngineResult(
@@ -638,12 +716,15 @@ class HuggingFaceVLMEngine:
                 "choice_suffix_tokens": suffix_tokens,
                 "choice_scored_tokens": scored_tokens,
                 "continuation_methods": sorted(methods),
+                "reasoning_cache_mode": (
+                    "consume_in_place" if answer_type == "CHOICE_SINGLE" else "fork_per_option"
+                ),
                 "multi_select_threshold": multi_select_threshold,
                 "model_id": self.model_id,
                 "model_identity": self._model_identity,
                 "device": self.device,
                 "dtype": self.dtype,
-                "peak_vram_mb": self._peak_vram_mb(),
+                "peak_vram_mb": peak_vram_mb,
             },
         )
 
@@ -655,7 +736,8 @@ class HuggingFaceVLMEngine:
         choice_ids: tuple[str, ...],
         option_texts: tuple[str, ...],
         answer_type: str,
-        suffix: str,
+        single_choice_suffix: str,
+        multi_verify_template: str,
         multi_select_threshold: float = 0.0,
         reasoning_max_new_tokens: int | None = None,
     ) -> CachedChoiceEngineResult:
@@ -667,7 +749,8 @@ class HuggingFaceVLMEngine:
         try:
             result = self.score_choice_from_cache(
                 reasoning.session,
-                suffix=suffix,
+                single_choice_suffix=single_choice_suffix,
+                multi_verify_template=multi_verify_template,
                 choice_ids=choice_ids,
                 option_texts=option_texts,
                 answer_type=answer_type,

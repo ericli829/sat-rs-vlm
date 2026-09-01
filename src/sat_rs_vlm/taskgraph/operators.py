@@ -808,7 +808,8 @@ class SelectExecutor:
                         f"{item.label if isinstance(item, Entity) else 'region'}"
                         for choice_id, item in zip(choice_ids, items, strict=True)
                     ),
-                    final_suffix=self.choice_config.final_suffix,
+                    single_choice_suffix=self.choice_config.single_choice_suffix,
+                    multi_verify_template=self.choice_config.multi_verify_template,
                     multi_select_threshold=self.choice_config.multi_select_threshold,
                     purpose="select_relation",
                 )
@@ -1224,7 +1225,8 @@ class SemanticExecutor:
                     answer_type=answer_type,
                     choice_ids=choice_ids,
                     option_texts=context.choices,
-                    final_suffix=self.choice_config.final_suffix,
+                    single_choice_suffix=self.choice_config.single_choice_suffix,
+                    multi_verify_template=self.choice_config.multi_verify_template,
                     multi_select_threshold=self.choice_config.multi_select_threshold,
                     purpose="route_choice",
                 )

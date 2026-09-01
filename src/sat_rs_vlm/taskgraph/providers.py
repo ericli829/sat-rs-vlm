@@ -163,7 +163,8 @@ class ChoiceScoringRequest:
     answer_type: str
     choice_ids: tuple[str, ...]
     option_texts: tuple[str, ...]
-    final_suffix: str
+    single_choice_suffix: str
+    multi_verify_template: str
     multi_select_threshold: float = 0.0
     purpose: str = "final_choice"
 
@@ -172,6 +173,13 @@ class ChoiceScoringRequest:
             raise ValueError("choice scoring answer_type is invalid")
         if not self.choice_ids or len(self.choice_ids) != len(self.option_texts):
             raise ValueError("choice ids and option texts must be non-empty and aligned")
+        if not self.single_choice_suffix:
+            raise ValueError("single choice suffix must not be empty")
+        if (
+            "{choice_id}" not in self.multi_verify_template
+            or "{option_text}" not in self.multi_verify_template
+        ):
+            raise ValueError("multi verify template must include choice_id and option_text")
 
 
 class SemanticVLMProvider(Protocol):
@@ -598,7 +606,8 @@ class LazyQwenSemanticProvider:
             choice_ids=request.choice_ids,
             option_texts=request.option_texts,
             answer_type=request.answer_type,
-            suffix=request.final_suffix,
+            single_choice_suffix=request.single_choice_suffix,
+            multi_verify_template=request.multi_verify_template,
             multi_select_threshold=request.multi_select_threshold,
             reasoning_max_new_tokens=self.model_config.max_new_tokens,
         )
@@ -744,8 +753,12 @@ class FakeSemanticVLMProvider:
                 "text_prefill_ms": 0.0,
                 "total_prefill_ms": 0.0,
                 "reasoning_decode_ms": 0.0,
+                "reasoning_total_ms": 0.0,
+                "cache_clone_ms": 0.0,
+                "suffix_tokenize_ms": 0.0,
                 "choice_suffix_prefill_ms": 0.0,
                 "choice_scoring_ms": 0.0,
+                "choice_total_ms": 0.0,
                 "total_ms": 0.0,
             },
             metadata={
@@ -756,6 +769,12 @@ class FakeSemanticVLMProvider:
                 "visual_prefill_count": 1 if request.model_input.visual_inputs else 0,
                 "reasoning_pass_count": 1,
                 "session_released": True,
+                "reasoning_cache_mode": (
+                    "consume_in_place"
+                    if request.answer_type == "CHOICE_SINGLE"
+                    else "fork_per_option"
+                ),
+                "peak_vram_mb": None,
                 "purpose": request.purpose,
             },
         )

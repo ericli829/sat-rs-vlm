@@ -59,8 +59,15 @@ is removed before the suffix so the constrained step remains in the same assista
 
 `score_choice_from_cache` validates model identity and active state, then supplies that
 cache to `prepare_inputs_for_generation` and the model forward pass. Qwen3-VL therefore
-does not receive `pixel_values` again. General-path candidate continuations fork the same
-base cache sequentially; this is correct but not yet batched.
+does not receive `pixel_values` again. Cached suffix forwards also receive query-length
+3D position IDs derived from the retained Qwen M-RoPE delta; using full attention-length
+positions here is invalid once the model input has been sliced to the suffix query.
+`CHOICE_SINGLE` consumes the reasoning cache in
+place while appending its suffix, so the common single-token path does not deepcopy the
+full reasoning KV. If a legal label itself spans multiple tokens, only the necessary
+candidate continuations fork the suffix-extended cache. `CHOICE_MULTI` forks the original
+reasoning cache once per independent option verification; these forks are sequential and
+correct but not yet batched.
 
 `reason_and_choose` is the preferred high-level API. It always closes the session in a
 `finally` block. Closing drops every tensor reference and removes the session from the
@@ -76,17 +83,50 @@ It never assumes labels are one token.
 - Fast path: if every legal ID is one token, select from the next-token logits.
 - General path: fork the same base cache for every legal ID and sum token log-probabilities
   over its complete continuation. Unequal token lengths are length-normalized.
-- `CHOICE_SINGLE`: select exactly one legal ID by score argmax.
-- `CHOICE_MULTI`: for each original option, append a short verification question and use
+- `CHOICE_SINGLE`: append `choice.single_choice_suffix` (`Final choice:` by default), then
+  select exactly one legal ID by score argmax.
+- `CHOICE_MULTI`: render `choice.multi_verify_template` independently for each original
+  option and use
   `score(YES) - score(NO)`. Select every score above
   `choice.multi_select_threshold`, preserving original option order. Zero selections remain
   empty or unresolved according to `choice.multi_empty_policy`; the runtime never inserts
   an argmax answer.
 
+`YES` and `NO`, like option IDs, use a single-token fast path only when the actual tokenizer
+produces one token; otherwise their complete continuations are scored.
+
 The unified `ChoiceScoreResult` preserves `selected_ids`, per-ID scores, answer type,
 reasoning text, provider/model, method, cache reuse, latency, and scalar metadata. The
-legacy `ChoiceResult.choice_id` property is populated only when exactly one ID is selected;
-multi-choice is never flattened to a string such as `"A,C"`.
+final `ChoiceResult` also stores `answer_type`. Its legacy `choice_id` property is populated
+only for `CHOICE_SINGLE` with exactly one selected ID. `CHOICE_MULTI` may contain exactly
+one selected option and still remains `CHOICE_MULTI`, with `choice_id: null`; multi-choice
+is never flattened to a string such as `"A,C"`.
+
+Trace summaries preserve the distinction explicitly:
+
+```json
+{"answer_type": "CHOICE_SINGLE", "selected_ids": ["C"], "choice_id": "C"}
+```
+
+```json
+{"answer_type": "CHOICE_MULTI", "selected_ids": ["C"], "choice_id": null}
+```
+
+```yaml
+choice:
+  backend: kv_cached_logits
+  single_choice_suffix: "\n\nFinal choice:"
+  multi_verify_template: |-
+    Verify the following option independently.
+
+    Candidate option {choice_id}: {option_text}
+    Is this option a correct answer to the original question?
+    Answer YES or NO:
+  legacy_regex_fallback: false
+  multi_select_threshold: 0.0
+  multi_empty_policy: EMPTY
+  preserve_reasoning_text: true
+```
 
 ## Structured deterministic mapping
 
@@ -104,12 +144,18 @@ Transformers generation loop reports jointly:
 - `vision_prefill_ms`, `text_prefill_ms`, and `total_prefill_ms` are `null` when unavailable;
 - `reasoning_decode_ms` is measured generation time and metadata states that it includes
   prefill;
-- `choice_suffix_prefill_ms`, `choice_scoring_ms`, and `total_ms` are measured;
+- `reasoning_total_ms` records that same currently measurable reasoning wall time;
+- `cache_clone_ms`, `suffix_tokenize_ms`, `choice_suffix_prefill_ms`, and
+  `choice_scoring_ms` retain useful detail;
+- `choice_total_ms` starts on entry to cached choice scoring and includes validation,
+  tokenization, Python setup, cache clone/fork, suffix forward, and candidate scoring;
+- `total_ms` is `reasoning_total_ms + choice_total_ms`, and benchmarks report
+  `choice_total_ms / reasoning_total_ms`;
 - token counts include initial prefill, reasoning, suffix, and scored continuation tokens;
 - model ID, device, dtype, cache reuse, and peak allocated VRAM (when CUDA exposes it) are
   scalar metadata.
 
-Run the lightweight real-model comparison without downloads:
+Run the lightweight current-architecture benchmark without downloads:
 
 ```powershell
 python scripts/taskgraph/benchmark_choice_cache.py `
@@ -120,10 +166,21 @@ python scripts/taskgraph/benchmark_choice_cache.py `
   --output outputs/taskgraph/choice-cache.json
 ```
 
-For the historical Route comparison, pass the 4B model as `--model-id`, set
-`--role route_4b`, and pass the 2B path as `--legacy-choice-model-id`. The baseline then
-measures recomputed 4B reasoning plus a 2B choice request; the cached path measures 4B
-reasoning plus the incremental same-4B choice.
+For Route, pass the 4B model as `--model-id` and set `--role route_4b`. This measures only
+the frozen 4B reasoning to same-4B cached choice flow. There is no 4B-versus-2B Route
+architecture comparison.
 
 Thresholds require dataset-level calibration. The default `0.0` corresponds to preferring
 `YES` over `NO`; it is a contract default, not a claim of universal probability calibration.
+
+## Validated dependency environment
+
+The cache API and unit compatibility checks in this branch were validated with:
+
+```text
+torch 2.6.0+cu126
+transformers 5.13.0
+```
+
+The declared Transformers dependency range remains unchanged; this validation records a
+known working environment rather than claiming a complete version matrix.
