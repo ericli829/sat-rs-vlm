@@ -59,7 +59,10 @@ is removed before the suffix so the constrained step remains in the same assista
 
 `score_choice_from_cache` validates model identity and active state, then supplies that
 cache to `prepare_inputs_for_generation` and the model forward pass. Qwen3-VL therefore
-does not receive `pixel_values` again. `CHOICE_SINGLE` consumes the reasoning cache in
+does not receive `pixel_values` again. Cached suffix forwards also receive query-length
+3D position IDs derived from the retained Qwen M-RoPE delta; using full attention-length
+positions here is invalid once the model input has been sliced to the suffix query.
+`CHOICE_SINGLE` consumes the reasoning cache in
 place while appending its suffix, so the common single-token path does not deepcopy the
 full reasoning KV. If a legal label itself spans multiple tokens, only the necessary
 candidate continuations fork the suffix-extended cache. `CHOICE_MULTI` forks the original

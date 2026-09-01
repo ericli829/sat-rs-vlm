@@ -264,6 +264,28 @@ class HuggingFaceVLMEngine:
         if model is not None and hasattr(model, "rope_deltas"):
             model.rope_deltas = session._rope_deltas
 
+    def _cached_position_ids(
+        self,
+        session: CachedGenerationSession,
+        attention_mask: Any,
+        next_sequence_length: int,
+    ) -> Any:
+        """Build query-length Qwen M-RoPE positions for an external cache continuation."""
+
+        rope_deltas = session._rope_deltas
+        if rope_deltas is None:
+            return None
+        batch_size = int(attention_mask.shape[0])
+        position_ids = attention_mask.long().cumsum(-1) - 1
+        position_ids = position_ids.masked_fill(attention_mask == 0, 0)
+        position_ids = position_ids[..., -next_sequence_length:]
+        position_ids = position_ids.view(1, batch_size, -1).repeat(3, 1, 1)
+        delta_batch = int(rope_deltas.shape[0])
+        if delta_batch < 1 or batch_size % delta_batch != 0:
+            raise RuntimeError("cached Qwen rope_deltas batch does not match the continuation")
+        deltas = rope_deltas.repeat_interleave(batch_size // delta_batch, dim=0)
+        return position_ids + deltas.to(device=position_ids.device)
+
     def _peak_vram_mb(self) -> float | None:
         cuda = getattr(self._torch, "cuda", None)
         if cuda is None or not bool(cuda.is_available()):
@@ -455,11 +477,17 @@ class HuggingFaceVLMEngine:
         if next_sequence_length < 1:
             raise RuntimeError("cached prefix has no unprocessed continuation tokens")
         self._restore_rope_state(session)
+        position_ids = self._cached_position_ids(
+            session,
+            attention_mask,
+            next_sequence_length,
+        )
         prepared = self._model.prepare_inputs_for_generation(
             full_ids,
             next_sequence_length=next_sequence_length,
             past_key_values=cache,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             use_cache=True,
             is_first_iteration=False,
         )
@@ -536,11 +564,13 @@ class HuggingFaceVLMEngine:
                         dim=-1,
                     )
                     self._restore_rope_state(session)
+                    position_ids = self._cached_position_ids(session, candidate_attention, 1)
                     with self._torch.inference_mode():
                         outputs = self._model(
                             input_ids=previous,
                             attention_mask=candidate_attention,
                             past_key_values=candidate_cache,
+                            position_ids=position_ids,
                             use_cache=True,
                             return_dict=True,
                         )

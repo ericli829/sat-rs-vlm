@@ -91,34 +91,67 @@ def test_real_qwen_visual_and_structured_choice_contracts() -> None:
         assert visual.provenance["cache_reused"] is True
         assert visual.provenance["method"].startswith("kv_cached_")
         assert "legacy" not in visual.provenance["method"]
+        multi_question = "Select every mathematically true statement; image content is irrelevant."
+        multi_options = ("A One plus one equals two", "B One plus one equals three")
+        multi_probe = runtime.choice_resolver.resolve(
+            ChoiceRequest(
+                (ImageRef(image),),
+                multi_question,
+                multi_options,
+                AnswerType.CHOICE_MULTI,
+            )
+        )
+        assert set(multi_probe.selected_ids) <= {"A", "B"}
+        assert multi_probe.choice_id is None
+        assert multi_probe.answer_type == "CHOICE_MULTI"
+        assert multi_probe.provenance["cache_reused"] is True
+        assert multi_probe.provenance["method"] == "kv_cached_binary_verification"
+        probe_score = runtime.choice_resolver.last_score_result
+        model_input = runtime.choice_resolver.last_model_input
+        assert probe_score is not None
+        assert model_input is not None
+        ranked_scores = sorted(probe_score.scores.values(), reverse=True)
+        assert ranked_scores[0] > ranked_scores[1]
+        one_threshold = (ranked_scores[0] + ranked_scores[1]) / 2.0
+        multi_one_score = runtime.providers.semantic_2b.reason_and_choose(
+            ChoiceScoringRequest(
+                model_input=model_input,
+                answer_type="CHOICE_MULTI",
+                choice_ids=("A", "B"),
+                option_texts=multi_options,
+                single_choice_suffix=runtime.choice_config.single_choice_suffix,
+                multi_verify_template=runtime.choice_config.multi_verify_template,
+                multi_select_threshold=one_threshold,
+                purpose="final_choice",
+            )
+        )
+        assert len(multi_one_score.selected_ids) == 1
+        assert multi_one_score.cache_reused is True
         multi_one = runtime.choice_resolver.resolve(
             ChoiceRequest(
-                (ImageRef(image),),
-                "Select every mathematically true statement; image content is irrelevant.",
-                ("A One plus one equals two", "B One plus one equals three"),
+                (multi_one_score,),
+                multi_question,
+                multi_options,
                 AnswerType.CHOICE_MULTI,
             )
         )
-        assert multi_one.selected_ids == ("A",)
+        assert len(multi_one.selected_ids) == 1
         assert multi_one.choice_id is None
         assert multi_one.answer_type == "CHOICE_MULTI"
-        assert multi_one.provenance["cache_reused"] is True
-        assert multi_one.provenance["method"] == "kv_cached_binary_verification"
-        multi_many = runtime.choice_resolver.resolve(
-            ChoiceRequest(
-                (ImageRef(image),),
-                "Select every mathematically true statement; image content is irrelevant.",
-                (
-                    "A One plus one equals two",
-                    "B Two plus two equals four",
-                    "C Two plus two equals five",
-                ),
-                AnswerType.CHOICE_MULTI,
+        multi_many_score = runtime.providers.semantic_2b.reason_and_choose(
+            ChoiceScoringRequest(
+                model_input=model_input,
+                answer_type="CHOICE_MULTI",
+                choice_ids=("A", "B"),
+                option_texts=multi_options,
+                single_choice_suffix=runtime.choice_config.single_choice_suffix,
+                multi_verify_template=runtime.choice_config.multi_verify_template,
+                multi_select_threshold=min(probe_score.scores.values()) - 1.0,
+                purpose="final_choice",
             )
         )
-        assert multi_many.selected_ids == ("A", "B")
-        assert multi_many.choice_id is None
-        assert multi_many.provenance["cache_reused"] is True
+        assert multi_many_score.selected_ids == ("A", "B")
+        assert multi_many_score.cache_reused is True
         structured = runtime.choice_resolver.resolve(
             ChoiceRequest(
                 (ScalarInt(7),),

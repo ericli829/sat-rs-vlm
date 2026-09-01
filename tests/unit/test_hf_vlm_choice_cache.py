@@ -125,11 +125,14 @@ class CacheModel:
         attention_mask: torch.Tensor,
         **kwargs: Any,
     ) -> dict[str, Any]:
+        position_ids = kwargs.pop("position_ids")
         del kwargs
+        assert position_ids.shape == (3, input_ids.shape[0], next_sequence_length)
         return {
             "input_ids": input_ids[:, -next_sequence_length:],
             "past_key_values": past_key_values,
             "attention_mask": attention_mask,
+            "position_ids": position_ids,
             "use_cache": True,
         }
 
@@ -267,6 +270,21 @@ def test_terminal_eos_is_removed_before_cached_suffix() -> None:
             answer_type="CHOICE_SINGLE",
         )
         assert result.selected_ids == ("B",)
+    finally:
+        reasoning.session.close()
+
+
+def test_cached_suffix_uses_query_length_qwen_mrope_positions() -> None:
+    engine = _engine()
+    reasoning = engine.reason_with_cache("reason", [])
+    try:
+        reasoning.session._rope_deltas = torch.tensor([[-2]])
+        attention_mask = torch.ones((1, 7), dtype=torch.long)
+
+        position_ids = engine._cached_position_ids(reasoning.session, attention_mask, 2)
+
+        assert position_ids.shape == (3, 1, 2)
+        assert position_ids[:, 0, :].tolist() == [[3, 4], [3, 4], [3, 4]]
     finally:
         reasoning.session.close()
 
