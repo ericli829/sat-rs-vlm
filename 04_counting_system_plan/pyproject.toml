@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "counting-system"
+version = "0.1.0"
+description = "TaskGraph COUNT executor: multi-scale LAE-DINO + GeoRSCLIP gate"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy",
+  "pillow",
+  "pyyaml",
+  "opencv-python-headless",
+]
+
+[project.optional-dependencies]
+detector = ["transformers", "torch", "torchvision"]
+retriever = ["open_clip_torch", "torch", "torchvision"]
+data = ["datasets", "huggingface_hub"]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"

@@ -1,0 +1,25 @@
+{
+  "num_samples": 8,
+  "parsed": 8,
+  "parse_rate": 1.0,
+  "exact_accuracy": 0.0,
+  "within1_accuracy": 0.0,
+  "mae": 369.375,
+  "rmse": 506.10436176741257,
+  "mean_signed_error": 369.375,
+  "elapsed_sec": 157.53122568503022,
+  "backend": [
+    "grounding_dino"
+  ],
+  "mean_detector_calls": 181.625,
+  "mean_latency_sec": 19.03504588920623,
+  "gpu": {
+    "device": "NVIDIA GeForce RTX 5090",
+    "torch_allocated_mb": 692.0,
+    "torch_max_allocated_mb": 1909.6,
+    "torch_max_reserved_mb": 2224.0,
+    "nvidia_smi_used_mb": 2835.0,
+    "nvidia_smi_total_mb": 32607.0,
+    "nvidia_smi_util": 0.0
+  }
+}

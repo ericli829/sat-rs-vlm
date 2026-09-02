@@ -1,0 +1,743 @@
+{
+  "expected": 8,
+  "experiments": {
+    "source_scale": [
+      {
+        "count": 8,
+        "raw": 39,
+        "calls": 35,
+        "fusion": {
+          "raw": 39,
+          "below_threshold": 0,
+          "after_threshold": 39,
+          "after_ownership": 27,
+          "after_same_scale": 24,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 35,
+        "tiles_run": 35,
+        "detector": "fake",
+        "latency_sec": 6.483756445348263,
+        "source_scale": 1333
+      },
+      {
+        "count": 8,
+        "raw": 39,
+        "calls": 35,
+        "fusion": {
+          "raw": 39,
+          "below_threshold": 0,
+          "after_threshold": 39,
+          "after_ownership": 27,
+          "after_same_scale": 24,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 35,
+        "tiles_run": 35,
+        "detector": "fake",
+        "latency_sec": 3.623742714524269,
+        "source_scale": 1024
+      },
+      {
+        "count": 8,
+        "raw": 39,
+        "calls": 35,
+        "fusion": {
+          "raw": 39,
+          "below_threshold": 0,
+          "after_threshold": 39,
+          "after_ownership": 27,
+          "after_same_scale": 24,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 35,
+        "tiles_run": 35,
+        "detector": "fake",
+        "latency_sec": 2.9080240949988365,
+        "source_scale": 896
+      }
+    ],
+    "threshold_sweep": [
+      {
+        "threshold": 0.4,
+        "raw": 39,
+        "after_threshold": 39,
+        "dropped_by_threshold": 0,
+        "no_proposal": false
+      },
+      {
+        "threshold": 0.3,
+        "raw": 39,
+        "after_threshold": 39,
+        "dropped_by_threshold": 0,
+        "no_proposal": false
+      },
+      {
+        "threshold": 0.2,
+        "raw": 39,
+        "after_threshold": 39,
+        "dropped_by_threshold": 0,
+        "no_proposal": false
+      },
+      {
+        "threshold": 0.15,
+        "raw": 39,
+        "after_threshold": 39,
+        "dropped_by_threshold": 0,
+        "no_proposal": false
+      },
+      {
+        "threshold": 0.1,
+        "raw": 39,
+        "after_threshold": 39,
+        "dropped_by_threshold": 0,
+        "no_proposal": false
+      },
+      {
+        "threshold": 0.05,
+        "raw": 39,
+        "after_threshold": 39,
+        "dropped_by_threshold": 0,
+        "no_proposal": false
+      },
+      {
+        "threshold": 0.02,
+        "raw": 39,
+        "after_threshold": 39,
+        "dropped_by_threshold": 0,
+        "no_proposal": false
+      }
+    ],
+    "prompt_wording": [
+      {
+        "count": 8,
+        "raw": 39,
+        "calls": 35,
+        "fusion": {
+          "raw": 39,
+          "below_threshold": 0,
+          "after_threshold": 39,
+          "after_ownership": 27,
+          "after_same_scale": 24,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 35,
+        "tiles_run": 35,
+        "detector": "fake",
+        "latency_sec": 3.6088781505823135,
+        "prompt": "ship"
+      },
+      {
+        "count": 8,
+        "raw": 39,
+        "calls": 35,
+        "fusion": {
+          "raw": 39,
+          "below_threshold": 0,
+          "after_threshold": 39,
+          "after_ownership": 27,
+          "after_same_scale": 24,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 35,
+        "tiles_run": 35,
+        "detector": "fake",
+        "latency_sec": 3.6827151775360107,
+        "prompt": "ship . vessel"
+      },
+      {
+        "count": 8,
+        "raw": 39,
+        "calls": 35,
+        "fusion": {
+          "raw": 39,
+          "below_threshold": 0,
+          "after_threshold": 39,
+          "after_ownership": 27,
+          "after_same_scale": 24,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 35,
+        "tiles_run": 35,
+        "detector": "fake",
+        "latency_sec": 3.6622500978410244,
+        "prompt": "ship . boat . vessel"
+      },
+      {
+        "count": 8,
+        "raw": 39,
+        "calls": 35,
+        "fusion": {
+          "raw": 39,
+          "below_threshold": 0,
+          "after_threshold": 39,
+          "after_ownership": 27,
+          "after_same_scale": 24,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 35,
+        "tiles_run": 35,
+        "detector": "fake",
+        "latency_sec": 3.6084903590381145,
+        "prompt": "boat"
+      },
+      {
+        "count": 8,
+        "raw": 39,
+        "calls": 35,
+        "fusion": {
+          "raw": 39,
+          "below_threshold": 0,
+          "after_threshold": 39,
+          "after_ownership": 27,
+          "after_same_scale": 24,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 35,
+        "tiles_run": 35,
+        "detector": "fake",
+        "latency_sec": 3.6105359233915806,
+        "prompt": "vessel"
+      }
+    ],
+    "scale_ablation": [
+      {
+        "count": 8,
+        "raw": 39,
+        "calls": 35,
+        "fusion": {
+          "raw": 39,
+          "below_threshold": 0,
+          "after_threshold": 39,
+          "after_ownership": 27,
+          "after_same_scale": 24,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 35,
+        "tiles_run": 35,
+        "detector": "fake",
+        "latency_sec": 3.6443965770304203,
+        "global": true,
+        "native": true,
+        "fine": true,
+        "cross": true
+      },
+      {
+        "count": 8,
+        "raw": 27,
+        "calls": 10,
+        "fusion": {
+          "raw": 27,
+          "below_threshold": 0,
+          "after_threshold": 27,
+          "after_ownership": 19,
+          "after_same_scale": 16,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 10,
+        "tiles_run": 10,
+        "detector": "fake",
+        "latency_sec": 1.0162078700959682,
+        "global": true,
+        "native": true,
+        "fine": false,
+        "cross": true
+      },
+      {
+        "count": 8,
+        "raw": 31,
+        "calls": 34,
+        "fusion": {
+          "raw": 31,
+          "below_threshold": 0,
+          "after_threshold": 31,
+          "after_ownership": 19,
+          "after_same_scale": 16,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 34,
+        "tiles_run": 34,
+        "detector": "fake",
+        "latency_sec": 3.5641096383333206,
+        "global": false,
+        "native": true,
+        "fine": true,
+        "cross": true
+      },
+      {
+        "count": 8,
+        "raw": 19,
+        "calls": 9,
+        "fusion": {
+          "raw": 19,
+          "below_threshold": 0,
+          "after_threshold": 19,
+          "after_ownership": 11,
+          "after_same_scale": 8,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 9,
+        "tiles_run": 9,
+        "detector": "fake",
+        "latency_sec": 0.8893428891897202,
+        "global": false,
+        "native": true,
+        "fine": false,
+        "cross": true
+      },
+      {
+        "count": 8,
+        "raw": 20,
+        "calls": 26,
+        "fusion": {
+          "raw": 20,
+          "below_threshold": 0,
+          "after_threshold": 20,
+          "after_ownership": 16,
+          "after_same_scale": 16,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 26,
+        "tiles_run": 26,
+        "detector": "fake",
+        "latency_sec": 2.8338707834482193,
+        "global": true,
+        "native": false,
+        "fine": true,
+        "cross": true
+      },
+      {
+        "count": 8,
+        "raw": 8,
+        "calls": 1,
+        "fusion": {
+          "raw": 8,
+          "below_threshold": 0,
+          "after_threshold": 8,
+          "after_ownership": 8,
+          "after_same_scale": 8,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 1,
+        "tiles_run": 1,
+        "detector": "fake",
+        "latency_sec": 0.1574949137866497,
+        "global": true,
+        "native": false,
+        "fine": false,
+        "cross": true
+      },
+      {
+        "count": 8,
+        "raw": 12,
+        "calls": 25,
+        "fusion": {
+          "raw": 12,
+          "below_threshold": 0,
+          "after_threshold": 12,
+          "after_ownership": 8,
+          "after_same_scale": 8,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 25,
+        "tiles_run": 25,
+        "detector": "fake",
+        "latency_sec": 2.6311541236937046,
+        "global": false,
+        "native": false,
+        "fine": true,
+        "cross": true
+      },
+      {
+        "count": 8,
+        "raw": 19,
+        "calls": 9,
+        "fusion": {
+          "raw": 19,
+          "below_threshold": 0,
+          "after_threshold": 19,
+          "after_ownership": 11,
+          "after_same_scale": 8,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 9,
+        "tiles_run": 9,
+        "detector": "fake",
+        "latency_sec": 0.883639857172966,
+        "global": false,
+        "native": false,
+        "fine": false,
+        "cross": true
+      },
+      {
+        "count": 8,
+        "raw": 39,
+        "calls": 35,
+        "fusion": {
+          "raw": 39,
+          "below_threshold": 0,
+          "after_threshold": 39,
+          "after_ownership": 27,
+          "after_same_scale": 24,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 35,
+        "tiles_run": 35,
+        "detector": "fake",
+        "latency_sec": 3.6089298985898495,
+        "global": true,
+        "native": true,
+        "fine": true,
+        "cross": false
+      },
+      {
+        "count": 8,
+        "raw": 27,
+        "calls": 10,
+        "fusion": {
+          "raw": 27,
+          "below_threshold": 0,
+          "after_threshold": 27,
+          "after_ownership": 19,
+          "after_same_scale": 16,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 10,
+        "tiles_run": 10,
+        "detector": "fake",
+        "latency_sec": 1.0049774907529354,
+        "global": true,
+        "native": true,
+        "fine": false,
+        "cross": false
+      },
+      {
+        "count": 8,
+        "raw": 31,
+        "calls": 34,
+        "fusion": {
+          "raw": 31,
+          "below_threshold": 0,
+          "after_threshold": 31,
+          "after_ownership": 19,
+          "after_same_scale": 16,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 34,
+        "tiles_run": 34,
+        "detector": "fake",
+        "latency_sec": 3.4776907190680504,
+        "global": false,
+        "native": true,
+        "fine": true,
+        "cross": false
+      },
+      {
+        "count": 8,
+        "raw": 19,
+        "calls": 9,
+        "fusion": {
+          "raw": 19,
+          "below_threshold": 0,
+          "after_threshold": 19,
+          "after_ownership": 11,
+          "after_same_scale": 8,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 9,
+        "tiles_run": 9,
+        "detector": "fake",
+        "latency_sec": 0.8714558631181717,
+        "global": false,
+        "native": true,
+        "fine": false,
+        "cross": false
+      },
+      {
+        "count": 8,
+        "raw": 20,
+        "calls": 26,
+        "fusion": {
+          "raw": 20,
+          "below_threshold": 0,
+          "after_threshold": 20,
+          "after_ownership": 16,
+          "after_same_scale": 16,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 26,
+        "tiles_run": 26,
+        "detector": "fake",
+        "latency_sec": 2.839771881699562,
+        "global": true,
+        "native": false,
+        "fine": true,
+        "cross": false
+      },
+      {
+        "count": 8,
+        "raw": 8,
+        "calls": 1,
+        "fusion": {
+          "raw": 8,
+          "below_threshold": 0,
+          "after_threshold": 8,
+          "after_ownership": 8,
+          "after_same_scale": 8,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 1,
+        "tiles_run": 1,
+        "detector": "fake",
+        "latency_sec": 0.15429671481251717,
+        "global": true,
+        "native": false,
+        "fine": false,
+        "cross": false
+      },
+      {
+        "count": 8,
+        "raw": 12,
+        "calls": 25,
+        "fusion": {
+          "raw": 12,
+          "below_threshold": 0,
+          "after_threshold": 12,
+          "after_ownership": 8,
+          "after_same_scale": 8,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 25,
+        "tiles_run": 25,
+        "detector": "fake",
+        "latency_sec": 2.6676953993737698,
+        "global": false,
+        "native": false,
+        "fine": true,
+        "cross": false
+      },
+      {
+        "count": 8,
+        "raw": 19,
+        "calls": 9,
+        "fusion": {
+          "raw": 19,
+          "below_threshold": 0,
+          "after_threshold": 19,
+          "after_ownership": 11,
+          "after_same_scale": 8,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 9,
+        "tiles_run": 9,
+        "detector": "fake",
+        "latency_sec": 0.890088964253664,
+        "global": false,
+        "native": false,
+        "fine": false,
+        "cross": false
+      }
+    ],
+    "whole_vs_tiled": [
+      {
+        "mode": "global_only",
+        "count": 8,
+        "raw": 8,
+        "calls": 1,
+        "fusion": {
+          "raw": 8,
+          "below_threshold": 0,
+          "after_threshold": 8,
+          "after_ownership": 8,
+          "after_same_scale": 8,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 1,
+        "tiles_run": 1,
+        "detector": "fake",
+        "latency_sec": 0.15149200707674026
+      },
+      {
+        "mode": "tiled_native",
+        "count": 8,
+        "raw": 19,
+        "calls": 9,
+        "fusion": {
+          "raw": 19,
+          "below_threshold": 0,
+          "after_threshold": 19,
+          "after_ownership": 11,
+          "after_same_scale": 8,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 9,
+        "tiles_run": 9,
+        "detector": "fake",
+        "latency_sec": 0.8854424767196178
+      }
+    ],
+    "gate": [
+      {
+        "count": 8,
+        "raw": 39,
+        "calls": 35,
+        "fusion": {
+          "raw": 39,
+          "below_threshold": 0,
+          "after_threshold": 39,
+          "after_ownership": 27,
+          "after_same_scale": 24,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 35,
+        "tiles_run": 35,
+        "detector": "fake",
+        "latency_sec": 3.701058655977249
+      },
+      {
+        "count": 8,
+        "raw": 39,
+        "calls": 35,
+        "fusion": {
+          "raw": 39,
+          "below_threshold": 0,
+          "after_threshold": 39,
+          "after_ownership": 27,
+          "after_same_scale": 24,
+          "after_fusion": 8,
+          "score_threshold": 0.2,
+          "nms_iou": 0.5,
+          "cross_scale_iou": 0.5
+        },
+        "duplicate_rate": 0.0,
+        "tiles_planned": 35,
+        "tiles_run": 35,
+        "detector": "fake",
+        "latency_sec": 3.6923638433218002
+      }
+    ],
+    "tiny_object": {
+      "tiny_blobs": 1,
+      "pred_count": 8,
+      "duplicate_rate": 0.0
+    }
+  },
+  "summary": {
+    "num_samples": 1,
+    "parsed": 1,
+    "parse_rate": 1.0,
+    "exact_accuracy": 1.0,
+    "within1_accuracy": 1.0,
+    "mae": 0.0,
+    "rmse": 0.0,
+    "mean_signed_error": 0.0
+  }
+}

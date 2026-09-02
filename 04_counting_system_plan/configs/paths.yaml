@@ -1,0 +1,26 @@
+# AutoDL 路径约定与 sat-rs-vlm 一致：
+#   /root/autodl-fs  归档与“逻辑根路径”
+#   /root/autodl-tmp 高速盘，大文件实际落点
+# 系统盘空间不足时，download_assets.py 会把真实文件写到 autodl-tmp，
+# 并在 autodl-fs 下建立同名符号链接，Python 只读本文件 / 环境变量。
+
+autodl_fs: /root/autodl-fs
+autodl_tmp: /root/autodl-tmp
+
+datasets:
+  xlrsbench_lite: /root/autodl-fs/datasets/xlrsbench-lite
+
+models:
+  lae_dino_root: /root/autodl-fs/models/lae-dino
+  lae_dino_repo: /root/autodl-fs/models/lae-dino/repo
+  lae_dino_weights: /root/autodl-fs/models/lae-dino/checkpoints/lae_dino_swint_lae1m-28ca3a15.pth
+  lae_dino_config: /root/autodl-fs/models/lae-dino/repo/mmdetection_lae/configs/lae_dino/lae_dino_swin-t_pretrain_LAE-1M.py
+  bert_dir: /root/autodl-fs/models/lae-dino/weights/bert-base-uncased
+  georsclip_dir: /root/autodl-fs/models/georsclip
+  georsclip_ckpt: /root/autodl-fs/models/georsclip/ckpt/RS5M_ViT-B-32.pt
+  grounding_dino: /root/autodl-tmp/26揭榜挂帅-太空智算/autodl-tmp/cache/huggingface/hub/models--IDEA-Research--grounding-dino-tiny/snapshots/a2bb814dd30d776dcf7e30523b00659f4f141c71
+
+huggingface:
+  endpoint: https://hf-mirror.com
+  home: /root/autodl-tmp/26揭榜挂帅-太空智算/autodl-tmp/cache/huggingface
+  disable_xet: true

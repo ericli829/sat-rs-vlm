@@ -1,0 +1,57 @@
+# COUNT 执行器默认配置。所有物理细节（tile、阈值、GPU）留在这里，
+# 不进入 TaskGraph 节点定义。
+
+count:
+  entire: true
+  score_threshold: 0.20
+  nms_iou: 0.50
+  cross_scale_iou: 0.50
+  keep_raw_proposals: true
+  max_detections_per_tile: 300
+
+scale:
+  source_scales: [1333, 1024, 896]
+  default_source_scale: 1024
+  global:
+    enabled: true
+  native:
+    enabled: true
+    tile_size: 1024
+    overlap: 256
+  fine:
+    enabled: true
+    tile_size: 512
+    overlap: 128
+    only_for_tiny: true
+
+gate:
+  enabled: false
+  backend: georsclip
+  coarse_tile_size: 1024
+  coarse_overlap: 256
+  threshold: 0.12
+  recall_first: true
+
+detector:
+  backend: auto   # auto | lae_mmdet | grounding_dino | fake
+  device: cuda
+  score_threshold: 0.0   # raw proposals 一律保留，后处理再截断
+  box_threshold: 0.05
+  text_threshold: 0.05
+
+retriever:
+  backend: georsclip
+  model_name: ViT-B-32
+  pretrained: openai
+  image_resolution: 224
+  device: cuda
+
+eval:
+  score_sweep: [0.40, 0.30, 0.20, 0.15, 0.10, 0.05, 0.02]
+  counting_categories:
+    - Counting
+    - Overall_counting
+    - Regional_counting
+    - Counting_with_complex_reasoning
+    - Counting_with_changing_detection
+  max_samples: 32

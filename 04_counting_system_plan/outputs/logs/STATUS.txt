@@ -1,0 +1,33 @@
+[2026-09-01 22:46:24] ===== overnight pid=2452 host=autodl-container-786940b8b6-0bbf86fb =====
+[2026-09-01 22:46:24] gpu=NVIDIA GeForce RTX 5090, 32607 MiB
+[2026-09-01 22:46:24] START xlrs_benchmark_32
+[2026-09-01 22:58:22] DONE xlrs_benchmark_32 exit=0
+[2026-09-01 22:58:22] START experiments_xlrs_32
+[2026-09-01 23:49:47] DONE experiments_xlrs_32 exit=0
+[2026-09-01 23:49:47] START xlrs_benchmark_320
+[2026-09-02 01:10:01] DONE xlrs_benchmark_320 exit=0
+[2026-09-02 01:10:01] ===== ALL STEPS FINISHED 2026-09-02 01:10:01 =====
+[2026-09-02 01:10:01] metrics8=exact 0.0 mae 369.375 backend ['grounding_dino']
+[2026-09-02 01:10:01] metrics32=exact 0.0 mae 370.78125 n 32 sec 715.2 gpu 1912.3
+[2026-09-02 01:10:01] metrics320=exact 0.0 mae 453.884375 n 320 sec 4811.4 gpu 1912.3
+Wed Sep  2 01:10:01 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.105.08             Driver Version: 580.105.08     CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GeForce RTX 5090        On  |   00000000:98:00.0 Off |                  N/A |
+| 42%   45C    P0             96W /  575W |       0MiB /  32607MiB |      1%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+[2026-09-02 01:10:01] log=outputs/logs/overnight_gpu.log

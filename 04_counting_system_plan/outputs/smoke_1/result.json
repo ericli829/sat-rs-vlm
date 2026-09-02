@@ -1,0 +1,45 @@
+{
+  "count": 172,
+  "scalar": 172,
+  "num_detections": 172,
+  "provenance": {
+    "mode": "visual",
+    "entire": true,
+    "target": "ship",
+    "prompt": "ship . vessel",
+    "tiny": true,
+    "scope": [
+      0.0,
+      0.0,
+      4096.0,
+      4096.0
+    ],
+    "source_scale": 1024,
+    "tiles_planned": 147,
+    "tiles_run": 147,
+    "detector": "grounding_dino",
+    "detector_calls": 147,
+    "raw_count": 5327,
+    "fusion": {
+      "raw": 5327,
+      "below_threshold": 4930,
+      "after_threshold": 397,
+      "after_ownership": 279,
+      "after_same_scale": 219,
+      "after_fusion": 172,
+      "score_threshold": 0.2,
+      "nms_iou": 0.5,
+      "cross_scale_iou": 0.5
+    },
+    "gate": {
+      "enabled": false,
+      "survivors": 147,
+      "dropped": 0,
+      "scores": []
+    },
+    "duplicate_rate": 0.0,
+    "latency_sec": 20.715527020394802
+  },
+  "raw_count": 5327,
+  "overlay": "outputs/smoke_1/overlay.png"
+}

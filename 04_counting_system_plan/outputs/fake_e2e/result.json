@@ -1,0 +1,18 @@
+{
+  "count": 7,
+  "expected": 7,
+  "ok": true,
+  "fusion": {
+    "raw": 34,
+    "below_threshold": 0,
+    "after_threshold": 34,
+    "after_ownership": 25,
+    "after_same_scale": 21,
+    "after_fusion": 7,
+    "score_threshold": 0.2,
+    "nms_iou": 0.5,
+    "cross_scale_iou": 0.5
+  },
+  "detector_calls": 35,
+  "overlay": "/root/autodl-tmp/26揭榜挂帅-太空智算/04_counting_system_plan/outputs/fake_e2e/overlay.png"
+}
