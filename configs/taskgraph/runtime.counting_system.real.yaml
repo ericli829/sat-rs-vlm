@@ -27,6 +27,7 @@ providers:
       bert_root: ${LAE_DINO_BERT_ROOT}
       worker_python: ${LAE_DINO_PYTHON}
       score_threshold: 0.0
+      top_k: 300
     scale:
       global:
         enabled: false
@@ -41,6 +42,7 @@ providers:
       nms_iou: 0.40
       cross_scale_iou: 0.50
       keep_raw_proposals: true
+      max_detections_per_tile: 300
     gate:
       enabled: false
   semantic_2b:
