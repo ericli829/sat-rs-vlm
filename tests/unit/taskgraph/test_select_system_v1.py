@@ -10,7 +10,7 @@ from sat_rs_vlm.infrastructure.config import ModelConfig
 from sat_rs_vlm.taskgraph.input_composer import InputComposer
 from sat_rs_vlm.taskgraph.operators import CountExecutor, OperatorContext, SelectExecutor
 from sat_rs_vlm.taskgraph.providers import (
-    FakeDetectionProvider,
+    FakeCountingProvider,
     FakeSemanticVLMProvider,
     LazyQwenSemanticProvider,
     ModelInput,
@@ -152,7 +152,7 @@ def test_unresolved_selection_is_not_silently_counted(tmp_path: Path) -> None:
     composer, context = _context(tmp_path)
     try:
         try:
-            CountExecutor(FakeDetectionProvider()).execute(
+            CountExecutor(FakeCountingProvider()).execute(
                 count_node, {"entities": unresolved}, context
             )
         except ValueError as exc:
@@ -161,7 +161,7 @@ def test_unresolved_selection_is_not_silently_counted(tmp_path: Path) -> None:
             raise AssertionError("COUNT accepted an unresolved SELECT result")
 
         selected = SelectResult(candidates, SelectStatus.OK, "geometry")
-        output = CountExecutor(FakeDetectionProvider()).execute(
+        output = CountExecutor(FakeCountingProvider()).execute(
             count_node, {"entities": selected}, context
         )
         assert output.value == ScalarInt(1, {"provider": "cardinality", "source": "EntitySet"})

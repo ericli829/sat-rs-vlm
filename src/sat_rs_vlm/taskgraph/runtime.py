@@ -24,10 +24,13 @@ from .operators import (
     SemanticExecutor,
 )
 from .providers import (
+    CountingProvider,
+    CountingRequest,
     DetectionProvider,
     DetectionRequest,
     EvidenceSufficiencyRequest,
     EvidenceSufficiencyResult,
+    FakeCountingProvider,
     FakeDetectionProvider,
     FakeRegionRetriever,
     FakeSemanticVLMProvider,
@@ -88,16 +91,24 @@ class RuntimeProviders:
     retriever: RegionRetrieverProvider
     choice: SemanticVLMProvider
     planner: PlannerProvider | None = None
+    counting: CountingProvider | None = None
+
+    def __post_init__(self) -> None:
+        if self.counting is None:
+            self.counting = FakeCountingProvider()
 
     def close(self) -> None:
         seen: set[int] = set()
         for provider in (
             self.detection,
+            self.counting,
             self.semantic_2b,
             self.route_4b,
             self.retriever,
             self.choice,
         ):
+            if provider is None:
+                continue
             if id(provider) not in seen:
                 provider.close()
                 seen.add(id(provider))
@@ -129,7 +140,9 @@ class TaskGraphRuntime:
             providers.retriever,
             semantic_categories=semantic_categories,
         )
-        count = CountExecutor(providers.detection)
+        counting = providers.counting or FakeCountingProvider()
+        providers.counting = counting
+        count = CountExecutor(counting)
         select = SelectExecutor(providers.semantic_2b, self.choice_config)
         semantic = SemanticExecutor(
             providers.semantic_2b,
@@ -292,18 +305,22 @@ class TaskGraphRuntime:
         if len(images) != 1:
             raise ValueError("DIRECT_DETECTION requires exactly one image")
         target = TargetSpec(category=request.target_category or "object")
-        detected = self.providers.detection.detect(
-            DetectionRequest(next(iter(images.values())), target, request.task_category)
-        )
+        scope = next(iter(images.values()))
         is_count = request.task_category.casefold() in {"count", "counting"}
-        source: RuntimeObject = (
-            ScalarInt(
-                len(detected.detections.entities),
-                {"provider": detected.provider, "detection": detected.detections.provenance},
+        if is_count:
+            counting = self.providers.counting
+            if counting is None:
+                raise RuntimeError("COUNT requires RuntimeProviders.counting")
+            counted = counting.count(CountingRequest(scope, target, entire=True))
+            source: RuntimeObject = ScalarInt(
+                counted.count,
+                {"provider": counted.provider, "detection": counted.detections.provenance},
             )
-            if is_count
-            else detected.detections
-        )
+        else:
+            detected = self.providers.detection.detect(
+                DetectionRequest(scope, target, request.task_category)
+            )
+            source = detected.detections
         trace = ExecutionTrace(request.sample_id, ExecutionMode.DIRECT_DETECTION.value)
         if request.options:
             choice_output = self.choice_resolver.resolve(
@@ -367,6 +384,7 @@ def fake_runtime(
             retriever=FakeRegionRetriever(retrieval_candidates),
             choice=shared_2b,
             planner=FixturePlannerProvider(planner_fixtures or {}) if planner_fixtures else None,
+            counting=FakeCountingProvider(detection_boxes),
         ),
         policy=policy,
         semantic_categories=semantic_categories,
@@ -391,17 +409,33 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
 
     detection_cfg = dict(providers.get("detection", {"kind": "fake"}))
     detection_kind = str(detection_cfg.pop("kind", "fake"))
+    if detection_kind == "counting_system":
+        raise ValueError(
+            "providers.detection.kind='counting_system' is no longer supported. "
+            "Configure providers.counting.kind='counting_system' instead; "
+            "providers.detection remains the LOCATE DetectionProvider."
+        )
     if detection_kind == "fake":
         detection: DetectionProvider = FakeDetectionProvider(detection_cfg.get("boxes"))
-    elif detection_kind == "counting_system":
-        from sat_rs_vlm.integrations.counting import CountingSystemDetectionAdapter
-
-        detection = CountingSystemDetectionAdapter.from_config(detection_cfg)
     else:
         from sat_rs_vlm.integrations.detectors.registry import create_proposal_provider
 
         detection = ProposalDetectionAdapter(
             create_proposal_provider(detection_kind, detection_cfg)
+        )
+
+    counting_cfg = dict(providers.get("counting", {"kind": "fake"}))
+    counting_kind = str(counting_cfg.pop("kind", "fake"))
+    if counting_kind == "fake":
+        counting: CountingProvider = FakeCountingProvider(counting_cfg.get("boxes"))
+    elif counting_kind == "counting_system":
+        from sat_rs_vlm.integrations.counting import CountingSystemProvider
+
+        counting = CountingSystemProvider.from_config(counting_cfg)
+    else:
+        raise ValueError(
+            f"unsupported counting provider kind: {counting_kind}; "
+            "use fake or counting_system"
         )
 
     def semantic_provider(name: str, role: str) -> SemanticVLMProvider:
@@ -485,7 +519,9 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
         route_max_side=int(composer_cfg.get("route_max_side", 1536)),
     )
     return TaskGraphRuntime(
-        RuntimeProviders(detection, semantic_2b, route_4b, retriever, choice, planner),
+        RuntimeProviders(
+            detection, semantic_2b, route_4b, retriever, choice, planner, counting
+        ),
         policy=policy,
         composer=composer,
         semantic_categories=set(config.get("semantic_region_categories", [])),

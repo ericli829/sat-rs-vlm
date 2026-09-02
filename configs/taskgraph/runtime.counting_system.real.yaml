@@ -1,24 +1,32 @@
 dataset_policy:
-  VRSBench:
-    count: DIRECT_DETECTION
-    counting: DIRECT_DETECTION
-    default: DIRECT_VLM
   MME_RealWorld_RS:
     default: TASKGRAPH_UHR
   XLRS_Bench:
     default: TASKGRAPH_UHR
 
 providers:
-  planner:
-    kind: fixture
-    fixture_file: tests/fixtures/taskgraph/planner_fixtures.json
   detection:
-    kind: fake
-    boxes: []
+    kind: tiled
+    tile_size: 1333
+    overlap_ratio: 0.15
+    global_nms_iou: 0.4
+    base_provider: lae_dino_lae1m
+    base_config:
+      source_root: ${LAE_DINO_SOURCE_ROOT}
+      config_path: ${LAE_DINO_CONFIG_LAE1M}
+      checkpoint: ${LAE_DINO_CHECKPOINT_LAE1M}
+      bert_root: ${LAE_DINO_BERT_ROOT}
+      worker_python: ${LAE_DINO_PYTHON}
   counting:
     kind: counting_system
     detector:
-      kind: fake
+      kind: lae_dino_lae1m
+      source_root: ${LAE_DINO_SOURCE_ROOT}
+      config_path: ${LAE_DINO_CONFIG_LAE1M}
+      checkpoint: ${LAE_DINO_CHECKPOINT_LAE1M}
+      bert_root: ${LAE_DINO_BERT_ROOT}
+      worker_python: ${LAE_DINO_PYTHON}
+      score_threshold: 0.0
     scale:
       global:
         enabled: false

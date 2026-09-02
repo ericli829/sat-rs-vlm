@@ -105,8 +105,8 @@ operation and records stable group IDs and group boxes.
 | `BUILD_ROUTE_CONTEXT` | route context construction | deterministic geometry/markers |
 | `LOCATE` object target | object perception | **REAL:** existing LAE-DINO `ProposalProvider` adapter |
 | `LOCATE` semantic region | region retrieval | existing UHR Locator or score-only Retriever adapter |
-| `COUNT(image/Region)` | tiled detection/count | **REAL:** `counting_system` adapter (`providers.detection.kind: counting_system`) or LAE-DINO `ProposalProvider`; both return global-coordinate `EntitySet`, then COUNT does `len(entities)` |
-| `COUNT(EntitySet)` | cardinality | deterministic Python; detector is not called again |
+| `COUNT(image/Region)` | tiled count | **REAL:** `CountingProvider` (`providers.counting.kind: counting_system`); native/global/fine tiling, ownership, NMS, and fusion stay in `04_counting_system_plan`; real detector is the isolated `lae_dino_lae1m` sidecar via `CountingProposalDetectorBridge`. TaskGraph output is `ScalarInt`. |
+| `COUNT(EntitySet)` | cardinality | deterministic Python; CountingProvider is not called |
 | `SELECT` rank/ordinal/extreme | geometry | deterministic Python |
 | `SELECT` `LEFT_OF`/`RIGHT_OF`/`ABOVE`/`BELOW`/`INSIDE`/`OVERLAP` | geometry first | deterministic Python; boundary cases fall back to Qwen3-VL-2B |
 | `SELECT` `NEAR`/`NEXT_TO`/`AROUND`/`BETWEEN` | semantic selection | **REAL:** Qwen3-VL-2B |
@@ -125,8 +125,12 @@ provider/model identity, cache reuse, and latency. Route reasoning and option sc
 one 4B cached session; no route-specific answer parser exists.
 
 The LAE adapter consumes the existing dependency-light `ProposalProvider`, including
-the isolated LAE sidecar and generic tiled wrapper. It converts crop-local boxes back
-to absolute original-image coordinates and retains model/tile provenance. The Qwen
+the isolated LAE sidecar and generic tiled wrapper. LOCATE may use
+`providers.detection.kind: tiled` with `base_provider: lae_dino_lae1m`. COUNT must
+not reuse that tiled detection provider: `providers.counting` is independent, and
+its detector kind is the non-tiled sidecar so Counting System tiling is not applied
+twice. It converts crop-local boxes back to absolute original-image coordinates
+and retains model/tile provenance. The Qwen
 adapter lazily creates the existing `HuggingFaceVLMEngine` and reuses its processor,
 model loading, device/dtype configuration, multi-image chat template, and generation
 stack. No checkpoint is hard-coded and model files are never downloaded by this runtime.

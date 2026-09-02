@@ -2,6 +2,9 @@
 
 实现计划书 `04_counting_system_plan.md`：在高分辨率整图或指定 Region 上做可靠计数。
 
+本目录是 counting **算法 backend / 研究工作区**。TaskGraph 对外合同以
+`src/sat_rs_vlm/taskgraph` 为准，见 [TASKGRAPH.md](TASKGRAPH.md)。
+
 ```text
 scope → ScalePolicy → tiling → LAE-DINO → local→global bbox
       → same-scale Core Ownership + NMS → cross-scale fusion → count

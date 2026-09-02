@@ -33,6 +33,32 @@ providers:
       checkpoint: ${LAE_DINO_CHECKPOINT_LAE1M}
       bert_root: ${LAE_DINO_BERT_ROOT}
       worker_python: ${LAE_DINO_PYTHON}
+  counting:
+    kind: counting_system
+    detector:
+      kind: lae_dino_lae1m
+      source_root: ${LAE_DINO_SOURCE_ROOT}
+      config_path: ${LAE_DINO_CONFIG_LAE1M}
+      checkpoint: ${LAE_DINO_CHECKPOINT_LAE1M}
+      bert_root: ${LAE_DINO_BERT_ROOT}
+      worker_python: ${LAE_DINO_PYTHON}
+      score_threshold: 0.0
+    scale:
+      global:
+        enabled: false
+      native:
+        enabled: true
+        tile_size: 1333
+        overlap: 200
+      fine:
+        enabled: false
+    count:
+      score_threshold: 0.20
+      nms_iou: 0.40
+      cross_scale_iou: 0.50
+      keep_raw_proposals: true
+    gate:
+      enabled: false
   semantic_2b:
     kind: qwen3_vl
     backend: huggingface

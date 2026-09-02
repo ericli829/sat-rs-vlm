@@ -80,6 +80,30 @@ class DetectionProvider(Protocol):
 
 
 @dataclass(frozen=True)
+class CountingRequest:
+    scope: ImageRef | Region
+    target: TargetSpec
+    entire: bool
+
+
+@dataclass(frozen=True)
+class CountingResult:
+    count: int
+    detections: EntitySet
+    provider: str
+    latency_ms: float
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+class CountingProvider(Protocol):
+    provider_name: str
+
+    def count(self, request: CountingRequest) -> CountingResult: ...
+
+    def close(self) -> None: ...
+
+
+@dataclass(frozen=True)
 class RegionRetrievalRequest:
     image: ImageRef | Region
     query: str
@@ -463,6 +487,74 @@ class FakeDetectionProvider:
 
     def close(self) -> None:
         return None
+
+
+class FakeCountingProvider:
+    """Deterministic COUNT fixture; independent from FakeDetectionProvider."""
+
+    provider_name = "fake_counting"
+
+    def __init__(self, boxes: Sequence[Sequence[float]] | None = None) -> None:
+        self.boxes = [cast(BBox, tuple(float(item) for item in box)) for box in (boxes or [])]
+        self.calls: list[CountingRequest] = []
+        self.closed = False
+
+    def count(self, request: CountingRequest) -> CountingResult:
+        self.calls.append(request)
+        image = request.scope if isinstance(request.scope, ImageRef) else request.scope.image
+        entire = bool(request.entire)
+        entire_source = "CountingRequest.entire"
+        if isinstance(request.scope, Region):
+            entire = False
+            entire_source = "region_frozen_semantic"
+        entities = []
+        for index, box in enumerate(self.boxes):
+            global_box = box
+            if isinstance(request.scope, Region):
+                clipped = _bbox_intersection(box, request.scope.bbox_xyxy_global)
+                if clipped is None:
+                    continue
+                global_box = clipped
+            entities.append(
+                Entity(
+                    Region(
+                        image,
+                        global_box,
+                        {
+                            "provider": self.provider_name,
+                            "entire": entire,
+                            "entire_source": entire_source,
+                        },
+                    ),
+                    request.target.category,
+                    max(0.01, 0.99 - index * 0.01),
+                    {"provider": self.provider_name},
+                )
+            )
+        detections = EntitySet(
+            tuple(entities),
+            {
+                "provider": self.provider_name,
+                "entire": entire,
+                "entire_source": entire_source,
+                "requested_entire": request.entire,
+            },
+        )
+        return CountingResult(
+            count=len(detections.entities),
+            detections=detections,
+            provider=self.provider_name,
+            latency_ms=0.0,
+            metadata={
+                "deterministic": True,
+                "entire": entire,
+                "entire_source": entire_source,
+                "requested_entire": request.entire,
+            },
+        )
+
+    def close(self) -> None:
+        self.closed = True
 
 
 class LocatorRegionRetrieverAdapter:
