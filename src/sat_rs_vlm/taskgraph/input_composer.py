@@ -42,6 +42,7 @@ class InputComposer:
         candidate_halo_ratio: float = 0.2,
         entity_set_union_area_threshold: float = 0.55,
         entity_set_max_side: int = 1536,
+        entity_set_max_crops: int = 16,
         route_max_side: int = 1536,
     ) -> None:
         if not 0.0 <= candidate_halo_ratio <= 1.0:
@@ -52,6 +53,8 @@ class InputComposer:
             raise ValueError("entity_set_union_area_threshold must be in (0, 1]")
         if entity_set_max_side < 256:
             raise ValueError("entity_set_max_side must be at least 256")
+        if entity_set_max_crops < 1:
+            raise ValueError("entity_set_max_crops must be positive")
         self._temporary = None
         if output_dir is None:
             self._temporary = tempfile.TemporaryDirectory(prefix="taskgraph_inputs_")
@@ -61,6 +64,7 @@ class InputComposer:
         self.candidate_halo_ratio = candidate_halo_ratio
         self.entity_set_union_area_threshold = entity_set_union_area_threshold
         self.entity_set_max_side = entity_set_max_side
+        self.entity_set_max_crops = entity_set_max_crops
         self.route_max_side = route_max_side
         self._counter = 0
 
@@ -233,9 +237,33 @@ class InputComposer:
                 if union_area_ratio <= self.entity_set_union_area_threshold
                 else "bounded_multi_crop"
             )
-            crop_sources = [(None, union_box)] if strategy == "union_crop" else list(
-                enumerate(boxes)
-            )
+            if strategy == "union_crop":
+                selected_candidate_indices = list(range(len(boxes)))
+                omitted_candidate_indices: list[int] = []
+                crop_sources = [(None, union_box)]
+            else:
+                ranked_indices = sorted(
+                    range(len(boxes)),
+                    key=lambda index: (
+                        -(
+                            float(entities.entities[index].score)
+                            if entities.entities[index].score is not None
+                            and math.isfinite(float(entities.entities[index].score))
+                            else float("-inf")
+                        ),
+                        index,
+                    ),
+                )
+                selected_candidate_indices = sorted(
+                    ranked_indices[: self.entity_set_max_crops]
+                )
+                selected_set = set(selected_candidate_indices)
+                omitted_candidate_indices = [
+                    index for index in range(len(boxes)) if index not in selected_set
+                ]
+                crop_sources = [
+                    (index, boxes[index]) for index in selected_candidate_indices
+                ]
             for source_index, source_box in crop_sources:
                 source_width = source_box[2] - source_box[0]
                 source_height = source_box[3] - source_box[1]
@@ -263,6 +291,8 @@ class InputComposer:
                 candidate_metadata: list[dict[str, object]] = []
                 draw = ImageDraw.Draw(canvas)
                 for index, entity in enumerate(entities.entities):
+                    if index not in selected_candidate_indices:
+                        continue
                     box = entity.region.bbox_xyxy_global
                     clipped = (
                         max(float(crop_box[0]), box[0]),
@@ -315,6 +345,15 @@ class InputComposer:
             "halo_ratio": self.candidate_halo_ratio,
             "original_image_size": [width, height],
             "crop_count": len(outputs),
+            "requested_candidate_count": len(boxes),
+            "selected_candidate_indices": selected_candidate_indices,
+            "omitted_candidate_indices": omitted_candidate_indices,
+            "max_crops": self.entity_set_max_crops,
+            "selection_policy": (
+                "all_candidates_for_union_crop"
+                if strategy == "union_crop"
+                else "score_descending_then_source_index_top_k"
+            ),
             "max_render_side": self.entity_set_max_side,
             "canvases": canvases_metadata,
             "whole_image_visual_used": False,

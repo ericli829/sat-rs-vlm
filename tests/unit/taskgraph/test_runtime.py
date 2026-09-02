@@ -95,6 +95,15 @@ def test_case_a_high_res_count_is_structured_text_only_choice() -> None:
         assert runtime.choice_resolver.last_model_input.visual_inputs == ()
         assert "value: 7" in runtime.choice_resolver.last_model_input.structured_context
         assert runtime.providers.choice.choice_calls == []
+        assert result.trace.detector_ms is not None and result.trace.detector_ms >= 0.0
+        assert result.trace.choice_ms is not None and result.trace.choice_ms >= 0.0
+        assert result.trace.stage_status["detector_ms"] == "executed"
+        assert result.trace.stage_status["choice_ms"] == "deterministic_or_precomputed"
+        assert result.trace.stage_status["retriever_ms"] == "not_used"
+        assert result.trace.activated_model_roles == ["detector"]
+        assert result.trace.activated_parameter_counts["detector"] == "NOT_AVAILABLE"
+        assert result.trace.e2e_ms is not None and result.trace.e2e_ms >= 0.0
+        assert result.trace.ttft_ms == "NOT_AVAILABLE_FROM_BACKEND"
     finally:
         runtime.close()
 
@@ -421,6 +430,10 @@ def test_case_e_route_accepts_entityset_start_and_goal() -> None:
         assert route_metadata["render_size"] == [4, 4]
         assert route_metadata["resize_scale"] == 1.0
         assert runtime.providers.semantic_2b.choice_calls == []
+        assert result.trace.route_vlm_ms is not None and result.trace.route_vlm_ms >= 0.0
+        assert result.trace.stage_status["route_vlm_ms"] == "executed"
+        assert "route_4b" in result.trace.activated_model_roles
+        assert result.trace.stage_status["choice_ms"] == "deterministic_or_precomputed"
         route_output = result.store.get("$n6")
         assert route_output.cache_reused is True
         assert route_output.metadata["input_metadata"]["visual_roles"] == ["CONTEXT"]

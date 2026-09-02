@@ -1,6 +1,22 @@
 {
   "ontology_version": "0.1",
   "language": "en_zh",
+  "capabilities": {
+    "detector": ["aircraft", "bridge", "building", "ship", "storage_tank", "vehicle"],
+    "region_retriever": [
+      "airport",
+      "farmland",
+      "forest",
+      "harbor",
+      "industrial_area",
+      "parking_lot",
+      "residential_area",
+      "river",
+      "road",
+      "runway",
+      "water"
+    ]
+  },
   "objects": {
     "aircraft": ["aircraft", "airplane", "airplanes", "aeroplane", "aeroplanes", "plane", "planes", "飞机", "航空器"],
     "airport": ["airport", "airports", "airfield", "airfields", "机场"],
@@ -9,6 +25,7 @@
     "farmland": ["farmland", "farmlands", "cropland", "croplands", "farm field", "farm fields", "农田", "耕地"],
     "forest": ["forest", "forests", "woodland", "woodlands", "林地", "森林"],
     "harbor": ["harbor", "harbors", "harbour", "harbours", "port", "ports", "港口", "港湾"],
+    "industrial_area": ["industrial area", "industrial areas", "industrial zone", "industrial zones", "工业区", "工業區"],
     "parking_lot": ["parking lot", "parking lots", "car park", "car parks", "停车场"],
     "residential_area": ["residential area", "residential areas", "residential district", "residential districts", "居民区", "住宅区"],
     "river": ["river", "rivers", "waterway", "waterways", "河", "河流"],

@@ -125,6 +125,7 @@ class RegionCandidates:
     candidates: tuple[RegionCandidate, ...]
     provider: str
     latency_ms: float = 0.0
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         latency = float(self.latency_ms)
@@ -530,7 +531,21 @@ class LocatorRegionRetrieverAdapter:
             ):
                 break
         candidates = tuple(candidates_list)
-        return RegionCandidates(candidates, self.provider_name, result.latency_ms.get("total", 0.0))
+        search_plan = getattr(result, "search_plan", None)
+        return RegionCandidates(
+            candidates,
+            self.provider_name,
+            result.latency_ms.get("total", 0.0),
+            {
+                "locator": self.provider_name,
+                "provider_provenance": dict(getattr(result, "provider_provenance", {})),
+                "latency_ms": dict(result.latency_ms),
+                "search_plan": (
+                    search_plan.to_dict() if hasattr(search_plan, "to_dict") else None
+                ),
+                "depth_reached": getattr(result, "depth_reached", None),
+            },
+        )
 
     def close(self) -> None:
         self._locator.close()
@@ -624,7 +639,12 @@ class ScoredGridRegionRetrieverAdapter:
             )
             for index in order
         )
-        return RegionCandidates(candidates, self.provider_name, scored.latency_ms)
+        return RegionCandidates(
+            candidates,
+            self.provider_name,
+            scored.latency_ms,
+            {"provider_metadata": dict(getattr(scored, "metadata", {}))},
+        )
 
     def close(self) -> None:
         self._provider.close()

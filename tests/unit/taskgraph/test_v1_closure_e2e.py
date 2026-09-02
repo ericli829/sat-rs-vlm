@@ -434,6 +434,12 @@ def test_f9_semantic_region_locate_uses_retriever_then_qwen(tmp_path: Path) -> N
         assert isinstance(result.output, Label)
         assert result.output.value == "industrial"
         assert len(runtime.providers.semantic_2b.semantic_calls) == 1
+        assert result.trace.retriever_ms is not None and result.trace.retriever_ms >= 0.0
+        assert result.trace.semantic_vlm_ms is not None and result.trace.semantic_vlm_ms >= 0.0
+        assert result.trace.stage_status["retriever_ms"] == "executed"
+        assert result.trace.stage_status["semantic_vlm_ms"] == "executed"
+        assert result.trace.stage_status["choice_ms"] == "not_used"
+        assert result.trace.activated_model_roles == ["retriever", "semantic_2b"]
     finally:
         runtime.close()
 

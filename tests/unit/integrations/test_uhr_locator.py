@@ -445,6 +445,136 @@ def test_georsclip_registry_is_lazy_until_first_score(
     assert provider._model is None
 
 
+class _FakeOpenCLIPModel:
+    def __init__(self, torch: Any, state: dict[str, Any]) -> None:
+        self._torch = torch
+        self._state = dict(state)
+        self.loaded_state: dict[str, Any] | None = None
+        self.device: str | None = None
+        self.evaluated = False
+
+    def state_dict(self) -> dict[str, Any]:
+        return dict(self._state)
+
+    def named_parameters(self):
+        return tuple(self._state.items())
+
+    def load_state_dict(self, state: dict[str, Any], strict: bool = False) -> SimpleNamespace:
+        assert strict is False
+        self.loaded_state = dict(state)
+        return SimpleNamespace(
+            missing_keys=[key for key in self._state if key not in state],
+            unexpected_keys=[key for key in state if key not in self._state],
+        )
+
+    def to(self, device: str) -> "_FakeOpenCLIPModel":
+        self.device = device
+        return self
+
+    def eval(self) -> "_FakeOpenCLIPModel":
+        self.evaluated = True
+        return self
+
+
+def _patch_fake_openclip(
+    monkeypatch: pytest.MonkeyPatch,
+    model: _FakeOpenCLIPModel,
+) -> None:
+    monkeypatch.setitem(
+        sys.modules,
+        "open_clip",
+        SimpleNamespace(
+            create_model_and_transforms=lambda arch, pretrained=None: (
+                model,
+                None,
+                lambda image: image,
+            ),
+            get_tokenizer=lambda arch: lambda values: values,
+        ),
+    )
+
+
+def test_openclip_compatible_checkpoint_records_load_coverage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    torch = pytest.importorskip("torch")
+    checkpoint = tmp_path / "compatible.pt"
+    model_state = {
+        "visual.weight": torch.ones(100),
+        "text.weight": torch.ones(100),
+        "logit_scale": torch.ones(1),
+    }
+    model = _FakeOpenCLIPModel(torch, model_state)
+    torch.save(
+        {
+            "state_dict": {
+                "module.visual.weight": model_state["visual.weight"],
+                "text.weight": model_state["text.weight"],
+                "metadata": torch.ones(1),
+            }
+        },
+        checkpoint,
+    )
+    _patch_fake_openclip(monkeypatch, model)
+    provider = OpenCLIPRetrieverProvider(
+        {
+            "checkpoint": str(checkpoint),
+            "device": "cpu",
+            "allowed_unexpected_key_patterns": [r"^metadata$"],
+        }
+    )
+    try:
+        provider._load()
+        report = provider.compatibility_report
+        assert report["compatibility_status"] == "compatible"
+        assert report["missing_key_count"] == 1
+        assert report["unexpected_key_count"] == 1
+        assert report["unallowed_missing_key_count"] == 0
+        assert report["unallowed_unexpected_key_count"] == 0
+        assert report["loaded_parameter_fraction"] == pytest.approx(200 / 201)
+        assert model.loaded_state is not None
+        assert model.device == "cpu"
+        assert model.evaluated is True
+    finally:
+        provider.close()
+
+
+def test_openclip_incompatible_checkpoint_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    torch = pytest.importorskip("torch")
+    checkpoint = tmp_path / "incompatible.pt"
+    model_state = {
+        "visual.weight": torch.ones(100),
+        "text.weight": torch.ones(100),
+    }
+    model = _FakeOpenCLIPModel(torch, model_state)
+    torch.save(
+        {
+            "state_dict": {
+                "visual.weight": model_state["visual.weight"],
+                "unrelated.weight": torch.ones(1),
+            }
+        },
+        checkpoint,
+    )
+    _patch_fake_openclip(monkeypatch, model)
+    provider = OpenCLIPRetrieverProvider({"checkpoint": str(checkpoint)})
+    try:
+        with pytest.raises(RetrievalError, match="incompatible OpenCLIP checkpoint"):
+            provider._load()
+        report = provider.compatibility_report
+        assert report["compatibility_status"] == "incompatible"
+        assert report["loaded_parameter_fraction"] == pytest.approx(0.5)
+        assert report["unallowed_missing_key_count"] == 1
+        assert report["unallowed_unexpected_key_count"] == 1
+        assert provider._model is None
+    finally:
+        provider.close()
+
+
 def test_visrag_registry_is_lazy_until_first_score(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

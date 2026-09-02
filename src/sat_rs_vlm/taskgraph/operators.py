@@ -11,6 +11,7 @@ from typing import Any, Protocol, cast
 import numpy as np
 from PIL import Image
 
+from .capabilities import TargetCapability, TargetCapabilityClassifier
 from .choice_config import ChoiceSystemConfig
 from .execution_plan import NodeExecutionHint
 from .input_composer import InputComposer
@@ -663,10 +664,14 @@ class LocateExecutor:
         retriever: RegionRetrieverProvider,
         *,
         semantic_categories: set[str] | None = None,
+        capability_classifier: TargetCapabilityClassifier | None = None,
     ) -> None:
         self.detection = detection
         self.retriever = retriever
         self.semantic_categories = {item.casefold() for item in (semantic_categories or set())}
+        self.capability_classifier = capability_classifier or TargetCapabilityClassifier(
+            legacy_region_overrides=self.semantic_categories
+        )
         self.provider_name = "locate"
 
     def execute(
@@ -679,7 +684,9 @@ class LocateExecutor:
         if not isinstance(scope, (ImageRef, Region)):
             raise TypeError("LOCATE.image must be ImageRef or Region")
         target = TargetSpec.model_validate(node.params["target"])
-        if target.category.casefold() in self.semantic_categories:
+        decision = self.capability_classifier.classify(target)
+        decision_metadata = {"capability_decision": decision.to_dict()}
+        if decision.effective_capability is TargetCapability.RETRIEVER:
             result = self.retriever.retrieve(
                 RegionRetrievalRequest(
                     scope,
@@ -693,11 +700,37 @@ class LocateExecutor:
                     Entity(item.region, target.category, item.relevance_score, item.provenance)
                     for item in result.candidates
                 ),
-                {"provider": result.provider, "capability": "region_retrieval"},
+                {
+                    "provider": result.provider,
+                    "capability": "region_retrieval",
+                    **decision_metadata,
+                },
             )
-            return OperatorOutcome(entities, result.provider)
+            return OperatorOutcome(
+                entities,
+                result.provider,
+                {
+                    **decision_metadata,
+                    "capability": "RETRIEVER",
+                    "latency_ms": result.latency_ms,
+                    "activated_provider": result.provider,
+                    "stage": "retriever",
+                    "provider_metadata": dict(result.metadata),
+                },
+            )
         detected = self.detection.detect(DetectionRequest(scope, target, "LOCATE"))
-        return OperatorOutcome(detected.detections, detected.provider)
+        return OperatorOutcome(
+            detected.detections,
+            detected.provider,
+            {
+                **decision_metadata,
+                "capability": "DETECTOR",
+                "latency_ms": detected.latency_ms,
+                "activated_provider": detected.provider,
+                "stage": "detector",
+                "provider_metadata": dict(detected.metadata),
+            },
+        )
 
 
 class CountExecutor:
@@ -739,6 +772,12 @@ class CountExecutor:
                 {"provider": detected.provider, "detection": detected.detections.provenance},
             ),
             detected.provider,
+            {
+                "latency_ms": detected.latency_ms,
+                "activated_provider": detected.provider,
+                "stage": "detector",
+                "provider_metadata": dict(detected.metadata),
+            },
         )
 
 
@@ -1707,11 +1746,13 @@ class SemanticExecutor:
         provider: SemanticVLMProvider,
         *,
         provider_name: str | None = None,
+        model_role: str | None = None,
         choice_config: ChoiceSystemConfig | None = None,
         semantic_config: SemanticDecisionConfig | None = None,
     ) -> None:
         self.provider = provider
         self.provider_name = provider_name or provider.provider_name
+        self.model_role = model_role or getattr(provider, "role", None)
         self.choice_config = choice_config or ChoiceSystemConfig()
         self.semantic_config = semantic_config or SemanticDecisionConfig()
         self.decisions = SemanticDecisionLayer(provider, self.semantic_config)
@@ -1732,6 +1773,10 @@ class SemanticExecutor:
                 "cache_reused",
                 "final_choice_fusion",
                 "fusion_reason",
+                "model_id",
+                "model_role",
+                "latency_ms",
+                "semantic_decision_total_ms",
             )
             if key in provenance
         }
@@ -1812,6 +1857,8 @@ class SemanticExecutor:
             "model_id": scored.model_id,
             "latency_ms": dict(scored.latency_ms),
         }
+        if self.model_role is not None:
+            trace_metadata["model_role"] = self.model_role
         route_context = model_input.metadata.get("route_context")
         if route_context is not None:
             trace_metadata["route_context"] = route_context
@@ -1831,6 +1878,8 @@ class SemanticExecutor:
         model_input = context.composer.compose_named(inputs, question=question, options=options)
         result = self.provider.infer(VLMRequest(model_input, node.op.value.casefold()))
         provenance = self._free_provenance(result, fusion_reason=fusion_reason)
+        if self.model_role is not None:
+            provenance["model_role"] = self.model_role
         if node.op in {OperatorName.ATTRIBUTE, OperatorName.CLASSIFY}:
             value: RuntimeObject = Label(result.text.strip(), provenance)
         else:
@@ -1905,6 +1954,8 @@ class SemanticExecutor:
                 reasoning_instruction=instruction,
             )
             provenance = {**provenance, "fusion_reason": fusion_reason}
+            if self.model_role is not None:
+                provenance["model_role"] = self.model_role
             value = Boolean(moving, provenance)
         elif node.op is OperatorName.MULTILABEL_CLASSIFY:
             decision = self.decisions.choose_many(
@@ -1914,6 +1965,8 @@ class SemanticExecutor:
                 reasoning_instruction=instruction,
             )
             provenance = {**decision.provenance, "fusion_reason": fusion_reason}
+            if self.model_role is not None:
+                provenance["model_role"] = self.model_role
             value = LabelSet(decision.values, provenance)
         else:
             purpose = {
@@ -1928,6 +1981,8 @@ class SemanticExecutor:
                 reasoning_instruction=instruction,
             )
             provenance = {**decision.provenance, "fusion_reason": fusion_reason}
+            if self.model_role is not None:
+                provenance["model_role"] = self.model_role
             value = Label(decision.values[0], provenance)
         return OperatorOutcome(
             value,

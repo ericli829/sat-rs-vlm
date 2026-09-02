@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 import tempfile
 import unittest
@@ -70,6 +71,75 @@ class LevirParserAndRoutingTests(unittest.TestCase):
 
 
 class LevirEndToEndTests(unittest.TestCase):
+    def test_visual_semantic_profile_runs_through_unified_evaluation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            predictions = root / "predictions.jsonl"
+            write_jsonl(
+                predictions,
+                [
+                    {
+                        "id": "sample-1",
+                        "task_type": "change_detection",
+                        "prediction": "A new building was constructed.",
+                        "reference": "A building appeared.",
+                        "metadata": {"dataset": "LEVIR-CC", "changeflag": 1},
+                    }
+                ],
+            )
+            gold = root / "visual_semantic_gold.csv"
+            with gold.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(
+                    handle,
+                    fieldnames=[
+                        "sample_id",
+                        "image_t1_path",
+                        "image_t2_path",
+                        "gold_change_label",
+                        "gold_changed_objects",
+                        "gold_change_directions",
+                        "gold_change_events",
+                        "annotation_confidence",
+                        "label_source",
+                    ],
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "sample_id": "sample-1",
+                        "image_t1_path": "missing-t1.png",
+                        "image_t2_path": "missing-t2.png",
+                        "gold_change_label": "1",
+                        "gold_changed_objects": "building",
+                        "gold_change_directions": "appearance_construction",
+                        "gold_change_events": "building:appearance_construction",
+                        "annotation_confidence": "high",
+                        "label_source": "image_audited_annotation",
+                    }
+                )
+            outputs = run_evaluation(
+                predictions,
+                root / "results",
+                contract_path=CONTRACT,
+                strict=True,
+                protected_repository=root / "protected",
+                semantic_enabled=False,
+                visual_semantic_enabled=True,
+                visual_semantic_gold_path=gold,
+                visual_semantic_verify_image_paths=False,
+            )
+
+            summary = json.loads(outputs["summary"].read_text(encoding="utf-8"))
+            auxiliary = summary["visual_semantic_auxiliary"]
+            assert auxiliary["metric_label"] == "research_auxiliary_visual_semantic_profile"
+            assert auxiliary["official_benchmark_metric"] is False
+            assert auxiliary["gold_source"] == "image_audited_annotation"
+            assert auxiliary["metrics"]["binary"]["accuracy"] == 1.0
+            assert outputs["visual_semantic_summary"].is_file()
+            manifest = json.loads(outputs["manifest"].read_text(encoding="utf-8"))
+            assert manifest["visual_semantic_evaluation_enabled"] is True
+            assert "visual_semantic_summary" in manifest["visual_semantic_output_files"]
+
     def test_confusion_matrix_and_positive_description_metrics(self) -> None:
         rows = [
             {

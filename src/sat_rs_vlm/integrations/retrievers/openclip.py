@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 import time
 from collections import OrderedDict
 from collections.abc import Mapping, Sequence
@@ -39,6 +40,22 @@ class OpenCLIPRetrieverProvider:
         self.image_embedding_cache_size = max(
             0, int(self.config.get("image_embedding_cache_size", 1024))
         )
+        self.min_loaded_parameter_fraction = float(
+            self.config.get("min_loaded_parameter_fraction", 0.95)
+        )
+        if not 0.0 <= self.min_loaded_parameter_fraction <= 1.0:
+            raise RetrievalError("OpenCLIP min_loaded_parameter_fraction must be in [0, 1]")
+        self.allowed_missing_key_patterns = self._patterns(
+            self.config.get(
+                "allowed_missing_key_patterns",
+                (r"(^|\.)logit_scale$", r"(^|\.)attn_mask$"),
+            ),
+            label="allowed_missing_key_patterns",
+        )
+        self.allowed_unexpected_key_patterns = self._patterns(
+            self.config.get("allowed_unexpected_key_patterns", ()),
+            label="allowed_unexpected_key_patterns",
+        )
         self.parameters = {
             "arch": self.arch,
             "batch_size": self.batch_size,
@@ -50,6 +67,104 @@ class OpenCLIPRetrieverProvider:
         self._decoded_image_cache: OrderedDict[tuple[str, int, int], Any] = OrderedDict()
         self._image_embedding_cache: OrderedDict[tuple[Any, ...], Any] = OrderedDict()
         self._load_info: dict[str, Any] = {}
+
+    @staticmethod
+    def _patterns(value: Any, *, label: str) -> tuple[re.Pattern[str], ...]:
+        if isinstance(value, str):
+            values = (value,)
+        elif isinstance(value, Sequence):
+            values = tuple(str(item) for item in value)
+        else:
+            raise RetrievalError(f"OpenCLIP {label} must be a string sequence")
+        try:
+            return tuple(re.compile(item) for item in values if item)
+        except re.error as exc:
+            raise RetrievalError(f"OpenCLIP {label} contains an invalid regex: {exc}") from exc
+
+    @staticmethod
+    def _matches(key: str, patterns: Sequence[re.Pattern[str]]) -> bool:
+        return any(pattern.search(key) is not None for pattern in patterns)
+
+    @staticmethod
+    def _value_size(value: Any) -> int:
+        try:
+            return max(1, int(value.numel()))
+        except (AttributeError, TypeError, ValueError):
+            return 1
+
+    def _compatibility_report(
+        self,
+        model: Any,
+        state: Mapping[str, Any],
+        load_result: Any,
+    ) -> dict[str, Any]:
+        missing_keys = [str(key) for key in getattr(load_result, "missing_keys", ())]
+        unexpected_keys = [str(key) for key in getattr(load_result, "unexpected_keys", ())]
+        try:
+            model_state = dict(model.state_dict())
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise RetrievalError(f"OpenCLIP model does not expose state_dict: {exc}") from exc
+        try:
+            parameter_names = {str(name) for name, _value in model.named_parameters()}
+        except (AttributeError, TypeError, ValueError):
+            parameter_names = set(model_state)
+        parameter_names.intersection_update(model_state)
+        if not parameter_names:
+            parameter_names = set(model_state)
+        loaded_names = parameter_names.difference(missing_keys)
+        total_parameter_count = sum(
+            self._value_size(model_state[name]) for name in parameter_names
+        )
+        loaded_parameter_count = sum(
+            self._value_size(model_state[name]) for name in loaded_names
+        )
+        loaded_fraction = (
+            loaded_parameter_count / total_parameter_count if total_parameter_count else 0.0
+        )
+        allowed_missing = [
+            key for key in missing_keys if self._matches(key, self.allowed_missing_key_patterns)
+        ]
+        unallowed_missing = [key for key in missing_keys if key not in allowed_missing]
+        allowed_unexpected = [
+            key
+            for key in unexpected_keys
+            if self._matches(key, self.allowed_unexpected_key_patterns)
+        ]
+        unallowed_unexpected = [
+            key for key in unexpected_keys if key not in allowed_unexpected
+        ]
+        return {
+            "checkpoint": str(self.checkpoint),
+            "model_id": self.model_id,
+            "arch": self.arch,
+            "missing_key_count": len(missing_keys),
+            "unexpected_key_count": len(unexpected_keys),
+            "missing_key_examples": missing_keys[:20],
+            "unexpected_key_examples": unexpected_keys[:20],
+            "allowed_missing_key_examples": allowed_missing[:20],
+            "allowed_unexpected_key_examples": allowed_unexpected[:20],
+            "unallowed_missing_key_count": len(unallowed_missing),
+            "unallowed_missing_key_examples": unallowed_missing[:20],
+            "unallowed_unexpected_key_count": len(unallowed_unexpected),
+            "unallowed_unexpected_key_examples": unallowed_unexpected[:20],
+            "total_parameter_count": total_parameter_count,
+            "loaded_parameter_count": loaded_parameter_count,
+            "loaded_parameter_fraction": loaded_fraction,
+            "minimum_loaded_parameter_fraction": self.min_loaded_parameter_fraction,
+            "compatibility_status": (
+                "compatible"
+                if (
+                    not unallowed_missing
+                    and not unallowed_unexpected
+                    and loaded_fraction >= self.min_loaded_parameter_fraction
+                )
+                else "incompatible"
+            ),
+        }
+
+    @property
+    def compatibility_report(self) -> dict[str, Any]:
+        return dict(self._load_info)
 
     def _load(self) -> None:
         if self._model is not None:
@@ -70,13 +185,22 @@ class OpenCLIPRetrieverProvider:
                 if isinstance(checkpoint, Mapping)
                 else checkpoint
             )
-            state = {key.removeprefix("module."): value for key, value in state.items()}
+            if not isinstance(state, Mapping):
+                raise RetrievalError("OpenCLIP checkpoint state_dict must be a mapping")
+            state = {str(key).removeprefix("module."): value for key, value in state.items()}
             load_result = model.load_state_dict(state, strict=False)
-            self._load_info = {
-                "missing_keys": len(load_result.missing_keys),
-                "unexpected_keys": len(load_result.unexpected_keys),
-            }
+            self._load_info = self._compatibility_report(model, state, load_result)
+            if self._load_info["compatibility_status"] != "compatible":
+                raise RetrievalError(
+                    "incompatible OpenCLIP checkpoint: "
+                    "loaded_parameter_fraction="
+                    f"{self._load_info['loaded_parameter_fraction']:.6f}, "
+                    f"missing={self._load_info['missing_key_count']}, "
+                    f"unexpected={self._load_info['unexpected_key_count']}"
+                )
             tokenizer = open_clip.get_tokenizer(self.arch)
+        except RetrievalError:
+            raise
         except Exception as exc:  # noqa: BLE001
             raise RetrievalError(f"failed to load OpenCLIP checkpoint: {exc}") from exc
         self._torch, self._model, self._preprocess, self._tokenizer = (

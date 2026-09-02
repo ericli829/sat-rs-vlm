@@ -48,6 +48,11 @@ from sat_rs_vlm.evaluation.records import (
     read_prediction_jsonl,
 )
 from sat_rs_vlm.evaluation.semantic.runner import SemanticEvaluator
+from sat_rs_vlm.evaluation.visual_semantic_runner import (
+    VisualSemanticEvaluationResult,
+    evaluate_visual_semantics,
+    write_visual_semantic_evaluation,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_SEMANTIC_CONTRACT = (
@@ -1282,6 +1287,7 @@ def _build_summary(
     input_errors: list[dict[str, Any]],
     warnings: list[str],
     semantic_summary: dict[str, Any] | None,
+    visual_semantic_summary: dict[str, Any] | None,
     latency_context: LatencyContext,
 ) -> dict[str, Any]:
     by_task_rows: dict[str, list[EvaluatedRow]] = defaultdict(list)
@@ -1363,6 +1369,8 @@ def _build_summary(
         summary["change_decision_version"] = change_decision_profile
     if semantic_summary is not None:
         summary["semantic"] = semantic_summary
+    if visual_semantic_summary is not None:
+        summary["visual_semantic_auxiliary"] = visual_semantic_summary
     grounding_rows = [row for row in rows if row.kind == "visual_grounding"]
     text_rows = [row for row in rows if row.kind == "text"]
     caption_rows = [row for row in rows if row.kind in {"caption", "change_caption"}]
@@ -1450,6 +1458,12 @@ def run_evaluation(
     semantic_enabled: bool = True,
     semantic_contract_path: str | Path | None = None,
     semantic_ontology_path: str | Path | None = None,
+    visual_semantic_enabled: bool = False,
+    visual_semantic_gold_path: str | Path | None = None,
+    visual_semantic_generation_manifest_path: str | Path | None = None,
+    visual_semantic_prompt_profile: str | None = None,
+    visual_semantic_allow_incomplete_historical_manifest: bool = False,
+    visual_semantic_verify_image_paths: bool = True,
     latency_semantics: str = "unresolved",
     eval_batch_size: int | None = None,
     group_by_task: bool | None = None,
@@ -1540,12 +1554,32 @@ def run_evaluation(
         if semantic_evaluator is not None
         else None
     )
+    if visual_semantic_enabled and visual_semantic_gold_path is None:
+        raise EvaluationError(
+            "visual semantic evaluation requires visual_semantic_gold_path"
+        )
+    visual_semantic_result: VisualSemanticEvaluationResult | None = None
+    if visual_semantic_gold_path is not None:
+        visual_semantic_result = evaluate_visual_semantics(
+            evaluated_outputs,
+            gold_csv=visual_semantic_gold_path,
+            predictions_path=predictions,
+            generation_manifest_path=visual_semantic_generation_manifest_path,
+            prompt_profile=visual_semantic_prompt_profile,
+            allow_incomplete_historical_manifest=(
+                visual_semantic_allow_incomplete_historical_manifest
+            ),
+            verify_image_paths=visual_semantic_verify_image_paths,
+        )
     summary = _build_summary(
         evaluated,
         contract=contract,
         input_errors=input_errors,
         warnings=warnings,
         semantic_summary=semantic_summary,
+        visual_semantic_summary=(
+            visual_semantic_result.summary if visual_semantic_result is not None else None
+        ),
         latency_context=latency_context,
     )
     outputs = {
@@ -1581,6 +1615,12 @@ def run_evaluation(
         "semantic_ontology_sha256": (
             _sha256(semantic_ontology_file) if semantic_evaluator is not None else None
         ),
+        "visual_semantic_evaluation_enabled": visual_semantic_result is not None,
+        "visual_semantic_gold_file": (
+            str(Path(visual_semantic_gold_path).expanduser().resolve())
+            if visual_semantic_result is not None
+            else None
+        ),
         "strict": strict,
         "latency_context": latency_context.to_dict(),
         "evaluation_tier": evaluation_tier,
@@ -1604,5 +1644,13 @@ def run_evaluation(
     _write_jsonl(outputs["evaluated_predictions"], evaluated_outputs)
     _write_json(outputs["metrics"], summary)
     _write_json(outputs["summary"], summary)
+    if visual_semantic_result is not None:
+        outputs.update(write_visual_semantic_evaluation(visual_semantic_result, destination))
+        manifest["visual_semantic_output_files"] = {
+            name: str(path)
+            for name, path in outputs.items()
+            if name.startswith("visual_semantic_")
+        }
+        manifest["output_files"] = {name: str(path) for name, path in outputs.items()}
     _write_json(outputs["manifest"], manifest)
     return outputs

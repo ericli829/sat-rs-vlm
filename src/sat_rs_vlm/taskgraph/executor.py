@@ -261,6 +261,7 @@ class GraphExecutor:
                     output_runtime_type=runtime_type_name(outcome.value),
                     output_summary=runtime_summary(outcome.value),
                     fallback=fallback,
+                    trace_metadata=dict(outcome.trace_metadata),
                 )
             )
         return trace

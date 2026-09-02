@@ -7,6 +7,8 @@ import pytest
 from PIL import Image, ImageDraw
 from pydantic import ValidationError
 
+from sat_rs_vlm.integrations.locators.config import load_locator_config
+from sat_rs_vlm.integrations.locators.registry import create_locator
 from sat_rs_vlm.taskgraph.executor import (
     CapabilityRouter,
     ExecutorBinding,
@@ -185,6 +187,38 @@ def test_locator_retriever_maps_local_crop_boxes_to_global(tmp_path: Path) -> No
     assert result.candidates[0].provenance["local_bbox_xyxy"] == [1, 2, 5, 6]
 
 
+def test_hierarchical_locator_adapter_preserves_nested_global_scope(tmp_path: Path) -> None:
+    image = _image(tmp_path / "nested-uhr.png", (200, 120))
+    parent = Region(image, (100.0, 0.0, 200.0, 60.0))
+    config = load_locator_config("configs/locator/uhr_hierarchical.yaml")
+    config["search"].update({"target_view_size": 1, "max_depth": 1})
+    config["scorers"]["detector"]["enabled"] = False
+    config["scorers"]["spatial"]["enabled"] = False
+    config["fusion"].update({"max_regions": 4, "score_threshold": -1.0})
+    locator = create_locator("hierarchical", config)
+    try:
+        result = LocatorRegionRetrieverAdapter(locator).retrieve(
+            RegionRetrievalRequest(parent, "harbor", search_scope=parent)
+        )
+    finally:
+        locator.close()
+
+    assert result.provider == "uhr_hierarchical"
+    assert result.metadata["provider_provenance"]["retriever"]["provider"] == "mock"
+    assert result.candidates
+    assert all(
+        100.0 <= candidate.region.bbox_xyxy_global[0]
+        and candidate.region.bbox_xyxy_global[1] >= 0.0
+        and candidate.region.bbox_xyxy_global[2] <= 200.0
+        and candidate.region.bbox_xyxy_global[3] <= 60.0
+        for candidate in result.candidates
+    )
+    assert all(
+        candidate.provenance["global_bbox_xyxy"] == list(candidate.region.bbox_xyxy_global)
+        for candidate in result.candidates
+    )
+
+
 def test_region_candidates_reject_non_finite_values(tmp_path: Path) -> None:
     image = _image(tmp_path / "candidate.png", (32, 32))
     region = Region(image, (0, 0, 16, 16))
@@ -348,6 +382,39 @@ def test_entity_set_composer_uses_bounded_multi_crop_for_distributed_candidates(
             assert canvas["crop_bbox_xyxy_global"] != [0, 0, 4096, 4096]
             with Image.open(path) as rendered:
                 assert max(rendered.size) <= 512
+    finally:
+        composer.close()
+
+
+def test_entity_set_composer_caps_distributed_crops_with_score_top_k(tmp_path: Path) -> None:
+    image = _image(tmp_path / "uhr_many_distributed.png", (4096, 4096))
+    entities = EntitySet(
+        tuple(
+            _entity(
+                image,
+                (40 + index * 700, 60 + index * 650, 100 + index * 700, 120 + index * 650),
+                score,
+            )
+            for index, score in enumerate((0.2, 0.95, 0.4, 0.8, 0.7))
+        )
+    )
+    composer = InputComposer(
+        tmp_path / "many_distributed_inputs",
+        entity_set_union_area_threshold=0.05,
+        entity_set_max_crops=2,
+    )
+    try:
+        model_input = composer.compose_named(
+            {"evidence": entities}, question="Compare the highest-scoring candidates."
+        )
+        metadata = model_input.metadata["entity_sets"][0]
+        assert metadata["strategy"] == "bounded_multi_crop"
+        assert metadata["requested_candidate_count"] == 5
+        assert metadata["selected_candidate_indices"] == [1, 3]
+        assert metadata["omitted_candidate_indices"] == [0, 2, 4]
+        assert metadata["selection_policy"] == "score_descending_then_source_index_top_k"
+        assert metadata["crop_count"] == 2
+        assert len(model_input.visual_inputs) == 2
     finally:
         composer.close()
 

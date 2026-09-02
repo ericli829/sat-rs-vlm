@@ -55,27 +55,20 @@ providers:
   choice:
     reuse: semantic_2b
   region_retriever:
-    kind: georsclip
-    checkpoint: ${GEORSCLIP_CHECKPOINT}
-    model_id: GeoRSCLIP-ViT-B-32
-    arch: ViT-B-32
-    device: auto
-    batch_size: 16
-    cache_dir: reports/cache/georsclip
-    decoded_image_cache_size: 2
-    image_embedding_cache_size: 1024
-    grid_size: 3
-    candidate_window_ratio: 0.5
-    max_candidates: 5
+    # Production UHR path: locator config -> hierarchical beam/refinement -> GeoRSCLIP.
+    # The flat `kind: georsclip` form remains available as a baseline/debug adapter.
+    kind: uhr_locator
+    config_path: configs/locator/uhr_hierarchical.georsclip.yaml
 
-semantic_region_categories:
-  - harbor
-  - industrial area
+capability_routing:
+  ontology_path: configs/eval/semantic/remote_sensing_ontology.json
+  unresolved_policy: detector_fallback
 
 input_composer:
   candidate_halo_ratio: 0.2
   entity_set_union_area_threshold: 0.55
   entity_set_max_side: 1536
+  entity_set_max_crops: 16
   route_max_side: 1536
 
 # Auxiliary service only. It reuses semantic_2b and never controls COUNT or graph traversal.

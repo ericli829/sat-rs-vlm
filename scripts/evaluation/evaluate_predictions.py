@@ -40,6 +40,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--semantic-contract", type=Path)
     parser.add_argument("--semantic-ontology", type=Path)
     parser.add_argument(
+        "--visual-semantic",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Run the image-audited LEVIR visual-semantic auxiliary profile.",
+    )
+    parser.add_argument("--visual-semantic-gold", type=Path)
+    parser.add_argument("--visual-semantic-generation-manifest", type=Path)
+    parser.add_argument("--visual-semantic-prompt-profile")
+    parser.add_argument(
+        "--visual-semantic-allow-incomplete-historical-manifest",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+    )
+    parser.add_argument(
+        "--visual-semantic-verify-image-paths",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+    )
+    parser.add_argument(
         "--latency-semantics",
         choices=("unresolved", "single_sample", "batch_amortized_per_sample"),
         default=None,
@@ -107,6 +126,36 @@ def main() -> int:
             ),
             semantic_ontology_path=_project_path(
                 args.semantic_ontology or settings.semantic_ontology or DEFAULT_SEMANTIC_ONTOLOGY
+            ),
+            visual_semantic_enabled=(
+                settings.visual_semantic if args.visual_semantic is None else args.visual_semantic
+            ),
+            visual_semantic_gold_path=(
+                _project_path(args.visual_semantic_gold or settings.visual_semantic_gold)
+                if args.visual_semantic_gold or settings.visual_semantic_gold
+                else None
+            ),
+            visual_semantic_generation_manifest_path=(
+                _project_path(
+                    args.visual_semantic_generation_manifest
+                    or settings.visual_semantic_generation_manifest
+                )
+                if args.visual_semantic_generation_manifest
+                or settings.visual_semantic_generation_manifest
+                else None
+            ),
+            visual_semantic_prompt_profile=(
+                args.visual_semantic_prompt_profile or settings.visual_semantic_prompt_profile
+            ),
+            visual_semantic_allow_incomplete_historical_manifest=(
+                settings.visual_semantic_allow_incomplete_historical_manifest
+                if args.visual_semantic_allow_incomplete_historical_manifest is None
+                else args.visual_semantic_allow_incomplete_historical_manifest
+            ),
+            visual_semantic_verify_image_paths=(
+                settings.visual_semantic_verify_image_paths
+                if args.visual_semantic_verify_image_paths is None
+                else args.visual_semantic_verify_image_paths
             ),
             latency_semantics=args.latency_semantics or settings.latency_semantics,
             eval_batch_size=args.eval_batch_size or settings.eval_batch_size,
