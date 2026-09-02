@@ -40,6 +40,7 @@ from .providers import (
     PlannerProvider,
     PlannerRequest,
     ProposalDetectionAdapter,
+    Qwen3VLPlannerProvider,
     RegionRetrieverProvider,
     ScoredGridRegionRetrieverAdapter,
     SemanticVLMProvider,
@@ -55,7 +56,14 @@ from .runtime_types import (
     runtime_summary,
     unwrap_select_result,
 )
-from .schema import AnswerType, OperatorName, QuestionType, TargetSpec, TaskGraph, parse_taskgraph
+from .schema import (
+    AnswerType,
+    OperatorName,
+    QuestionType,
+    TargetSpec,
+    TaskGraph,
+    parse_taskgraph,
+)
 from .semantic_decision import SemanticDecisionConfig
 from .store import RuntimeStore
 from .tracing import (
@@ -105,7 +113,10 @@ class RuntimeProviders:
             self.route_4b,
             self.retriever,
             self.choice,
+            self.planner,
         ):
+            if provider is None:
+                continue
             if id(provider) not in seen:
                 provider.close()
                 seen.add(id(provider))
@@ -145,9 +156,12 @@ def _provider_parameter_count(provider: Any) -> int | str:
             if callable(parameters):
                 try:
                     return sum(int(parameter.numel()) for parameter in parameters())
-                except (AttributeError, RuntimeError, TypeError, ValueError):
+                except Exception:
                     pass
-        pending.extend(_provider_children(current))
+        try:
+            pending.extend(_provider_children(current))
+        except Exception:
+            pass
     return "NOT_AVAILABLE"
 
 
@@ -160,10 +174,16 @@ def _provider_names(provider: Any) -> tuple[str, ...]:
         if current is None or id(current) in seen:
             continue
         seen.add(id(current))
-        name = getattr(current, "provider_name", None)
+        try:
+            name = getattr(current, "provider_name", None)
+        except Exception:
+            name = None
         if name is not None and str(name).strip() and str(name) not in names:
             names.append(str(name))
-        pending.extend(_provider_children(current))
+        try:
+            pending.extend(_provider_children(current))
+        except Exception:
+            pass
     return tuple(names)
 
 
@@ -175,39 +195,58 @@ def _provider_torch(providers: RuntimeProviders) -> Any | None:
         providers.route_4b,
         providers.retriever,
         providers.choice,
+        providers.planner,
     ]
     while pending:
         current = pending.pop()
         if current is None or id(current) in seen:
             continue
         seen.add(id(current))
-        torch = getattr(current, "_torch", None)
+        try:
+            torch = getattr(current, "_torch", None)
+        except Exception:
+            torch = None
         if torch is not None:
             return torch
-        pending.extend(_provider_children(current))
+        try:
+            pending.extend(_provider_children(current))
+        except Exception:
+            pass
     return None
 
 
 def _reset_runtime_resources(providers: RuntimeProviders) -> Any | None:
-    torch = _provider_torch(providers)
-    cuda = getattr(torch, "cuda", None)
-    if cuda is None or not bool(getattr(cuda, "is_available", lambda: False)()):
+    try:
+        torch = _provider_torch(providers)
+        cuda = getattr(torch, "cuda", None)
+        available = bool(getattr(cuda, "is_available", lambda: False)())
+    except Exception:
+        return torch if "torch" in locals() else None
+    if cuda is None or not available:
         return torch
     try:
         cuda.synchronize()
         cuda.reset_peak_memory_stats()
-    except (AttributeError, RuntimeError, TypeError):
+    except Exception:
         pass
     return torch
 
 
 def _capture_runtime_resources(torch: Any | None) -> dict[str, Any]:
-    from sat_rs_vlm.evaluation.performance import process_memory_snapshot_mb
+    try:
+        from sat_rs_vlm.evaluation.performance import process_memory_snapshot_mb
+    except Exception:
+        process_memory_snapshot_mb = None
 
-    cuda = getattr(torch, "cuda", None)
-    gpu_available = bool(
-        cuda is not None and bool(getattr(cuda, "is_available", lambda: False)())
-    )
+    try:
+        cuda = getattr(torch, "cuda", None)
+        gpu_available = bool(
+            cuda is not None and bool(getattr(cuda, "is_available", lambda: False)())
+        )
+    except Exception:
+        cuda = None
+        gpu_available = False
+    resource_errors: list[str] = []
     allocated: float | None = None
     reserved: float | None = None
     if gpu_available:
@@ -215,17 +254,23 @@ def _capture_runtime_resources(torch: Any | None) -> dict[str, Any]:
             cuda.synchronize()
             allocated = float(cuda.max_memory_allocated()) / (1024.0 * 1024.0)
             reserved = float(cuda.max_memory_reserved()) / (1024.0 * 1024.0)
-        except (AttributeError, RuntimeError, TypeError):
+        except Exception as exc:
             allocated = None
             reserved = None
-    memory = process_memory_snapshot_mb()
+            resource_errors.append(f"gpu:{type(exc).__name__}")
+    try:
+        memory = process_memory_snapshot_mb() if process_memory_snapshot_mb else {}
+    except Exception as exc:
+        memory = {}
+        resource_errors.append(f"rss:{type(exc).__name__}")
     return {
         "peak_gpu_allocated_mb": allocated,
         "peak_gpu_reserved_mb": reserved,
         "process_rss_mb": memory.get("rss_mb"),
         "process_peak_rss_mb": memory.get("os_peak_rss_mb"),
-        "gpu_status": "available" if gpu_available else "NOT_AVAILABLE",
+        "gpu_status": "available" if gpu_available else "NOT_AVAILABLE_FROM_BACKEND",
         "rss_status": "available" if memory.get("rss_mb") is not None else "NOT_AVAILABLE",
+        "telemetry_errors": resource_errors,
         "measurement_window": (
             "TaskGraphRuntime.run: before provider execution through final output; "
             "GPU peak counters reset at run start"
@@ -382,6 +427,9 @@ class TaskGraphRuntime:
         trace.telemetry["graph_execution_ms"] = (time.perf_counter() - graph_started) * 1000.0
         trace.telemetry["planner_status"] = planner_status
         trace.telemetry["planner_ms"] = planner_ms
+        planner_metadata = getattr(self.providers.planner, "last_metadata", None)
+        if isinstance(planner_metadata, Mapping):
+            trace.telemetry["planner_metadata"] = dict(planner_metadata)
         postprocess_started = time.perf_counter()
         choice_requested = graph.final.answer_type in {
             AnswerType.CHOICE_SINGLE,
@@ -821,7 +869,7 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
             return LazyQwenSemanticProvider(ModelConfig.model_validate(section), role=role)
         raise ValueError(f"unsupported semantic provider kind: {kind}")
 
-    semantic_2b = semantic_provider("semantic_2b", "general_2b")
+    semantic_2b = semantic_provider("semantic_2b", "semantic_2b")
     route_4b = semantic_provider("route_4b", "route_4b")
     choice_section = providers.get("choice", {"reuse": "semantic_2b"})
     if not isinstance(choice_section, dict):
@@ -907,11 +955,18 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
     planner_cfg = dict(providers.get("planner", {}))
     if planner_cfg:
         kind = str(planner_cfg.get("kind", "fixture"))
-        if kind != "fixture":
-            raise ValueError("only fixture planner is available until a checkpoint is selected")
-        fixture_path = Path(str(planner_cfg["fixture_file"]))
-        payload = json.loads(fixture_path.read_text(encoding="utf-8"))
-        planner = FixturePlannerProvider(payload)
+        if kind == "fixture":
+            fixture_path = Path(str(planner_cfg["fixture_file"]))
+            if not fixture_path.is_absolute():
+                candidate = Path.cwd() / fixture_path
+                repository_candidate = PROJECT_ROOT / fixture_path
+                fixture_path = candidate if candidate.is_file() else repository_candidate
+            payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+            planner = FixturePlannerProvider(payload)
+        elif kind == "qwen3vl_lora":
+            planner = Qwen3VLPlannerProvider(planner_cfg, role="planner_4b")
+        else:
+            raise ValueError(f"unsupported planner provider kind: {kind}")
 
     policy = DatasetExecutionPolicy.from_mapping(config.get("dataset_policy"))
     choice_config = ChoiceSystemConfig.from_mapping(config.get("choice"))

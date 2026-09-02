@@ -1559,7 +1559,7 @@ def run_evaluation(
             "visual semantic evaluation requires visual_semantic_gold_path"
         )
     visual_semantic_result: VisualSemanticEvaluationResult | None = None
-    if visual_semantic_gold_path is not None:
+    if visual_semantic_enabled:
         visual_semantic_result = evaluate_visual_semantics(
             evaluated_outputs,
             gold_csv=visual_semantic_gold_path,

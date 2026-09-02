@@ -21,6 +21,25 @@ dataset_policy:
     default: TASKGRAPH_UHR
 
 providers:
+  planner:
+    kind: qwen3vl_lora
+    role: planner_4b
+    model_id: ${QWEN3VL_4B_MODEL_DIR}
+    adapter_path: ${QWEN3VL_4B_PLANNER_LORA}
+    processor_id: ${QWEN3VL_4B_MODEL_DIR}
+    device: auto
+    dtype: bfloat16
+    local_files_only: true
+    trust_remote_code: true
+    max_new_tokens: 512
+    max_prompt_tokens: 2048
+    max_attempts: 2
+    constrained_decoding: true
+    constraint_top_k: 64
+    constraint_max_candidate_checks: 256
+    constraint_max_nodes: 24
+    repeat_guard_repetitions: 4
+    max_finish_node_tokens: 32
   detection:
     kind: tiled
     tile_size: 1333

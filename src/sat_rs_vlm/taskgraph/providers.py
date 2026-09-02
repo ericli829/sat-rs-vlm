@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import re
 import tempfile
@@ -290,6 +291,481 @@ class PlannerProvider(Protocol):
     provider_name: str
 
     def plan(self, request: PlannerRequest) -> TaskGraph: ...
+
+
+class PlannerFailedError(RuntimeError):
+    """A Planner exhausted its bounded generation and validation attempts."""
+
+    error_type = "planner_failed"
+    stage = "planner"
+
+
+class Qwen3VLPlannerProvider:
+    """Text-only Qwen3-VL 4B Planner with the validated lab DSL boundary."""
+
+    provider_name = "qwen3vl_lora"
+
+    def __init__(self, config: Mapping[str, Any], *, role: str = "planner_4b") -> None:
+        self.config = dict(config)
+        self.role = role
+        self.model_id = str(
+            self.config.get("model_id")
+            or self.config.get("base_model")
+            or self.config.get("model_dir")
+            or ""
+        ).strip()
+        self.adapter_path = str(
+            self.config.get("adapter_path")
+            or self.config.get("adapter")
+            or self.config.get("lora_path")
+            or ""
+        ).strip()
+        self.processor_id = str(
+            self.config.get("processor_id")
+            or self.config.get("processor_path")
+            or self.model_id
+        ).strip()
+        self.device = str(self.config.get("device", "auto"))
+        self.dtype = str(self.config.get("dtype", self.config.get("torch_dtype", "auto")))
+        self.local_files_only = bool(self.config.get("local_files_only", True))
+        self.max_new_tokens = int(self.config.get("max_new_tokens", 512))
+        self.max_prompt_tokens = int(self.config.get("max_prompt_tokens", 2048))
+        self.max_attempts = int(self.config.get("max_attempts", 2))
+        self.constraint_top_k = int(self.config.get("constraint_top_k", 64))
+        self.constraint_max_candidate_checks = int(
+            self.config.get("constraint_max_candidate_checks", 256)
+        )
+        self.constraint_max_nodes = int(self.config.get("constraint_max_nodes", 24))
+        self.repeat_guard_repetitions = int(self.config.get("repeat_guard_repetitions", 4))
+        self.max_finish_node_tokens = int(self.config.get("max_finish_node_tokens", 32))
+        self._model: Any | None = None
+        self._processor: Any | None = None
+        self._tokenizer: Any | None = None
+        self._torch: Any | None = None
+        self._load_info: dict[str, Any] = {}
+        self.last_metadata: dict[str, Any] = {}
+        self._validate_config()
+
+    @staticmethod
+    def _local_path(value: str, *, code: str, label: str) -> Path:
+        path = Path(value).expanduser().resolve()
+        if not path.is_dir():
+            raise FileNotFoundError(f"{code}: {label} directory does not exist: {path}")
+        return path
+
+    @staticmethod
+    def _model_stem(value: str | Path) -> str:
+        text = str(value).replace("\\", "/").rstrip("/").casefold()
+        return text.rsplit("/", 1)[-1]
+
+    def _validate_adapter_base(self, adapter_config: Mapping[str, Any]) -> None:
+        declared = adapter_config.get("base_model_name_or_path")
+        if not declared:
+            return
+        configured = self._model_stem(self.model_id)
+        adapter_base = self._model_stem(str(declared))
+        if configured == adapter_base or configured in adapter_base or adapter_base in configured:
+            return
+        raise ValueError(
+            "PLANNER_ADAPTER_BASE_MISMATCH: LoRA adapter targets "
+            f"{declared!r}, configured base is {self.model_id!r}"
+        )
+
+    def _validate_config(self) -> None:
+        if not self.model_id:
+            raise ValueError("MISSING_LOCAL_PLANNER_MODEL: planner model_id is required")
+        if not self.adapter_path:
+            raise ValueError("MISSING_LOCAL_PLANNER_ADAPTER: planner adapter_path is required")
+        if not self.local_files_only:
+            raise ValueError("Qwen3VL Planner requires local_files_only=true")
+        if self.max_new_tokens < 1 or self.max_prompt_tokens < 1:
+            raise ValueError("Planner token limits must be positive")
+        if not 1 <= self.max_attempts <= 3:
+            raise ValueError("Planner max_attempts must be between 1 and 3")
+        if self.constraint_top_k < 1 or (
+            self.constraint_max_candidate_checks < self.constraint_top_k
+        ):
+            raise ValueError("Planner constraint candidate limits are invalid")
+        if self.constraint_max_nodes < 1 or self.repeat_guard_repetitions < 1:
+            raise ValueError("Planner constraint node/repeat limits are invalid")
+        self.base_path = self._local_path(
+            self.model_id,
+            code="MISSING_LOCAL_PLANNER_MODEL",
+            label="Planner base model",
+        )
+        self.adapter_dir = self._local_path(
+            self.adapter_path,
+            code="MISSING_LOCAL_PLANNER_ADAPTER",
+            label="Planner LoRA adapter",
+        )
+        if self.processor_id:
+            self.processor_path = self._local_path(
+                self.processor_id,
+                code="MISSING_LOCAL_PLANNER_PROCESSOR",
+                label="Planner processor",
+            )
+        else:
+            self.processor_path = self.base_path
+        adapter_config_path = self.adapter_dir / "adapter_config.json"
+        try:
+            adapter_config = json.loads(adapter_config_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(
+                f"INVALID_LOCAL_PLANNER_ADAPTER: cannot read {adapter_config_path}: {exc}"
+            ) from exc
+        if not isinstance(adapter_config, Mapping):
+            raise ValueError("INVALID_LOCAL_PLANNER_ADAPTER: adapter_config.json must be an object")
+        self.adapter_config = dict(adapter_config)
+        self._validate_adapter_base(self.adapter_config)
+
+    @property
+    def load_info(self) -> dict[str, Any]:
+        return dict(self._load_info)
+
+    def _load(self) -> tuple[Any, Any, Any, Any]:
+        if self._model is not None and self._processor is not None:
+            return self._model, self._processor, self._tokenizer, self._torch
+        try:
+            import peft
+            import torch
+            import transformers
+        except (ImportError, OSError) as exc:  # pragma: no cover - optional dependency
+            raise RuntimeError(
+                "PLANNER_DEPENDENCY_MISSING: install the model extras for Qwen3-VL Planner"
+            ) from exc
+        from sat_rs_vlm.models.qwen3vl_loader import load_qwen3vl
+
+        torch_dtype = None if self.dtype == "auto" else getattr(torch, self.dtype, None)
+        if self.dtype != "auto" and torch_dtype is None:
+            raise ValueError(f"Unsupported Planner torch dtype: {self.dtype}")
+        model_kwargs: dict[str, Any] = {
+            "trust_remote_code": bool(self.config.get("trust_remote_code", True)),
+            "local_files_only": True,
+            "dtype": torch_dtype if torch_dtype is not None else "auto",
+        }
+        if self.device == "auto":
+            model_kwargs["device_map"] = "auto"
+        if self.config.get("attn_implementation"):
+            model_kwargs["attn_implementation"] = self.config["attn_implementation"]
+        model, processor = load_qwen3vl(
+            modules={"torch": torch, "transformers": transformers, "peft": peft},
+            base_model=str(self.base_path),
+            processor_source=str(self.processor_path),
+            model_kwargs=model_kwargs,
+            processor_kwargs={
+                "trust_remote_code": model_kwargs["trust_remote_code"],
+                "local_files_only": True,
+            },
+            adapter_path=str(self.adapter_dir),
+        )
+        tokenizer = getattr(processor, "tokenizer", processor)
+        if hasattr(tokenizer, "padding_side"):
+            tokenizer.padding_side = "left"
+        model_device = getattr(model, "device", None)
+        if model_device is None:
+            try:
+                model_device = next(model.parameters()).device
+            except (AttributeError, StopIteration):
+                model_device = self.device
+        self._model, self._processor, self._tokenizer, self._torch = (
+            model,
+            processor,
+            tokenizer,
+            torch,
+        )
+        self._load_info = {
+            "base_model_path": str(self.base_path),
+            "adapter_path": str(self.adapter_dir),
+            "adapter_config": dict(self.adapter_config),
+            "model_class": type(model).__name__,
+            "dtype": self.dtype,
+            "device": str(model_device),
+            "role": self.role,
+        }
+        return model, processor, tokenizer, torch
+
+    @staticmethod
+    def _question_type(value: str, choices: Sequence[str]) -> str:
+        normalized = str(value).upper()
+        if choices:
+            return (
+                "MULTIPLE_CHOICE_MULTI"
+                if normalized.endswith("_MULTI") or normalized == "MULTI"
+                else "MULTIPLE_CHOICE_SINGLE"
+            )
+        return normalized if normalized in {"FREE_FORM", "BOOLEAN", "INTEGER"} else "FREE_FORM"
+
+    @staticmethod
+    def _messages(
+        request: PlannerRequest,
+        system_prompt: str,
+        *,
+        previous_prediction: str | None = None,
+        diagnostic: str | None = None,
+    ) -> list[dict[str, str]]:
+        inputs = {
+            str(key).removeprefix("$"): {
+                "type": "image",
+                "uri_or_key": value.uri_or_key,
+            }
+            for key, value in request.inputs.items()
+        }
+        payload = {
+            "question": request.question,
+            "question_type": Qwen3VLPlannerProvider._question_type(
+                request.question_type, request.choices
+            ),
+            "choices": list(request.choices) if request.choices else None,
+            "inputs": inputs,
+        }
+        messages: list[dict[str, str]] = [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": json.dumps(
+                    payload,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+            },
+        ]
+        if previous_prediction is not None:
+            messages.append({"role": "assistant", "content": previous_prediction.strip()})
+        if diagnostic is not None:
+            messages.append({"role": "user", "content": diagnostic})
+        return messages
+
+    def _system_prompt(self) -> str:
+        configured = self.config.get("system_prompt_path") or self.config.get("prompt_path")
+        path = (
+            Path(str(configured)).expanduser()
+            if configured
+            else Path(__file__).resolve().parents[3]
+            / "taskgraph_lab"
+            / "prompts"
+            / "planner_student_system_prompt.txt"
+        )
+        if not path.is_absolute():
+            path = Path(__file__).resolve().parents[3] / path
+        if not path.is_file():
+            raise FileNotFoundError(f"PLANNER_SYSTEM_PROMPT_MISSING: {path}")
+        prompt = path.read_text(encoding="utf-8").strip()
+        if not prompt:
+            raise ValueError(f"PLANNER_SYSTEM_PROMPT_EMPTY: {path}")
+        return prompt
+
+    def _input_device(self, model: Any, torch: Any) -> Any:
+        if self.device != "auto":
+            return torch.device(self.device)
+        model_device = getattr(model, "device", None)
+        if model_device is not None and str(model_device) != "meta":
+            return model_device
+        try:
+            return next(model.parameters()).device
+        except (AttributeError, StopIteration):
+            return torch.device("cpu")
+
+    def _generate(
+        self,
+        request: PlannerRequest,
+        messages: list[dict[str, str]],
+    ) -> tuple[str, dict[str, Any]]:
+        model, processor, tokenizer, torch = self._load()
+        apply_chat_template = getattr(processor, "apply_chat_template", None)
+        if not callable(apply_chat_template):
+            raise RuntimeError("PLANNER_PROCESSOR_INVALID: processor lacks apply_chat_template")
+        template_kwargs = {
+            "tokenize": False,
+            "add_generation_prompt": True,
+            "enable_thinking": False,
+        }
+        try:
+            prompt = str(apply_chat_template(messages, **template_kwargs))
+        except TypeError:
+            template_kwargs.pop("enable_thinking")
+            prompt = str(apply_chat_template(messages, **template_kwargs))
+        encoded = processor(
+            text=[prompt],
+            images=None,
+            videos=None,
+            padding=True,
+            truncation=True,
+            max_length=self.max_prompt_tokens,
+            return_tensors="pt",
+        )
+        input_device = self._input_device(model, torch)
+        if hasattr(encoded, "to"):
+            encoded = encoded.to(input_device)
+        else:
+            encoded = {
+                key: value.to(input_device) if hasattr(value, "to") else value
+                for key, value in dict(encoded).items()
+            }
+        input_ids = encoded["input_ids"]
+        prompt_width = int(input_ids.shape[1])
+        pad_token_id = getattr(tokenizer, "pad_token_id", None)
+        if pad_token_id is None:
+            pad_token_id = getattr(tokenizer, "eos_token_id", None)
+        if pad_token_id is None:
+            raise RuntimeError("PLANNER_TOKENIZER_INVALID: tokenizer lacks pad/eos token")
+        from taskgraph_lab.evaluation.constrained_decoding import GreedyDSLLogitsProcessor
+
+        constraint = GreedyDSLLogitsProcessor(
+            tokenizer,
+            prompt_width=prompt_width,
+            image_refs_by_row=[
+                tuple(f"${str(key).removeprefix('$')}" for key in request.inputs)
+            ],
+            initial_top_k=self.constraint_top_k,
+            max_candidate_checks=self.constraint_max_candidate_checks,
+            max_nodes=self.constraint_max_nodes,
+            repeat_guard_repetitions=self.repeat_guard_repetitions,
+            max_finish_node_tokens=self.max_finish_node_tokens,
+        )
+        started = time.perf_counter()
+        with torch.inference_mode():
+            generated = model.generate(
+                **encoded,
+                do_sample=False,
+                num_beams=1,
+                max_new_tokens=self.max_new_tokens,
+                pad_token_id=int(pad_token_id),
+                use_cache=True,
+                logits_processor=[constraint],
+            )
+        continuation = generated[0, prompt_width:]
+        if hasattr(processor, "decode"):
+            text = str(
+                processor.decode(
+                    continuation,
+                    skip_special_tokens=True,
+                    clean_up_tokenization_spaces=False,
+                )
+            ).strip()
+        else:
+            text = str(
+                tokenizer.decode(
+                    continuation.tolist(),
+                    skip_special_tokens=True,
+                    clean_up_tokenization_spaces=False,
+                )
+            ).strip()
+        metadata = constraint.diagnostics(
+            0,
+            continuation,
+            max_new_tokens=self.max_new_tokens,
+            pad_token_id=int(pad_token_id),
+        )
+        metadata.update(
+            {
+                "latency_ms": (time.perf_counter() - started) * 1000.0,
+                "prompt_tokens": int(encoded.get("attention_mask", input_ids).sum().item()),
+                "generated_tokens": int((continuation != int(pad_token_id)).sum().item()),
+                "constrained": True,
+                "vision_inputs": 0,
+            }
+        )
+        return text, metadata
+
+    @staticmethod
+    def _to_production_graph(text: str, request: PlannerRequest) -> TaskGraph:
+        from taskgraph_lab.taskgraph.canonicalize import canonicalize_target
+        from taskgraph_lab.taskgraph.dsl import parse_taskgraph_dsl
+
+        target = parse_taskgraph_dsl(text)
+        canonical = canonicalize_target(target)
+        final = dict(canonical["final"])
+        final.setdefault("question", "")
+        payload = {
+            "version": "taskgraph-v1.1",
+            "question": request.question,
+            "question_type": Qwen3VLPlannerProvider._question_type(
+                request.question_type, request.choices
+            ),
+            "choices": list(request.choices) if request.choices else None,
+            "inputs": {
+                str(key).removeprefix("$"): {
+                    "type": "image",
+                    "uri_or_key": value.uri_or_key,
+                }
+                for key, value in request.inputs.items()
+            },
+            **canonical,
+            "final": final,
+        }
+        return TaskGraph.model_validate(payload)
+
+    def plan(self, request: PlannerRequest) -> TaskGraph:
+        if not request.question.strip():
+            raise ValueError("Planner question must not be empty")
+        system_prompt = self._system_prompt()
+        attempts: list[dict[str, Any]] = []
+        messages = self._messages(request, system_prompt)
+        for attempt_number in range(1, self.max_attempts + 1):
+            prediction, generation_metadata = self._generate(request, messages)
+            try:
+                graph = self._to_production_graph(prediction, request)
+            except Exception as exc:
+                attempts.append(
+                    {
+                        "attempt": attempt_number,
+                        "prediction": prediction,
+                        "termination_reason": "planner_failed",
+                        "error_type": type(exc).__name__,
+                        "error": str(exc),
+                        **generation_metadata,
+                    }
+                )
+                if attempt_number >= self.max_attempts:
+                    self.last_metadata = {
+                        "role": self.role,
+                        "provider": self.provider_name,
+                        "status": "planner_failed",
+                        "attempts": attempts,
+                        "load": self.load_info,
+                    }
+                    raise PlannerFailedError(
+                        "planner_failed for sample "
+                        f"{request.sample_id or request.question!r}: {exc}"
+                    ) from exc
+                messages = self._messages(
+                    request,
+                    system_prompt,
+                    previous_prediction=prediction,
+                    diagnostic=(
+                        "Previous plan is invalid.\n\nError:\n"
+                        f"{type(exc).__name__}: {exc}\n\n"
+                        "Regenerate the complete valid TaskGraph DSL only."
+                    ),
+                )
+                continue
+            attempts.append(
+                {
+                    "attempt": attempt_number,
+                    "termination_reason": "final",
+                    **generation_metadata,
+                }
+            )
+            self.last_metadata = {
+                "role": self.role,
+                "provider": self.provider_name,
+                "status": "executed",
+                "attempts": attempts,
+                "load": self.load_info,
+                "vision_inputs": 0,
+            }
+            return graph
+        raise AssertionError("Planner generated no attempts")
+
+    def close(self) -> None:
+        close = getattr(self._model, "close", None)
+        if callable(close):
+            close()
+        self._model = None
+        self._processor = None
+        self._tokenizer = None
+        self._torch = None
 
 
 @dataclass(frozen=True)

@@ -3,6 +3,11 @@
 from .answerability import AnswerabilityConfig, EvidenceSufficiencyExecutor
 from .choice import ChoiceRequest, ChoiceResolver
 from .choice_config import ChoiceSystemConfig
+from .evaluation_runner import (
+    TaskGraphEvaluationConfig,
+    run_taskgraph_evaluation,
+    runtime_request_from_sample,
+)
 from .execution_plan import FinalChoiceFusionConfig
 from .executor import CapabilityRouter, GraphExecutor, TaskGraphExecutionError
 from .input_composer import InputComposer
@@ -31,6 +36,7 @@ __all__ = [
     "ChoiceResolver",
     "ChoiceScoreResult",
     "ChoiceSystemConfig",
+    "TaskGraphEvaluationConfig",
     "DatasetExecutionPolicy",
     "ExecutionMode",
     "ExecutionModeRouter",
@@ -52,4 +58,6 @@ __all__ = [
     "fake_runtime",
     "parse_taskgraph",
     "runtime_from_config",
+    "run_taskgraph_evaluation",
+    "runtime_request_from_sample",
 ]

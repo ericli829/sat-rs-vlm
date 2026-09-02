@@ -60,6 +60,8 @@ def adaptive_beam_select(
     cumulative_mass: float,
     max_beam: int,
     redundancy_weight: float,
+    score_threshold: float | None = None,
+    min_beam: int = 1,
 ) -> BeamSelection:
     if len(regions) != len(scores) or not regions:
         raise LocatorError("adaptive beam requires equally sized non-empty regions and scores")
@@ -67,8 +69,12 @@ def adaptive_beam_select(
         raise LocatorError("cumulative_mass must be in (0, 1]")
     if max_beam < 1:
         raise LocatorError("max_beam must be positive")
+    if min_beam < 1 or min_beam > max_beam:
+        raise LocatorError("min_beam must be between 1 and max_beam")
     if redundancy_weight < 0.0:
         raise LocatorError("redundancy_weight must be non-negative")
+    if score_threshold is not None and not math.isfinite(score_threshold):
+        raise LocatorError("score_threshold must be finite when configured")
     logits = standardized_logits(scores)
     probabilities = softmax_probabilities(logits, temperature)
     remaining = set(range(len(regions)))
@@ -92,7 +98,12 @@ def adaptive_beam_select(
         selected.append(chosen)
         remaining.remove(chosen)
         cumulative += probabilities[chosen]
-        if cumulative >= cumulative_mass:
+        if len(selected) < min(min_beam, len(regions)):
+            continue
+        if score_threshold is not None:
+            if not any(scores[index] >= score_threshold for index in remaining):
+                break
+        elif cumulative >= cumulative_mass:
             break
     return BeamSelection(
         selected_indices=tuple(selected),

@@ -5,6 +5,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from sat_rs_vlm.evaluation.comparison import ComparisonError, compare_evaluations
 from sat_rs_vlm.evaluation.parsers import parse_change_prediction
@@ -71,6 +72,38 @@ class LevirParserAndRoutingTests(unittest.TestCase):
 
 
 class LevirEndToEndTests(unittest.TestCase):
+    def test_disabled_visual_semantic_skips_gold_evaluation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            predictions = root / "predictions.jsonl"
+            write_jsonl(
+                predictions,
+                [
+                    {
+                        "id": "sample-1",
+                        "task_type": "change_detection",
+                        "prediction": "unchanged",
+                        "reference": "no change has occurred",
+                        "metadata": {"dataset": "LEVIR-CC", "changeflag": 0},
+                    }
+                ],
+            )
+            with patch("sat_rs_vlm.evaluation.runner.evaluate_visual_semantics") as evaluate:
+                outputs = run_evaluation(
+                    predictions,
+                    root / "results",
+                    contract_path=CONTRACT,
+                    strict=True,
+                    protected_repository=root / "protected",
+                    semantic_enabled=False,
+                    visual_semantic_enabled=False,
+                    visual_semantic_gold_path=root / "missing-gold.csv",
+                )
+
+            evaluate.assert_not_called()
+            manifest = json.loads(outputs["manifest"].read_text(encoding="utf-8"))
+            self.assertFalse(manifest["visual_semantic_evaluation_enabled"])
+
     def test_visual_semantic_profile_runs_through_unified_evaluation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
