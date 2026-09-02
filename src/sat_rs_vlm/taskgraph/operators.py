@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, field, replace
 from math import hypot
 from statistics import median
@@ -29,6 +30,7 @@ from .providers import (
     VLMResult,
     parse_selection_indices,
 )
+from .referent_refinement import ReferentRefiner
 from .runtime_types import (
     Answer,
     Boolean,
@@ -71,6 +73,9 @@ class OperatorContext:
     choices: tuple[str, ...]
     composer: InputComposer
     execution_hint: NodeExecutionHint | None = None
+    final_sources: tuple[str, ...] = ()
+    final_question: str | None = None
+    graph_nodes: tuple[GraphNode, ...] = ()
 
 
 class OperatorExecutor(Protocol):
@@ -674,6 +679,7 @@ class LocateExecutor:
         *,
         semantic_categories: set[str] | None = None,
         capability_classifier: TargetCapabilityClassifier | None = None,
+        refiner: ReferentRefiner | None = None,
     ) -> None:
         self.detection = detection
         self.retriever = retriever
@@ -681,7 +687,58 @@ class LocateExecutor:
         self.capability_classifier = capability_classifier or TargetCapabilityClassifier(
             legacy_region_overrides=self.semantic_categories
         )
+        self.refiner = refiner
         self.provider_name = "locate"
+
+    @staticmethod
+    def _references_node(value: object, node_id: str) -> bool:
+        if isinstance(value, str):
+            return value == f"${node_id}"
+        return isinstance(value, (list, tuple)) and f"${node_id}" in value
+
+    @classmethod
+    def _needs_refinement(
+        cls, node: GraphNode, target: TargetSpec, context: OperatorContext
+    ) -> tuple[bool, str]:
+        for graph_node in context.graph_nodes:
+            if graph_node.op in {
+                OperatorName.SELECT,
+                OperatorName.GROUP,
+                OperatorName.COUNT,
+                OperatorName.RELATION,
+            } and any(
+                cls._references_node(value, node.id) for value in graph_node.inputs.values()
+            ):
+                return False, f"set_aware_consumer:{graph_node.op.value}"
+        if f"${node.id}" in context.final_sources:
+            question = (context.final_question or context.question).casefold()
+            if re.search(
+                r"\bhow many\b|\bnumber of\b|\bcount\b|多少|几(?:个|艘|架|辆|座|条)",
+                question,
+            ):
+                return False, "multi_instance_question"
+            return True, "direct_final_visual_source"
+        if target.attributes:
+            return True, "target_attributes"
+        for graph_node in context.graph_nodes:
+            if graph_node.op in {
+                OperatorName.ATTRIBUTE,
+                OperatorName.CLASSIFY,
+                OperatorName.MULTILABEL_CLASSIFY,
+                OperatorName.MOTION,
+            } and any(
+                cls._references_node(value, node.id) for value in graph_node.inputs.values()
+            ):
+                return True, f"singular_consumer:{graph_node.op.value}"
+        return False, "set_aware_or_non_singular_consumer"
+
+    @staticmethod
+    def _primary_resolution_status(candidate_count: int) -> str:
+        if candidate_count == 0:
+            return "EMPTY"
+        if candidate_count == 1:
+            return "PRIMARY_RESOLVED"
+        return "MULTIPLE_VALID"
 
     def execute(
         self,
@@ -715,8 +772,78 @@ class LocateExecutor:
                     **decision_metadata,
                 },
             )
+            should_refine, trigger_reason = self._needs_refinement(node, target, context)
+            primary_candidate_count = len(entities.entities)
+            primary_resolution_status = self._primary_resolution_status(primary_candidate_count)
+            refinement_metadata: dict[str, Any] = {
+                "primary_provider": result.provider,
+                "refinement_applied": False,
+                "refinement_method": "none",
+                "candidate_count_before_refinement": primary_candidate_count,
+                "candidate_count_after_refinement": primary_candidate_count,
+                "selected_candidate_ids": [
+                    entity.provenance.get("candidate_id", f"candidate_{index + 1:04d}")
+                    for index, entity in enumerate(entities.entities)
+                ],
+                "resolution_status": primary_resolution_status,
+                "refinement_status": primary_resolution_status,
+                "refinement_trigger": trigger_reason,
+                "fallback_triggered": False,
+                "fallback_reason": None,
+                "fallback_provider": None,
+                "fallback_scope": None,
+            }
+            value = entities
+            if (
+                not entities.entities
+                and should_refine
+                and self.refiner is not None
+                and self.refiner.config.enabled
+            ):
+                fallback = self.refiner.visual_fallback(
+                    scope,
+                    question=context.final_question or context.question,
+                    target=target,
+                    reason="EMPTY_RETRIEVER_RESULTS",
+                )
+                value = fallback.entities
+                refinement_metadata.update(
+                    {
+                        **fallback.metadata,
+                        "fallback_triggered": True,
+                        "fallback_reason": "EMPTY_RETRIEVER_RESULTS",
+                        "fallback_provider": "semantic_2b",
+                        "fallback_scope": fallback.metadata.get("fallback_scope"),
+                        "final_resolution_status": "SEMANTIC_FALLBACK_RESOLVED",
+                        "resolution_status": "SEMANTIC_FALLBACK_RESOLVED",
+                        "refinement_status": "SEMANTIC_FALLBACK_RESOLVED",
+                        "candidate_count_after_refinement": len(value.entities),
+                    }
+                )
+            refinement_metadata.setdefault(
+                "final_resolution_status", refinement_metadata["resolution_status"]
+            )
+            value.provenance.update(
+                {
+                    "primary_provider": result.provider,
+                    "primary_candidate_count": primary_candidate_count,
+                    "candidate_count_before_refinement": primary_candidate_count,
+                    "candidate_count_after_refinement": len(value.entities),
+                    "refinement_applied": refinement_metadata["refinement_applied"],
+                    "refinement_status": refinement_metadata["refinement_status"],
+                    "resolution_status": refinement_metadata["resolution_status"],
+                    "fallback_triggered": refinement_metadata["fallback_triggered"],
+                    "fallback_reason": refinement_metadata["fallback_reason"],
+                    "fallback_provider": refinement_metadata["fallback_provider"],
+                    "fallback_scope": refinement_metadata["fallback_scope"],
+                    "final_resolution_status": refinement_metadata[
+                        "final_resolution_status"
+                    ],
+                    "refinement": refinement_metadata,
+                }
+            )
             return OperatorOutcome(
-                entities,
+                value,
                 result.provider,
                 {
                     **decision_metadata,
@@ -725,11 +852,118 @@ class LocateExecutor:
                     "activated_provider": result.provider,
                     "stage": "retriever",
                     "provider_metadata": dict(result.metadata),
+                    "primary_provider": result.provider,
+                    "primary_candidate_count": primary_candidate_count,
+                    "refinement_applied": refinement_metadata["refinement_applied"],
+                    "refinement_status": refinement_metadata["refinement_status"],
+                    "fallback_triggered": refinement_metadata["fallback_triggered"],
+                    "fallback_reason": refinement_metadata["fallback_reason"],
+                    "fallback_provider": refinement_metadata["fallback_provider"],
+                    "fallback_scope": refinement_metadata["fallback_scope"],
+                    "final_resolution_status": refinement_metadata[
+                        "final_resolution_status"
+                    ],
+                    "referent_refinement": refinement_metadata,
                 },
             )
         detected = self.detection.detect(DetectionRequest(scope, target, "LOCATE"))
+        should_refine, trigger_reason = self._needs_refinement(node, target, context)
+        before_entities = detected.detections.entities
+        refinement_metadata: dict[str, Any] = {
+            "primary_provider": detected.provider,
+            "refinement_applied": False,
+            "refinement_method": "none",
+            "candidate_count_before_refinement": len(before_entities),
+            "candidate_count_after_refinement": len(before_entities),
+            "selected_candidate_ids": [
+                entity.provenance.get("candidate_id", f"candidate_{index + 1:04d}")
+                for index, entity in enumerate(before_entities)
+            ],
+            "resolution_status": self._primary_resolution_status(len(before_entities)),
+            "refinement_status": self._primary_resolution_status(len(before_entities)),
+            "refinement_trigger": trigger_reason,
+            "fallback_triggered": False,
+            "fallback_reason": None,
+            "fallback_provider": None,
+            "fallback_scope": None,
+        }
+        value = detected.detections
+        if (
+            not before_entities
+            and should_refine
+            and self.refiner is not None
+            and self.refiner.config.enabled
+        ):
+            fallback = self.refiner.visual_fallback(
+                scope,
+                question=context.final_question or context.question,
+                target=target,
+                reason="EMPTY_PROPOSALS",
+            )
+            value = fallback.entities
+            refinement_metadata = {
+                **refinement_metadata,
+                **fallback.metadata,
+                "fallback_triggered": True,
+                "fallback_reason": "EMPTY_PROPOSALS",
+                "fallback_provider": "semantic_2b",
+                "fallback_scope": fallback.metadata.get("fallback_scope"),
+                "final_resolution_status": "SEMANTIC_FALLBACK_RESOLVED",
+                "resolution_status": "SEMANTIC_FALLBACK_RESOLVED",
+                "refinement_status": "SEMANTIC_FALLBACK_RESOLVED",
+                "candidate_count_after_refinement": len(value.entities),
+            }
+        elif should_refine and self.refiner is not None:
+            refined = self.refiner.refine(
+                detected.detections,
+                question=context.final_question or context.question,
+                target=target,
+                trigger_reason=trigger_reason,
+            )
+            value = refined.entities
+            refinement_metadata = {
+                **refinement_metadata,
+                **refined.metadata,
+                "refinement_applied": bool(refined.metadata.get("applied", False)),
+                "refinement_method": refined.metadata.get("method", "none"),
+                "candidate_count_after_refinement": len(value.entities),
+                "refinement_status": refined.metadata.get(
+                    "resolution_status", refinement_metadata["resolution_status"]
+                ),
+            }
+            if value.provenance.get("fallback_required"):
+                refinement_metadata.update(
+                    {
+                        "fallback_triggered": True,
+                        "fallback_reason": refined.metadata.get(
+                            "failure_reason", "REFERENT_UNRESOLVED"
+                        ),
+                        "fallback_provider": "semantic_2b",
+                        "fallback_scope": "bounded_candidate_set",
+                    }
+                )
+        if "final_resolution_status" not in refinement_metadata:
+            refinement_metadata["final_resolution_status"] = refinement_metadata[
+                "resolution_status"
+            ]
+        value.provenance.update(
+            {
+                "proposal_query": target.category,
+                "original_target_spec": {
+                    "category": target.category,
+                    "attributes": dict(target.attributes),
+                },
+                "candidate_count_before_refinement": len(before_entities),
+                "candidate_count_after_refinement": len(value.entities),
+                "refinement_applied": refinement_metadata["refinement_applied"],
+                "refinement_method": refinement_metadata["refinement_method"],
+                "resolution_status": refinement_metadata["resolution_status"],
+                "final_resolution_status": refinement_metadata["final_resolution_status"],
+                "refinement": refinement_metadata,
+            }
+        )
         return OperatorOutcome(
-            detected.detections,
+            value,
             detected.provider,
             {
                 **decision_metadata,
@@ -738,6 +972,16 @@ class LocateExecutor:
                 "activated_provider": detected.provider,
                 "stage": "detector",
                 "provider_metadata": dict(detected.metadata),
+                "primary_provider": detected.provider,
+                "primary_candidate_count": len(before_entities),
+                "refinement_applied": refinement_metadata["refinement_applied"],
+                "refinement_status": refinement_metadata["refinement_status"],
+                "fallback_triggered": refinement_metadata["fallback_triggered"],
+                "fallback_reason": refinement_metadata["fallback_reason"],
+                "fallback_provider": refinement_metadata["fallback_provider"],
+                "fallback_scope": refinement_metadata["fallback_scope"],
+                "final_resolution_status": refinement_metadata["final_resolution_status"],
+                "referent_refinement": refinement_metadata,
             },
         )
 

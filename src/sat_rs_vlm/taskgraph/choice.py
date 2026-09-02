@@ -19,6 +19,7 @@ from .runtime_types import (
     Boolean,
     ChoiceResult,
     ChoiceScoreResult,
+    EntitySet,
     Label,
     LabelSet,
     RuntimeObject,
@@ -26,6 +27,7 @@ from .runtime_types import (
     ScalarInt,
 )
 from .schema import AnswerType
+from .spatial_choice import SpatialPositionChoiceResolver
 
 
 @dataclass(frozen=True)
@@ -60,6 +62,7 @@ class ChoiceResolver:
         self.config = config or ChoiceSystemConfig()
         self.last_model_input: ModelInput | None = None
         self.last_score_result: ChoiceScoreResult | None = None
+        self.spatial_resolver = SpatialPositionChoiceResolver()
 
     @staticmethod
     def _choice_ids(options: tuple[str, ...]) -> tuple[str, ...]:
@@ -200,6 +203,63 @@ class ChoiceResolver:
             ),
         )
 
+    @staticmethod
+    def _needs_semantic_fallback(source: RuntimeObject) -> bool:
+        return isinstance(source, EntitySet) and bool(
+            source.provenance.get("fallback_required")
+            or source.provenance.get("resolution_status") == "UNRESOLVED"
+            or source.provenance.get("resolution_status") == "SEMANTIC_FALLBACK_RESOLVED"
+        )
+
+    def _semantic_fallback_score(self, request: ChoiceRequest) -> ChoiceScoreResult | None:
+        if len(request.sources) != 1 or not self._needs_semantic_fallback(request.sources[0]):
+            return None
+        model_input = self.composer.compose_named(
+            {"candidates": request.sources[0]},
+            question=(
+                "Use only the supplied bounded visual candidates to resolve the remaining "
+                "referring expression and answer the residual question. Do not search outside "
+                "the supplied candidates and do not infer a candidate that is not shown.\n\n"
+                f"Original question: {request.question or ''}\n"
+                "The candidate resolver could not establish a reliable singleton. "
+                "Choose the answer option supported by the supplied candidates."
+            ),
+            options=request.options,
+        )
+        self.last_model_input = model_input
+        scorer = getattr(self.provider, "reason_and_choose", None)
+        if not callable(scorer):
+            raise CachedChoiceUnavailableError(
+                "semantic fallback provider does not implement cached choice scoring"
+            )
+        scored = cast(
+            ChoiceScoreResult,
+            scorer(
+                ChoiceScoringRequest(
+                    model_input=model_input,
+                    answer_type=request.answer_type.value,
+                    choice_ids=self._choice_ids(request.options),
+                    option_texts=request.options,
+                    single_choice_suffix=self.config.single_choice_suffix,
+                    multi_verify_template=self.config.multi_verify_template,
+                    multi_select_threshold=self.config.multi_select_threshold,
+                    purpose="semantic_candidate_fallback",
+                )
+            ),
+        )
+        return replace(
+            scored,
+            metadata={
+                **scored.metadata,
+                "fallback_triggered": True,
+                "fallback_reason": "UNRESOLVED_REFERENT",
+                "fallback_provider": scored.provider,
+                "fallback_scope": "bounded_candidate_set",
+                "final_resolution_status": "SEMANTIC_FALLBACK_RESOLVED",
+                "fallback_input_metadata": dict(model_input.metadata),
+            },
+        )
+
     def _to_result(self, score: ChoiceScoreResult) -> ChoiceResult:
         empty_status = None
         if score.answer_type == "CHOICE_MULTI" and not score.selected_ids:
@@ -224,6 +284,25 @@ class ChoiceResolver:
         )
 
     def resolve(self, request: ChoiceRequest) -> ChoiceResult:
+        fallback_score = self._semantic_fallback_score(request)
+        if fallback_score is not None:
+            self.last_score_result = fallback_score
+            return self._to_result(fallback_score)
+        spatial_score = self.spatial_resolver.resolve(
+            request.sources,
+            request.options,
+            question=request.question,
+        )
+        if spatial_score is not None:
+            self.last_model_input = ModelInput(
+                visual_inputs=(),
+                structured_context="",
+                question=self._reasoning_question(request),
+                options=request.options,
+                metadata=dict(spatial_score.metadata),
+            )
+            self.last_score_result = spatial_score
+            return self._to_result(spatial_score)
         score = self._structured_score(request) or self._precomputed_score(request)
         if score is None:
             self.last_model_input = self.composer.compose(

@@ -871,9 +871,20 @@ class ProposalDetectionAdapter:
                     crop = source.convert("RGB").crop(request.scope.bbox_xyxy_global)
                     detector_path = Path(temp_dir) / "scope.png"
                     crop.save(detector_path)
-            result = self._provider.predict(detector_path, request.target.phrase())
+            proposal_query = request.target.category.strip()
+            result = self._provider.predict(detector_path, proposal_query)
+        result_metadata = dict(result.metadata)
+        result_metadata.update(
+            {
+                "proposal_query": proposal_query,
+                "original_target_spec": {
+                    "category": request.target.category,
+                    "attributes": dict(request.target.attributes),
+                },
+            }
+        )
         entities = []
-        for box, score in zip(result.boxes_xyxy, result.scores, strict=True):
+        for index, (box, score) in enumerate(zip(result.boxes_xyxy, result.scores, strict=True)):
             global_box = (
                 float(box[0]) + offset[0],
                 float(box[1]) + offset[1],
@@ -888,6 +899,7 @@ class ProposalDetectionAdapter:
                         provenance={
                             "provider": result.provider,
                             "coordinate_mode": "absolute_original_pixel_xyxy",
+                            "candidate_id": f"candidate_{index + 1:04d}",
                         },
                     ),
                     label=request.target.category,
@@ -895,7 +907,8 @@ class ProposalDetectionAdapter:
                     provenance={
                         "provider": result.provider,
                         "model_id": result.model_id,
-                        "scale_tile_metadata": dict(result.metadata),
+                        "candidate_id": f"candidate_{index + 1:04d}",
+                        "scale_tile_metadata": result_metadata,
                     },
                 )
             )
@@ -905,12 +918,12 @@ class ProposalDetectionAdapter:
                 provenance={
                     "provider": result.provider,
                     "model_id": result.model_id,
-                    "proposal_metadata": dict(result.metadata),
+                    "proposal_metadata": result_metadata,
                 },
             ),
             latency_ms=(time.perf_counter() - started) * 1000.0,
             provider=result.provider,
-            metadata=dict(result.metadata),
+            metadata=result_metadata,
         )
 
     def close(self) -> None:

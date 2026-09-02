@@ -96,7 +96,17 @@ class InputComposer:
             raise FileNotFoundError(f"visual source does not exist: {source_path}")
         output = self._next_path()
         with Image.open(source_path) as source:
-            source.convert("RGB").crop(region.bbox_xyxy_global).save(output)
+            canvas = source.convert("RGB").crop(region.bbox_xyxy_global)
+            resize_scale = min(1.0, self.entity_set_max_side / float(max(canvas.size)))
+            if resize_scale < 1.0:
+                canvas = canvas.resize(
+                    (
+                        max(1, round(canvas.size[0] * resize_scale)),
+                        max(1, round(canvas.size[1] * resize_scale)),
+                    ),
+                    Image.Resampling.LANCZOS,
+                )
+            canvas.save(output)
         return str(output)
 
     @staticmethod
@@ -165,16 +175,26 @@ class InputComposer:
                 min(height, math.ceil(y1 + halo)),
             )
             canvas = source.convert("RGB").crop(canvas_box)
+        source_canvas_size = canvas.size
+        resize_scale = min(1.0, self.entity_set_max_side / float(max(canvas.size)))
+        if resize_scale < 1.0:
+            canvas = canvas.resize(
+                (
+                    max(1, round(canvas.size[0] * resize_scale)),
+                    max(1, round(canvas.size[1] * resize_scale)),
+                ),
+                Image.Resampling.LANCZOS,
+            )
         draw = ImageDraw.Draw(canvas)
         candidate_mapping: dict[str, object] = {}
         role_mapping: dict[str, list[dict[str, object]]] = {}
         for role, index, region, entity in items:
             global_box = region.bbox_xyxy_global
             local_box = (
-                global_box[0] - canvas_box[0],
-                global_box[1] - canvas_box[1],
-                global_box[2] - canvas_box[0],
-                global_box[3] - canvas_box[1],
+                (global_box[0] - canvas_box[0]) * resize_scale,
+                (global_box[1] - canvas_box[1]) * resize_scale,
+                (global_box[2] - canvas_box[0]) * resize_scale,
+                (global_box[3] - canvas_box[1]) * resize_scale,
             )
             if role == "candidates":
                 marker = self._candidate_id(index)
@@ -188,7 +208,7 @@ class InputComposer:
             else:
                 marker = "REFERENCE" if index == 0 else f"REFERENCE_{index + 1}"
                 color = "blue"
-            draw.rectangle(local_box, outline=color, width=4)
+            draw.rectangle(local_box, outline=color, width=max(2, round(4 * resize_scale)))
             draw.text((local_box[0] + 2, local_box[1] + 2), marker, fill=color)
             entry: dict[str, object] = {
                 "index": index,
@@ -211,10 +231,13 @@ class InputComposer:
             "canvas_kind": canvas_role,
             "canvas_bbox_xyxy_global": list(canvas_box),
             "canvas_size": list(canvas.size),
+            "source_canvas_size": list(source_canvas_size),
+            "resize_scale": resize_scale,
             "original_image_size": [width, height],
             "coordinate_transform": {
                 "origin_global": [canvas_box[0], canvas_box[1]],
-                "canvas_to_global": "translate",
+                "canvas_to_global": "translate_then_scale",
+                "scale_xy": [resize_scale, resize_scale],
             },
             "candidate_mapping": candidate_mapping,
             "role_mapping": role_mapping,

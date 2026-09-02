@@ -213,7 +213,13 @@ class GraphExecutor:
         )
         for node in graph.nodes:
             hint = plan.hint_for(node.id)
-            node_context = replace(context, execution_hint=hint)
+            node_context = replace(
+                context,
+                execution_hint=hint,
+                final_sources=tuple(graph.final.sources),
+                final_question=graph.final.question,
+                graph_nodes=tuple(graph.nodes),
+            )
             resolved = {name: store.resolve(refs) for name, refs in node.inputs.items()}
             started = time.perf_counter()
             fallback = None

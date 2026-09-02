@@ -44,7 +44,7 @@ providers:
     kind: clip_rerank
     detector_weight: 0.35
     retriever_weight: 0.65
-    candidate_top_k: 4
+    candidate_top_k: null
     fail_open: true
     retriever:
       provider: georsclip
@@ -136,6 +136,13 @@ providers:
 capability_routing:
   ontology_path: configs/eval/semantic/remote_sensing_ontology.json
   unresolved_policy: detector_fallback
+
+locate_refinement:
+  enabled: true
+  max_candidates: 8
+  semantic_weight: 0.75
+  geometry_weight: 0.25
+  minimum_margin: 0.02
 
 input_composer:
   candidate_halo_ratio: 0.2

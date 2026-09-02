@@ -49,6 +49,7 @@ from .providers import (
     SemanticVLMProvider,
     VLMRequest,
 )
+from .referent_refinement import ReferentRefinementConfig, ReferentRefiner
 from .routing import DatasetExecutionPolicy, ExecutionMode, ExecutionModeRouter
 from .runtime_types import (
     Answer,
@@ -301,6 +302,7 @@ class TaskGraphRuntime:
         semantic_decision_config: SemanticDecisionConfig | None = None,
         final_choice_fusion_config: FinalChoiceFusionConfig | None = None,
         answerability_config: AnswerabilityConfig | None = None,
+        locate_refinement_config: ReferentRefinementConfig | None = None,
     ) -> None:
         self.providers = providers
         self.composer = composer or InputComposer()
@@ -315,6 +317,12 @@ class TaskGraphRuntime:
             providers.retriever,
             semantic_categories=semantic_categories,
             capability_classifier=capability_classifier,
+            refiner=ReferentRefiner(
+                providers.semantic_2b,
+                self.composer,
+                locate_refinement_config,
+                choice_config=self.choice_config,
+            ),
         )
         counting = providers.counting or FakeCountingProvider()
         providers.counting = counting
@@ -1071,6 +1079,10 @@ def runtime_from_config(
         config.get("final_vlm_choice_fusion")
     )
     answerability_config = AnswerabilityConfig.from_mapping(config.get("answerability"))
+    locate_refinement_value = config.get("locate_refinement", {})
+    if not isinstance(locate_refinement_value, Mapping):
+        raise TypeError("locate_refinement config must be a mapping")
+    locate_refinement_config = ReferentRefinementConfig.from_mapping(locate_refinement_value)
     capability_cfg = config.get("capability_routing", {})
     if not isinstance(capability_cfg, Mapping):
         raise TypeError("capability_routing config must be a mapping")
@@ -1123,4 +1135,5 @@ def runtime_from_config(
         semantic_decision_config=semantic_decision_config,
         final_choice_fusion_config=final_choice_fusion_config,
         answerability_config=answerability_config,
+        locate_refinement_config=locate_refinement_config,
     )
