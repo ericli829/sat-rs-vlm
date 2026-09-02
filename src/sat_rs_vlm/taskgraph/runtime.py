@@ -11,6 +11,7 @@ from sat_rs_vlm.infrastructure.config import ModelConfig
 
 from .choice import ChoiceRequest, ChoiceResolver
 from .choice_config import ChoiceSystemConfig
+from .execution_plan import FinalChoiceFusionConfig
 from .executor import CapabilityRouter, ExecutorBinding, GraphExecutor
 from .input_composer import InputComposer
 from .operators import (
@@ -49,6 +50,7 @@ from .runtime_types import (
     unwrap_select_result,
 )
 from .schema import AnswerType, OperatorName, QuestionType, TargetSpec, TaskGraph, parse_taskgraph
+from .semantic_decision import SemanticDecisionConfig
 from .store import RuntimeStore
 from .tracing import ExecutionTrace
 
@@ -107,10 +109,14 @@ class TaskGraphRuntime:
         composer: InputComposer | None = None,
         semantic_categories: set[str] | None = None,
         choice_config: ChoiceSystemConfig | None = None,
+        semantic_decision_config: SemanticDecisionConfig | None = None,
+        final_choice_fusion_config: FinalChoiceFusionConfig | None = None,
     ) -> None:
         self.providers = providers
         self.composer = composer or InputComposer()
         self.choice_config = choice_config or ChoiceSystemConfig()
+        self.semantic_decision_config = semantic_decision_config or SemanticDecisionConfig()
+        self.final_choice_fusion_config = final_choice_fusion_config or FinalChoiceFusionConfig()
         self.mode_router = ExecutionModeRouter(policy)
         geometry = GeometryExecutor()
         locate = LocateExecutor(
@@ -120,11 +126,16 @@ class TaskGraphRuntime:
         )
         count = CountExecutor(providers.detection)
         select = SelectExecutor(providers.semantic_2b, self.choice_config)
-        semantic = SemanticExecutor(providers.semantic_2b, choice_config=self.choice_config)
+        semantic = SemanticExecutor(
+            providers.semantic_2b,
+            choice_config=self.choice_config,
+            semantic_config=self.semantic_decision_config,
+        )
         route = SemanticExecutor(
             providers.route_4b,
             provider_name="route_vlm",
             choice_config=self.choice_config,
+            semantic_config=self.semantic_decision_config,
         )
         bindings = {
             OperatorName.REGION: ExecutorBinding(geometry),
@@ -145,7 +156,10 @@ class TaskGraphRuntime:
             OperatorName.ROUTE_REASON: ExecutorBinding(route),
             OperatorName.MATCH_CHOICE: ExecutorBinding(semantic),
         }
-        self.graph_executor = GraphExecutor(CapabilityRouter(bindings))
+        self.graph_executor = GraphExecutor(
+            CapabilityRouter(bindings),
+            self.final_choice_fusion_config,
+        )
         self.choice_resolver = ChoiceResolver(providers.choice, self.composer, self.choice_config)
 
     @staticmethod
@@ -319,6 +333,8 @@ def fake_runtime(
     planner_fixtures: dict[str, TaskGraph | dict[str, Any]] | None = None,
     policy: DatasetExecutionPolicy | None = None,
     choice_config: ChoiceSystemConfig | None = None,
+    semantic_decision_config: SemanticDecisionConfig | None = None,
+    final_choice_fusion_config: FinalChoiceFusionConfig | None = None,
 ) -> TaskGraphRuntime:
     shared_2b = FakeSemanticVLMProvider(
         {**(semantic_responses or {}), **(choice_responses or {})},
@@ -335,6 +351,8 @@ def fake_runtime(
         ),
         policy=policy,
         choice_config=choice_config,
+        semantic_decision_config=semantic_decision_config,
+        final_choice_fusion_config=final_choice_fusion_config,
     )
 
 
@@ -418,6 +436,10 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
 
     policy = DatasetExecutionPolicy.from_mapping(config.get("dataset_policy"))
     choice_config = ChoiceSystemConfig.from_mapping(config.get("choice"))
+    semantic_decision_config = SemanticDecisionConfig.from_mapping(config.get("semantic_decision"))
+    final_choice_fusion_config = FinalChoiceFusionConfig.from_mapping(
+        config.get("final_vlm_choice_fusion")
+    )
     composer_cfg = config.get("input_composer", {})
     if not isinstance(composer_cfg, dict):
         raise TypeError("input_composer config must be a mapping")
@@ -430,4 +452,6 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
         composer=composer,
         semantic_categories=set(config.get("semantic_region_categories", [])),
         choice_config=choice_config,
+        semantic_decision_config=semantic_decision_config,
+        final_choice_fusion_config=final_choice_fusion_config,
     )

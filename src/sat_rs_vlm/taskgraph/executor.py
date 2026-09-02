@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from typing import cast
 
-from .contracts import validate_runtime_inputs
+from .contracts import validate_runtime_inputs, validate_runtime_output
+from .execution_plan import ExecutionPlan, FinalChoiceFusionConfig
 from .operators import OperatorContext, OperatorExecutor, OperatorOutcome
 from .runtime_types import (
     RuntimeObject,
@@ -49,9 +51,7 @@ class ExecutorBinding:
 class CapabilityRouter:
     """Explicit operator-to-capability registry; graphs never contain model names."""
 
-    _SELECT_INPUT_POLICIES: dict[
-        OperatorName, dict[str, tuple[bool, bool]]
-    ] = {
+    _SELECT_INPUT_POLICIES: dict[OperatorName, dict[str, tuple[bool, bool]]] = {
         OperatorName.SELECT: {
             "candidates": (True, False),
             "reference": (False, False),
@@ -106,9 +106,7 @@ class CapabilityRouter:
                 )
 
             materialized[role] = (
-                [unwrap(item) for item in value]
-                if isinstance(value, list)
-                else unwrap(value)
+                [unwrap(item) for item in value] if isinstance(value, list) else unwrap(value)
             )
         return materialized
 
@@ -135,7 +133,15 @@ class CapabilityRouter:
                 exception=contract_error,
             ) from contract_error
         try:
-            return binding.primary.execute(node, inputs, context), None
+            outcome = binding.primary.execute(node, inputs, context)
+            validate_runtime_output(
+                node.op.value,
+                outcome.value,
+                final_choice_fusion=bool(
+                    context.execution_hint and context.execution_hint.final_choice_fusion
+                ),
+            )
+            return outcome, None
         except Exception as primary_error:
             if binding.fallback is None:
                 raise TaskGraphExecutionError(
@@ -147,6 +153,13 @@ class CapabilityRouter:
                 ) from primary_error
             try:
                 outcome = binding.fallback.execute(node, inputs, context)
+                validate_runtime_output(
+                    node.op.value,
+                    outcome.value,
+                    final_choice_fusion=bool(
+                        context.execution_hint and context.execution_hint.final_choice_fusion
+                    ),
+                )
                 return outcome, binding.primary.provider_name
             except Exception as fallback_error:
                 raise TaskGraphExecutionError(
@@ -159,8 +172,13 @@ class CapabilityRouter:
 
 
 class GraphExecutor:
-    def __init__(self, router: CapabilityRouter) -> None:
+    def __init__(
+        self,
+        router: CapabilityRouter,
+        fusion_config: FinalChoiceFusionConfig | None = None,
+    ) -> None:
         self.router = router
+        self.fusion_config = fusion_config or FinalChoiceFusionConfig()
 
     @staticmethod
     def _input_types(value: RuntimeObject | list[RuntimeObject]) -> str | list[str]:
@@ -184,12 +202,19 @@ class GraphExecutor:
             final_sources=list(graph.final.sources),
             final_question=graph.final.question,
         )
+        plan = ExecutionPlan.build(
+            graph,
+            options=context.choices,
+            config=self.fusion_config,
+        )
         for node in graph.nodes:
+            hint = plan.hint_for(node.id)
+            node_context = replace(context, execution_hint=hint)
             resolved = {name: store.resolve(refs) for name, refs in node.inputs.items()}
             started = time.perf_counter()
             fallback = None
             try:
-                outcome, fallback = self.router.execute(node, resolved, context)
+                outcome, fallback = self.router.execute(node, resolved, node_context)
                 store.put(node.id, outcome.value)
             except TaskGraphExecutionError as exc:
                 trace.nodes.append(
@@ -202,6 +227,8 @@ class GraphExecutor:
                         },
                         provider=str(exc.details["provider"]),
                         latency_ms=(time.perf_counter() - started) * 1000.0,
+                        final_choice_fusion=hint.final_choice_fusion,
+                        fusion_reason=hint.fusion_reason,
                         error=dict(exc.details),
                     )
                 )
@@ -216,6 +243,17 @@ class GraphExecutor:
                     },
                     provider=outcome.provider,
                     latency_ms=(time.perf_counter() - started) * 1000.0,
+                    execution_mode=cast(str | None, outcome.trace_metadata.get("execution_mode")),
+                    semantic_method=cast(str | None, outcome.trace_metadata.get("semantic_method")),
+                    cache_reused=cast(bool | None, outcome.trace_metadata.get("cache_reused")),
+                    final_choice_fusion=cast(
+                        bool | None,
+                        outcome.trace_metadata.get("final_choice_fusion", hint.final_choice_fusion),
+                    ),
+                    fusion_reason=cast(
+                        str | None,
+                        outcome.trace_metadata.get("fusion_reason", hint.fusion_reason),
+                    ),
                     output_runtime_type=runtime_type_name(outcome.value),
                     output_summary=runtime_summary(outcome.value),
                     fallback=fallback,

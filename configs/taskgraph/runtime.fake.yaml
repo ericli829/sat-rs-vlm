@@ -55,3 +55,24 @@ choice:
   multi_select_threshold: 0.0
   multi_empty_policy: EMPTY
   preserve_reasoning_text: true
+
+semantic_decision:
+  enabled: true
+  legacy_text_fallback: false
+  preserve_reasoning_text: true
+  single_decision_suffix: "\n\nCanonical value:"
+  multi_select_threshold: 0.0
+  uncertainty_epsilon: 0.0
+  attributes: {}
+
+final_vlm_choice_fusion:
+  mode: auto
+  operators:
+    - VLM_REASON
+    - MATCH_CHOICE
+    - ROUTE_REASON
+    - ATTRIBUTE
+    - CLASSIFY
+    - MULTILABEL_CLASSIFY
+    - MOTION
+    - RELATION

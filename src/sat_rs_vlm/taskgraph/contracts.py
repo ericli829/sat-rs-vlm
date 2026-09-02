@@ -166,3 +166,34 @@ def validate_runtime_inputs(operator: str, inputs: dict[str, Any]) -> None:
         invalid = [name for name in actual if name not in allowed]
         if invalid:
             raise TypeError(f"{operator}.{role} expected {sorted(allowed)}, got {actual}")
+
+
+_NORMAL_SEMANTIC_OUTPUTS: dict[str, frozenset[str]] = {
+    "ATTRIBUTE": frozenset({"Label"}),
+    "CLASSIFY": frozenset({"Label"}),
+    "MULTILABEL_CLASSIFY": frozenset({"LabelSet"}),
+    "MOTION": frozenset({"Boolean"}),
+    "RELATION": frozenset({"Label"}),
+    "VLM_REASON": frozenset({"Answer"}),
+    "MATCH_CHOICE": frozenset({"Answer"}),
+    # ROUTE_REASON has always transported a precomputed score result.
+    "ROUTE_REASON": frozenset({"ChoiceScoreResult"}),
+}
+
+
+def validate_runtime_output(
+    operator: str,
+    value: Any,
+    *,
+    final_choice_fusion: bool,
+) -> None:
+    """Validate execution-dependent VLM output types without changing the DAG schema."""
+
+    normal = _NORMAL_SEMANTIC_OUTPUTS.get(operator)
+    if normal is None:
+        return
+    allowed = frozenset({"ChoiceScoreResult"}) if final_choice_fusion else normal
+    actual = type(value).__name__
+    if actual not in allowed:
+        mode = "final choice fusion" if final_choice_fusion else "normal execution"
+        raise TypeError(f"{operator} {mode} expected {sorted(allowed)}, got {actual}")

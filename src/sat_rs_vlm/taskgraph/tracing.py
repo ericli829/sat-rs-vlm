@@ -16,6 +16,11 @@ class NodeTrace:
     resolved_input_types: dict[str, str | list[str]]
     provider: str
     latency_ms: float
+    execution_mode: str | None = None
+    semantic_method: str | None = None
+    cache_reused: bool | None = None
+    final_choice_fusion: bool | None = None
+    fusion_reason: str | None = None
     output_runtime_type: str | None = None
     output_summary: dict[str, Any] = field(default_factory=dict)
     error: dict[str, Any] | None = None

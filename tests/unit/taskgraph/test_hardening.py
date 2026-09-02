@@ -300,8 +300,12 @@ def test_relation_canvas_preserves_subject_and_reference_roles(tmp_path: Path) -
             {"subject": subject, "reference": reference},
             OperatorContext("relation", (), composer),
         )
-        model_input = provider.calls[0].model_input
-        assert result.value == Label("LEFT_OF", {"provider": "fake_vlm"})
+        model_input = provider.semantic_calls[0].model_input
+        assert isinstance(result.value, Label)
+        assert result.value.value == "LEFT_OF"
+        assert result.value.provenance["method"] == "kv_cached_categorical"
+        assert result.value.provenance["cache_reused"] is True
+        assert provider.calls == []
         assert model_input.visual_roles == ("RELATION_CANVAS",)
         roles = model_input.metadata["role_mapping"]
         assert roles["subject"][0]["id"] == "SUBJECT"

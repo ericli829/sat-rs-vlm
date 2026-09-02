@@ -186,10 +186,73 @@ class ChoiceScoringRequest:
             raise ValueError("multi verify template must include choice_id and option_text")
 
 
+@dataclass(frozen=True)
+class FiniteDecisionRequest:
+    """Generic cached reasoning-to-finite-decision request.
+
+    Benchmark choice is one caller of this primitive. Intermediate semantic
+    alignment uses canonical values directly and never parses the free
+    reasoning text.
+    """
+
+    model_input: ModelInput
+    decision_mode: str
+    candidate_ids: tuple[str, ...]
+    candidate_texts: tuple[str, ...]
+    single_decision_suffix: str
+    multi_verify_template: str
+    select_threshold: float = 0.0
+    purpose: str = "semantic_decision"
+    reasoning_instruction: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.decision_mode not in {"SINGLE", "MULTI", "BINARY"}:
+            raise ValueError("finite decision mode must be SINGLE, MULTI, or BINARY")
+        if not self.candidate_ids or len(self.candidate_ids) != len(self.candidate_texts):
+            raise ValueError("finite decision candidates must be non-empty and aligned")
+        if len(self.candidate_ids) != len(set(self.candidate_ids)):
+            raise ValueError("finite decision candidate ids must be unique")
+        if self.decision_mode == "BINARY" and len(self.candidate_ids) != 2:
+            raise ValueError("binary finite decision requires exactly two candidates")
+        if not self.single_decision_suffix:
+            raise ValueError("single decision suffix must not be empty")
+        if (
+            "{choice_id}" not in self.multi_verify_template
+            or "{option_text}" not in self.multi_verify_template
+        ):
+            raise ValueError("multi verify template must include choice_id and option_text")
+
+
+@dataclass(frozen=True)
+class FiniteDecisionResult:
+    selected_ids: tuple[str, ...]
+    scores: dict[str, float]
+    decision_mode: str
+    reasoning_text: str | None
+    provider: str
+    model_id: str
+    method: str
+    cache_reused: bool
+    latency_ms: dict[str, float | None] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.decision_mode not in {"SINGLE", "MULTI", "BINARY"}:
+            raise ValueError("finite decision result mode is invalid")
+        if self.decision_mode in {"SINGLE", "BINARY"} and len(self.selected_ids) != 1:
+            raise ValueError("single and binary decisions require exactly one selected id")
+        if len(self.selected_ids) != len(set(self.selected_ids)):
+            raise ValueError("selected finite decision ids must be unique")
+        if any(candidate not in self.scores for candidate in self.selected_ids):
+            raise ValueError("every selected finite decision id must have a score")
+
+
 class SemanticVLMProvider(Protocol):
     provider_name: str
 
     def infer(self, request: VLMRequest) -> VLMResult: ...
+
+    def reason_and_decide(self, request: FiniteDecisionRequest) -> FiniteDecisionResult: ...
 
     def reason_and_choose(self, request: ChoiceScoringRequest) -> ChoiceScoreResult: ...
 
@@ -578,52 +641,59 @@ class LazyQwenSemanticProvider:
             generated,
             f"{self.provider_name}:{self.role}",
             metadata={
+                "model_id": str(getattr(engine, "model_id", "unknown")),
                 "output_contract": request.output_contract,
                 "constrained_decoding": allowed_outputs is not None,
                 "allowed_output_count": len(allowed_outputs or ()),
             },
         )
 
-    def reason_and_choose(self, request: ChoiceScoringRequest) -> ChoiceScoreResult:
-        if request.purpose == "route_choice":
-            instruction = (
+    @staticmethod
+    def _choice_instruction(purpose: str) -> str:
+        if purpose == "route_choice":
+            return (
                 "Analyze the route-planning problem using the marked start, goal, obstacles, "
                 "spatial layout, and supplied route options. Compare feasible routes carefully. "
                 "The final option will be selected in a separate constrained step."
             )
-        elif request.purpose == "select_relation":
-            instruction = (
+        if purpose == "select_relation":
+            return (
                 "Analyze which candidate object or objects satisfy the requested relation. "
                 "Use candidate labels only as visual references during reasoning. A separate "
                 "constrained step will determine the final selection."
             )
-        else:
-            instruction = (
-                "Analyze the visual evidence, question, and all candidate options carefully. "
-                "Reason through the problem before making the final decision. The final option "
-                "will be selected in a separate constrained step."
-            )
+        return (
+            "Analyze the visual evidence, question, and all candidate options carefully. "
+            "Reason through the problem before making the final decision. The final option "
+            "will be selected in a separate constrained step."
+        )
+
+    def reason_and_decide(self, request: FiniteDecisionRequest) -> FiniteDecisionResult:
         engine = self._load()
         scorer = getattr(engine, "reason_and_choose", None)
         if not callable(scorer):
             raise CachedChoiceUnavailableError(
-                "Qwen engine does not expose cached reasoning-to-choice scoring"
+                "Qwen engine does not expose cached reasoning-to-decision scoring"
             )
+        answer_type = "CHOICE_MULTI" if request.decision_mode == "MULTI" else "CHOICE_SINGLE"
         result = scorer(
-            self._prompt(request.model_input, reasoning_instruction=instruction),
+            self._prompt(
+                request.model_input,
+                reasoning_instruction=request.reasoning_instruction,
+            ),
             list(request.model_input.visual_inputs),
-            choice_ids=request.choice_ids,
-            option_texts=request.option_texts,
-            answer_type=request.answer_type,
-            single_choice_suffix=request.single_choice_suffix,
+            choice_ids=request.candidate_ids,
+            option_texts=request.candidate_texts,
+            answer_type=answer_type,
+            single_choice_suffix=request.single_decision_suffix,
             multi_verify_template=request.multi_verify_template,
-            multi_select_threshold=request.multi_select_threshold,
+            multi_select_threshold=request.select_threshold,
             reasoning_max_new_tokens=self.model_config.max_new_tokens,
         )
-        return ChoiceScoreResult(
+        return FiniteDecisionResult(
             selected_ids=result.selected_ids,
             scores=result.scores,
-            answer_type=result.answer_type,
+            decision_mode=request.decision_mode,
             reasoning_text=result.reasoning_text,
             provider=f"{self.provider_name}:{self.role}",
             model_id=engine.model_id,
@@ -631,6 +701,33 @@ class LazyQwenSemanticProvider:
             cache_reused=result.cache_reused,
             latency_ms=result.latency_ms,
             metadata={**result.metadata, "purpose": request.purpose},
+        )
+
+    def reason_and_choose(self, request: ChoiceScoringRequest) -> ChoiceScoreResult:
+        decided = self.reason_and_decide(
+            FiniteDecisionRequest(
+                model_input=request.model_input,
+                decision_mode=("MULTI" if request.answer_type == "CHOICE_MULTI" else "SINGLE"),
+                candidate_ids=request.choice_ids,
+                candidate_texts=request.option_texts,
+                single_decision_suffix=request.single_choice_suffix,
+                multi_verify_template=request.multi_verify_template,
+                select_threshold=request.multi_select_threshold,
+                purpose=request.purpose,
+                reasoning_instruction=self._choice_instruction(request.purpose),
+            )
+        )
+        return ChoiceScoreResult(
+            selected_ids=decided.selected_ids,
+            scores=decided.scores,
+            answer_type=request.answer_type,
+            reasoning_text=decided.reasoning_text,
+            provider=decided.provider,
+            model_id=decided.model_id,
+            method=decided.method,
+            cache_reused=decided.cache_reused,
+            latency_ms=decided.latency_ms,
+            metadata=decided.metadata,
         )
 
     def close(self) -> None:
@@ -656,6 +753,7 @@ class FakeSemanticVLMProvider:
             for purpose, scores in (choice_scores or {}).items()
         }
         self.calls: list[VLMRequest] = []
+        self.semantic_calls: list[FiniteDecisionRequest] = []
         self.choice_calls: list[ChoiceScoringRequest] = []
 
     def infer(self, request: VLMRequest) -> VLMResult:
@@ -718,6 +816,106 @@ class FakeSemanticVLMProvider:
                 if all(0 <= item < len(request.choice_ids) for item in indices):
                     values = [request.choice_ids[item] for item in indices]
         return tuple(dict.fromkeys(item for item in values if item in request.choice_ids))
+
+    def _finite_fixture_selected_ids(self, request: FiniteDecisionRequest) -> tuple[str, ...]:
+        response = self.responses.get(request.purpose)
+        if response is None and request.purpose.startswith("semantic_"):
+            response = self.responses.get(request.purpose.removeprefix("semantic_"))
+        if response is None:
+            response = self.responses.get(request.decision_mode.casefold())
+        response = (response or self.default).strip()
+        try:
+            import json
+
+            payload = json.loads(response)
+        except (ValueError, TypeError):
+            payload = None
+        values: list[str] = []
+        if isinstance(payload, dict):
+            raw = payload.get("selected_ids", payload.get("candidate_ids"))
+            if isinstance(raw, list):
+                values = [str(item).strip() for item in raw]
+        if not values:
+            canonical = {item.casefold(): item for item in request.candidate_ids}
+            normalized = response.casefold()
+            if normalized in {"true", "1"}:
+                normalized = "yes"
+            elif normalized in {"false", "0"}:
+                normalized = "no"
+            if normalized in canonical:
+                values = [canonical[normalized]]
+        if not values and request.decision_mode == "MULTI":
+            raw_items = [item.strip() for item in response.split(",")]
+            if raw_items and all(item in request.candidate_ids for item in raw_items):
+                values = raw_items
+        return tuple(dict.fromkeys(item for item in values if item in request.candidate_ids))
+
+    def reason_and_decide(self, request: FiniteDecisionRequest) -> FiniteDecisionResult:
+        self.semantic_calls.append(request)
+        fixture_scores = self.choice_scores.get(request.purpose)
+        if fixture_scores is None:
+            fixture_scores = self.choice_scores.get(request.decision_mode.casefold())
+        selected_fixture = self._finite_fixture_selected_ids(request)
+        scores = {
+            candidate_id: (
+                float(fixture_scores[candidate_id])
+                if fixture_scores is not None and candidate_id in fixture_scores
+                else (1.0 if candidate_id in selected_fixture else -1.0)
+            )
+            for candidate_id in request.candidate_ids
+        }
+        selected_ids: tuple[str, ...]
+        if request.decision_mode in {"SINGLE", "BINARY"}:
+            selected_ids = (max(request.candidate_ids, key=lambda item: scores[item]),)
+            method = "fake_kv_cached_logits"
+            cache_mode = "consume_in_place"
+        else:
+            selected_ids = tuple(
+                candidate_id
+                for candidate_id in request.candidate_ids
+                if scores[candidate_id] > request.select_threshold
+            )
+            method = "fake_kv_cached_binary_verification"
+            cache_mode = "fork_per_option"
+        reasoning = self.responses.get(
+            f"{request.purpose}_reasoning",
+            self.responses.get("reasoning", "Fake free reasoning is never parsed."),
+        )
+        return FiniteDecisionResult(
+            selected_ids=selected_ids,
+            scores=scores,
+            decision_mode=request.decision_mode,
+            reasoning_text=reasoning,
+            provider=self.provider_name,
+            model_id="fake-model",
+            method=method,
+            cache_reused=True,
+            latency_ms={
+                "vision_prefill_ms": 0.0,
+                "text_prefill_ms": 0.0,
+                "total_prefill_ms": 0.0,
+                "reasoning_decode_ms": 0.0,
+                "reasoning_total_ms": 0.0,
+                "cache_clone_ms": 0.0,
+                "suffix_tokenize_ms": 0.0,
+                "choice_suffix_prefill_ms": 0.0,
+                "choice_scoring_ms": 0.0,
+                "choice_total_ms": 0.0,
+                "total_ms": 0.0,
+            },
+            metadata={
+                "initial_prefill_tokens": 1,
+                "reasoning_tokens": 1,
+                "choice_suffix_tokens": 1,
+                "choice_scored_tokens": len(request.candidate_ids),
+                "visual_prefill_count": 1 if request.model_input.visual_inputs else 0,
+                "reasoning_pass_count": 1,
+                "session_released": True,
+                "reasoning_cache_mode": cache_mode,
+                "peak_vram_mb": None,
+                "purpose": request.purpose,
+            },
+        )
 
     def reason_and_choose(self, request: ChoiceScoringRequest) -> ChoiceScoreResult:
         self.choice_calls.append(request)

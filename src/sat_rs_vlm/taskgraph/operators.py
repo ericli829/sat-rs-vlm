@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from math import hypot
 from statistics import median
 from typing import Protocol, cast
@@ -11,6 +10,7 @@ from typing import Protocol, cast
 from PIL import Image
 
 from .choice_config import ChoiceSystemConfig
+from .execution_plan import NodeExecutionHint
 from .input_composer import InputComposer
 from .providers import (
     CachedChoiceUnavailableError,
@@ -21,6 +21,7 @@ from .providers import (
     RegionRetrieverProvider,
     SemanticVLMProvider,
     VLMRequest,
+    VLMResult,
     parse_selection_indices,
 )
 from .runtime_types import (
@@ -40,13 +41,16 @@ from .runtime_types import (
     SelectStatus,
     unwrap_select_result,
 )
-from .schema import GraphNode, OperatorName, TargetSpec
+from .schema import AnswerType, GraphNode, OperatorName, SpatialRelation, TargetSpec
+from .semantic_decision import SemanticDecisionConfig, SemanticDecisionLayer
+from .semantic_prompts import semantic_question, semantic_reasoning_instruction
 
 
 @dataclass(frozen=True)
 class OperatorOutcome:
     value: RuntimeObject
     provider: str
+    trace_metadata: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -54,6 +58,7 @@ class OperatorContext:
     question: str
     choices: tuple[str, ...]
     composer: InputComposer
+    execution_hint: NodeExecutionHint | None = None
 
 
 class OperatorExecutor(Protocol):
@@ -814,8 +819,7 @@ class SelectExecutor:
     @staticmethod
     def _stable_index(items: tuple[Entity | Region, ...]) -> dict[str, int]:
         mapping = {
-            str(item.provenance.get("candidate_id")): index
-            for index, item in enumerate(items)
+            str(item.provenance.get("candidate_id")): index for index, item in enumerate(items)
         }
         if len(mapping) != len(items) or "None" in mapping:
             raise ValueError("SELECT candidate_id values must be present and unique")
@@ -886,9 +890,7 @@ class SelectExecutor:
             semantic_indices,
             provenance={"select": "RELATION_GREY_SUBSET", **provenance},
         )
-        named: dict[str, RuntimeObject | list[RuntimeObject]] = {
-            "candidates": semantic_candidates
-        }
+        named: dict[str, RuntimeObject | list[RuntimeObject]] = {"candidates": semantic_candidates}
         if reference is not None:
             named["reference"] = reference
         model_input = context.composer.compose_named(
@@ -1057,11 +1059,7 @@ class SelectExecutor:
         semantic_ids = self._candidate_ids(items, semantic_positive_indices)
         final_ids = self._candidate_ids(items, final_indices)
         status = self._cardinality_status(len(final_indices), selection_type)
-        method = (
-            "qwen3_vl_token_mask_fallback"
-            if fallback_used
-            else "qwen3_vl_kv_cached_choice"
-        )
+        method = "qwen3_vl_token_mask_fallback" if fallback_used else "qwen3_vl_kv_cached_choice"
         return self._result(
             self._selected_like(
                 candidates,
@@ -1071,9 +1069,7 @@ class SelectExecutor:
             status=status,
             method=method,
             reason=(
-                "single_selection_multiple_matches"
-                if status is SelectStatus.AMBIGUOUS
-                else None
+                "single_selection_multiple_matches" if status is SelectStatus.AMBIGUOUS else None
             ),
             confidence=confidence,
             provenance={
@@ -1085,8 +1081,7 @@ class SelectExecutor:
                 "choice_labels": [
                     choice_id
                     for choice_id, entry in candidate_mapping.items()
-                    if isinstance(entry, dict)
-                    and entry.get("candidate_id") in set(semantic_ids)
+                    if isinstance(entry, dict) and entry.get("candidate_id") in set(semantic_ids)
                 ],
                 "scores": scores,
                 "score_method": score_method,
@@ -1122,25 +1117,33 @@ class SelectExecutor:
                 bucket = (
                     positive
                     if x < ref_x - margin
-                    else grey if abs(x - ref_x) <= margin else negative
+                    else grey
+                    if abs(x - ref_x) <= margin
+                    else negative
                 )
             elif relation == "RIGHT_OF":
                 bucket = (
                     positive
                     if x > ref_x + margin
-                    else grey if abs(x - ref_x) <= margin else negative
+                    else grey
+                    if abs(x - ref_x) <= margin
+                    else negative
                 )
             elif relation == "ABOVE":
                 bucket = (
                     positive
                     if y < ref_y - margin
-                    else grey if abs(y - ref_y) <= margin else negative
+                    else grey
+                    if abs(y - ref_y) <= margin
+                    else negative
                 )
             elif relation == "BELOW":
                 bucket = (
                     positive
                     if y > ref_y + margin
-                    else grey if abs(y - ref_y) <= margin else negative
+                    else grey
+                    if abs(y - ref_y) <= margin
+                    else negative
                 )
             elif relation == "INSIDE":
                 if self._contains(ref_box, box):
@@ -1264,9 +1267,7 @@ class SelectExecutor:
         items = self._items(candidates)
         reference_input = safe_inputs.get("reference")
         scope_input = safe_inputs.get("scope")
-        reference_value = (
-            reference_input if not isinstance(reference_input, list) else None
-        )
+        reference_value = reference_input if not isinstance(reference_input, list) else None
         scope_value = scope_input if not isinstance(scope_input, list) else None
         if not self._same_image_inputs(candidates, reference_value, scope_value):
             return self._result(
@@ -1335,9 +1336,7 @@ class SelectExecutor:
                 ordered = self._sort_entities(entities, order)
                 best_key = self._ordinal_primary(ordered[0], order)
                 selected = tuple(
-                    entity
-                    for entity in ordered
-                    if self._ordinal_primary(entity, order) == best_key
+                    entity for entity in ordered if self._ordinal_primary(entity, order) == best_key
                 )
                 status = SelectStatus.AMBIGUOUS if len(selected) > 1 else SelectStatus.OK
                 return self._result(
@@ -1415,9 +1414,7 @@ class SelectExecutor:
             scope = self._scope_for(safe_inputs, candidates, reference)
             margin = self._default_margin(scope, node.params.get("margin"))
             configured_threshold = node.params.get("overlap_iou_threshold")
-            threshold = float(
-                0.10 if configured_threshold is None else configured_threshold
-            )
+            threshold = float(0.10 if configured_threshold is None else configured_threshold)
             partition = self._direct_relation(
                 candidates, reference, relation, margin=margin, overlap_iou_threshold=threshold
             )
@@ -1431,13 +1428,9 @@ class SelectExecutor:
                 "margin_px": margin,
                 "overlap_iou_threshold": threshold,
                 "all_candidate_ids": self._candidate_ids(items, all_indices),
-                "clear_positive_candidate_ids": self._candidate_ids(
-                    items, partition.positive
-                ),
+                "clear_positive_candidate_ids": self._candidate_ids(items, partition.positive),
                 "grey_candidate_ids": self._candidate_ids(items, partition.grey),
-                "clear_negative_candidate_ids": self._candidate_ids(
-                    items, partition.negative
-                ),
+                "clear_negative_candidate_ids": self._candidate_ids(items, partition.negative),
             }
             if partition.grey:
                 return self._semantic_select(
@@ -1455,9 +1448,7 @@ class SelectExecutor:
                 partition.positive,
                 provenance={"select": "RELATION", **provenance},
             )
-            status = self._cardinality_status(
-                len(partition.positive), self._selection_type(node)
-            )
+            status = self._cardinality_status(len(partition.positive), self._selection_type(node))
             final_ids = self._candidate_ids(items, partition.positive)
             return self._result(
                 relation_selected,
@@ -1490,14 +1481,128 @@ class SemanticExecutor:
         *,
         provider_name: str | None = None,
         choice_config: ChoiceSystemConfig | None = None,
+        semantic_config: SemanticDecisionConfig | None = None,
     ) -> None:
         self.provider = provider
         self.provider_name = provider_name or provider.provider_name
         self.choice_config = choice_config or ChoiceSystemConfig()
+        self.semantic_config = semantic_config or SemanticDecisionConfig()
+        self.decisions = SemanticDecisionLayer(provider, self.semantic_config)
 
     @staticmethod
-    def _label_set(text: str) -> tuple[str, ...]:
-        return tuple(item.strip() for item in re.split(r"[,;\n]", text) if item.strip())
+    def _choice_ids(options: tuple[str, ...]) -> tuple[str, ...]:
+        if not options or len(options) > 26:
+            raise ValueError("fused benchmark choice requires between 1 and 26 options")
+        return tuple(chr(ord("A") + index) for index in range(len(options)))
+
+    @staticmethod
+    def _trace_metadata(provenance: dict[str, object]) -> dict[str, object]:
+        return {
+            key: provenance[key]
+            for key in (
+                "execution_mode",
+                "semantic_method",
+                "cache_reused",
+                "final_choice_fusion",
+                "fusion_reason",
+            )
+            if key in provenance
+        }
+
+    @staticmethod
+    def _free_provenance(
+        result: VLMResult,
+        *,
+        fusion_reason: str,
+    ) -> dict[str, object]:
+        return {
+            "provider": result.provider,
+            "model_id": str(result.metadata.get("model_id", "unknown")),
+            "method": "free_text_generation",
+            "canonical": False,
+            "execution_mode": "free_text",
+            "semantic_method": "free_generation",
+            "cache_reused": False,
+            "final_choice_fusion": False,
+            "fusion_reason": fusion_reason,
+            "generation_metadata": dict(result.metadata),
+        }
+
+    def _final_fusion(
+        self,
+        node: GraphNode,
+        inputs: dict[str, RuntimeObject | list[RuntimeObject]],
+        context: OperatorContext,
+        hint: NodeExecutionHint,
+    ) -> OperatorOutcome:
+        question = semantic_question(node, context.question, final_choice_fusion=True)
+        model_input = context.composer.compose_named(
+            inputs,
+            question=question,
+            options=hint.options,
+        )
+        answer_type = hint.answer_type
+        if answer_type is None:
+            raise RuntimeError("eligible final choice fusion is missing answer_type")
+        purpose = (
+            "route_choice"
+            if node.op is OperatorName.ROUTE_REASON
+            else f"final_{node.op.value.casefold()}_choice_fusion"
+        )
+        scored = self.provider.reason_and_choose(
+            ChoiceScoringRequest(
+                model_input=model_input,
+                answer_type=answer_type.value,
+                choice_ids=self._choice_ids(hint.options),
+                option_texts=hint.options,
+                single_choice_suffix=self.choice_config.single_choice_suffix,
+                multi_verify_template=self.choice_config.multi_verify_template,
+                multi_select_threshold=self.choice_config.multi_select_threshold,
+                purpose=purpose,
+            )
+        )
+        metadata = {
+            **scored.metadata,
+            "execution_mode": "final_choice_fused",
+            "semantic_method": "kv_cached_final_choice",
+            "final_choice_fusion": True,
+            "fusion_reason": "eligible",
+        }
+        scored = replace(
+            scored,
+            reasoning_text=(
+                scored.reasoning_text if self.choice_config.preserve_reasoning_text else None
+            ),
+            metadata=metadata,
+        )
+        trace_metadata: dict[str, object] = {
+            "execution_mode": "final_choice_fused",
+            "semantic_method": "kv_cached_final_choice",
+            "cache_reused": scored.cache_reused,
+            "final_choice_fusion": True,
+            "fusion_reason": "eligible",
+        }
+        return OperatorOutcome(scored, scored.provider, trace_metadata)
+
+    def _free_text(
+        self,
+        node: GraphNode,
+        inputs: dict[str, RuntimeObject | list[RuntimeObject]],
+        context: OperatorContext,
+        *,
+        options: tuple[str, ...] = (),
+    ) -> OperatorOutcome:
+        hint = context.execution_hint
+        fusion_reason = hint.fusion_reason if hint is not None else "not_final_source"
+        question = semantic_question(node, context.question, final_choice_fusion=False)
+        model_input = context.composer.compose_named(inputs, question=question, options=options)
+        result = self.provider.infer(VLMRequest(model_input, node.op.value.casefold()))
+        provenance = self._free_provenance(result, fusion_reason=fusion_reason)
+        if node.op in {OperatorName.ATTRIBUTE, OperatorName.CLASSIFY}:
+            value: RuntimeObject = Label(result.text.strip(), provenance)
+        else:
+            value = Answer(result.text, result.confidence, provenance)
+        return OperatorOutcome(value, result.provider, self._trace_metadata(provenance))
 
     def execute(
         self,
@@ -1505,57 +1610,94 @@ class SemanticExecutor:
         inputs: dict[str, RuntimeObject | list[RuntimeObject]],
         context: OperatorContext,
     ) -> OperatorOutcome:
-        if node.op is OperatorName.ATTRIBUTE:
-            question = f"Determine the {node.params['attribute']} of the selected object."
-        elif node.op is OperatorName.CLASSIFY:
-            question = "Classify the selected visual source."
-        elif node.op is OperatorName.MULTILABEL_CLASSIFY:
-            question = "Return all applicable labels."
-        elif node.op is OperatorName.MOTION:
-            question = "Is the selected object moving? Answer true or false."
-        elif node.op is OperatorName.RELATION:
-            question = "What is the subject's relation to the reference?"
-        elif node.op in {OperatorName.VLM_REASON, OperatorName.ROUTE_REASON}:
-            configured = str(node.params["question"])
-            question = context.question if configured == "$question" else configured
-        else:
-            question = context.question
-        options = (
-            context.choices
-            if node.op in {OperatorName.ROUTE_REASON, OperatorName.MATCH_CHOICE}
-            else ()
-        )
-        model_input = context.composer.compose_named(inputs, question=question, options=options)
+        hint = context.execution_hint
+        if hint is not None and hint.final_choice_fusion:
+            return self._final_fusion(node, inputs, context, hint)
+
+        # Preserve the frozen same-4B ROUTE_REASON path. Normal runtime graphs
+        # mark it eligible; this compatibility branch only serves direct executor use.
         if node.op is OperatorName.ROUTE_REASON:
-            choice_ids = tuple(chr(ord("A") + index) for index in range(len(context.choices)))
-            answer_type = getattr(node.params.get("answer_type"), "value", None) or str(
-                node.params.get("answer_type") or "CHOICE_SINGLE"
+            compatibility_hint = NodeExecutionHint(
+                node_id=node.id,
+                final_choice_fusion=True,
+                answer_type=AnswerType.CHOICE_SINGLE,
+                options=context.choices,
+                question=context.question,
+                fusion_reason="eligible",
             )
-            scored = self.provider.reason_and_choose(
-                ChoiceScoringRequest(
-                    model_input=model_input,
-                    answer_type=answer_type,
-                    choice_ids=choice_ids,
-                    option_texts=context.choices,
-                    single_choice_suffix=self.choice_config.single_choice_suffix,
-                    multi_verify_template=self.choice_config.multi_verify_template,
-                    multi_select_threshold=self.choice_config.multi_select_threshold,
-                    purpose="route_choice",
-                )
-            )
-            if not self.choice_config.preserve_reasoning_text:
-                scored = replace(scored, reasoning_text=None)
-            return OperatorOutcome(scored, scored.provider)
-        result = self.provider.infer(VLMRequest(model_input, node.op.value.casefold()))
-        if node.op in {OperatorName.ATTRIBUTE, OperatorName.CLASSIFY, OperatorName.RELATION}:
-            value: RuntimeObject = Label(result.text, {"provider": result.provider})
+            return self._final_fusion(node, inputs, context, compatibility_hint)
+
+        fusion_reason = hint.fusion_reason if hint is not None else "not_final_source"
+        question = semantic_question(node, context.question, final_choice_fusion=False)
+        instruction = semantic_reasoning_instruction(node)
+
+        candidates: tuple[str, ...] | None = None
+        if node.op is OperatorName.RELATION:
+            candidates = tuple(relation.value for relation in SpatialRelation)
+        elif node.op is OperatorName.CLASSIFY:
+            candidates = tuple(str(item) for item in (node.params.get("label_space") or ()))
+            if not candidates:
+                return self._free_text(node, inputs, context)
         elif node.op is OperatorName.MULTILABEL_CLASSIFY:
-            value = LabelSet(self._label_set(result.text), {"provider": result.provider})
+            candidates = tuple(str(item) for item in node.params["label_space"])
+        elif node.op is OperatorName.ATTRIBUTE:
+            candidates = self.semantic_config.attribute_values(str(node.params["attribute"]))
+            if not candidates:
+                return self._free_text(node, inputs, context)
         elif node.op is OperatorName.MOTION:
-            value = Boolean(
-                result.text.strip().casefold() in {"true", "yes", "1"},
-                {"provider": result.provider},
+            candidates = ("YES", "NO")
+        elif node.op is OperatorName.VLM_REASON:
+            configured_choices = node.params.get("choices")
+            options = (
+                context.choices
+                if configured_choices == "$choices"
+                else tuple(configured_choices or ())
             )
+            return self._free_text(node, inputs, context, options=options)
+        elif node.op is OperatorName.MATCH_CHOICE:
+            return self._free_text(node, inputs, context, options=context.choices)
         else:
-            value = Answer(result.text, result.confidence, {"provider": result.provider})
-        return OperatorOutcome(value, result.provider)
+            return self._free_text(node, inputs, context)
+
+        model_input = context.composer.compose_named(
+            inputs,
+            question=question,
+            options=candidates,
+        )
+        value: RuntimeObject
+        if node.op is OperatorName.MOTION:
+            moving, provenance = self.decisions.verify(
+                model_input,
+                purpose="semantic_motion",
+                reasoning_instruction=instruction,
+            )
+            provenance = {**provenance, "fusion_reason": fusion_reason}
+            value = Boolean(moving, provenance)
+        elif node.op is OperatorName.MULTILABEL_CLASSIFY:
+            decision = self.decisions.choose_many(
+                model_input,
+                candidates,
+                purpose="semantic_multilabel_classify",
+                reasoning_instruction=instruction,
+            )
+            provenance = {**decision.provenance, "fusion_reason": fusion_reason}
+            value = LabelSet(decision.values, provenance)
+        else:
+            purpose = {
+                OperatorName.RELATION: "semantic_relation",
+                OperatorName.CLASSIFY: "semantic_classify",
+                OperatorName.ATTRIBUTE: "semantic_attribute",
+            }[node.op]
+            decision = self.decisions.choose_one(
+                model_input,
+                candidates,
+                purpose=purpose,
+                reasoning_instruction=instruction,
+            )
+            provenance = {**decision.provenance, "fusion_reason": fusion_reason}
+            value = Label(decision.values[0], provenance)
+        return OperatorOutcome(
+            value,
+            str(provenance["provider"]),
+            self._trace_metadata(provenance),
+        )

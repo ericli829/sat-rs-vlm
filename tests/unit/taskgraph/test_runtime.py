@@ -7,7 +7,12 @@ import pytest
 
 from sat_rs_vlm.taskgraph import RuntimeRequest, fake_runtime, parse_taskgraph
 from sat_rs_vlm.taskgraph.routing import ExecutionMode
-from sat_rs_vlm.taskgraph.runtime_types import Answer, ChoiceResult, ScalarInt
+from sat_rs_vlm.taskgraph.runtime_types import (
+    Answer,
+    ChoiceResult,
+    ChoiceScoreResult,
+    ScalarInt,
+)
 
 IMAGE = str(Path("tests/fixtures/miniature_dataset/images/counting.ppm").resolve())
 SECOND_IMAGE = str(Path("tests/fixtures/miniature_dataset/images/vqa.ppm").resolve())
@@ -298,7 +303,11 @@ def test_case_d_object_relation_uses_semantic_relation_provider() -> None:
             )
         )
         assert result.output.choice_id == "B"
-        assert result.store.get("$n3").value == "RIGHT_OF"
+        fused = result.store.get("$n3")
+        assert isinstance(fused, ChoiceScoreResult)
+        assert fused.selected_ids == ("B",)
+        assert fused.cache_reused is True
+        assert len(runtime.providers.semantic_2b.choice_calls) == 1
     finally:
         runtime.close()
 

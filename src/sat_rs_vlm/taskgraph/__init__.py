@@ -2,6 +2,7 @@
 
 from .choice import ChoiceRequest, ChoiceResolver
 from .choice_config import ChoiceSystemConfig
+from .execution_plan import FinalChoiceFusionConfig
 from .executor import CapabilityRouter, GraphExecutor, TaskGraphExecutionError
 from .input_composer import InputComposer
 from .routing import DatasetExecutionPolicy, ExecutionMode, ExecutionModeRouter
@@ -14,6 +15,7 @@ from .runtime import (
 )
 from .runtime_types import ChoiceScoreResult
 from .schema import TaskGraph, parse_taskgraph
+from .semantic_decision import SemanticDecisionConfig, SemanticDecisionUnresolvedError
 from .store import RuntimeStore
 
 __all__ = [
@@ -25,11 +27,14 @@ __all__ = [
     "DatasetExecutionPolicy",
     "ExecutionMode",
     "ExecutionModeRouter",
+    "FinalChoiceFusionConfig",
     "GraphExecutor",
     "InputComposer",
     "RuntimeRequest",
     "RuntimeResult",
     "RuntimeStore",
+    "SemanticDecisionConfig",
+    "SemanticDecisionUnresolvedError",
     "TaskGraph",
     "TaskGraphExecutionError",
     "TaskGraphRuntime",
