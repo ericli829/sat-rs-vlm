@@ -269,7 +269,7 @@ class HuggingFaceVLMEngine:
     def generate_text(
         self,
         prompt: str,
-        image_paths: list[str],
+        image_paths: list[Any],
         *,
         allowed_outputs: tuple[str, ...] | None = None,
     ) -> str:
@@ -345,7 +345,7 @@ class HuggingFaceVLMEngine:
     def reason_with_cache(
         self,
         prompt: str,
-        image_paths: list[str],
+        image_paths: list[Any],
         *,
         max_new_tokens: int | None = None,
     ) -> CachedReasoningResult:
@@ -772,7 +772,7 @@ class HuggingFaceVLMEngine:
     def reason_and_choose(
         self,
         prompt: str,
-        image_paths: list[str],
+        image_paths: list[Any],
         *,
         choice_ids: tuple[str, ...],
         option_texts: tuple[str, ...],
@@ -838,7 +838,7 @@ class HuggingFaceVLMEngine:
             raise ValueError(f"Unsupported torch dtype: {dtype}")
         return getattr(self._torch, dtype)
 
-    def _open_image(self, image_path: str) -> Any:
+    def _open_image(self, image_path: Any) -> Any:
         """读取图像并转为 RGB。
 
         参数：
@@ -851,6 +851,13 @@ class HuggingFaceVLMEngine:
             FileNotFoundError：图像不存在时抛出。
         """
 
+        if not isinstance(image_path, (str, Path)):
+            convert = getattr(image_path, "convert", None)
+            if not callable(convert):
+                raise TypeError("image input must be a path or PIL-compatible image")
+            converted = convert("RGB")
+            copy = getattr(converted, "copy", None)
+            return copy() if callable(copy) else converted
         path = Path(image_path).expanduser()
         if not path.exists():
             raise FileNotFoundError(f"Image file does not exist: {image_path}")

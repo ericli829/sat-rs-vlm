@@ -1124,6 +1124,8 @@ def runtime_from_config(
         entity_set_max_side=int(composer_cfg.get("entity_set_max_side", 1536)),
         entity_set_max_crops=int(composer_cfg.get("entity_set_max_crops", 16)),
         route_max_side=int(composer_cfg.get("route_max_side", 1536)),
+        save_intermediate_artifacts=bool(composer_cfg.get("save_intermediate_artifacts", True)),
+        compact_trace=bool(composer_cfg.get("compact_trace", False)),
     )
     return TaskGraphRuntime(
         RuntimeProviders(detection, semantic_2b, route_4b, retriever, choice, planner, counting),

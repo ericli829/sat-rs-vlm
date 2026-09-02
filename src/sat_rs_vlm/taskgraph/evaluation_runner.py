@@ -7,7 +7,7 @@ import re
 import time
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any
 
@@ -190,6 +190,81 @@ def _serialized_output(result: RuntimeResult) -> dict[str, Any]:
     return {"answer": answer, "output": output}
 
 
+_COMPACT_TRACE_DROP_KEYS = frozenset(
+    {
+        "adapter_config",
+        "all_tiles",
+        "bert",
+        "bert_manifest",
+        "checkpoint",
+        "checkpoint_identity",
+        "checkpoint_manifest",
+        "config_dump",
+        "environment",
+        "environment_info",
+        "full_config",
+        "full_environment",
+        "manifest",
+        "model_config",
+        "model_configuration",
+        "raw_proposal_records",
+        "raw_proposals",
+        "raw_response",
+        "proposal_records",
+        "tile_records",
+        "tiles",
+    }
+)
+_COMPACT_TRACE_COUNT_KEYS = frozenset({"boxes", "candidates", "detections", "entities", "regions"})
+_TRACE_OMIT = object()
+
+
+def _compact_trace_value(value: Any, *, key: str | None = None, depth: int = 0) -> Any:
+    normalized_key = key.casefold() if key is not None else None
+    if normalized_key in _COMPACT_TRACE_DROP_KEYS:
+        return _TRACE_OMIT
+    if depth > 8:
+        return "<trace_depth_limit>"
+    if isinstance(value, Mapping):
+        if normalized_key in {"candidate_mapping", "role_mapping"}:
+            return {"count": len(value)}
+        compact: dict[str, Any] = {}
+        for raw_key, item in value.items():
+            child_key = str(raw_key)
+            child = _compact_trace_value(item, key=child_key, depth=depth + 1)
+            if child is not _TRACE_OMIT:
+                compact[child_key] = child
+        return compact
+    if isinstance(value, (list, tuple)):
+        if normalized_key in _COMPACT_TRACE_COUNT_KEYS:
+            return {"count": len(value)}
+        compact_items = [
+            item
+            for item in (
+                _compact_trace_value(item, depth=depth + 1) for item in value
+            )
+            if item is not _TRACE_OMIT
+        ]
+        return compact_items
+    return value
+
+
+def _serialized_trace(trace: ExecutionTrace, *, compact: bool) -> dict[str, Any]:
+    if not compact:
+        return trace.to_dict()
+    serialized = {
+        field.name: getattr(trace, field.name)
+        for field in fields(trace)
+        if field.name != "nodes"
+    }
+    serialized["nodes"] = [
+        {field.name: getattr(node, field.name) for field in fields(node)}
+        for node in trace.nodes
+    ]
+    compacted = _compact_trace_value(serialized)
+    return compacted if isinstance(compacted, dict) else {}
+
+
 _REFERENCE_ANSWER_KEYS = ("ground_truth", "Ground truth", "reference_answer", "answer")
 
 
@@ -283,7 +358,7 @@ def _answer_judgment(
     }
 
 
-def _planner_chain(trace: ExecutionTrace) -> dict[str, Any]:
+def _planner_chain(trace: ExecutionTrace, *, compact: bool = False) -> dict[str, Any]:
     telemetry = trace.telemetry
     raw_metadata = telemetry.get("planner_metadata")
     metadata = dict(raw_metadata) if isinstance(raw_metadata, Mapping) else {}
@@ -297,35 +372,58 @@ def _planner_chain(trace: ExecutionTrace) -> dict[str, Any]:
                 break
     metadata.pop("attempts", None)
     metadata.pop("planner_output", None)
+    if compact:
+        attempts = [
+            {
+                key: attempt[key]
+                for key in ("attempt", "termination_reason", "error_type", "error")
+                if key in attempt
+            }
+            for attempt in attempts
+            if isinstance(attempt, Mapping)
+        ]
+        compact_metadata = _compact_trace_value(metadata)
+        metadata = compact_metadata if isinstance(compact_metadata, dict) else {}
     status = str(telemetry.get("planner_status", "not_used"))
     if trace.taskgraph is not None and status == "deferred":
         status = "provided_graph"
     return {
         "status": status,
         "generated_output": generated_output,
+        "latency_ms": trace.planner_ms
+        if trace.planner_ms is not None
+        else telemetry.get("planner_ms"),
         "taskgraph": trace.taskgraph,
         "attempts": attempts,
         "metadata": metadata,
     }
 
 
-def _module_chain(trace: ExecutionTrace) -> list[dict[str, Any]]:
+def _module_chain(trace: ExecutionTrace, *, compact: bool = False) -> list[dict[str, Any]]:
     if trace.nodes:
-        return [
-            {
-                "node_id": node.node_id,
-                "operator": node.operator,
-                "inputs": dict(node.input_refs),
-                "resolved_input_types": dict(node.resolved_input_types),
-                "provider": node.provider,
-                "latency_ms": node.latency_ms,
-                "fallback": node.fallback,
-                "output": dict(node.output_summary),
-                "trace_metadata": dict(node.trace_metadata),
-                "error": dict(node.error) if node.error is not None else None,
-            }
-            for node in trace.nodes
-        ]
+        modules: list[dict[str, Any]] = []
+        for node in trace.nodes:
+            trace_metadata: Any = dict(node.trace_metadata)
+            output: Any = dict(node.output_summary)
+            if compact:
+                trace_metadata = _compact_trace_value(trace_metadata)
+                output = _compact_trace_value(output)
+            modules.append(
+                {
+                    "node_id": node.node_id,
+                    "operator": node.operator,
+                    "inputs": dict(node.input_refs),
+                    "resolved_input_types": dict(node.resolved_input_types),
+                    "provider": node.provider,
+                    "output_runtime_type": node.output_runtime_type,
+                    "latency_ms": node.latency_ms,
+                    "fallback": node.fallback,
+                    "output": output,
+                    "trace_metadata": trace_metadata,
+                    "error": dict(node.error) if node.error is not None else None,
+                }
+            )
+        return modules
     telemetry = trace.telemetry
     modules: list[dict[str, Any]] = []
     direct_modules = (
@@ -338,6 +436,9 @@ def _module_chain(trace: ExecutionTrace) -> list[dict[str, Any]]:
         metadata = telemetry.get(metadata_key)
         if metadata is None and output is None:
             continue
+        if compact:
+            metadata = _compact_trace_value(metadata)
+            output = _compact_trace_value(output)
         modules.append(
             {
                 "node_id": None,
@@ -359,6 +460,7 @@ def _reasoning_chain(
     prediction: dict[str, Any] | None,
     answer_judgment: dict[str, Any],
     failure: Mapping[str, Any] | None = None,
+    compact: bool = False,
 ) -> dict[str, Any]:
     answer = prediction.get("answer") if prediction is not None else None
     output = prediction.get("output") if prediction is not None else None
@@ -366,13 +468,14 @@ def _reasoning_chain(
         "execution_mode": trace.execution_mode,
         "input_image_paths": list(trace.input_image_paths),
         "intermediate_output_paths": list(trace.intermediate_output_paths),
-        "planner": _planner_chain(trace),
-        "modules": _module_chain(trace),
+        "planner": _planner_chain(trace, compact=compact),
+        "modules": _module_chain(trace, compact=compact),
         "final": {
             "answer": answer,
             "output": output,
             "source_refs": list(trace.final_sources),
             "question": trace.final_question,
+            "choice_result": trace.choice_result,
             "answer_judgment": answer_judgment,
         },
     }
@@ -463,6 +566,7 @@ def _error_row(
     sample: Any = None,
     request: RuntimeRequest | None = None,
     image_root: Path | None = None,
+    compact_trace: bool = False,
 ) -> dict[str, Any]:
     if isinstance(request_like, RuntimeRequest):
         sample_id = request_like.sample_id
@@ -513,6 +617,7 @@ def _error_row(
             prediction=None,
             answer_judgment=answer_judgment,
             failure=failure,
+            compact=compact_trace,
         )
     else:
         reasoning_chain = {
@@ -555,7 +660,7 @@ def _error_row(
         "elapsed_ms": elapsed_ms,
     }
     if trace is not None:
-        row["trace"] = trace.to_dict()
+        row["trace"] = _serialized_trace(trace, compact=compact_trace)
     return row
 
 
@@ -605,6 +710,7 @@ def run_taskgraph_evaluation(
     processed = skipped = successes = failures = 0
     failure_stages: Counter[str] = Counter()
     failure_types: Counter[str] = Counter()
+    compact_trace = bool(getattr(getattr(runtime, "composer", None), "compact_trace", False))
     started = time.perf_counter()
     with destination.open(mode, encoding="utf-8", newline="\n") as output:
         for ordinal, sample in enumerate(samples, start=1):
@@ -645,8 +751,9 @@ def run_taskgraph_evaluation(
                         result.trace,
                         prediction=prediction,
                         answer_judgment=answer_judgment,
+                        compact=compact_trace,
                     ),
-                    "trace": result.trace.to_dict(),
+                    "trace": _serialized_trace(result.trace, compact=compact_trace),
                     "elapsed_ms": elapsed_ms,
                 }
                 successes += 1
@@ -660,6 +767,7 @@ def run_taskgraph_evaluation(
                     sample=sample,
                     request=request,
                     image_root=config.image_root,
+                    compact_trace=compact_trace,
                 )
                 failures += 1
                 failure_stages[str(row["stage"])] += 1

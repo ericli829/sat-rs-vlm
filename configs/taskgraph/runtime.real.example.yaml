@@ -145,6 +145,8 @@ locate_refinement:
   minimum_margin: 0.02
 
 input_composer:
+  save_intermediate_artifacts: false
+  compact_trace: true
   candidate_halo_ratio: 0.2
   entity_set_union_area_threshold: 0.55
   entity_set_max_side: 1536

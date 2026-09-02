@@ -12,7 +12,7 @@ from sat_rs_vlm.taskgraph.input_composer import InputComposer
 from sat_rs_vlm.taskgraph.providers import PlannerFailedError
 from sat_rs_vlm.taskgraph.routing import ExecutionMode
 from sat_rs_vlm.taskgraph.runtime import RuntimeResult
-from sat_rs_vlm.taskgraph.runtime_types import ChoiceResult, ImageRef, Region
+from sat_rs_vlm.taskgraph.runtime_types import ChoiceResult, Entity, EntitySet, ImageRef, Region
 from sat_rs_vlm.taskgraph.tracing import ExecutionTrace
 
 
@@ -129,6 +129,32 @@ def test_input_composer_keeps_persistent_visual_paths(tmp_path: Path) -> None:
         assert all(Path(path).is_file() for path in paths)
     finally:
         composer.close()
+
+
+def test_input_composer_keeps_in_memory_candidate_canvas_as_image(tmp_path: Path) -> None:
+    from PIL import Image
+
+    source = tmp_path / "source.png"
+    Image.new("RGB", (40, 30), "white").save(source)
+    image = ImageRef(str(source), width=40, height=30)
+    candidates = EntitySet(
+        (
+            Entity(Region(image, (2, 3, 12, 14)), "building", 0.9),
+            Entity(Region(image, (20, 10, 30, 22)), "building", 0.8),
+        )
+    )
+    composer = InputComposer(save_intermediate_artifacts=False)
+    try:
+        model_input = composer.compose_named(
+            {"candidates": candidates},
+            question="Which candidate is relevant?",
+        )
+    finally:
+        composer.close()
+
+    assert len(model_input.visual_inputs) == 1
+    assert isinstance(model_input.visual_inputs[0], Image.Image)
+    assert model_input.metadata["visual_paths"] == ["<in-memory-visual>"]
 
 
 def test_runner_resumes_only_successful_sample_ids(tmp_path: Path) -> None:

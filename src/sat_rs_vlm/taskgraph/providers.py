@@ -178,7 +178,7 @@ class ModelSource:
 
 @dataclass(frozen=True)
 class ModelInput:
-    visual_inputs: tuple[str, ...]
+    visual_inputs: tuple[Any, ...]
     structured_context: str
     question: str
     options: tuple[str, ...] = ()
