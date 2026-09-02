@@ -35,6 +35,7 @@ def create_vlm_engine(model_config: ModelConfig) -> BaseVLMEngine:
 
         return HuggingFaceVLMEngine(
             model_id=model_config.model_id,
+            adapter_path=model_config.adapter_path,
             device=model_config.device,
             dtype=model_config.dtype,
             max_new_tokens=model_config.max_new_tokens,

@@ -95,13 +95,13 @@ def test_case_a_high_res_count_is_structured_text_only_choice() -> None:
         assert runtime.choice_resolver.last_model_input.visual_inputs == ()
         assert "value: 7" in runtime.choice_resolver.last_model_input.structured_context
         assert runtime.providers.choice.choice_calls == []
-        assert result.trace.detector_ms is not None and result.trace.detector_ms >= 0.0
+        assert result.trace.counting_ms is not None and result.trace.counting_ms >= 0.0
         assert result.trace.choice_ms is not None and result.trace.choice_ms >= 0.0
-        assert result.trace.stage_status["detector_ms"] == "executed"
+        assert result.trace.stage_status["counting_ms"] == "executed"
         assert result.trace.stage_status["choice_ms"] == "deterministic_or_precomputed"
         assert result.trace.stage_status["retriever_ms"] == "not_used"
-        assert result.trace.activated_model_roles == ["detector"]
-        assert result.trace.activated_parameter_counts["detector"] == "NOT_AVAILABLE"
+        assert result.trace.activated_model_roles == ["counting"]
+        assert result.trace.activated_parameter_counts["counting"] == "NOT_AVAILABLE"
         assert result.trace.e2e_ms is not None and result.trace.e2e_ms >= 0.0
         assert result.trace.ttft_ms == "NOT_AVAILABLE_FROM_BACKEND"
     finally:

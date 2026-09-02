@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import subprocess
 import sys
 import tempfile
+import threading
 import uuid
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from .parallel import resolve_parallel_workers
 from .protocol import (
     ProposalError,
     ProposalResult,
@@ -66,8 +69,7 @@ class _LAESidecarClient:
             # ``__file__`` is under ``<repo>/src/sat_rs_vlm/integrations/detectors``;
             # parents[4] is the repository root (not ``<repo>/src``).
             self.worker_script = (
-                Path(__file__).resolve().parents[4]
-                / "scripts/integrations/lae_dino_worker.py"
+                Path(__file__).resolve().parents[4] / "scripts/integrations/lae_dino_worker.py"
             )
         if not self.worker_script.is_file():
             raise ProposalError(f"LAE-DINO sidecar worker does not exist: {self.worker_script}")
@@ -107,15 +109,19 @@ class _LAESidecarClient:
         if self.bert_root is not None:
             self.environment["LAE_DINO_BERT_ROOT"] = str(self.bert_root)
         self.process: subprocess.Popen[str] | None = None
-        self.stderr_path = Path(
-            str(
-                self.config.get(
-                    "stderr_log",
-                    Path(tempfile.gettempdir())
-                    / f"lae_dino_sidecar_{uuid.uuid4().hex}.stderr.log",
+        self.stderr_path = (
+            Path(
+                str(
+                    self.config.get(
+                        "stderr_log",
+                        Path(tempfile.gettempdir())
+                        / f"lae_dino_sidecar_{uuid.uuid4().hex}.stderr.log",
+                    )
                 )
             )
-        ).expanduser().resolve()
+            .expanduser()
+            .resolve()
+        )
         self._stderr_handle: Any = None
 
     def start(self) -> None:
@@ -219,6 +225,13 @@ class LAEDinoSidecarProvider:
     def __init__(self, config: Mapping[str, Any], *, provider_name: str) -> None:
         self.provider_name = provider_name
         self.config = dict(config)
+        self.parallel_workers_requested = self.config.get("parallel_workers", 1)
+        self.parallel_max_workers = int(self.config.get("parallel_max_workers", 3))
+        self.parallel_worker_vram_gb = float(self.config.get("parallel_worker_vram_gb", 4.0))
+        self.parallel_vram_reserve_gb = float(self.config.get("parallel_vram_reserve_gb", 6.0))
+        self._clients: list[_LAESidecarClient] = []
+        self._available_clients: queue.Queue[_LAESidecarClient] | None = None
+        self._pool_lock = threading.Lock()
         self._client = _LAESidecarClient(self.config)
         self.model_id = str(self._client.checkpoint)
         self.source_revision = str(
@@ -239,8 +252,49 @@ class LAEDinoSidecarProvider:
             "inference_query_mode": self.inference_query_mode,
         }
 
+    def _client_config(self, worker_index: int, worker_count: int) -> dict[str, Any]:
+        config = dict(self.config)
+        stderr_log = config.get("stderr_log")
+        if stderr_log and worker_count > 1:
+            path = Path(str(stderr_log)).expanduser()
+            config["stderr_log"] = str(
+                path.with_name(f"{path.stem}.worker{worker_index}{path.suffix}")
+            )
+        return config
+
+    def _ensure_client_pool(self) -> queue.Queue[_LAESidecarClient]:
+        if self._available_clients is not None:
+            return self._available_clients
+        with self._pool_lock:
+            if self._available_clients is not None:
+                return self._available_clients
+            worker_count = resolve_parallel_workers(
+                self.parallel_workers_requested,
+                max_workers=self.parallel_max_workers,
+                worker_vram_gb=self.parallel_worker_vram_gb,
+                vram_reserve_gb=self.parallel_vram_reserve_gb,
+            )
+            clients = [self._client]
+            clients.extend(
+                _LAESidecarClient(self._client_config(index, worker_count))
+                for index in range(1, worker_count)
+            )
+            available_clients: queue.Queue[_LAESidecarClient] = queue.Queue(maxsize=worker_count)
+            for client in clients:
+                available_clients.put_nowait(client)
+            self._clients = clients
+            self._available_clients = available_clients
+            self.parallel_workers = worker_count
+            return available_clients
+
     def predict(self, image_path: Path, target_phrase: str) -> ProposalResult:
-        response = self._client.request(image_path, target_phrase)
+        clients = self._ensure_client_pool()
+        client = clients.get()
+        stderr_path = str(client.stderr_path)
+        try:
+            response = client.request(image_path, target_phrase)
+        finally:
+            clients.put(client)
         metadata = dict(response.get("metadata", {}))
         try:
             image_width = int(metadata["image_width"])
@@ -262,7 +316,7 @@ class LAEDinoSidecarProvider:
                 "schema_version": "lae-dino-sidecar-v1",
                 "target_phrase": target_phrase.strip().lower(),
                 "config_path": str(self._client.config_path),
-                "stderr_log": str(self._client.stderr_path),
+                "stderr_log": stderr_path,
                 "checkpoint_identity": self.model_identity,
                 "checkpoint_training_regime": self.config.get(
                     "checkpoint_training_regime", "unspecified"
@@ -282,4 +336,8 @@ class LAEDinoSidecarProvider:
         )
 
     def close(self) -> None:
-        self._client.close()
+        clients = self._clients or [self._client]
+        for client in clients:
+            client.close()
+        self._clients = []
+        self._available_clients = None

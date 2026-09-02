@@ -1,0 +1,80 @@
+# COUNT 执行器默认配置。所有物理细节（tile、阈值、GPU）留在这里，
+# 不进入 TaskGraph 节点定义。
+
+count:
+  entire: true
+  score_threshold: 0.20
+  nms_iou: 0.40
+  cross_scale_iou: 0.50
+  keep_raw_proposals: true
+  max_detections_per_tile: 300
+
+scale:
+  source_scales: [1333, 1024, 896]
+  default_source_scale: 1333
+  global:
+    enabled: true
+  native:
+    enabled: true
+    # 对齐 feature/uhr-locator configs/locator/uhr_hierarchical.yaml detector.tiled
+    tile_size: 1333
+    overlap_ratio: 0.15
+    overlap: 200
+  fine:
+    enabled: true
+    tile_size: 512
+    overlap_ratio: 0.25
+    overlap: 128
+    only_for_tiny: true
+
+gate:
+  enabled: false
+  backend: georsclip
+  coarse_tile_size: 1333
+  coarse_overlap_ratio: 0.15
+  coarse_overlap: 200
+  threshold: 0.12
+  recall_first: true
+
+detector:
+  backend: auto   # auto | lae_mmdet | grounding_dino | fake
+  device: cuda
+  score_threshold: 0.0   # raw proposals 一律保留，后处理再截断
+  box_threshold: 0.05
+  text_threshold: 0.05
+
+retriever:
+  backend: georsclip
+  model_name: ViT-B-32
+  pretrained: openai
+  image_resolution: 224
+  device: cuda
+
+eval:
+  score_sweep: [0.40, 0.30, 0.20, 0.15, 0.10, 0.05, 0.02]
+  counting_categories:
+    - Counting
+    - Overall_counting
+    - Regional_counting
+    - Counting_with_complex_reasoning
+    - Counting_with_changing_detection
+  max_samples: 32
+  # 初赛答疑对齐：主指标 exact_match / rmse；GPT Judge 不作主结果
+  primary_metrics: [exact_match, rmse]
+  secondary_metrics: [mae, within1_accuracy, choice_accuracy]
+  protocol:
+    dataset: XLRS-Bench-lite
+    language: en
+    official_aligned: false
+    offline_only: true
+    upstream_branch: feature/vlm-semantic-alignment
+    counting_protocol: formal_e2_parse_count_plus_exact_cardinality_eligibility_v1
+
+integration:
+  upstream_repo: https://github.com/ericli829/sat-rs-vlm
+  upstream_branch: feature/vlm-semantic-alignment
+  taskgraph_version: taskgraph-v1.1
+  count_output: ScalarInt
+  count_inputs: exactly_one of image(ImageRef|Region) or entities(EntitySet|SelectResult)
+  locator_config: configs/locator/uhr_hierarchical.yaml
+  export_format: sat_rs_vlm_evaluation_v1.5_predictions_jsonl

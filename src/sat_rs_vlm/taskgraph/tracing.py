@@ -13,6 +13,7 @@ SYSTEM_TELEMETRY_STAGES = (
     "planner_ms",
     "retriever_ms",
     "detector_ms",
+    "counting_ms",
     "semantic_vlm_ms",
     "route_vlm_ms",
     "choice_ms",
@@ -56,6 +57,7 @@ class ExecutionTrace:
     planner_ms: float | None = None
     retriever_ms: float | None = None
     detector_ms: float | None = None
+    counting_ms: float | None = None
     semantic_vlm_ms: float | None = None
     route_vlm_ms: float | None = None
     choice_ms: float | None = None

@@ -292,6 +292,24 @@ def test_cached_suffix_uses_query_length_qwen_mrope_positions() -> None:
         reasoning.session.close()
 
 
+def test_peft_wrapped_qwen_rope_state_is_captured_and_restored() -> None:
+    engine = _engine()
+    holder = SimpleNamespace(rope_deltas=torch.tensor([[-7]]))
+    engine._model.model = SimpleNamespace()
+    engine._model.base_model = SimpleNamespace(model=SimpleNamespace(model=holder))
+
+    reasoning = engine.reason_with_cache("reason", [])
+    try:
+        assert reasoning.session._rope_deltas.tolist() == [[-7]]
+
+        holder.rope_deltas = torch.tensor([[99]])
+        engine._restore_rope_state(reasoning.session)
+
+        assert holder.rope_deltas.tolist() == [[-7]]
+    finally:
+        reasoning.session.close()
+
+
 def test_multi_token_choice_label_uses_full_continuation_probability() -> None:
     engine = _engine(multi_token_labels=True)
     result = engine.reason_and_choose(

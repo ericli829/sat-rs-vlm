@@ -109,6 +109,7 @@ class HuggingFaceVLMEngine:
 
     参数：
         model_id：HuggingFace 模型 ID 或本地模型目录。
+        adapter_path：可选的本地 PEFT/LoRA adapter 目录。
         device：运行设备；auto 使用 accelerate 自动分配模型。
         dtype：torch dtype 名称；auto 使用模型推荐精度。
         max_new_tokens：生成最大新 token 数。
@@ -119,6 +120,7 @@ class HuggingFaceVLMEngine:
     def __init__(
         self,
         model_id: str,
+        adapter_path: str | None = None,
         device: str = "auto",
         dtype: str = "auto",
         max_new_tokens: int = 256,
@@ -153,6 +155,7 @@ class HuggingFaceVLMEngine:
             raise ImportError(MODEL_EXTRA_MESSAGE) from exc
 
         self.model_id = model_id
+        self.adapter_path = adapter_path
         self.device = self._resolve_device(device)
         self.dtype = dtype
         self.max_new_tokens = max_new_tokens
@@ -170,8 +173,24 @@ class HuggingFaceVLMEngine:
         if device == "auto":
             model_kwargs["device_map"] = "auto"
 
-        self._processor = processor_cls.from_pretrained(model_id, **processor_kwargs)
-        self._model = model_cls.from_pretrained(model_id, **model_kwargs)
+        if adapter_path:
+            try:
+                peft = importlib.import_module("peft")
+            except ModuleNotFoundError as exc:
+                raise ImportError(MODEL_EXTRA_MESSAGE) from exc
+            from sat_rs_vlm.models.qwen3vl_loader import load_qwen3vl
+
+            self._model, self._processor = load_qwen3vl(
+                modules={"torch": self._torch, "transformers": transformers, "peft": peft},
+                base_model=model_id,
+                processor_source=model_id,
+                model_kwargs=model_kwargs,
+                processor_kwargs=processor_kwargs,
+                adapter_path=adapter_path,
+            )
+        else:
+            self._processor = processor_cls.from_pretrained(model_id, **processor_kwargs)
+            self._model = model_cls.from_pretrained(model_id, **model_kwargs)
         if device != "auto" and hasattr(self._model, "to"):
             self._model = self._model.to(self.device)
         if hasattr(self._model, "eval"):
@@ -179,7 +198,10 @@ class HuggingFaceVLMEngine:
         model_device = getattr(self._model, "device", None)
         if model_device is not None:
             self.device = str(model_device)
-        self._model_identity = f"{self.model_id}:{self._model_class_name}:{id(self._model)}"
+        adapter_identity = self.adapter_path or "none"
+        self._model_identity = (
+            f"{self.model_id}:{self._model_class_name}:{adapter_identity}:{id(self._model)}"
+        )
         self._active_sessions: dict[str, CachedGenerationSession] = {}
 
     @property
@@ -265,10 +287,29 @@ class HuggingFaceVLMEngine:
     def _release_session(self, session_id: str) -> None:
         self._active_sessions.pop(session_id, None)
 
+    def _rope_state_holder(self) -> Any | None:
+        pending = [self._model]
+        visited: set[int] = set()
+        while pending:
+            candidate = pending.pop(0)
+            identity = id(candidate)
+            if identity in visited:
+                continue
+            visited.add(identity)
+            if hasattr(candidate, "rope_deltas"):
+                return candidate
+            for attribute in ("model", "base_model"):
+                nested = getattr(candidate, attribute, None)
+                if nested is not None and id(nested) not in visited:
+                    pending.append(nested)
+        return None
+
     def _restore_rope_state(self, session: CachedGenerationSession) -> None:
-        model = getattr(self._model, "model", None)
-        if model is not None and hasattr(model, "rope_deltas"):
-            model.rope_deltas = session._rope_deltas
+        if session._rope_deltas is None:
+            return
+        holder = self._rope_state_holder()
+        if holder is not None:
+            holder.rope_deltas = session._rope_deltas
 
     def _cached_position_ids(
         self,
@@ -379,8 +420,8 @@ class HuggingFaceVLMEngine:
                 ],
                 dim=-1,
             )
-        model = getattr(self._model, "model", None)
-        rope_deltas = getattr(model, "rope_deltas", None)
+        rope_holder = self._rope_state_holder()
+        rope_deltas = getattr(rope_holder, "rope_deltas", None)
         clone_rope = getattr(rope_deltas, "clone", None)
         if callable(clone_rope):
             rope_deltas = clone_rope()

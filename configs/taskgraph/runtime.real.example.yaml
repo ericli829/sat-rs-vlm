@@ -45,6 +45,12 @@ providers:
     tile_size: 1333
     overlap_ratio: 0.15
     global_nms_iou: 0.4
+    # LAE-DINO is isolated per worker.  `auto` sizes the pool from currently
+    # free CUDA memory after reserving headroom for VLM activations.
+    parallel_workers: auto
+    parallel_max_workers: 3
+    parallel_worker_vram_gb: 4.0
+    parallel_vram_reserve_gb: 6.0
     base_provider: lae_dino_lae1m
     base_config:
       source_root: ${LAE_DINO_SOURCE_ROOT}
@@ -52,10 +58,41 @@ providers:
       checkpoint: ${LAE_DINO_CHECKPOINT_LAE1M}
       bert_root: ${LAE_DINO_BERT_ROOT}
       worker_python: ${LAE_DINO_PYTHON}
+      stderr_log: ${LAE_DINO_STDERR_LOG}
+  counting:
+    kind: counting_system
+    detector:
+      kind: lae_dino_lae1m
+      source_root: ${LAE_DINO_SOURCE_ROOT}
+      config_path: ${LAE_DINO_CONFIG_LAE1M}
+      checkpoint: ${LAE_DINO_CHECKPOINT_LAE1M}
+      bert_root: ${LAE_DINO_BERT_ROOT}
+      worker_python: ${LAE_DINO_PYTHON}
+      stderr_log: ${LAE_DINO_STDERR_LOG}
+      score_threshold: 0.0
+      top_k: 300
+    scale:
+      global:
+        enabled: false
+      native:
+        enabled: true
+        tile_size: 1333
+        overlap: 200
+      fine:
+        enabled: false
+    count:
+      score_threshold: 0.20
+      nms_iou: 0.40
+      cross_scale_iou: 0.50
+      keep_raw_proposals: true
+      max_detections_per_tile: 300
+    gate:
+      enabled: false
   semantic_2b:
     kind: qwen3_vl
     backend: huggingface
     model_id: ${QWEN3VL_2B_MODEL_DIR}
+    adapter_path: ${QWEN3VL_2B_SEMANTIC_LORA}
     device: auto
     dtype: auto
     local_files_only: true

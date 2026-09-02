@@ -43,6 +43,10 @@ detector:
     overlap_ratio: 0.15
     global_nms_iou: 0.4
     global_top_k: 300
+    parallel_workers: auto
+    parallel_max_workers: 3
+    parallel_worker_vram_gb: 4.0
+    parallel_vram_reserve_gb: 6.0
   config: {}
 
 retriever:

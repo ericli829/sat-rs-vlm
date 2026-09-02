@@ -27,10 +27,13 @@ from .operators import (
     SemanticExecutor,
 )
 from .providers import (
+    CountingProvider,
+    CountingRequest,
     DetectionProvider,
     DetectionRequest,
     EvidenceSufficiencyRequest,
     EvidenceSufficiencyResult,
+    FakeCountingProvider,
     FakeDetectionProvider,
     FakeRegionRetriever,
     FakeSemanticVLMProvider,
@@ -104,11 +107,17 @@ class RuntimeProviders:
     retriever: RegionRetrieverProvider
     choice: SemanticVLMProvider
     planner: PlannerProvider | None = None
+    counting: CountingProvider | None = None
+
+    def __post_init__(self) -> None:
+        if self.counting is None:
+            self.counting = FakeCountingProvider()
 
     def close(self) -> None:
         seen: set[int] = set()
         for provider in (
             self.detection,
+            self.counting,
             self.semantic_2b,
             self.route_4b,
             self.retriever,
@@ -191,6 +200,7 @@ def _provider_torch(providers: RuntimeProviders) -> Any | None:
     seen: set[int] = set()
     pending: list[Any] = [
         providers.detection,
+        providers.counting,
         providers.semantic_2b,
         providers.route_4b,
         providers.retriever,
@@ -306,7 +316,9 @@ class TaskGraphRuntime:
             semantic_categories=semantic_categories,
             capability_classifier=capability_classifier,
         )
-        count = CountExecutor(providers.detection)
+        counting = providers.counting or FakeCountingProvider()
+        providers.counting = counting
+        count = CountExecutor(counting)
         select = SelectExecutor(providers.semantic_2b, self.choice_config)
         semantic = SemanticExecutor(
             providers.semantic_2b,
@@ -527,23 +539,33 @@ class TaskGraphRuntime:
         if len(images) != 1:
             raise ValueError("DIRECT_DETECTION requires exactly one image")
         target = TargetSpec(category=request.target_category or "object")
-        detector_started = time.perf_counter()
-        detected = self.providers.detection.detect(
-            DetectionRequest(next(iter(images.values())), target, request.task_category)
-        )
-        detector_ms = (time.perf_counter() - detector_started) * 1000.0
         is_count = request.task_category.casefold() in {"count", "counting"}
-        source: RuntimeObject = (
-            ScalarInt(
-                len(detected.detections.entities),
-                {"provider": detected.provider, "detection": detected.detections.provenance},
-            )
-            if is_count
-            else detected.detections
-        )
+        scope = next(iter(images.values()))
         trace = ExecutionTrace(request.sample_id, ExecutionMode.DIRECT_DETECTION.value)
-        trace.telemetry["detector_ms"] = detector_ms
-        trace.telemetry["detector_metadata"] = dict(detected.metadata)
+        if is_count:
+            counting_started = time.perf_counter()
+            counting = self.providers.counting
+            if counting is None:
+                raise RuntimeError("COUNT requires RuntimeProviders.counting")
+            counted = counting.count(CountingRequest(scope, target, entire=True))
+            trace.telemetry["counting_ms"] = (
+                time.perf_counter() - counting_started
+            ) * 1000.0
+            trace.telemetry["counting_metadata"] = dict(counted.metadata)
+            source: RuntimeObject = ScalarInt(
+                counted.count,
+                {"provider": counted.provider, "detection": counted.detections.provenance},
+            )
+        else:
+            detector_started = time.perf_counter()
+            detected = self.providers.detection.detect(
+                DetectionRequest(scope, target, request.task_category)
+            )
+            trace.telemetry["detector_ms"] = (
+                time.perf_counter() - detector_started
+            ) * 1000.0
+            trace.telemetry["detector_metadata"] = dict(detected.metadata)
+            source = detected.detections
         if request.options:
             choice_started = time.perf_counter()
             choice_output = self.choice_resolver.resolve(
@@ -591,7 +613,14 @@ class TaskGraphRuntime:
     def _node_stage(node: Any) -> str | None:
         metadata = node.trace_metadata
         stage = metadata.get("stage")
-        if stage in {"detector", "retriever", "semantic_vlm", "route_vlm", "choice"}:
+        if stage in {
+            "detector",
+            "counting",
+            "retriever",
+            "semantic_vlm",
+            "route_vlm",
+            "choice",
+        }:
             return str(stage)
         capability = metadata.get("capability")
         if capability == "DETECTOR":
@@ -657,7 +686,13 @@ class TaskGraphRuntime:
                 value = max(0.0, float(node.latency_ms))
             stage_values[stage] = stage_values.get(stage, 0.0) + value
             stage_status[stage + "_ms"] = "executed"
-        for stage in ("semantic_vlm", "route_vlm", "retriever", "detector"):
+        for stage in (
+            "semantic_vlm",
+            "route_vlm",
+            "retriever",
+            "detector",
+            "counting",
+        ):
             value = trace.telemetry.get(stage + "_ms")
             if isinstance(value, (int, float)):
                 stage_values[stage] = max(0.0, float(value))
@@ -694,7 +729,13 @@ class TaskGraphRuntime:
         stage_status["postprocess_ms"] = (
             "executed" if postprocess_value is not None else "not_used"
         )
-        for stage_name in ("retriever", "detector", "semantic_vlm", "route_vlm"):
+        for stage_name in (
+            "retriever",
+            "detector",
+            "counting",
+            "semantic_vlm",
+            "route_vlm",
+        ):
             field_name = stage_name + "_ms"
             setattr(trace, field_name, stage_values.get(stage_name, 0.0))
             stage_status.setdefault(field_name, "not_used")
@@ -712,6 +753,7 @@ class TaskGraphRuntime:
         activated_counts: dict[str, int | str | None] = {}
         stage_providers = {
             "detector": ("detector", self.providers.detection),
+            "counting": ("counting", self.providers.counting),
             "retriever": ("retriever", self.providers.retriever),
             "semantic_vlm": ("semantic_2b", self.providers.semantic_2b),
             "route_vlm": ("route_4b", self.providers.route_4b),
@@ -823,6 +865,7 @@ def fake_runtime(
             retriever=FakeRegionRetriever(retrieval_candidates),
             choice=shared_2b,
             planner=FixturePlannerProvider(planner_fixtures or {}) if planner_fixtures else None,
+            counting=FakeCountingProvider(detection_boxes),
         ),
         policy=policy,
         semantic_categories=semantic_categories,
@@ -847,6 +890,12 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
 
     detection_cfg = dict(providers.get("detection", {"kind": "fake"}))
     detection_kind = str(detection_cfg.pop("kind", "fake"))
+    if detection_kind == "counting_system":
+        raise ValueError(
+            "providers.detection.kind='counting_system' is no longer supported. "
+            "Configure providers.counting.kind='counting_system' instead; "
+            "providers.detection remains the LOCATE DetectionProvider."
+        )
     if detection_kind == "fake":
         detection: DetectionProvider = FakeDetectionProvider(detection_cfg.get("boxes"))
     else:
@@ -854,6 +903,20 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
 
         detection = ProposalDetectionAdapter(
             create_proposal_provider(detection_kind, detection_cfg)
+        )
+
+    counting_cfg = dict(providers.get("counting", {"kind": "fake"}))
+    counting_kind = str(counting_cfg.pop("kind", "fake"))
+    if counting_kind == "fake":
+        counting: CountingProvider = FakeCountingProvider(counting_cfg.get("boxes"))
+    elif counting_kind == "counting_system":
+        from sat_rs_vlm.integrations.counting import CountingSystemProvider
+
+        counting = CountingSystemProvider.from_config(counting_cfg)
+    else:
+        raise ValueError(
+            f"unsupported counting provider kind: {counting_kind}; "
+            "use fake or counting_system"
         )
 
     def semantic_provider(name: str, role: str) -> SemanticVLMProvider:
@@ -1015,7 +1078,9 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
         route_max_side=int(composer_cfg.get("route_max_side", 1536)),
     )
     return TaskGraphRuntime(
-        RuntimeProviders(detection, semantic_2b, route_4b, retriever, choice, planner),
+        RuntimeProviders(
+            detection, semantic_2b, route_4b, retriever, choice, planner, counting
+        ),
         policy=policy,
         composer=composer,
         semantic_categories=set(config.get("semantic_region_categories", [])),

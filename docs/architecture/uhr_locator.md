@@ -209,6 +209,14 @@ detector:
 
 The values above are a diagnostic preset, not an optimum.
 
+When the tiled base provider is LAE-DINO, tile inference can use independent
+sidecar workers. Set `parallel_workers: auto` to size the pool from currently
+free CUDA memory; `parallel_max_workers` caps the pool, while
+`parallel_worker_vram_gb` and `parallel_vram_reserve_gb` provide conservative
+memory budgeting. The implementation keeps tile order deterministic and applies
+global NMS only after all workers return. A missing CUDA memory query falls back
+to one worker.
+
 VisRAG-only:
 
 ```powershell

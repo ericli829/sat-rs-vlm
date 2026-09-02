@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import builtins
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
@@ -21,6 +22,7 @@ from sat_rs_vlm.integrations.detectors.cache import ProposalCache
 from sat_rs_vlm.integrations.detectors.config import expand_config_value, resolve_config_path
 from sat_rs_vlm.integrations.detectors.grounding_dino import GroundingDinoProvider, _nms
 from sat_rs_vlm.integrations.detectors.lae_dino_sidecar import (
+    LAEDinoSidecarProvider,
     SidecarProtocolError,
     _LAESidecarClient,
 )
@@ -141,8 +143,9 @@ def test_grounding_dino_uses_structured_text_labels_without_loading_model(tmp_pa
             self.call_text = text
             return {"input_ids": "input-ids", "pixel_values": "pixels"}
 
-        def post_process_grounded_object_detection(self, outputs, *, input_ids, threshold,
-                                                   text_threshold, target_sizes, text_labels):
+        def post_process_grounded_object_detection(
+            self, outputs, *, input_ids, threshold, text_threshold, target_sizes, text_labels
+        ):
             self.post_text_labels = text_labels
             self.post_input_ids = input_ids
             return [{"boxes": [], "scores": []}]
@@ -373,6 +376,56 @@ def test_lae_sidecar_reports_process_crash(tmp_path: Path) -> None:
             client.request(image, "airplanes")
     finally:
         client.close()
+
+
+def test_lae_sidecar_uses_independent_clients_for_parallel_requests(tmp_path: Path) -> None:
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    config = tmp_path / "config.py"
+    config.write_text("# explicit test config\n", encoding="utf-8")
+    checkpoint = tmp_path / "checkpoint.pth"
+    checkpoint.write_bytes(b"checkpoint")
+    bert_root = tmp_path / "bert"
+    bert_root.mkdir()
+    image = tmp_path / "image.bin"
+    image.write_bytes(b"image")
+    worker = tmp_path / "worker.py"
+    worker.write_text(
+        "import json, sys, time\n"
+        "for line in sys.stdin:\n"
+        "    request = json.loads(line)\n"
+        "    time.sleep(0.03)\n"
+        "    response = {'id': request['id'], 'status': 'ok', 'bbox_list': [], "
+        "'bbox_scores': [], 'metadata': {'image_width': 20, 'image_height': 10}}\n"
+        "    sys.stdout.write(json.dumps(response) + '\\n')\n"
+        "    sys.stdout.flush()\n",
+        encoding="utf-8",
+    )
+    provider = LAEDinoSidecarProvider(
+        {
+            "source_root": str(source_root),
+            "config_path": str(config),
+            "checkpoint": str(checkpoint),
+            "bert_root": str(bert_root),
+            "worker_python": sys.executable,
+            "worker_script": str(worker),
+            "device": "cpu",
+            "parallel_workers": 2,
+        },
+        provider_name="lae_dino_lae1m",
+    )
+    try:
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            results = list(
+                executor.map(
+                    lambda _: provider.predict(image, "aircraft"),
+                    range(4),
+                )
+            )
+        assert len(provider._clients) == 2
+        assert all(result.boxes_xyxy == [] for result in results)
+    finally:
+        provider.close()
 
 
 def test_lae_worker_extracts_mmdetection2_boxes_without_segmentation_payload() -> None:

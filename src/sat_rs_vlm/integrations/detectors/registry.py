@@ -36,6 +36,15 @@ def create_proposal_provider(name: str, config: Mapping[str, Any]) -> ProposalPr
         base_config = normalized_config.get("base_config", {})
         if not isinstance(base_config, Mapping):
             raise ProposalError("tiled detector base_config must be a mapping")
+        base_config = dict(base_config)
+        for key in (
+            "parallel_workers",
+            "parallel_max_workers",
+            "parallel_worker_vram_gb",
+            "parallel_vram_reserve_gb",
+        ):
+            if key in normalized_config:
+                base_config.setdefault(key, normalized_config[key])
         base_provider = create_proposal_provider(base_provider_name, base_config)
         try:
             return TiledProposalProvider(

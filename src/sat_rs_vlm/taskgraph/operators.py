@@ -18,6 +18,8 @@ from .input_composer import InputComposer
 from .providers import (
     CachedChoiceUnavailableError,
     ChoiceScoringRequest,
+    CountingProvider,
+    CountingRequest,
     DetectionProvider,
     DetectionRequest,
     RegionRetrievalRequest,
@@ -44,7 +46,14 @@ from .runtime_types import (
     SelectStatus,
     unwrap_select_result,
 )
-from .schema import AnswerType, GraphNode, OperatorName, SpatialRelation, TargetSpec
+from .schema import (
+    AnswerType,
+    CountParams,
+    GraphNode,
+    OperatorName,
+    SpatialRelation,
+    TargetSpec,
+)
 from .semantic_decision import SemanticDecisionConfig, SemanticDecisionLayer
 from .semantic_prompts import semantic_question, semantic_reasoning_instruction
 
@@ -734,9 +743,9 @@ class LocateExecutor:
 
 
 class CountExecutor:
-    def __init__(self, detection: DetectionProvider) -> None:
-        self.detection = detection
-        self.provider_name = detection.provider_name
+    def __init__(self, counting: CountingProvider) -> None:
+        self.counting = counting
+        self.provider_name = counting.provider_name
 
     def execute(
         self,
@@ -764,19 +773,26 @@ class CountExecutor:
         scope = inputs.get("image")
         if not isinstance(scope, (ImageRef, Region)):
             raise TypeError("COUNT requires image/Region or EntitySet")
-        target = TargetSpec.model_validate(node.params["target"])
-        detected = self.detection.detect(DetectionRequest(scope, target, "COUNT"))
+        params = CountParams.model_validate(node.params)
+        counted = self.counting.count(
+            CountingRequest(scope=scope, target=params.target, entire=params.entire)
+        )
         return OperatorOutcome(
             ScalarInt(
-                len(detected.detections.entities),
-                {"provider": detected.provider, "detection": detected.detections.provenance},
+                counted.count,
+                {
+                    "provider": counted.provider,
+                    "detection": counted.detections.provenance,
+                    "entire": counted.metadata.get("entire", params.entire),
+                    "requested_entire": params.entire,
+                },
             ),
-            detected.provider,
+            counted.provider,
             {
-                "latency_ms": detected.latency_ms,
-                "activated_provider": detected.provider,
-                "stage": "detector",
-                "provider_metadata": dict(detected.metadata),
+                "latency_ms": counted.latency_ms,
+                "activated_provider": counted.provider,
+                "stage": "counting",
+                "provider_metadata": dict(counted.metadata),
             },
         )
 
