@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import importlib.util
 import json
 import os
@@ -24,6 +25,7 @@ MODEL_MODULES = (
     "qwen_vl_utils",
     "scipy",
 )
+RETRIEVER_MODULES = ("torch", "open_clip", "timm")
 PATH_NAMES = (
     "PROJECT_ROOT",
     "DATA_ROOT",
@@ -37,6 +39,12 @@ PATH_NAMES = (
     "HF_HUB_CACHE",
     "TORCH_HOME",
     "PIP_CACHE_DIR",
+    "GEORSCLIP_CHECKPOINT",
+    "LAE_DINO_PYTHON",
+    "LAE_DINO_SOURCE_ROOT",
+    "LAE_DINO_CONFIG",
+    "LAE_DINO_CHECKPOINT",
+    "LAE_DINO_BERT_ROOT",
 )
 
 
@@ -45,6 +53,7 @@ def parse_args() -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--require-model", action="store_true")
+    parser.add_argument("--require-retriever", action="store_true")
     parser.add_argument("--require-bitsandbytes", action="store_true")
     parser.add_argument("--require-gpu", action="store_true")
     parser.add_argument("--dataset-root", type=Path)
@@ -56,6 +65,14 @@ def parse_args() -> argparse.Namespace:
 
 def _available(module: str) -> bool:
     return importlib.util.find_spec(module) is not None
+
+
+def _importable(module: str) -> bool:
+    try:
+        importlib.import_module(module)
+    except Exception:
+        return False
+    return True
 
 
 def _gpu_report() -> dict[str, Any]:
@@ -111,6 +128,10 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
 
     base = {name: _available(name) for name in BASE_MODULES}
     model = {name: _available(name) for name in MODEL_MODULES}
+    retriever = {
+        name: (_importable(name) if args.require_retriever else _available(name))
+        for name in RETRIEVER_MODULES
+    }
     optional = {"bitsandbytes": _available("bitsandbytes")}
     return {
         "ok": all(base.values()),
@@ -121,6 +142,8 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "conda_environment": os.environ.get("CONDA_DEFAULT_ENV"),
         "base_dependencies": base,
         "model_dependencies": model,
+        "retriever_dependencies": retriever,
+        "retriever_check_mode": "import" if args.require_retriever else "availability",
         "optional_dependencies": optional,
         "gpu": _gpu_report(),
         "paths": _path_report(args.dataset_root, args.model_root, args.output_root),
@@ -138,6 +161,8 @@ def main() -> int:
         failures.append("base dependencies are incomplete")
     if args.require_model and not all(report["model_dependencies"].values()):
         failures.append("model dependencies are incomplete")
+    if args.require_retriever and not all(report["retriever_dependencies"].values()):
+        failures.append("retriever dependencies are incomplete")
     if args.require_bitsandbytes and not report["optional_dependencies"]["bitsandbytes"]:
         failures.append("bitsandbytes is unavailable")
     if args.require_gpu and not report["gpu"]["available"]:

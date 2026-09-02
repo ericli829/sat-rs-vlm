@@ -102,11 +102,17 @@ def main() -> int:
     except Exception as exc:
         report["errors"].append(f"torch check failed: {exc}")
     try:
+        importlib.import_module("mmcv")
         importlib.import_module("mmdet")
         importlib.import_module("mmengine")
-        report["imports"] = {"mmdet": True, "mmengine": True}
+        report["imports"] = {"mmcv": True, "mmdet": True, "mmengine": True}
     except Exception as exc:
-        report["imports"] = {"mmdet": False, "mmengine": False, "error": str(exc)}
+        report["imports"] = {
+            "mmcv": False,
+            "mmdet": False,
+            "mmengine": False,
+            "error": str(exc),
+        }
         report["errors"].append(f"LAE-DINO import check failed: {exc}")
     if report["errors"]:
         report["status"] = "failed"
