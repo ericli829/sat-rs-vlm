@@ -1,0 +1,4 @@
+pydantic>=2.5,<3
+PyYAML>=6,<7
+pytest>=7.4,<10
+regex>=2024,<2027

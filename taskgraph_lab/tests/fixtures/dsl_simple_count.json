@@ -1,0 +1,15 @@
+{
+  "intent": "SIMPLE_COUNT",
+  "nodes": [
+    {
+      "id": "n1",
+      "op": "COUNT",
+      "inputs": {"image": "$image0"},
+      "params": {
+        "target": {"category": "ship", "attributes": {"size": "large"}},
+        "entire": true
+      }
+    }
+  ],
+  "final": {"sources": ["$n1"], "answer_type": "CHOICE_SINGLE"}
+}

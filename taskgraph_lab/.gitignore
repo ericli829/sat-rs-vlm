@@ -1,0 +1,9 @@
+data/normalized/
+data/seeds/generated*
+outputs/
+.env
+*.log
+__pycache__/
+.pytest_cache/
+.pytest_tmp/
+

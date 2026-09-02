@@ -1,0 +1,72 @@
+model:
+  model_dir: "D:/Desktop/tzb-2026/Qwen3-VL-2B-Instruct"
+  processor_dir: "D:/Desktop/tzb-2026/Qwen3-VL-2B-Instruct"
+  local_files_only: true
+  trust_remote_code: true
+  torch_dtype: "bfloat16"
+  device_map: "auto"
+  attn_implementation: "sdpa"
+
+data:
+  train_file: "taskgraph_lab/data/planner_sft_new2701/train.jsonl"
+  val_file: "taskgraph_lab/data/planner_sft_new2701/test.jsonl"
+  image_root: "."
+  max_seq_length: 1088
+  skip_bad_samples: false
+  data_composition: "full"
+  sampling_mode: "uniform"
+
+training:
+  output_dir: "taskgraph_lab/outputs/training/qwen3vl_2b_planner_lora_new2701"
+  method: "lora"
+  freeze_vision_encoder: true
+  freeze_projector: true
+  num_train_epochs: 3
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 4
+  learning_rate: 0.0002
+  weight_decay: 0.01
+  warmup_ratio: 0.05
+  lr_scheduler_type: "cosine"
+  logging_steps: 5
+  save_steps: 250
+  eval_steps: 250
+  save_total_limit: 2
+  bf16: true
+  fp16: false
+  gradient_checkpointing: true
+  dataloader_num_workers: 0
+  dataloader_pin_memory: true
+  dataloader_persistent_workers: false
+  max_grad_norm: 1.0
+  seed: 42
+  resume_from_checkpoint: null
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+
+qlora:
+  load_in_4bit: false
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_compute_dtype: "bfloat16"
+  bnb_4bit_use_double_quant: true
+
+loss:
+  mode: "token_mean"
+  task_weights: {planner: 1.0}
+  unknown_task_weight: 1.0
+  strict_task_metadata: true
+
+evaluation:
+  do_eval: true
+  predict_with_generate: false
+  max_new_tokens: 512
+  num_beams: 1
+
+logging:
+  report_to: "none"
+  experiment_name: "qwen3vl-2b-taskgraph-planner-lora-new2701"

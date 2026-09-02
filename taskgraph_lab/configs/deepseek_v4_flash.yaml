@@ -1,0 +1,17 @@
+provider:
+  type: openai_compatible
+  endpoint: https://api.deepseek.com/chat/completions
+  model: deepseek-v4-flash
+  api_key_env: TASKGRAPH_TEACHER_API_KEY
+  thinking: enabled
+  reasoning_effort: low
+runtime:
+  concurrency: 2
+  requests_per_minute: 30
+  timeout_seconds: 120
+  max_retries: 3
+  backoff_base_seconds: 2.0
+  temperature: 0.1
+  max_output_tokens: 8192
+  repair_enabled: true
+  semantic_review: false

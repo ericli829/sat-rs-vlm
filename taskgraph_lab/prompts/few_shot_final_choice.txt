@@ -1,0 +1,31 @@
+Example A: authoritative count choice
+
+Sample:
+{"question":"How many large ships are there?","question_type":"MULTIPLE_CHOICE_SINGLE","choices":["(A) 3","(B) 4"],"inputs":{"image0":{"type":"image","uri_or_key":"ships.png"}}}
+
+Target:
+{"intent":"SIMPLE_COUNT","nodes":[{"id":"n1","op":"COUNT","inputs":{"image":"$image0"},"params":{"target":{"category":"ship","attributes":{"size":"large"}},"entire":true}}],"final":{"sources":["$n1"],"answer_type":"CHOICE_SINGLE"}}
+
+Example B: bbox visual choice with compound color options
+
+Sample:
+{"question":"What colors are visible on the object in bounding box [10,20,30,40]?","question_type":"MULTIPLE_CHOICE_SINGLE","choices":["(A) White and purple","(B) Green and blue"],"inputs":{"image0":{"type":"image","uri_or_key":"bbox.png"}}}
+
+Target:
+{"intent":"ATTRIBUTE_QUERY","nodes":[{"id":"n1","op":"REGION_FROM_BBOX","inputs":{"image":"$image0"},"params":{"bbox":[10,20,30,40]}}],"final":{"sources":["$n1"],"question":"What colors are visible on the selected object?","answer_type":"CHOICE_SINGLE"}}
+
+Example C: relational visual attribute
+
+Sample:
+{"question":"What colors are visible on the house next to the pool at the top?","question_type":"MULTIPLE_CHOICE_SINGLE","choices":["(A) Black and white","(B) Gold and green"],"inputs":{"image0":{"type":"image","uri_or_key":"house.png"}}}
+
+Target:
+{"intent":"ATTRIBUTE_QUERY","nodes":[{"id":"n1","op":"REGION","inputs":{"image":"$image0"},"params":{"position":"TOP"}},{"id":"n2","op":"LOCATE","inputs":{"image":"$n1"},"params":{"target":{"category":"pool","attributes":{}}}},{"id":"n3","op":"LOCATE","inputs":{"image":"$image0"},"params":{"target":{"category":"house","attributes":{}}}},{"id":"n4","op":"SELECT","inputs":{"candidates":"$n3","reference":"$n2"},"params":{"mode":"RELATION","relation":"NEXT_TO"}}],"final":{"sources":["$n4"],"question":"What colors are visible on the selected house?","answer_type":"CHOICE_SINGLE"}}
+
+Example D: route choice from typed context
+
+Sample:
+{"question":"What is the best route from the top-right building to the bottom-right pond?","question_type":"MULTIPLE_CHOICE_SINGLE","choices":["(A) Turn left","(B) Turn right"],"inputs":{"image0":{"type":"image","uri_or_key":"route.png"}}}
+
+Target:
+{"intent":"ROUTE_PLANNING","nodes":[{"id":"n1","op":"REGION","inputs":{"image":"$image0"},"params":{"position":"TOP_RIGHT"}},{"id":"n2","op":"LOCATE","inputs":{"image":"$n1"},"params":{"target":{"category":"building","attributes":{}}}},{"id":"n3","op":"REGION","inputs":{"image":"$image0"},"params":{"position":"BOTTOM_RIGHT"}},{"id":"n4","op":"LOCATE","inputs":{"image":"$n3"},"params":{"target":{"category":"pond","attributes":{}}}},{"id":"n5","op":"BUILD_ROUTE_CONTEXT","inputs":{"image":"$image0","start":"$n2","goal":"$n4"},"params":{}}],"final":{"sources":["$n5"],"question":"Which option describes the best route between the selected start and goal?","answer_type":"CHOICE_SINGLE"}}
