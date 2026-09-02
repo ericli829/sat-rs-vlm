@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 import tempfile
 import time
@@ -112,12 +113,27 @@ class RegionCandidate:
     relevance_score: float
     provenance: dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        score = float(self.relevance_score)
+        if not math.isfinite(score):
+            raise ValueError("region candidate relevance_score must be finite")
+        object.__setattr__(self, "relevance_score", score)
+
 
 @dataclass(frozen=True)
 class RegionCandidates:
     candidates: tuple[RegionCandidate, ...]
     provider: str
     latency_ms: float = 0.0
+
+    def __post_init__(self) -> None:
+        latency = float(self.latency_ms)
+        if not math.isfinite(latency) or latency < 0.0:
+            raise ValueError("region candidate latency_ms must be finite and non-negative")
+        if not str(self.provider).strip():
+            raise ValueError("region candidate provider must not be empty")
+        object.__setattr__(self, "candidates", tuple(self.candidates))
+        object.__setattr__(self, "latency_ms", latency)
 
 
 class RegionRetrieverProvider(Protocol):
@@ -523,10 +539,25 @@ class LocatorRegionRetrieverAdapter:
 class ScoredGridRegionRetrieverAdapter:
     """Adapt score-only RetrieverProvider by supplying explicit grid candidates."""
 
-    def __init__(self, provider: RetrieverProvider, *, grid_size: int = 3) -> None:
+    def __init__(
+        self,
+        provider: RetrieverProvider,
+        *,
+        grid_size: int = 3,
+        default_max_candidates: int = 5,
+        candidate_window_ratio: float | None = None,
+    ) -> None:
+        if grid_size < 1:
+            raise ValueError("retriever grid_size must be positive")
+        if default_max_candidates < 1:
+            raise ValueError("retriever default_max_candidates must be positive")
+        if candidate_window_ratio is not None and not 0.0 < candidate_window_ratio <= 1.0:
+            raise ValueError("retriever candidate_window_ratio must be in (0, 1]")
         self._provider = provider
         self.provider_name = provider.provider_name
         self.grid_size = grid_size
+        self.default_max_candidates = default_max_candidates
+        self.candidate_window_ratio = candidate_window_ratio
 
     def retrieve(self, request: RegionRetrievalRequest) -> RegionCandidates:
         image = request.image if isinstance(request.image, ImageRef) else request.image.image
@@ -538,26 +569,58 @@ class ScoredGridRegionRetrieverAdapter:
             if effective_scope is not None
             else (0.0, 0.0, float(width), float(height))
         )
-        cell_width = (scope[2] - scope[0]) / self.grid_size
-        cell_height = (scope[3] - scope[1]) / self.grid_size
+        scope_width = scope[2] - scope[0]
+        scope_height = scope[3] - scope[1]
+        window_ratio = self.candidate_window_ratio or 1.0 / self.grid_size
+        cell_width = scope_width * window_ratio
+        cell_height = scope_height * window_ratio
+        if self.grid_size == 1:
+            x_starts = [scope[0] + (scope_width - cell_width) / 2.0]
+            y_starts = [scope[1] + (scope_height - cell_height) / 2.0]
+        else:
+            x_stride = (scope_width - cell_width) / (self.grid_size - 1)
+            y_stride = (scope_height - cell_height) / (self.grid_size - 1)
+            x_starts = [scope[0] + x * x_stride for x in range(self.grid_size)]
+            y_starts = [scope[1] + y * y_stride for y in range(self.grid_size)]
         boxes = [
-            (
-                scope[0] + x * cell_width,
-                scope[1] + y * cell_height,
-                scope[0] + (x + 1) * cell_width,
-                scope[1] + (y + 1) * cell_height,
-            )
-            for y in range(self.grid_size)
-            for x in range(self.grid_size)
+            (x_start, y_start, x_start + cell_width, y_start + cell_height)
+            for y_start in y_starts
+            for x_start in x_starts
         ]
         scored = self._provider.score_regions(image.path, request.query, boxes)
         order = sorted(range(len(boxes)), key=lambda index: (-scored.scores[index], index))
-        order = order[: request.max_candidates or len(order)]
+        order = order[: request.max_candidates or self.default_max_candidates]
         candidates = tuple(
             RegionCandidate(
-                Region(image, boxes[index], {"retriever": self.provider_name}),
+                Region(
+                    image,
+                    boxes[index],
+                    {
+                        "retriever": self.provider_name,
+                        "coordinate_mode": "absolute_original_pixel_xyxy",
+                        "search_scope": list(scope),
+                    },
+                ),
                 scored.scores[index],
-                {"retriever": self.provider_name, "model_id": scored.model_id},
+                {
+                    "provider": self.provider_name,
+                    "model_id": scored.model_id,
+                    "bbox_xyxy_global": list(boxes[index]),
+                    "search_scope": list(scope),
+                    "tile": {
+                        "level": 1,
+                        "index": index,
+                        "row": index // self.grid_size,
+                        "column": index % self.grid_size,
+                        "grid_size": self.grid_size,
+                    },
+                    "candidate_geometry": {
+                        "layout": "uniform_sliding_grid",
+                        "window_ratio": window_ratio,
+                        "overlapping": window_ratio > 1.0 / self.grid_size,
+                    },
+                    "provider_metadata": dict(getattr(scored, "metadata", {})),
+                },
             )
             for index in order
         )

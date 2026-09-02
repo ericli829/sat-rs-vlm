@@ -1,7 +1,7 @@
 model:
-  base_model: "${MODEL_ROOT}/Qwen3-VL-2B-Instruct"
-  adapter_path: "checkpoints/smoke/qwen3vl-local-smoke"
-  processor_id: "${MODEL_ROOT}/Qwen3-VL-2B-Instruct"
+  base_model: "${QWEN3VL_2B_MODEL_DIR}"
+  adapter_path: null
+  processor_id: "${QWEN3VL_2B_MODEL_DIR}"
   local_files_only: true
   trust_remote_code: true
   torch_dtype: "bfloat16"
@@ -14,6 +14,8 @@ data:
   image_root: "${DATA_ROOT}"
   max_seq_length: 1024
   max_eval_samples: null
+  eval_batch_size: 1
+  group_by_task: true
   tiers_manifest: "data/evaluation/tiers_v2/evaluation_tiers_manifest.json"
 
 generation:
@@ -29,7 +31,10 @@ evaluation:
   tiers_manifest: "data/evaluation/tiers_v2/evaluation_tiers_manifest.json"
   strict: true
   semantic: true
-  latency_semantics: "batch_amortized_per_sample"
+  latency_semantics: "single_sample"
+
+performance:
+  enabled: true
 
 output:
   summary_file: "reports/eval/qwen3vl_eval_summary.json"

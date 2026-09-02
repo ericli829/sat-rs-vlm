@@ -6,8 +6,9 @@ import math
 from dataclasses import dataclass, field, replace
 from math import hypot
 from statistics import median
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
+import numpy as np
 from PIL import Image
 
 from .choice_config import ChoiceSystemConfig
@@ -149,6 +150,76 @@ class GeometryExecutor:
         )
 
     @staticmethod
+    def _marker_components(mask: Any) -> list[dict[str, int]]:
+        """Label an 8-connected mask using row runs, never one Python object per pixel."""
+
+        parents: list[int] = []
+        runs: list[tuple[int, int, int, int]] = []
+
+        def new_label() -> int:
+            label = len(parents)
+            parents.append(label)
+            return label
+
+        def find(label: int) -> int:
+            root = label
+            while parents[root] != root:
+                root = parents[root]
+            while parents[label] != label:
+                parent = parents[label]
+                parents[label] = root
+                label = parent
+            return root
+
+        def union(left: int, right: int) -> int:
+            left_root = find(left)
+            right_root = find(right)
+            if left_root != right_root:
+                root = min(left_root, right_root)
+                parents[max(left_root, right_root)] = root
+            return find(left_root)
+
+        previous: list[tuple[int, int, int]] = []
+        for y in range(int(mask.shape[0])):
+            row = mask[y]
+            padded = np.empty(int(row.shape[0]) + 2, dtype=np.bool_)
+            padded[0] = False
+            padded[-1] = False
+            padded[1:-1] = row
+            transitions = np.flatnonzero(padded[1:] != padded[:-1])
+            current: list[tuple[int, int, int]] = []
+            for x0_raw, x1_raw in zip(transitions[0::2], transitions[1::2], strict=True):
+                x0, x1 = int(x0_raw), int(x1_raw)
+                overlaps = [
+                    label
+                    for previous_x0, previous_x1, label in previous
+                    if previous_x1 >= x0 and previous_x0 <= x1
+                ]
+                if overlaps:
+                    label = find(overlaps[0])
+                    for other in overlaps[1:]:
+                        label = union(label, other)
+                else:
+                    label = new_label()
+                current.append((x0, x1, label))
+                runs.append((y, x0, x1, label))
+            previous = current
+
+        components: dict[int, dict[str, int]] = {}
+        for y, x0, x1, label in runs:
+            root = find(label)
+            component = components.setdefault(
+                root,
+                {"x0": x0, "y0": y, "x1": x1, "y1": y + 1, "pixels": 0},
+            )
+            component["x0"] = min(component["x0"], x0)
+            component["y0"] = min(component["y0"], y)
+            component["x1"] = max(component["x1"], x1)
+            component["y1"] = max(component["y1"], y + 1)
+            component["pixels"] += x1 - x0
+        return sorted(components.values(), key=lambda item: (item["y0"], item["x0"]))
+
+    @staticmethod
     def _marker(
         source: ImageRef | Region,
         color: str | None,
@@ -158,26 +229,21 @@ class GeometryExecutor:
         scope = _scope_box(source)
         marker_color = (color or "red").casefold()
 
-        def matches(pixel: tuple[int, int, int]) -> bool:
-            red, green, blue = pixel
-            if marker_color == "green":
-                return green >= 140 and green >= red + 40 and green >= blue + 40
-            if marker_color == "blue":
-                return blue >= 140 and blue >= red + 40 and blue >= green + 40
-            if marker_color == "yellow":
-                return red >= 150 and green >= 150 and blue <= 130
-            return red >= 160 and red >= green + 60 and red >= blue + 60
-
         with Image.open(image.path.resolve()) as raw:
             crop = raw.convert("RGB").crop(scope)
-            pixels = crop.load()
-            hits: set[tuple[int, int]] = set()
-            for y in range(crop.height):
-                for x in range(crop.width):
-                    if matches(pixels[x, y]):
-                        hits.add((x, y))
+            pixels = np.asarray(crop, dtype=np.int16)
+        red, green, blue = pixels[:, :, 0], pixels[:, :, 1], pixels[:, :, 2]
+        if marker_color == "green":
+            mask = (green >= 140) & (green - red >= 40) & (green - blue >= 40)
+        elif marker_color == "blue":
+            mask = (blue >= 140) & (blue - red >= 40) & (blue - green >= 40)
+        elif marker_color == "yellow":
+            mask = (red >= 150) & (green >= 150) & (blue <= 130)
+        else:
+            mask = (red >= 160) & (red - green >= 60) & (red - blue >= 60)
+        components = GeometryExecutor._marker_components(mask)
         marker_shape = (shape or "unspecified").casefold()
-        if not hits:
+        if not components:
             return RegionSet(
                 (),
                 {
@@ -186,41 +252,28 @@ class GeometryExecutor:
                     "shape": marker_shape,
                     "component_count": 0,
                     "rejected_component_count": 0,
+                    "implementation": "numpy_vectorized_mask_rle_union_find",
                 },
             )
 
-        components: list[set[tuple[int, int]]] = []
-        remaining = set(hits)
-        while remaining:
-            seed = min(remaining, key=lambda point: (point[1], point[0]))
-            remaining.remove(seed)
-            component = {seed}
-            stack = [seed]
-            while stack:
-                x, y = stack.pop()
-                for delta_y in (-1, 0, 1):
-                    for delta_x in (-1, 0, 1):
-                        neighbor = (x + delta_x, y + delta_y)
-                        if neighbor in remaining:
-                            remaining.remove(neighbor)
-                            component.add(neighbor)
-                            stack.append(neighbor)
-            components.append(component)
-
         minimum_pixels = max(4, min(64, math.ceil(crop.width * crop.height * 0.00001)))
         maximum_bbox_area = crop.width * crop.height * 0.2
-        accepted: list[set[tuple[int, int]]] = []
+        accepted: list[dict[str, int]] = []
         rejected: list[dict[str, object]] = []
         for component in components:
-            component_x0 = min(point[0] for point in component)
-            component_y0 = min(point[1] for point in component)
-            component_x1 = max(point[0] for point in component) + 1
-            component_y1 = max(point[1] for point in component) + 1
+            component_x0 = component["x0"]
+            component_y0 = component["y0"]
+            component_x1 = component["x1"]
+            component_y1 = component["y1"]
             component_width = component_x1 - component_x0
             component_height = component_y1 - component_y0
             bbox_area = component_width * component_height
             reason = None
-            if len(component) < minimum_pixels or component_width < 2 or component_height < 2:
+            if (
+                component["pixels"] < minimum_pixels
+                or component_width < 2
+                or component_height < 2
+            ):
                 reason = "too_small"
             elif bbox_area > maximum_bbox_area:
                 reason = "too_large_for_artificial_marker"
@@ -239,7 +292,7 @@ class GeometryExecutor:
                             component_x1,
                             component_y1,
                         ],
-                        "pixels": len(component),
+                        "pixels": component["pixels"],
                         "reason": reason,
                     }
                 )
@@ -249,25 +302,19 @@ class GeometryExecutor:
             Region(
                 image,
                 (
-                    min(point[0] for point in component) + offset_x,
-                    min(point[1] for point in component) + offset_y,
-                    max(point[0] for point in component) + offset_x + 1,
-                    max(point[1] for point in component) + offset_y + 1,
+                    component["x0"] + offset_x,
+                    component["y0"] + offset_y,
+                    component["x1"] + offset_x,
+                    component["y1"] + offset_y,
                 ),
                 {
                     "operator": "FIND_MARKER",
                     "color": marker_color,
                     "shape": marker_shape,
-                    "component_pixels": len(component),
+                    "component_pixels": component["pixels"],
                 },
             )
-            for component in sorted(
-                accepted,
-                key=lambda item: (
-                    min(point[1] for point in item),
-                    min(point[0] for point in item),
-                ),
-            )
+            for component in accepted
         )
         return RegionSet(
             regions,
@@ -279,6 +326,7 @@ class GeometryExecutor:
                 "rejected_component_count": len(rejected),
                 "rejected_components": rejected,
                 "minimum_component_pixels": minimum_pixels,
+                "implementation": "numpy_vectorized_mask_rle_union_find",
             },
         )
 

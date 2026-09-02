@@ -1,8 +1,16 @@
 dataset_policy:
   VRSBench:
     caption: DIRECT_VLM
+    captioning: DIRECT_VLM
     vqa: DIRECT_VLM
+    visual_question_answering: DIRECT_VLM
+    attribute: DIRECT_VLM
+    classification: DIRECT_VLM
     count: DIRECT_DETECTION
+    counting: DIRECT_DETECTION
+    grounding: DIRECT_DETECTION
+    visual_grounding: DIRECT_DETECTION
+    referring_grounding: DIRECT_DETECTION
     detection: DIRECT_DETECTION
     default: DIRECT_VLM
   LEVIR_CC:
@@ -44,6 +52,8 @@ semantic_region_categories:
 
 input_composer:
   candidate_halo_ratio: 0.2
+  entity_set_union_area_threshold: 0.55
+  entity_set_max_side: 1536
   route_max_side: 1536
 
 answerability:

@@ -5,6 +5,7 @@ import math
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from scripts.integrations.visrag_worker import score_request
@@ -37,7 +38,8 @@ from sat_rs_vlm.integrations.locators.router import TaskRouter
 from sat_rs_vlm.integrations.locators.scoring.detector import DetectorRegionScorer
 from sat_rs_vlm.integrations.locators.scoring.spatial import SpatialRegionScorer
 from sat_rs_vlm.integrations.locators.types import LocatorError, SearchRegion
-from sat_rs_vlm.integrations.retrievers.cache import retrieval_cache_key
+from sat_rs_vlm.integrations.retrievers.cache import RetrievalCache, retrieval_cache_key
+from sat_rs_vlm.integrations.retrievers.openclip import OpenCLIPRetrieverProvider
 from sat_rs_vlm.integrations.retrievers.protocol import RetrievalError, RetrievalResult
 from sat_rs_vlm.integrations.retrievers.registry import create_retriever_provider
 from sat_rs_vlm.integrations.retrievers.visrag import (
@@ -400,6 +402,17 @@ def test_retrieval_result_validation_and_mock_order(tmp_path: Path) -> None:
     assert result.scores == [0.3, 0.8]
 
 
+def test_retrieval_cache_atomically_replaces_without_temporary_files(tmp_path: Path) -> None:
+    cache = RetrievalCache(tmp_path / "cache")
+    key = "a" * 64
+    path = cache.put(key, 0.25, {"provider": "fixture"})
+    cache.put(key, 0.75)
+
+    assert path.is_file()
+    assert cache.get(key) == pytest.approx(0.75)
+    assert list(cache.root.glob("*.tmp")) == []
+
+
 def test_mock_registry_does_not_import_heavy_transformers(monkeypatch: pytest.MonkeyPatch) -> None:
     original_import = builtins.__import__
 
@@ -411,6 +424,25 @@ def test_mock_registry_does_not_import_heavy_transformers(monkeypatch: pytest.Mo
     monkeypatch.setattr(builtins, "__import__", guarded_import)
     provider = create_retriever_provider("mock", {})
     assert provider.provider_name == "mock"
+
+
+def test_georsclip_registry_is_lazy_until_first_score(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checkpoint = tmp_path / "georsclip.pt"
+    checkpoint.touch()
+    original_import = builtins.__import__
+
+    def guarded_import(name: str, *args: object, **kwargs: object) -> object:
+        if name == "open_clip" or name.startswith("open_clip."):
+            raise AssertionError("GeoRSCLIP loaded open_clip during construction")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
+    provider = create_retriever_provider("georsclip", {"checkpoint": str(checkpoint)})
+    assert provider.provider_name == "georsclip"
+    assert provider._model is None
 
 
 def test_visrag_registry_is_lazy_until_first_score(
@@ -446,6 +478,62 @@ def test_visrag_uses_official_weighted_pooling_and_normalization() -> None:
 def test_visrag_default_query_instruction_matches_official_model_card(tmp_path: Path) -> None:
     provider = create_retriever_provider("visrag", {"model_path": str(tmp_path)})
     assert provider.query_instruction == _OFFICIAL_QUERY_INSTRUCTION
+
+
+def test_openclip_reuses_decode_embedding_and_score_caches(tmp_path: Path) -> None:
+    torch = pytest.importorskip("torch")
+    from PIL import Image
+
+    checkpoint = tmp_path / "remoteclip.pt"
+    checkpoint.touch()
+    image_path = tmp_path / "image.png"
+    Image.new("RGB", (40, 20), "white").save(image_path)
+    provider = OpenCLIPRetrieverProvider(
+        {
+            "checkpoint": str(checkpoint),
+            "cache_dir": str(tmp_path / "cache"),
+            "batch_size": 2,
+            "decoded_image_cache_size": 1,
+            "image_embedding_cache_size": 4,
+        }
+    )
+
+    class FakeModel:
+        def __init__(self) -> None:
+            self.image_calls = 0
+
+        def encode_text(self, tokens: Any) -> Any:
+            return torch.tensor([[1.0, 0.0]])
+
+        def encode_image(self, images: Any) -> Any:
+            self.image_calls += 1
+            return torch.tensor(
+                [[1.0, float(index + 1)] for index in range(len(images))]
+            )
+
+    model = FakeModel()
+    provider._torch = torch
+    provider._model = model
+    provider._preprocess = lambda image: torch.tensor(
+        [float(image.width), float(image.height)]
+    )
+    provider._tokenizer = lambda values: torch.tensor([[1, 2]])
+    provider._resolved_device = "cpu"
+    boxes = [(0, 0, 20, 20), (20, 0, 40, 20)]
+    try:
+        first = provider.score_regions(image_path, "airport", boxes)
+        second_query = provider.score_regions(image_path, "harbor", boxes)
+        repeated = provider.score_regions(image_path, "airport", boxes)
+    finally:
+        provider.close()
+
+    assert first.metadata["decoded_image_cache_hit"] is False
+    assert first.metadata["image_embedding_cache_hits"] == 0
+    assert second_query.metadata["decoded_image_cache_hit"] is True
+    assert second_query.metadata["image_embedding_cache_hits"] == 2
+    assert repeated.metadata["score_cache_hits"] == 2
+    assert repeated.metadata["crop_batch_count"] == 0
+    assert model.image_calls == 1
 
 
 def test_visrag_reuses_model_query_embedding_and_batches_crops(tmp_path: Path) -> None:

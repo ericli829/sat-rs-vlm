@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -80,12 +81,31 @@ class RetrievalCache:
 
     def put(self, key: str, score: float, metadata: dict[str, Any] | None = None) -> Path:
         path = self._path(key)
-        temporary = path.with_suffix(".tmp")
         payload = {
             "schema_version": RETRIEVAL_CACHE_SCHEMA_VERSION,
             "score": float(score),
             "metadata": dict(metadata or {}),
         }
-        temporary.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-        os.replace(temporary, path)
+        temporary_name: str | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=self.root,
+                prefix=f"{key}.",
+                suffix=".tmp",
+                delete=False,
+            ) as handle:
+                temporary_name = handle.name
+                json.dump(payload, handle, indent=2)
+                handle.write("\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary_name, path)
+        finally:
+            if temporary_name is not None:
+                try:
+                    os.unlink(temporary_name)
+                except FileNotFoundError:
+                    pass
         return path

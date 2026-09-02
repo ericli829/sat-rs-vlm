@@ -42,6 +42,11 @@ _INTERMEDIATE_INSTRUCTIONS = {
         "Reason freely about the marked subject and reference. A separate canonical decision "
         "step will select the spatial relation."
     ),
+    OperatorName.VLM_REASON: (
+        "Treat every supplied crop, candidate set, label, count, and localized region as "
+        "authoritative upstream evidence. Resolve only the residual question. Do not search for "
+        "a replacement target, redo COUNT, or rescan the original whole image."
+    ),
 }
 
 _FINAL_FUSION = (
@@ -54,7 +59,10 @@ _ROUTE_V1_CONTEXT = (
     "START and GOAL have already been resolved by upstream localization and are marked in the "
     "supplied route crop. Treat referring descriptions of those endpoints as identity context "
     "only; do not search for replacement endpoints. Preserve and apply all navigation, direction, "
-    "obstacle, and shortest-route constraints. Prompt version: route-v1."
+    "obstacle, and shortest-route constraints. This includes driving, walking, or boat mode; "
+    "shortest or best route; north/south/east/west and left/right directions; first or second "
+    "intersections; U-turns; forks; T-junctions; and traversability constraints. "
+    "Prompt version: route-v1."
 )
 
 
@@ -79,6 +87,14 @@ def semantic_question(
     elif node.op in {OperatorName.VLM_REASON, OperatorName.ROUTE_REASON}:
         configured = str(node.params["question"])
         base = original_question if configured == "$question" else configured
+        if node.op is OperatorName.VLM_REASON:
+            residual = base or "Resolve the remaining semantic question from the supplied evidence."
+            base = (
+                "Upstream localization, selection, and structured results are authoritative. "
+                "Use only the supplied evidence; do not search for a replacement target, redo "
+                "COUNT, or rescan the original whole image.\n\n"
+                f"Residual semantic question:\n{residual}"
+            )
     else:
         base = _INTERMEDIATE_QUESTIONS.get(node.op, original_question)
     if node.op is OperatorName.ROUTE_REASON:

@@ -50,6 +50,7 @@ CLOUD_ENV = {
     "ADAPTER_PATH": "/workspace/outputs/adapter",
     "REPLAY_ADAPTER_DIR": "/workspace/outputs/replay-generalist-adapter",
     "QWEN3VL_4B_REPLAY_ADAPTER_DIR": "/workspace/outputs/qwen3vl-4b-replay-adapter",
+    "GEORSCLIP_CHECKPOINT": "/workspace/models/GeoRSCLIP/GeoRSCLIP-ViT-B-32.pt",
 }
 
 

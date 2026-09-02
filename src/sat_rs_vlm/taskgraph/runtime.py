@@ -353,6 +353,7 @@ def fake_runtime(
     semantic_decision_config: SemanticDecisionConfig | None = None,
     final_choice_fusion_config: FinalChoiceFusionConfig | None = None,
     answerability_config: AnswerabilityConfig | None = None,
+    semantic_categories: set[str] | None = None,
 ) -> TaskGraphRuntime:
     shared_2b = FakeSemanticVLMProvider(
         {**(semantic_responses or {}), **(choice_responses or {})},
@@ -368,6 +369,7 @@ def fake_runtime(
             planner=FixturePlannerProvider(planner_fixtures or {}) if planner_fixtures else None,
         ),
         policy=policy,
+        semantic_categories=semantic_categories,
         choice_config=choice_config,
         semantic_decision_config=semantic_decision_config,
         final_choice_fusion_config=final_choice_fusion_config,
@@ -440,7 +442,14 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
 
         scorer = create_retriever_provider(retriever_kind, retriever_cfg)
         retriever = ScoredGridRegionRetrieverAdapter(
-            scorer, grid_size=int(retriever_cfg.get("grid_size", 3))
+            scorer,
+            grid_size=int(retriever_cfg.get("grid_size", 3)),
+            default_max_candidates=int(retriever_cfg.get("max_candidates", 5)),
+            candidate_window_ratio=(
+                float(retriever_cfg["candidate_window_ratio"])
+                if retriever_cfg.get("candidate_window_ratio") is not None
+                else None
+            ),
         )
 
     planner = None
@@ -465,6 +474,10 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
         raise TypeError("input_composer config must be a mapping")
     composer = InputComposer(
         candidate_halo_ratio=float(composer_cfg.get("candidate_halo_ratio", 0.2)),
+        entity_set_union_area_threshold=float(
+            composer_cfg.get("entity_set_union_area_threshold", 0.55)
+        ),
+        entity_set_max_side=int(composer_cfg.get("entity_set_max_side", 1536)),
         route_max_side=int(composer_cfg.get("route_max_side", 1536)),
     )
     return TaskGraphRuntime(

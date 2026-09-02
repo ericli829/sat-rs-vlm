@@ -388,3 +388,90 @@ def test_f8_nested_bbox_to_attribute_keeps_global_coordinates(tmp_path: Path) ->
         assert result.output.value == "concrete"
     finally:
         runtime.close()
+
+
+def test_f9_semantic_region_locate_uses_retriever_then_qwen(tmp_path: Path) -> None:
+    image = _image(tmp_path / "f9.png")
+    graph = _graph(
+        "What type of harbor is in the retrieved region?",
+        [
+            {
+                "id": "n1",
+                "op": "LOCATE",
+                "inputs": {"image": "$image0"},
+                "params": {"target": {"category": "harbor", "attributes": {}}},
+            },
+            {
+                "id": "n2",
+                "op": "SELECT",
+                "inputs": {"candidates": "$n1"},
+                "params": {"mode": "EXTREME", "direction": "LEFTMOST"},
+            },
+            {
+                "id": "n3",
+                "op": "CLASSIFY",
+                "inputs": {"source": "$n2"},
+                "params": {"label_space": ["commercial", "industrial"]},
+            },
+        ],
+        "$n3",
+        "LABEL",
+    )
+    runtime = fake_runtime(
+        detection_boxes=[[1, 1, 10, 10]],
+        retrieval_candidates=[([40, 30, 180, 160], 0.9)],
+        semantic_choice_scores={
+            "semantic_classify": {"commercial": -1.0, "industrial": 2.0}
+        },
+        semantic_categories={"harbor"},
+    )
+    try:
+        result = _run(runtime, graph, (image,))
+        located = result.store.get("$n1")
+        assert located.provenance["capability"] == "region_retrieval"
+        assert located.entities[0].region.bbox_xyxy_global == (40.0, 30.0, 180.0, 160.0)
+        assert runtime.providers.detection.calls == []
+        assert isinstance(result.output, Label)
+        assert result.output.value == "industrial"
+        assert len(runtime.providers.semantic_2b.semantic_calls) == 1
+    finally:
+        runtime.close()
+
+
+def test_f10_object_locate_remains_bound_to_lae(tmp_path: Path) -> None:
+    image = _image(tmp_path / "f10.png")
+    graph = _graph(
+        "Locate the aircraft.",
+        [
+            {
+                "id": "n1",
+                "op": "LOCATE",
+                "inputs": {"image": "$image0"},
+                "params": {"target": {"category": "aircraft", "attributes": {}}},
+            },
+            {
+                "id": "n2",
+                "op": "COUNT",
+                "inputs": {"entities": "$n1"},
+                "params": {
+                    "target": {"category": "aircraft", "attributes": {}},
+                    "entire": False,
+                },
+            },
+        ],
+        "$n2",
+        "INTEGER",
+    )
+    runtime = fake_runtime(
+        detection_boxes=[[20, 20, 80, 70]],
+        retrieval_candidates=[([200, 200, 300, 280], 0.99)],
+        semantic_categories={"harbor"},
+    )
+    try:
+        result = _run(runtime, graph, (image,))
+        located = result.store.get("$n1")
+        assert located.entities[0].region.bbox_xyxy_global == (20.0, 20.0, 80.0, 70.0)
+        assert result.output.value == 1
+        assert len(runtime.providers.detection.calls) == 1
+    finally:
+        runtime.close()

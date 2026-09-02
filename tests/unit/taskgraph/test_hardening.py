@@ -23,6 +23,8 @@ from sat_rs_vlm.taskgraph.providers import (
     FakeRegionRetriever,
     FakeSemanticVLMProvider,
     LocatorRegionRetrieverAdapter,
+    RegionCandidate,
+    RegionCandidates,
     RegionRetrievalRequest,
     ScoredGridRegionRetrieverAdapter,
 )
@@ -183,6 +185,18 @@ def test_locator_retriever_maps_local_crop_boxes_to_global(tmp_path: Path) -> No
     assert result.candidates[0].provenance["local_bbox_xyxy"] == [1, 2, 5, 6]
 
 
+def test_region_candidates_reject_non_finite_values(tmp_path: Path) -> None:
+    image = _image(tmp_path / "candidate.png", (32, 32))
+    region = Region(image, (0, 0, 16, 16))
+
+    with pytest.raises(ValueError, match="relevance_score"):
+        RegionCandidate(region, float("nan"))
+    with pytest.raises(ValueError, match="latency_ms"):
+        RegionCandidates((), "fixture", float("inf"))
+    with pytest.raises(ValueError, match="provider"):
+        RegionCandidates((), " ", 0.0)
+
+
 def test_scored_grid_retriever_uses_region_scope(tmp_path: Path) -> None:
     image = _image(tmp_path / "grid.png", (120, 100))
     scope = Region(image, (20, 10, 80, 70))
@@ -219,6 +233,123 @@ def test_scored_grid_retriever_uses_region_scope(tmp_path: Path) -> None:
         and candidate.region.bbox_xyxy_global[2] <= scope.bbox_xyxy_global[2]
         for candidate in result.candidates
     )
+
+
+def test_scored_grid_retriever_supports_overlapping_windows(tmp_path: Path) -> None:
+    image = _image(tmp_path / "sliding.png", (100, 100))
+
+    class Scorer:
+        provider_name = "recording_scorer"
+
+        def __init__(self) -> None:
+            self.boxes: list[tuple[float, float, float, float]] = []
+
+        def score_regions(
+            self,
+            image_path: Path,
+            query: str,
+            regions_xyxy: list[tuple[float, float, float, float]],
+        ) -> SimpleNamespace:
+            self.boxes = list(regions_xyxy)
+            return SimpleNamespace(
+                scores=[float(index) for index in range(len(regions_xyxy))],
+                model_id="fake",
+                latency_ms=0.0,
+                metadata={"generation_used": False},
+            )
+
+        def close(self) -> None:
+            return None
+
+    scorer = Scorer()
+    result = ScoredGridRegionRetrieverAdapter(
+        scorer,
+        grid_size=3,
+        candidate_window_ratio=0.5,
+    ).retrieve(RegionRetrievalRequest(image, "harbor"))
+    assert scorer.boxes[0] == (0.0, 0.0, 50.0, 50.0)
+    assert scorer.boxes[4] == (25.0, 25.0, 75.0, 75.0)
+    assert scorer.boxes[-1] == (50.0, 50.0, 100.0, 100.0)
+    assert len(result.candidates) == 5
+    assert result.candidates[0].provenance["candidate_geometry"] == {
+        "layout": "uniform_sliding_grid",
+        "window_ratio": 0.5,
+        "overlapping": True,
+    }
+
+
+def test_entity_set_composer_keeps_single_and_clustered_evidence_local(tmp_path: Path) -> None:
+    image = _image(tmp_path / "uhr_clustered.png", (4096, 4096))
+    composer = InputComposer(
+        tmp_path / "localized_inputs",
+        candidate_halo_ratio=0.2,
+        entity_set_union_area_threshold=0.25,
+    )
+    try:
+        single = EntitySet((_entity(image, (1900, 1900, 1940, 1940), 0.9),))
+        single_input = composer.compose_named(
+            {"evidence": single}, question="Inspect the supplied target."
+        )
+        with Image.open(single_input.visual_inputs[0]) as rendered:
+            assert rendered.width < 4096 and rendered.height < 4096
+
+        clustered = EntitySet(
+            (
+                _entity(image, (1800, 1800, 1840, 1840), 0.9),
+                _entity(image, (1900, 1850, 1940, 1890), 0.8),
+                _entity(image, (2000, 1900, 2040, 1940), 0.7),
+            )
+        )
+        clustered_input = composer.compose_named(
+            {"evidence": clustered}, question="Compare the supplied candidates."
+        )
+        metadata = clustered_input.metadata["entity_sets"][0]
+        assert metadata["strategy"] == "union_crop"
+        assert metadata["whole_image_visual_used"] is False
+        assert metadata["crop_count"] == 1
+        assert metadata["union_bbox_xyxy_global"] == [1800, 1800, 2040, 1940]
+        canvas = metadata["canvases"][0]
+        assert canvas["crop_bbox_xyxy_global"] != [0, 0, 4096, 4096]
+        assert len(canvas["candidate_boxes"]) == 3
+        with Image.open(clustered_input.visual_inputs[0]) as rendered:
+            assert rendered.width < 4096 and rendered.height < 4096
+    finally:
+        composer.close()
+
+
+def test_entity_set_composer_uses_bounded_multi_crop_for_distributed_candidates(
+    tmp_path: Path,
+) -> None:
+    image = _image(tmp_path / "uhr_distributed.png", (4096, 4096))
+    entities = EntitySet(
+        (
+            _entity(image, (40, 60, 100, 120), 0.9),
+            _entity(image, (3950, 3930, 4010, 3990), 0.8),
+        )
+    )
+    composer = InputComposer(
+        tmp_path / "distributed_inputs",
+        candidate_halo_ratio=0.2,
+        entity_set_union_area_threshold=0.25,
+        entity_set_max_side=512,
+    )
+    try:
+        model_input = composer.compose_named(
+            {"evidence": entities}, question="Compare the supplied candidates."
+        )
+        metadata = model_input.metadata["entity_sets"][0]
+        assert metadata["strategy"] == "bounded_multi_crop"
+        assert metadata["whole_image_visual_used"] is False
+        assert metadata["crop_count"] == 2
+        assert len(model_input.visual_inputs) == 2
+        for path, canvas in zip(
+            model_input.visual_inputs, metadata["canvases"], strict=True
+        ):
+            assert canvas["crop_bbox_xyxy_global"] != [0, 0, 4096, 4096]
+            with Image.open(path) as rendered:
+                assert max(rendered.size) <= 512
+    finally:
+        composer.close()
 
 
 def test_candidate_canvas_is_local_and_has_stable_global_mapping(tmp_path: Path) -> None:

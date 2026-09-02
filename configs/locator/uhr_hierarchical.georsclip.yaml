@@ -1,0 +1,81 @@
+locator:
+  provider: hierarchical
+
+parser:
+  provider: rules
+  ontology_path: configs/eval/semantic/remote_sensing_ontology.json
+  fallback: null
+
+router:
+  retrieval_for_counting: true
+
+search:
+  grid_size: 3
+  halo_ratio: 0.25
+  target_view_size: 1280
+  max_depth: 3
+  temperature: 1.0
+  cumulative_mass: 0.90
+  max_beam: 9
+  min_beam: 3
+  score_threshold: 0.55
+  spatial_prefilter: false
+  spatial_first_depth_only: true
+  max_regions: 128
+  max_processed_area_ratio: 3.0
+
+scorers:
+  detector:
+    enabled: false
+  retrieval:
+    enabled: true
+  spatial:
+    enabled: true
+  weights:
+    detector: 0.0
+    retrieval: 1.0
+    spatial: 0.8
+    parent: 0.25
+    redundancy: 0.2
+
+detector:
+  enabled: false
+  provider: mock
+  config: {}
+
+retriever:
+  enabled: true
+  provider: georsclip
+  config: {}
+
+provider_configs:
+  detector:
+    mock: {}
+  retriever:
+    georsclip:
+      checkpoint: ${GEORSCLIP_CHECKPOINT}
+      model_id: GeoRSCLIP-ViT-B-32
+      arch: ViT-B-32
+      device: auto
+      batch_size: 16
+      cache_dir: reports/cache/georsclip
+      decoded_image_cache_size: 2
+      image_embedding_cache_size: 1024
+
+fusion:
+  overlap_iou_threshold: 0.65
+  min_regions: 3
+  max_regions: 16
+  score_threshold: 0.55
+  merge_adjacent: false
+  adjacent_gap: 4.0
+  context_margin: 0.08
+
+cache:
+  enabled: true
+
+debug:
+  export_crops: false
+  export_overlay: false
+
+fail_on_provider_error: true

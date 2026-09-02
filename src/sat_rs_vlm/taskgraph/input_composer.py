@@ -40,12 +40,18 @@ class InputComposer:
         output_dir: str | Path | None = None,
         *,
         candidate_halo_ratio: float = 0.2,
+        entity_set_union_area_threshold: float = 0.55,
+        entity_set_max_side: int = 1536,
         route_max_side: int = 1536,
     ) -> None:
         if not 0.0 <= candidate_halo_ratio <= 1.0:
             raise ValueError("candidate_halo_ratio must be between 0 and 1")
         if route_max_side < 256:
             raise ValueError("route_max_side must be at least 256")
+        if not 0.0 < entity_set_union_area_threshold <= 1.0:
+            raise ValueError("entity_set_union_area_threshold must be in (0, 1]")
+        if entity_set_max_side < 256:
+            raise ValueError("entity_set_max_side must be at least 256")
         self._temporary = None
         if output_dir is None:
             self._temporary = tempfile.TemporaryDirectory(prefix="taskgraph_inputs_")
@@ -53,6 +59,8 @@ class InputComposer:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.candidate_halo_ratio = candidate_halo_ratio
+        self.entity_set_union_area_threshold = entity_set_union_area_threshold
+        self.entity_set_max_side = entity_set_max_side
         self.route_max_side = route_max_side
         self._counter = 0
 
@@ -196,23 +204,127 @@ class InputComposer:
         }
         return str(output), canvas_role, metadata, set(selected_roles)
 
-    def _entity_set_visual(self, entities: EntitySet) -> str:
+    def _entity_set_visuals_with_metadata(
+        self, entities: EntitySet
+    ) -> tuple[list[str], dict[str, object]]:
         if not entities.entities:
             raise ValueError("cannot materialize an empty EntitySet")
         image = entities.entities[0].region.image
-        output = self._next_path()
-        with Image.open(image.path.resolve()) as source:
-            canvas = source.convert("RGB")
-            draw = ImageDraw.Draw(canvas)
-            for index, entity in enumerate(entities.entities):
-                draw.rectangle(entity.region.bbox_xyxy_global, outline="red", width=3)
-                draw.text(
-                    (entity.region.bbox_xyxy_global[0] + 2, entity.region.bbox_xyxy_global[1] + 2),
-                    self._candidate_id(index),
-                    fill="red",
+        image_key = image.path.resolve()
+        if any(entity.region.image.path.resolve() != image_key for entity in entities.entities):
+            raise ValueError("EntitySet visual sources must refer to the same image")
+        boxes = [entity.region.bbox_xyxy_global for entity in entities.entities]
+        union_box = (
+            min(box[0] for box in boxes),
+            min(box[1] for box in boxes),
+            max(box[2] for box in boxes),
+            max(box[3] for box in boxes),
+        )
+        outputs: list[str] = []
+        canvases_metadata: list[dict[str, object]] = []
+        with Image.open(image_key) as source:
+            rgb = source.convert("RGB")
+            width, height = rgb.size
+            image_area = float(width * height)
+            union_area = (union_box[2] - union_box[0]) * (union_box[3] - union_box[1])
+            union_area_ratio = union_area / image_area if image_area else 1.0
+            strategy = (
+                "union_crop"
+                if union_area_ratio <= self.entity_set_union_area_threshold
+                else "bounded_multi_crop"
+            )
+            crop_sources = [(None, union_box)] if strategy == "union_crop" else list(
+                enumerate(boxes)
+            )
+            for source_index, source_box in crop_sources:
+                source_width = source_box[2] - source_box[0]
+                source_height = source_box[3] - source_box[1]
+                halo_px = max(
+                    4.0,
+                    self.candidate_halo_ratio * max(source_width, source_height),
                 )
-            canvas.save(output)
-        return str(output)
+                crop_box = (
+                    max(0, math.floor(source_box[0] - halo_px)),
+                    max(0, math.floor(source_box[1] - halo_px)),
+                    min(width, math.ceil(source_box[2] + halo_px)),
+                    min(height, math.ceil(source_box[3] + halo_px)),
+                )
+                canvas = rgb.crop(crop_box)
+                crop_size = canvas.size
+                resize_scale = min(1.0, self.entity_set_max_side / float(max(crop_size)))
+                if resize_scale < 1.0:
+                    render_size = (
+                        max(1, round(crop_size[0] * resize_scale)),
+                        max(1, round(crop_size[1] * resize_scale)),
+                    )
+                    canvas = canvas.resize(render_size, Image.Resampling.LANCZOS)
+                else:
+                    render_size = crop_size
+                candidate_metadata: list[dict[str, object]] = []
+                draw = ImageDraw.Draw(canvas)
+                for index, entity in enumerate(entities.entities):
+                    box = entity.region.bbox_xyxy_global
+                    clipped = (
+                        max(float(crop_box[0]), box[0]),
+                        max(float(crop_box[1]), box[1]),
+                        min(float(crop_box[2]), box[2]),
+                        min(float(crop_box[3]), box[3]),
+                    )
+                    if clipped[0] >= clipped[2] or clipped[1] >= clipped[3]:
+                        continue
+                    local_box = tuple(
+                        (clipped[position] - crop_box[position % 2]) * resize_scale
+                        for position in range(4)
+                    )
+                    marker = self._candidate_id(index)
+                    draw.rectangle(local_box, outline="red", width=max(2, round(3 * resize_scale)))
+                    draw.text((local_box[0] + 2, local_box[1] + 2), marker, fill="red")
+                    candidate_metadata.append(
+                        {
+                            "id": marker,
+                            "index": index,
+                            "label": entity.label,
+                            "score": entity.score,
+                            "bbox_xyxy_global": list(box),
+                            "bbox_xyxy_local": list(local_box),
+                        }
+                    )
+                output = self._next_path()
+                canvas.save(output)
+                outputs.append(str(output))
+                canvases_metadata.append(
+                    {
+                        "source_candidate_index": source_index,
+                        "crop_bbox_xyxy_global": list(crop_box),
+                        "halo_px": halo_px,
+                        "crop_size": list(crop_size),
+                        "render_size": list(render_size),
+                        "global_to_local": {
+                            "operation": "translate_then_scale",
+                            "origin_global": [crop_box[0], crop_box[1]],
+                            "scale_xy": [resize_scale, resize_scale],
+                        },
+                        "candidate_boxes": candidate_metadata,
+                    }
+                )
+        return outputs, {
+            "strategy": strategy,
+            "union_bbox_xyxy_global": list(union_box),
+            "union_area_ratio": union_area_ratio,
+            "union_area_threshold": self.entity_set_union_area_threshold,
+            "halo_ratio": self.candidate_halo_ratio,
+            "original_image_size": [width, height],
+            "crop_count": len(outputs),
+            "max_render_side": self.entity_set_max_side,
+            "canvases": canvases_metadata,
+            "whole_image_visual_used": False,
+        }
+
+    def _entity_set_visual(self, entities: EntitySet) -> str:
+        visuals, _ = self._entity_set_visuals_with_metadata(entities)
+        if len(visuals) != 1:
+            raise ValueError("distributed EntitySet requires multi-image composition")
+        return visuals[0]
 
     def _route_visual_with_metadata(self, context: RouteContext) -> tuple[str, dict[str, object]]:
         if context.marker_visual_path:
@@ -319,7 +431,7 @@ class InputComposer:
         if isinstance(value, EntitySet):
             if len(value.entities) == 1:
                 return [self._crop(value.entities[0].region)]
-            return [self._entity_set_visual(value)]
+            return self._entity_set_visuals_with_metadata(value)[0]
         if isinstance(value, RouteContext):
             return [self._route_visual(value)]
         if isinstance(value, Evidence):
@@ -451,6 +563,12 @@ class InputComposer:
                     route_path, route_metadata = self._route_visual_with_metadata(source.value)
                     source_visuals = [route_path]
                     metadata["route_context"] = route_metadata
+                elif isinstance(source.value, EntitySet) and len(source.value.entities) > 1:
+                    source_visuals, entity_set_metadata = (
+                        self._entity_set_visuals_with_metadata(source.value)
+                    )
+                    existing = cast(list[dict[str, object]], metadata.setdefault("entity_sets", []))
+                    existing.append({"role": source.role, **entity_set_metadata})
                 else:
                     source_visuals = self._visuals(source.value)
                 visuals.extend(source_visuals)

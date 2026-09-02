@@ -1,8 +1,17 @@
 dataset_policy:
   VRSBench:
     caption: DIRECT_VLM
+    captioning: DIRECT_VLM
     vqa: DIRECT_VLM
+    visual_question_answering: DIRECT_VLM
+    attribute: DIRECT_VLM
+    classification: DIRECT_VLM
     count: DIRECT_DETECTION
+    counting: DIRECT_DETECTION
+    grounding: DIRECT_DETECTION
+    visual_grounding: DIRECT_DETECTION
+    referring_grounding: DIRECT_DETECTION
+    detection: DIRECT_DETECTION
     default: DIRECT_VLM
   LEVIR_CC:
     default: DIRECT_VLM
@@ -46,14 +55,18 @@ providers:
   choice:
     reuse: semantic_2b
   region_retriever:
-    kind: uhr_locator
-    # The remaining keys follow configs/locator/uhr_hierarchical.yaml.
-    parser:
-      ontology_path: configs/eval/semantic/remote_sensing_ontology.json
-    retriever:
-      enabled: false
-    detector:
-      enabled: false
+    kind: georsclip
+    checkpoint: ${GEORSCLIP_CHECKPOINT}
+    model_id: GeoRSCLIP-ViT-B-32
+    arch: ViT-B-32
+    device: auto
+    batch_size: 16
+    cache_dir: reports/cache/georsclip
+    decoded_image_cache_size: 2
+    image_embedding_cache_size: 1024
+    grid_size: 3
+    candidate_window_ratio: 0.5
+    max_candidates: 5
 
 semantic_region_categories:
   - harbor
@@ -61,6 +74,8 @@ semantic_region_categories:
 
 input_composer:
   candidate_halo_ratio: 0.2
+  entity_set_union_area_threshold: 0.55
+  entity_set_max_side: 1536
   route_max_side: 1536
 
 # Auxiliary service only. It reuses semantic_2b and never controls COUNT or graph traversal.
