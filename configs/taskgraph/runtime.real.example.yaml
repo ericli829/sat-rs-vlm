@@ -42,6 +42,10 @@ providers:
     max_finish_node_tokens: 32
   detection:
     kind: clip_rerank
+    locate_detector:
+      score_threshold: 0.15
+      max_candidates: 16
+      clip_rerank_top_k: 4
     detector_weight: 0.35
     retriever_weight: 0.65
     candidate_top_k: null

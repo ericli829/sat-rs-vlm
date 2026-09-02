@@ -179,7 +179,7 @@ def _locate_node() -> GraphNode:
     )
 
 
-def test_empty_detector_enters_traced_visual_fallback(tmp_path: Path) -> None:
+def test_empty_detector_uses_bounded_regional_fallback(tmp_path: Path) -> None:
     image_path = tmp_path / "empty.png"
     Image.new("RGB", (100, 80), "white").save(image_path)
     image = ImageRef(str(image_path), width=100, height=80)
@@ -198,15 +198,26 @@ def test_empty_detector_enters_traced_visual_fallback(tmp_path: Path) -> None:
         graph_nodes=(node,),
     )
 
+    class EmptyThenBoxDetection(FakeDetectionProvider):
+        def detect(self, request: object):
+            if self.calls:
+                self.boxes = [(20.0, 10.0, 30.0, 20.0)]
+            return super().detect(request)
+
+    detection = EmptyThenBoxDetection()
     outcome = LocateExecutor(
-        FakeDetectionProvider(), FakeRegionRetriever(), refiner=refiner
+        detection,
+        FakeRegionRetriever([((0.0, 0.0, 100.0, 80.0), 0.9)]),
+        refiner=refiner,
     ).execute(node, {"image": image}, context)
 
     assert len(outcome.value.entities) == 1
     assert outcome.trace_metadata["primary_candidate_count"] == 0
     assert outcome.trace_metadata["fallback_reason"] == "EMPTY_PROPOSALS"
-    assert outcome.trace_metadata["final_resolution_status"] == "SEMANTIC_FALLBACK_RESOLVED"
-    assert outcome.value.provenance["fallback_required"] is True
+    assert outcome.trace_metadata["regional_fallback_triggered"] is True
+    assert outcome.trace_metadata["regional_fallback_regions"]
+    assert outcome.value.entities[0].region.bbox_xyxy_global == (20.0, 10.0, 30.0, 20.0)
+    assert len(detection.calls) == 2
     composer.close()
 
 

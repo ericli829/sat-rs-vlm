@@ -87,6 +87,25 @@ def test_clip_rerank_fuses_scores_and_records_original_indices() -> None:
     assert base.closed and retriever.closed
 
 
+def test_clip_rerank_accepts_distinct_detector_and_referring_queries() -> None:
+    provider = CLIPRerankedProposalProvider(
+        _FakeProposalProvider(_base_result()),
+        retriever := _FakeRetriever([0.1, 0.2, 0.9]),
+        {},
+        base_provider_name="fake_detector",
+        retriever_name="fake_retriever",
+    )
+
+    result = provider.predict_with_rerank_query(
+        Path("image.png"), "building", "white cylindrical building"
+    )
+
+    assert retriever.calls == [(Path("image.png"), "white cylindrical building", 3)]
+    assert result.metadata["clip_rerank"]["detector_query"] == "building"
+    assert result.metadata["clip_rerank"]["clip_query"] == "white cylindrical building"
+    provider.close()
+
+
 def test_clip_rerank_top_k_is_explicit_and_auditable() -> None:
     provider = CLIPRerankedProposalProvider(
         _FakeProposalProvider(_base_result()),

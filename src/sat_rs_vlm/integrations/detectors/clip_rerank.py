@@ -106,9 +106,19 @@ class CLIPRerankedProposalProvider:
             metadata=metadata,
         )
 
-    def predict(self, image_path: Path, target_phrase: str) -> ProposalResult:
+    def predict_with_rerank_query(
+        self,
+        image_path: Path,
+        detector_phrase: str,
+        ranking_phrase: str,
+        *,
+        top_k: int | None = None,
+    ) -> ProposalResult:
+        effective_top_k = self.candidate_top_k if top_k is None else int(top_k)
+        if effective_top_k is not None and effective_top_k < 1:
+            raise ProposalError("clip_rerank top_k must be positive")
         started = time.perf_counter()
-        result = self.base_provider.predict(image_path, target_phrase)
+        result = self.base_provider.predict(image_path, detector_phrase)
         candidate_count = len(result.boxes_xyxy)
         if candidate_count == 0:
             metadata = self._base_metadata(result)
@@ -119,7 +129,7 @@ class CLIPRerankedProposalProvider:
                 "candidate_count": 0,
                 "detector_weight": self.detector_weight,
                 "retriever_weight": self.retriever_weight,
-                "candidate_top_k": self.candidate_top_k,
+                "candidate_top_k": effective_top_k,
                 "latency_ms": (time.perf_counter() - started) * 1000.0,
             }
             return ProposalResult(
@@ -133,7 +143,7 @@ class CLIPRerankedProposalProvider:
 
         try:
             scored = self.retriever.score_regions(
-                Path(image_path), target_phrase, result.boxes_xyxy
+                Path(image_path), ranking_phrase, result.boxes_xyxy
             )
             if len(scored.scores) != candidate_count:
                 raise ProposalError(
@@ -156,8 +166,8 @@ class CLIPRerankedProposalProvider:
                 key=lambda index: (-fused_scores[index], index),
             )
             retained = (
-                order[: self.candidate_top_k]
-                if self.candidate_top_k is not None
+                order[: effective_top_k]
+                if effective_top_k is not None
                 else order
             )
             metadata = self._base_metadata(result)
@@ -168,9 +178,11 @@ class CLIPRerankedProposalProvider:
                 "retriever_provider": scored.provider,
                 "retriever_model_id": scored.model_id,
                 "candidate_count": candidate_count,
+                "detector_query": detector_phrase,
+                "clip_query": ranking_phrase,
                 "detector_weight": self.detector_weight,
                 "retriever_weight": self.retriever_weight,
-                "candidate_top_k": self.candidate_top_k,
+                "candidate_top_k": effective_top_k,
                 "original_order": list(range(candidate_count)),
                 "ranked_order": order,
                 "retained_indices": retained,
@@ -199,6 +211,12 @@ class CLIPRerankedProposalProvider:
                 started=started,
                 reason=f"{type(exc).__name__}: {exc}",
             )
+
+    def predict(self, image_path: Path, target_phrase: str) -> ProposalResult:
+        return self.predict_with_rerank_query(image_path, target_phrase, target_phrase)
+
+    def predict_detector_only(self, image_path: Path, target_phrase: str) -> ProposalResult:
+        return self.base_provider.predict(image_path, target_phrase)
 
     def close(self) -> None:
         try:

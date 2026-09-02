@@ -680,7 +680,10 @@ class LocateExecutor:
         semantic_categories: set[str] | None = None,
         capability_classifier: TargetCapabilityClassifier | None = None,
         refiner: ReferentRefiner | None = None,
+        max_candidates: int = 16,
     ) -> None:
+        if max_candidates < 1:
+            raise ValueError("locate_detector.max_candidates must be positive")
         self.detection = detection
         self.retriever = retriever
         self.semantic_categories = {item.casefold() for item in (semantic_categories or set())}
@@ -688,6 +691,7 @@ class LocateExecutor:
             legacy_region_overrides=self.semantic_categories
         )
         self.refiner = refiner
+        self.max_candidates = int(max_candidates)
         self.provider_name = "locate"
 
     @staticmethod
@@ -739,6 +743,134 @@ class LocateExecutor:
         if candidate_count == 1:
             return "PRIMARY_RESOLVED"
         return "MULTIPLE_VALID"
+
+    @staticmethod
+    def _bbox_iou(
+        left: tuple[float, float, float, float], right: tuple[float, float, float, float]
+    ) -> float:
+        x0 = max(left[0], right[0])
+        y0 = max(left[1], right[1])
+        x1 = min(left[2], right[2])
+        y1 = min(left[3], right[3])
+        intersection = max(0.0, x1 - x0) * max(0.0, y1 - y0)
+        left_area = max(0.0, left[2] - left[0]) * max(0.0, left[3] - left[1])
+        right_area = max(0.0, right[2] - right[0]) * max(0.0, right[3] - right[1])
+        union = left_area + right_area - intersection
+        return intersection / union if union > 0.0 else 0.0
+
+    @classmethod
+    def _merge_fallback_entities(
+        cls, entities: list[Entity], max_candidates: int
+    ) -> tuple[Entity, ...]:
+        ordered = sorted(
+            entities,
+            key=lambda entity: (
+                -(
+                    float(entity.score)
+                    if entity.score is not None and math.isfinite(float(entity.score))
+                    else float("-inf")
+                ),
+                str(entity.provenance.get("candidate_id", "")),
+            ),
+        )
+        kept: list[Entity] = []
+        for entity in ordered:
+            if any(
+                cls._bbox_iou(entity.region.bbox_xyxy_global, kept_entity.region.bbox_xyxy_global)
+                > 0.5
+                for kept_entity in kept
+            ):
+                continue
+            kept.append(entity)
+            if len(kept) >= max_candidates:
+                break
+        return tuple(kept)
+
+    def _regional_fallback(
+        self,
+        scope: ImageRef | Region,
+        *,
+        target: TargetSpec,
+    ) -> tuple[EntitySet, dict[str, Any]]:
+        query = target.phrase()
+        regions = self.retriever.retrieve(
+            RegionRetrievalRequest(
+                scope,
+                query,
+                search_scope=scope if isinstance(scope, Region) else None,
+                max_candidates=3,
+            )
+        )
+        regional_entities: list[Entity] = []
+        detector_calls = 0
+        region_records: list[dict[str, Any]] = []
+        clip_records: list[dict[str, Any]] = []
+        for region_index, candidate in enumerate(regions.candidates):
+            detector_calls += 1
+            regional_detection = self.detection.detect(
+                DetectionRequest(candidate.region, target, "LOCATE")
+            )
+            clip_metadata = regional_detection.metadata.get("clip_rerank", {})
+            if isinstance(clip_metadata, dict):
+                clip_records.append(dict(clip_metadata))
+            region_box = candidate.region.bbox_xyxy_global
+            region_records.append(
+                {
+                    "region_id": f"region_{region_index + 1:02d}",
+                    "bbox_xyxy_global": list(region_box),
+                    "score": candidate.relevance_score,
+                    "candidate_count": len(regional_detection.detections.entities),
+                    "provider": regional_detection.provider,
+                }
+            )
+            for candidate_index, entity in enumerate(regional_detection.detections.entities):
+                regional_entities.append(
+                    Entity(
+                        entity.region,
+                        entity.label,
+                        entity.score,
+                        {
+                            **entity.provenance,
+                            "candidate_id": (
+                                f"regional_{region_index + 1:02d}_{candidate_index + 1:04d}"
+                            ),
+                            "regional_fallback": True,
+                            "regional_fallback_region": f"region_{region_index + 1:02d}",
+                        },
+                    )
+                )
+        merged = self._merge_fallback_entities(regional_entities, self.max_candidates)
+        metadata = {
+            "regional_fallback_triggered": True,
+            "regional_fallback_query": query,
+            "regional_fallback_regions": region_records,
+            "regional_fallback_region_count": len(regions.candidates),
+            "regional_fallback_detector_calls": detector_calls,
+            "regional_fallback_candidate_count": len(merged),
+            "regional_fallback_provider": regions.provider,
+            "regional_fallback_provider_metadata": dict(regions.metadata),
+            "clip_rerank_applied": any(
+                item.get("status") == "applied" for item in clip_records
+            ),
+            "clip_query": query,
+            "clip_input_candidate_count": sum(
+                int(item.get("candidate_count", 0)) for item in clip_records
+            ),
+            "clip_output_candidate_count": len(merged),
+            "clip_scores": [
+                item.get("fused_scores", []) for item in clip_records if item.get("fused_scores")
+            ],
+        }
+        return EntitySet(
+            merged,
+            {
+                "provider": self.detection.provider_name,
+                "capability": "DETECTOR",
+                "regional_fallback": metadata,
+                "proposal_query": target.category,
+                "proposal_query_mode": "category_only",
+            },
+        ), metadata
 
     def execute(
         self,
@@ -866,9 +998,21 @@ class LocateExecutor:
                     "referent_refinement": refinement_metadata,
                 },
             )
-        detected = self.detection.detect(DetectionRequest(scope, target, "LOCATE"))
         should_refine, trigger_reason = self._needs_refinement(node, target, context)
+        detected = self.detection.detect(
+            DetectionRequest(
+                scope,
+                target,
+                "LOCATE",
+                apply_locate_policy=should_refine,
+                use_clip_rerank=should_refine,
+            )
+        )
         before_entities = detected.detections.entities
+        clip_metadata = detected.metadata.get("clip_rerank", {})
+        if not isinstance(clip_metadata, dict):
+            clip_metadata = {}
+        clip_query = detected.metadata.get("clip_query", clip_metadata.get("clip_query"))
         refinement_metadata: dict[str, Any] = {
             "primary_provider": detected.provider,
             "refinement_applied": False,
@@ -886,36 +1030,60 @@ class LocateExecutor:
             "fallback_reason": None,
             "fallback_provider": None,
             "fallback_scope": None,
+            "clip_rerank_applied": clip_metadata.get("status") == "applied",
+            "clip_query": clip_query,
+            "clip_input_candidate_count": clip_metadata.get("candidate_count"),
+            "clip_output_candidate_count": len(before_entities),
+            "clip_scores": clip_metadata.get("fused_scores", []),
         }
         value = detected.detections
-        if (
-            not before_entities
-            and should_refine
-            and self.refiner is not None
-            and self.refiner.config.enabled
-        ):
-            fallback = self.refiner.visual_fallback(
-                scope,
-                question=context.final_question or context.question,
-                target=target,
-                reason="EMPTY_PROPOSALS",
+        if not before_entities and should_refine:
+            try:
+                value, regional_metadata = self._regional_fallback(scope, target=target)
+            except Exception as exc:
+                value = EntitySet(
+                    (),
+                    {
+                        **detected.detections.provenance,
+                        "resolution_status": "UNRESOLVED",
+                        "fallback_required": True,
+                    },
+                )
+                regional_metadata = {
+                    "regional_fallback_triggered": True,
+                    "regional_fallback_query": target.phrase(),
+                    "regional_fallback_regions": [],
+                    "regional_fallback_region_count": 0,
+                    "regional_fallback_detector_calls": 0,
+                    "regional_fallback_candidate_count": 0,
+                    "regional_fallback_provider": self.retriever.provider_name,
+                    "regional_fallback_error": f"{type(exc).__name__}: {exc}",
+                }
+            refinement_metadata.update(
+                {
+                    **regional_metadata,
+                    "fallback_triggered": True,
+                    "fallback_reason": "EMPTY_PROPOSALS",
+                    "fallback_provider": regional_metadata.get(
+                        "regional_fallback_provider", self.retriever.provider_name
+                    ),
+                    "fallback_scope": "bounded_retriever_regions",
+                    "resolution_status": (
+                        self._primary_resolution_status(len(value.entities))
+                        if value.entities
+                        else "UNRESOLVED"
+                    ),
+                    "refinement_status": (
+                        self._primary_resolution_status(len(value.entities))
+                        if value.entities
+                        else "UNRESOLVED"
+                    ),
+                    "candidate_count_after_refinement": len(value.entities),
+                }
             )
-            value = fallback.entities
-            refinement_metadata = {
-                **refinement_metadata,
-                **fallback.metadata,
-                "fallback_triggered": True,
-                "fallback_reason": "EMPTY_PROPOSALS",
-                "fallback_provider": "semantic_2b",
-                "fallback_scope": fallback.metadata.get("fallback_scope"),
-                "final_resolution_status": "SEMANTIC_FALLBACK_RESOLVED",
-                "resolution_status": "SEMANTIC_FALLBACK_RESOLVED",
-                "refinement_status": "SEMANTIC_FALLBACK_RESOLVED",
-                "candidate_count_after_refinement": len(value.entities),
-            }
-        elif should_refine and self.refiner is not None:
+        if value.entities and should_refine and self.refiner is not None:
             refined = self.refiner.refine(
-                detected.detections,
+                value,
                 question=context.final_question or context.question,
                 target=target,
                 trigger_reason=trigger_reason,
@@ -959,6 +1127,23 @@ class LocateExecutor:
                 "refinement_method": refinement_metadata["refinement_method"],
                 "resolution_status": refinement_metadata["resolution_status"],
                 "final_resolution_status": refinement_metadata["final_resolution_status"],
+                "regional_fallback_triggered": refinement_metadata.get(
+                    "regional_fallback_triggered", False
+                ),
+                "regional_fallback_regions": refinement_metadata.get(
+                    "regional_fallback_regions", []
+                ),
+                "clip_rerank_applied": refinement_metadata.get(
+                    "clip_rerank_applied", False
+                ),
+                "clip_query": refinement_metadata.get("clip_query"),
+                "clip_input_candidate_count": refinement_metadata.get(
+                    "clip_input_candidate_count"
+                ),
+                "clip_output_candidate_count": refinement_metadata.get(
+                    "clip_output_candidate_count"
+                ),
+                "clip_scores": refinement_metadata.get("clip_scores", []),
                 "refinement": refinement_metadata,
             }
         )
@@ -981,6 +1166,23 @@ class LocateExecutor:
                 "fallback_provider": refinement_metadata["fallback_provider"],
                 "fallback_scope": refinement_metadata["fallback_scope"],
                 "final_resolution_status": refinement_metadata["final_resolution_status"],
+                "regional_fallback_triggered": refinement_metadata.get(
+                    "regional_fallback_triggered", False
+                ),
+                "regional_fallback_regions": refinement_metadata.get(
+                    "regional_fallback_regions", []
+                ),
+                "clip_rerank_applied": refinement_metadata.get(
+                    "clip_rerank_applied", False
+                ),
+                "clip_query": refinement_metadata.get("clip_query"),
+                "clip_input_candidate_count": refinement_metadata.get(
+                    "clip_input_candidate_count"
+                ),
+                "clip_output_candidate_count": refinement_metadata.get(
+                    "clip_output_candidate_count"
+                ),
+                "clip_scores": refinement_metadata.get("clip_scores", []),
                 "referent_refinement": refinement_metadata,
             },
         )

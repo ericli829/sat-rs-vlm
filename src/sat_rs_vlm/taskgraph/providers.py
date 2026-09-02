@@ -62,6 +62,8 @@ class DetectionRequest:
     scope: ImageRef | Region
     target: TargetSpec
     task_hint: str | None = None
+    apply_locate_policy: bool = True
+    use_clip_rerank: bool = True
 
 
 @dataclass(frozen=True)
@@ -848,9 +850,25 @@ class EvidenceSufficiencyProvider(Protocol):
 class ProposalDetectionAdapter:
     """Adapt the existing LAE/other ProposalProvider without changing it."""
 
-    def __init__(self, provider: ProposalProvider) -> None:
+    def __init__(
+        self,
+        provider: ProposalProvider,
+        *,
+        locate_max_candidates: int = 16,
+        locate_score_threshold: float | None = None,
+        locate_clip_rerank_top_k: int = 4,
+    ) -> None:
+        if locate_max_candidates < 1:
+            raise ValueError("locate_detector.max_candidates must be positive")
+        if locate_score_threshold is not None and not 0.0 <= locate_score_threshold <= 1.0:
+            raise ValueError("locate_detector.score_threshold must be between 0 and 1")
+        if locate_clip_rerank_top_k < 1:
+            raise ValueError("locate_detector.clip_rerank_top_k must be positive")
         self._provider = provider
         self.provider_name = provider.provider_name
+        self.max_candidates = int(locate_max_candidates)
+        self.score_threshold = locate_score_threshold
+        self.clip_rerank_top_k = int(locate_clip_rerank_top_k)
 
     @staticmethod
     def _image_scope(scope: ImageRef | Region) -> tuple[ImageRef, tuple[float, float]]:
@@ -872,19 +890,53 @@ class ProposalDetectionAdapter:
                     detector_path = Path(temp_dir) / "scope.png"
                     crop.save(detector_path)
             proposal_query = request.target.category.strip()
-            result = self._provider.predict(detector_path, proposal_query)
+            ranking_query = request.target.phrase()
+            rerank_predict = getattr(self._provider, "predict_with_rerank_query", None)
+            detector_only_predict = getattr(self._provider, "predict_detector_only", None)
+            if request.use_clip_rerank and callable(rerank_predict):
+                result = rerank_predict(
+                    detector_path,
+                    proposal_query,
+                    ranking_query,
+                    top_k=(self.clip_rerank_top_k if request.apply_locate_policy else None),
+                )
+            elif not request.use_clip_rerank and callable(detector_only_predict):
+                result = detector_only_predict(detector_path, proposal_query)
+            else:
+                result = self._provider.predict(detector_path, proposal_query)
         result_metadata = dict(result.metadata)
+        raw_candidate_count = len(result.boxes_xyxy)
+        order = sorted(
+            range(raw_candidate_count),
+            key=lambda index: (-float(result.scores[index]), index),
+        )
+        retained = order[: self.max_candidates] if request.apply_locate_policy else order
         result_metadata.update(
             {
                 "proposal_query": proposal_query,
+                "proposal_query_mode": "category_only",
+                "attributes_sent_to_detector": False,
+                "clip_query": ranking_query if request.use_clip_rerank else None,
                 "original_target_spec": {
                     "category": request.target.category,
                     "attributes": dict(request.target.attributes),
                 },
+                "locate_detector": {
+                    "score_threshold": self.score_threshold,
+                    "max_candidates": self.max_candidates,
+                    "policy_applied": request.apply_locate_policy,
+                    "clip_rerank_top_k": (
+                        self.clip_rerank_top_k if request.apply_locate_policy else None
+                    ),
+                    "raw_candidate_count": raw_candidate_count,
+                    "retained_candidate_count": len(retained),
+                },
             }
         )
         entities = []
-        for index, (box, score) in enumerate(zip(result.boxes_xyxy, result.scores, strict=True)):
+        for index in retained:
+            box = result.boxes_xyxy[index]
+            score = result.scores[index]
             global_box = (
                 float(box[0]) + offset[0],
                 float(box[1]) + offset[1],
@@ -907,7 +959,7 @@ class ProposalDetectionAdapter:
                     provenance={
                         "provider": result.provider,
                         "model_id": result.model_id,
-                        "candidate_id": f"candidate_{index + 1:04d}",
+                        "candidate_id": f"candidate_{len(entities) + 1:04d}",
                         "scale_tile_metadata": result_metadata,
                     },
                 )
@@ -919,6 +971,12 @@ class ProposalDetectionAdapter:
                     "provider": result.provider,
                     "model_id": result.model_id,
                     "proposal_metadata": result_metadata,
+                    "proposal_query": proposal_query,
+                    "proposal_query_mode": "category_only",
+                    "attributes_sent_to_detector": False,
+                    "locate_policy_applied": request.apply_locate_policy,
+                    "candidate_count_before_limit": raw_candidate_count,
+                    "candidate_count_after_limit": len(entities),
                 },
             ),
             latency_ms=(time.perf_counter() - started) * 1000.0,

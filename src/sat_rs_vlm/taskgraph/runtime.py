@@ -78,6 +78,20 @@ from .tracing import (
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
+def _override_nested_detector_threshold(
+    config: Mapping[str, Any], threshold: float
+) -> dict[str, Any]:
+    """Apply the LOCATE threshold to the leaf proposal detector only."""
+
+    updated = dict(config)
+    nested = updated.get("base_config")
+    if isinstance(nested, Mapping):
+        updated["base_config"] = _override_nested_detector_threshold(nested, threshold)
+    else:
+        updated["score_threshold"] = threshold
+    return updated
+
+
 @dataclass(frozen=True)
 class RuntimeRequest:
     sample_id: str
@@ -303,6 +317,7 @@ class TaskGraphRuntime:
         final_choice_fusion_config: FinalChoiceFusionConfig | None = None,
         answerability_config: AnswerabilityConfig | None = None,
         locate_refinement_config: ReferentRefinementConfig | None = None,
+        locate_max_candidates: int = 16,
     ) -> None:
         self.providers = providers
         self.composer = composer or InputComposer()
@@ -317,6 +332,7 @@ class TaskGraphRuntime:
             providers.retriever,
             semantic_categories=semantic_categories,
             capability_classifier=capability_classifier,
+            max_candidates=locate_max_candidates,
             refiner=ReferentRefiner(
                 providers.semantic_2b,
                 self.composer,
@@ -580,7 +596,13 @@ class TaskGraphRuntime:
         else:
             detector_started = time.perf_counter()
             detected = self.providers.detection.detect(
-                DetectionRequest(scope, target, request.task_category)
+                DetectionRequest(
+                    scope,
+                    target,
+                    request.task_category,
+                    apply_locate_policy=False,
+                    use_clip_rerank=False,
+                )
             )
             trace.telemetry["detector_ms"] = (time.perf_counter() - detector_started) * 1000.0
             trace.telemetry["detector_metadata"] = dict(detected.metadata)
@@ -934,6 +956,32 @@ def runtime_from_config(
 
     detection_cfg = dict(providers.get("detection", {"kind": "fake"}))
     detection_kind = str(detection_cfg.pop("kind", "fake"))
+    locate_detector_value = detection_cfg.pop("locate_detector", {})
+    if not isinstance(locate_detector_value, Mapping):
+        raise TypeError("providers.detection.locate_detector must be a mapping")
+    locate_detector_cfg = dict(locate_detector_value)
+    locate_score_threshold_value = locate_detector_cfg.get("score_threshold")
+    locate_score_threshold = (
+        float(locate_score_threshold_value)
+        if locate_score_threshold_value is not None
+        else None
+    )
+    locate_max_candidates = int(locate_detector_cfg.get("max_candidates", 16))
+    locate_clip_rerank_top_k = int(locate_detector_cfg.get("clip_rerank_top_k", 4))
+    if locate_max_candidates < 1:
+        raise ValueError("providers.detection.locate_detector.max_candidates must be positive")
+    if locate_clip_rerank_top_k < 1:
+        raise ValueError(
+            "providers.detection.locate_detector.clip_rerank_top_k must be positive"
+        )
+    if locate_score_threshold is not None and not 0.0 <= locate_score_threshold <= 1.0:
+        raise ValueError(
+            "providers.detection.locate_detector.score_threshold must be between 0 and 1"
+        )
+    if locate_score_threshold is not None:
+        detection_cfg = _override_nested_detector_threshold(
+            detection_cfg, locate_score_threshold
+        )
     if detection_kind == "counting_system":
         raise ValueError(
             "providers.detection.kind='counting_system' is no longer supported. "
@@ -946,7 +994,10 @@ def runtime_from_config(
         from sat_rs_vlm.integrations.detectors.registry import create_proposal_provider
 
         detection = ProposalDetectionAdapter(
-            create_proposal_provider(detection_kind, detection_cfg)
+            create_proposal_provider(detection_kind, detection_cfg),
+            locate_max_candidates=locate_max_candidates,
+            locate_score_threshold=locate_score_threshold,
+            locate_clip_rerank_top_k=locate_clip_rerank_top_k,
         )
 
     counting_cfg = dict(providers.get("counting", {"kind": "fake"}))
@@ -1138,4 +1189,5 @@ def runtime_from_config(
         final_choice_fusion_config=final_choice_fusion_config,
         answerability_config=answerability_config,
         locate_refinement_config=locate_refinement_config,
+        locate_max_candidates=locate_max_candidates,
     )
