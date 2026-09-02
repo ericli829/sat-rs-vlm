@@ -9,6 +9,7 @@ from typing import Any
 
 from sat_rs_vlm.infrastructure.config import ModelConfig
 
+from .answerability import AnswerabilityConfig, EvidenceSufficiencyExecutor
 from .choice import ChoiceRequest, ChoiceResolver
 from .choice_config import ChoiceSystemConfig
 from .execution_plan import FinalChoiceFusionConfig
@@ -25,6 +26,8 @@ from .operators import (
 from .providers import (
     DetectionProvider,
     DetectionRequest,
+    EvidenceSufficiencyRequest,
+    EvidenceSufficiencyResult,
     FakeDetectionProvider,
     FakeRegionRetriever,
     FakeSemanticVLMProvider,
@@ -111,12 +114,14 @@ class TaskGraphRuntime:
         choice_config: ChoiceSystemConfig | None = None,
         semantic_decision_config: SemanticDecisionConfig | None = None,
         final_choice_fusion_config: FinalChoiceFusionConfig | None = None,
+        answerability_config: AnswerabilityConfig | None = None,
     ) -> None:
         self.providers = providers
         self.composer = composer or InputComposer()
         self.choice_config = choice_config or ChoiceSystemConfig()
         self.semantic_decision_config = semantic_decision_config or SemanticDecisionConfig()
         self.final_choice_fusion_config = final_choice_fusion_config or FinalChoiceFusionConfig()
+        self.answerability_config = answerability_config or AnswerabilityConfig()
         self.mode_router = ExecutionModeRouter(policy)
         geometry = GeometryExecutor()
         locate = LocateExecutor(
@@ -161,6 +166,18 @@ class TaskGraphRuntime:
             self.final_choice_fusion_config,
         )
         self.choice_resolver = ChoiceResolver(providers.choice, self.composer, self.choice_config)
+        self.answerability = EvidenceSufficiencyExecutor(
+            providers.semantic_2b,
+            self.composer,
+            self.answerability_config,
+        )
+
+    def assess_answerability(
+        self, request: EvidenceSufficiencyRequest
+    ) -> EvidenceSufficiencyResult:
+        """Run the optional sufficiency service; it never changes graph execution control flow."""
+
+        return self.answerability.assess(request)
 
     @staticmethod
     def _images(request: RuntimeRequest) -> dict[str, ImageRef]:
@@ -172,7 +189,7 @@ class TaskGraphRuntime:
     def _choice_or_answer(
         self,
         sources: tuple[RuntimeObject, ...],
-        question: str,
+        question: str | None,
         options: tuple[str, ...],
         answer_type: AnswerType,
     ) -> RuntimeObject | ChoiceResult | tuple[RuntimeObject, ...]:
@@ -232,7 +249,7 @@ class TaskGraphRuntime:
         )
         output = self._choice_or_answer(
             sources,
-            graph.final.question or request.question,
+            graph.final.question or None,
             request.options,
             graph.final.answer_type,
         )
@@ -335,6 +352,7 @@ def fake_runtime(
     choice_config: ChoiceSystemConfig | None = None,
     semantic_decision_config: SemanticDecisionConfig | None = None,
     final_choice_fusion_config: FinalChoiceFusionConfig | None = None,
+    answerability_config: AnswerabilityConfig | None = None,
 ) -> TaskGraphRuntime:
     shared_2b = FakeSemanticVLMProvider(
         {**(semantic_responses or {}), **(choice_responses or {})},
@@ -353,6 +371,7 @@ def fake_runtime(
         choice_config=choice_config,
         semantic_decision_config=semantic_decision_config,
         final_choice_fusion_config=final_choice_fusion_config,
+        answerability_config=answerability_config,
     )
 
 
@@ -440,11 +459,13 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
     final_choice_fusion_config = FinalChoiceFusionConfig.from_mapping(
         config.get("final_vlm_choice_fusion")
     )
+    answerability_config = AnswerabilityConfig.from_mapping(config.get("answerability"))
     composer_cfg = config.get("input_composer", {})
     if not isinstance(composer_cfg, dict):
         raise TypeError("input_composer config must be a mapping")
     composer = InputComposer(
-        candidate_halo_ratio=float(composer_cfg.get("candidate_halo_ratio", 0.2))
+        candidate_halo_ratio=float(composer_cfg.get("candidate_halo_ratio", 0.2)),
+        route_max_side=int(composer_cfg.get("route_max_side", 1536)),
     )
     return TaskGraphRuntime(
         RuntimeProviders(detection, semantic_2b, route_4b, retriever, choice, planner),
@@ -454,4 +475,5 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
         choice_config=choice_config,
         semantic_decision_config=semantic_decision_config,
         final_choice_fusion_config=final_choice_fusion_config,
+        answerability_config=answerability_config,
     )

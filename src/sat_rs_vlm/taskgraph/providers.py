@@ -7,6 +7,7 @@ import tempfile
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from enum import Enum
 from itertools import combinations
 from pathlib import Path
 from typing import Any, Protocol, cast
@@ -277,14 +278,49 @@ class PlannerProvider(Protocol):
 @dataclass(frozen=True)
 class EvidenceSufficiencyRequest:
     question: str
-    region: Region
+    region: Region | None = None
     task_hint: str | None = None
+    evidence: tuple[RuntimeObject, ...] = ()
+    sample_id: str | None = None
+    evidence_version: str = "v1"
+
+    def __post_init__(self) -> None:
+        if not self.question.strip():
+            raise ValueError("evidence sufficiency question must not be empty")
+        if self.region is None and not self.evidence:
+            raise ValueError("evidence sufficiency requires region or evidence")
+        if not self.evidence_version.strip():
+            raise ValueError("evidence_version must not be empty")
+
+    @property
+    def sources(self) -> tuple[RuntimeObject, ...]:
+        region = (self.region,) if self.region is not None else ()
+        return region + self.evidence
+
+
+class EvidenceSufficiencyStatus(str, Enum):
+    SUFFICIENT = "SUFFICIENT"
+    NEED_MORE_EVIDENCE = "NEED_MORE_EVIDENCE"
+    UNRESOLVED = "UNRESOLVED"
+    ERROR = "ERROR"
 
 
 @dataclass(frozen=True)
 class EvidenceSufficiencyResult:
-    status: str
+    status: EvidenceSufficiencyStatus | str
     score: float | None = None
+    reason_code: str | None = None
+    provider: str = "unknown"
+    model_id: str = "unknown"
+    method: str = "unknown"
+    cache_reused: bool = False
+    latency_ms: dict[str, float | None] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "status", EvidenceSufficiencyStatus(self.status))
+        if self.score is not None and not 0.0 <= self.score <= 1.0:
+            raise ValueError("evidence sufficiency score must be between 0 and 1")
 
 
 class EvidenceSufficiencyProvider(Protocol):
@@ -375,17 +411,35 @@ class FakeDetectionProvider:
     def detect(self, request: DetectionRequest) -> DetectionSet:
         self.calls.append(request)
         image = request.scope if isinstance(request.scope, ImageRef) else request.scope.image
-        entities = tuple(
-            Entity(
-                Region(image, box, {"provider": self.provider_name}),
-                request.target.category,
-                max(0.01, 0.99 - index * 0.01),
-                {"provider": self.provider_name},
+        entities = []
+        for index, box in enumerate(self.boxes):
+            global_box = box
+            if isinstance(request.scope, Region):
+                clipped = _bbox_intersection(box, request.scope.bbox_xyxy_global)
+                if clipped is None:
+                    continue
+                global_box = clipped
+            entities.append(
+                Entity(
+                    Region(
+                        image,
+                        global_box,
+                        {
+                            "provider": self.provider_name,
+                            "search_scope": (
+                                list(request.scope.bbox_xyxy_global)
+                                if isinstance(request.scope, Region)
+                                else None
+                            ),
+                        },
+                    ),
+                    request.target.category,
+                    max(0.01, 0.99 - index * 0.01),
+                    {"provider": self.provider_name},
+                )
             )
-            for index, box in enumerate(self.boxes)
-        )
         return DetectionSet(
-            EntitySet(entities, {"provider": self.provider_name}),
+            EntitySet(tuple(entities), {"provider": self.provider_name}),
             0.0,
             self.provider_name,
             {"deterministic": True},
@@ -1014,11 +1068,20 @@ class FakeEvidenceSufficiencyProvider:
     provider_name = "fake_evidence_sufficiency"
 
     def __init__(self, status: str = "SUFFICIENT", score: float = 1.0) -> None:
-        self.status = status
+        self.status = EvidenceSufficiencyStatus(status)
         self.score = score
+        self.calls: list[EvidenceSufficiencyRequest] = []
 
     def assess(self, request: EvidenceSufficiencyRequest) -> EvidenceSufficiencyResult:
-        return EvidenceSufficiencyResult(self.status, self.score)
+        self.calls.append(request)
+        return EvidenceSufficiencyResult(
+            self.status,
+            self.score,
+            reason_code="fake_fixture",
+            provider=self.provider_name,
+            model_id="fake",
+            method="fake_structured_status",
+        )
 
 
 def parse_selection_indices(text: str, count: int) -> tuple[int, ...]:

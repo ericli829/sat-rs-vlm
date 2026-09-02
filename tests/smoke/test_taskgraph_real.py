@@ -10,7 +10,11 @@ from PIL import Image
 from sat_rs_vlm.taskgraph.choice import ChoiceRequest
 from sat_rs_vlm.taskgraph.input_composer import InputComposer
 from sat_rs_vlm.taskgraph.operators import OperatorContext, SelectExecutor, SemanticExecutor
-from sat_rs_vlm.taskgraph.providers import ChoiceScoringRequest
+from sat_rs_vlm.taskgraph.providers import (
+    ChoiceScoringRequest,
+    EvidenceSufficiencyRequest,
+    EvidenceSufficiencyStatus,
+)
 from sat_rs_vlm.taskgraph.runtime import RuntimeRequest, runtime_from_config
 from sat_rs_vlm.taskgraph.runtime_types import (
     Boolean,
@@ -454,6 +458,46 @@ def test_real_qwen_semantic_alignment_and_final_fusion_contracts() -> None:
         assert attribute_score.metadata["session_released"] is True
         assert attribute_result.trace.nodes[-1].final_choice_fusion is True
 
+        engine = runtime.providers.semantic_2b._engine
+        assert engine is not None
+        assert engine.active_session_count == 0
+    finally:
+        runtime.close()
+
+
+@pytest.mark.real_model
+def test_real_qwen_answerability_reuses_cache_and_releases_session() -> None:
+    if os.environ.get("RUN_REAL_QWEN") != "1":
+        pytest.skip("set RUN_REAL_QWEN=1 for the Qwen smoke")
+    image_path = os.environ.get("TASKGRAPH_SMOKE_IMAGE")
+    if not image_path or not Path(image_path).is_file():
+        pytest.skip("TASKGRAPH_SMOKE_IMAGE is missing")
+    _local_model("QWEN3VL_2B_MODEL_DIR")
+    with Image.open(image_path) as source:
+        width, height = source.size
+    image = ImageRef(image_path, width=width, height=height)
+    evidence = Region(image, (0.0, 0.0, float(width), float(height)))
+    config = _config("qwen_2b")
+    config["providers"]["semantic_2b"]["max_new_tokens"] = 16
+    runtime = runtime_from_config(config)
+    try:
+        result = runtime.assess_answerability(
+            EvidenceSufficiencyRequest(
+                "Is the supplied crop sufficient to identify its broad land-use class?",
+                evidence,
+                task_hint="classification",
+                sample_id="real-answerability-smoke",
+                evidence_version="full-fixture-v1",
+            )
+        )
+        assert result.status in {
+            EvidenceSufficiencyStatus.SUFFICIENT,
+            EvidenceSufficiencyStatus.NEED_MORE_EVIDENCE,
+            EvidenceSufficiencyStatus.UNRESOLVED,
+        }
+        assert result.cache_reused is True
+        assert result.metadata["reasoning_exposed"] is False
+        assert result.metadata["session_released"] is True
         engine = runtime.providers.semantic_2b._engine
         assert engine is not None
         assert engine.active_session_count == 0

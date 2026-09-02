@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field, replace
 from math import hypot
 from statistics import median
@@ -148,7 +149,11 @@ class GeometryExecutor:
         )
 
     @staticmethod
-    def _marker(source: ImageRef | Region, color: str | None) -> RegionSet:
+    def _marker(
+        source: ImageRef | Region,
+        color: str | None,
+        shape: str | None = None,
+    ) -> RegionSet:
         image = source if isinstance(source, ImageRef) else source.image
         scope = _scope_box(source)
         marker_color = (color or "red").casefold()
@@ -171,8 +176,18 @@ class GeometryExecutor:
                 for x in range(crop.width):
                     if matches(pixels[x, y]):
                         hits.add((x, y))
+        marker_shape = (shape or "unspecified").casefold()
         if not hits:
-            return RegionSet((), {"operator": "FIND_MARKER", "color": color})
+            return RegionSet(
+                (),
+                {
+                    "operator": "FIND_MARKER",
+                    "color": marker_color,
+                    "shape": marker_shape,
+                    "component_count": 0,
+                    "rejected_component_count": 0,
+                },
+            )
 
         components: list[set[tuple[int, int]]] = []
         remaining = set(hits)
@@ -192,6 +207,43 @@ class GeometryExecutor:
                             stack.append(neighbor)
             components.append(component)
 
+        minimum_pixels = max(4, min(64, math.ceil(crop.width * crop.height * 0.00001)))
+        maximum_bbox_area = crop.width * crop.height * 0.2
+        accepted: list[set[tuple[int, int]]] = []
+        rejected: list[dict[str, object]] = []
+        for component in components:
+            component_x0 = min(point[0] for point in component)
+            component_y0 = min(point[1] for point in component)
+            component_x1 = max(point[0] for point in component) + 1
+            component_y1 = max(point[1] for point in component) + 1
+            component_width = component_x1 - component_x0
+            component_height = component_y1 - component_y0
+            bbox_area = component_width * component_height
+            reason = None
+            if len(component) < minimum_pixels or component_width < 2 or component_height < 2:
+                reason = "too_small"
+            elif bbox_area > maximum_bbox_area:
+                reason = "too_large_for_artificial_marker"
+            elif any(token in marker_shape for token in ("circle", "round", "ring")):
+                aspect = component_width / float(component_height)
+                if not 0.55 <= aspect <= 1.8:
+                    reason = "shape_aspect_mismatch"
+            if reason is None:
+                accepted.append(component)
+            else:
+                rejected.append(
+                    {
+                        "bbox_xyxy_scope": [
+                            component_x0,
+                            component_y0,
+                            component_x1,
+                            component_y1,
+                        ],
+                        "pixels": len(component),
+                        "reason": reason,
+                    }
+                )
+
         offset_x, offset_y = scope[0], scope[1]
         regions = tuple(
             Region(
@@ -205,11 +257,12 @@ class GeometryExecutor:
                 {
                     "operator": "FIND_MARKER",
                     "color": marker_color,
+                    "shape": marker_shape,
                     "component_pixels": len(component),
                 },
             )
             for component in sorted(
-                components,
+                accepted,
                 key=lambda item: (
                     min(point[1] for point in item),
                     min(point[0] for point in item),
@@ -218,13 +271,29 @@ class GeometryExecutor:
         )
         return RegionSet(
             regions,
-            {"operator": "FIND_MARKER", "color": marker_color, "component_count": len(regions)},
+            {
+                "operator": "FIND_MARKER",
+                "color": marker_color,
+                "shape": marker_shape,
+                "component_count": len(regions),
+                "rejected_component_count": len(rejected),
+                "rejected_components": rejected,
+                "minimum_component_pixels": minimum_pixels,
+            },
         )
 
     @staticmethod
     def _group(entities: EntitySet, mode: str) -> EntitySet:
         if not entities.entities:
-            return EntitySet((), {**entities.provenance, "group": mode, "groups": []})
+            return EntitySet(
+                (),
+                {
+                    **entities.provenance,
+                    "group": mode,
+                    "group_count": 0,
+                    "groups": [],
+                },
+            )
         indexed = list(enumerate(entities.entities))
 
         def center(item: tuple[int, Entity]) -> tuple[float, float]:
@@ -342,18 +411,20 @@ class GeometryExecutor:
             raise ValueError(f"BUILD_ROUTE_CONTEXT.{role} EntitySet is empty")
         if len(value.entities) == 1:
             return value.entities[0], {"policy": "single", "selected_index": 0}
-        scored = [
-            (index, entity)
-            for index, entity in enumerate(value.entities)
-            if entity.score is not None
-        ]
-        if not scored:
-            raise ValueError(f"BUILD_ROUTE_CONTEXT.{role} is ambiguous: multiple unscored entities")
-        selected_index, selected = max(scored, key=lambda item: (item[1].score, -item[0]))
+        if any(entity.score is None for entity in value.entities):
+            raise ValueError(
+                f"BUILD_ROUTE_CONTEXT.{role} is ambiguous: every candidate needs a score"
+            )
+        scored = list(enumerate(value.entities))
+        ordered = sorted(scored, key=lambda item: cast(float, item[1].score), reverse=True)
+        if abs(cast(float, ordered[0][1].score) - cast(float, ordered[1][1].score)) <= 1e-9:
+            raise ValueError(f"BUILD_ROUTE_CONTEXT.{role} is ambiguous: highest score is tied")
+        selected_index, selected = ordered[0]
         return selected, {
-            "policy": "highest_score",
+            "policy": "unique_highest_complete_scores",
             "selected_index": selected_index,
             "selected_score": selected.score,
+            "candidate_scores": [entity.score for entity in value.entities],
         }
 
     @staticmethod
@@ -363,6 +434,37 @@ class GeometryExecutor:
         image = _image(image_value)
         selected_start, start_selection = GeometryExecutor._resolve_route_endpoint(start, "start")
         selected_goal, goal_selection = GeometryExecutor._resolve_route_endpoint(goal, "goal")
+        width, height = _dimensions(image)
+
+        def clipped_endpoint(value: Entity | Region, role: str) -> Entity | Region:
+            region = value.region if isinstance(value, Entity) else value
+            box = region.bbox_xyxy_global
+            clipped_box = (
+                max(0.0, min(float(width), box[0])),
+                max(0.0, min(float(height), box[1])),
+                max(0.0, min(float(width), box[2])),
+                max(0.0, min(float(height), box[3])),
+            )
+            if clipped_box[0] >= clipped_box[2] or clipped_box[1] >= clipped_box[3]:
+                raise ValueError(f"route {role} endpoint is outside the source image")
+            if clipped_box == box:
+                return value
+            clipped_region = replace(
+                region,
+                bbox_xyxy_global=clipped_box,
+                provenance={
+                    **region.provenance,
+                    "route_endpoint_clipped_from": list(box),
+                },
+            )
+            return (
+                replace(value, region=clipped_region)
+                if isinstance(value, Entity)
+                else clipped_region
+            )
+
+        selected_start = clipped_endpoint(selected_start, "start")
+        selected_goal = clipped_endpoint(selected_goal, "goal")
         start_region = (
             selected_start.region if isinstance(selected_start, Entity) else selected_start
         )
@@ -372,7 +474,6 @@ class GeometryExecutor:
             or goal_region.image.uri_or_key != image.uri_or_key
         ):
             raise ValueError("route endpoints must reference BUILD_ROUTE_CONTEXT.image")
-        width, height = _dimensions(image)
         x0 = max(0.0, min(start_region.bbox_xyxy_global[0], goal_region.bbox_xyxy_global[0]))
         y0 = max(0.0, min(start_region.bbox_xyxy_global[1], goal_region.bbox_xyxy_global[1]))
         x1 = min(
@@ -382,16 +483,34 @@ class GeometryExecutor:
             float(height), max(start_region.bbox_xyxy_global[3], goal_region.bbox_xyxy_global[3])
         )
         pad = max(8.0, 0.1 * max(x1 - x0, y1 - y0))
-        context_box = (
+        padded_box = (
             max(0.0, x0 - pad),
             max(0.0, y0 - pad),
             min(width, x1 + pad),
             min(height, y1 + pad),
         )
+        minimum_side = 256.0
+
+        def expand_axis(low: float, high: float, limit: float) -> tuple[float, float]:
+            target = min(limit, max(minimum_side, high - low))
+            center = (low + high) / 2.0
+            expanded_low = max(0.0, center - target / 2.0)
+            expanded_high = min(limit, expanded_low + target)
+            expanded_low = max(0.0, expanded_high - target)
+            return expanded_low, expanded_high
+
+        context_x0, context_x1 = expand_axis(padded_box[0], padded_box[2], float(width))
+        context_y0, context_y1 = expand_axis(padded_box[1], padded_box[3], float(height))
+        context_box = (context_x0, context_y0, context_x1, context_y1)
         context_region = Region(
             image,
             context_box,
-            {"coordinate_transform": {"origin_global": list(context_box[:2])}},
+            {
+                "coordinate_transform": {"origin_global": list(context_box[:2])},
+                "endpoint_union_bbox_xyxy_global": [x0, y0, x1, y1],
+                "padded_bbox_xyxy_global": list(padded_box),
+                "minimum_context_side": minimum_side,
+            },
         )
         return RouteContext(
             image=image,
@@ -400,9 +519,11 @@ class GeometryExecutor:
             context_region=context_region,
             provenance={
                 "provider": "geometry",
-                "ambiguity_policy": "single_or_highest_score_else_error",
+                "ambiguity_policy": "single_or_unique_highest_complete_scores_else_error",
                 "start_selection": start_selection,
                 "goal_selection": goal_selection,
+                "context_bbox_xyxy_global": list(context_box),
+                "context_size": [context_x1 - context_x0, context_y1 - context_y0],
             },
         )
 
@@ -418,12 +539,15 @@ class GeometryExecutor:
                 raise TypeError("REGION.image must be ImageRef or Region")
             value: RuntimeObject = self._position_region(source, str(node.params["position"]))
         elif node.op is OperatorName.REGION_FROM_BBOX:
-            image = inputs["image"]
-            if not isinstance(image, ImageRef):
-                raise TypeError("REGION_FROM_BBOX.image must be ImageRef")
-            width, height = _dimensions(image)
+            source = inputs["image"]
+            if not isinstance(source, (ImageRef, Region)):
+                raise TypeError("REGION_FROM_BBOX.image must be ImageRef or Region")
+            image = source if isinstance(source, ImageRef) else source.image
+            width, height = _dimensions(source)
             source_size = node.params.get("image_size")
             bbox = tuple(float(item) for item in node.params["bbox"])
+            if bbox[0] >= bbox[2] or bbox[1] >= bbox[3]:
+                raise ValueError("REGION_FROM_BBOX bbox must have positive area before clipping")
             scale_x = scale_y = 1.0
             if source_size is not None:
                 scale_x = width / float(source_size[0])
@@ -434,12 +558,15 @@ class GeometryExecutor:
                     bbox[2] * scale_x,
                     bbox[3] * scale_y,
                 )
+            scope = _scope_box(source)
             bbox = (
-                max(0.0, min(float(width), bbox[0])),
-                max(0.0, min(float(height), bbox[1])),
-                max(0.0, min(float(width), bbox[2])),
-                max(0.0, min(float(height), bbox[3])),
+                max(scope[0], min(scope[2], bbox[0])),
+                max(scope[1], min(scope[3], bbox[1])),
+                max(scope[0], min(scope[2], bbox[2])),
+                max(scope[1], min(scope[3], bbox[3])),
             )
+            if bbox[0] >= bbox[2] or bbox[1] >= bbox[3]:
+                raise ValueError("REGION_FROM_BBOX bbox does not intersect its input scope")
             value = Region(
                 image,
                 bbox,
@@ -448,13 +575,19 @@ class GeometryExecutor:
                     "source_image_size": list(source_size) if source_size is not None else None,
                     "actual_image_size": [width, height],
                     "scale_xy": [scale_x, scale_y],
+                    "input_scope_bbox_xyxy_global": list(scope),
+                    "coordinates": "absolute_xyxy_global",
                 },
             )
         elif node.op is OperatorName.FIND_MARKER:
             source = inputs["image"]
             if not isinstance(source, (ImageRef, Region)):
                 raise TypeError("FIND_MARKER.image must be ImageRef or Region")
-            value = self._marker(source, node.params["marker"].get("color"))
+            value = self._marker(
+                source,
+                node.params["marker"].get("color"),
+                node.params["marker"].get("shape"),
+            )
         elif node.op is OperatorName.GROUP:
             entities = inputs["entities"]
             if not isinstance(entities, EntitySet):
@@ -617,8 +750,9 @@ class SelectExecutor:
         return [str(items[index].provenance.get("candidate_id")) for index in indices]
 
     @staticmethod
-    def _ordinal_primary(item: Entity, order: str) -> float:
-        box = item.region.bbox_xyxy_global
+    def _ordinal_primary(item: Entity | Region, order: str) -> float:
+        region = item.region if isinstance(item, Entity) else item
+        box = region.bbox_xyxy_global
         if order in {"TOP_TO_BOTTOM", "BOTTOM_TO_TOP"}:
             return box[1]
         return box[0]
@@ -1299,6 +1433,51 @@ class SelectExecutor:
             )
         if mode == "SUBREGION":
             return self._subregion(safe_inputs, candidates, node)
+        if isinstance(candidates, RegionSet) and mode in {"ORDINAL", "EXTREME"}:
+            if mode == "ORDINAL":
+                order = str(node.params["order"])
+                requested_index = int(node.params["index"]) - 1
+            else:
+                order = {
+                    "LEFTMOST": "LEFT_TO_RIGHT",
+                    "RIGHTMOST": "RIGHT_TO_LEFT",
+                    "TOPMOST": "TOP_TO_BOTTOM",
+                    "BOTTOMMOST": "BOTTOM_TO_TOP",
+                }[str(node.params["direction"])]
+                requested_index = 0
+            reverse = order in {"BOTTOM_TO_TOP", "RIGHT_TO_LEFT"}
+            indexed_regions = sorted(
+                enumerate(candidates.regions),
+                key=lambda item: self._ordinal_primary(item[1], order),
+                reverse=reverse,
+            )
+            if requested_index >= len(indexed_regions):
+                return self._result(
+                    self._empty_like(candidates),
+                    status=SelectStatus.UNRESOLVED,
+                    method="geometry",
+                    reason="ordinal_out_of_range",
+                )
+            selected_key = self._ordinal_primary(
+                indexed_regions[requested_index][1],
+                order,
+            )
+            selected_indices = tuple(
+                source_index
+                for source_index, region in indexed_regions
+                if self._ordinal_primary(region, order) == selected_key
+            )
+            status = SelectStatus.AMBIGUOUS if len(selected_indices) > 1 else SelectStatus.OK
+            return self._result(
+                self._selected_like(
+                    candidates,
+                    selected_indices,
+                    provenance={"select": mode, "coordinate_system": "bbox_xyxy_global"},
+                ),
+                status=status,
+                method="geometry",
+                reason=(f"{mode.casefold()}_tie" if status is SelectStatus.AMBIGUOUS else None),
+            )
         if isinstance(candidates, EntitySet):
             entities = candidates.entities
             if mode == "ORDINAL":
@@ -1535,7 +1714,7 @@ class SemanticExecutor:
         context: OperatorContext,
         hint: NodeExecutionHint,
     ) -> OperatorOutcome:
-        question = semantic_question(node, context.question, final_choice_fusion=True)
+        question = semantic_question(node, hint.question, final_choice_fusion=True)
         model_input = context.composer.compose_named(
             inputs,
             question=question,
@@ -1563,6 +1742,7 @@ class SemanticExecutor:
         )
         metadata = {
             **scored.metadata,
+            "input_metadata": dict(model_input.metadata),
             "execution_mode": "final_choice_fused",
             "semantic_method": "kv_cached_final_choice",
             "final_choice_fusion": True,
@@ -1581,7 +1761,12 @@ class SemanticExecutor:
             "cache_reused": scored.cache_reused,
             "final_choice_fusion": True,
             "fusion_reason": "eligible",
+            "model_id": scored.model_id,
+            "latency_ms": dict(scored.latency_ms),
         }
+        route_context = model_input.metadata.get("route_context")
+        if route_context is not None:
+            trace_metadata["route_context"] = route_context
         return OperatorOutcome(scored, scored.provider, trace_metadata)
 
     def _free_text(

@@ -62,7 +62,11 @@ class CapabilityRouter:
         OperatorName.ATTRIBUTE: {"entity": (False, True)},
         OperatorName.CLASSIFY: {"source": (False, True)},
         OperatorName.MULTILABEL_CLASSIFY: {"source": (False, True)},
-        OperatorName.MOTION: {"source": (False, True)},
+        OperatorName.MOTION: {
+            "source": (False, True),
+            "before": (False, True),
+            "after": (False, True),
+        },
         OperatorName.RELATION: {
             "subject": (False, True),
             "reference": (False, True),

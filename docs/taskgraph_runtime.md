@@ -87,7 +87,13 @@ to those entities. Configure the halo with `input_composer.candidate_halo_ratio`
 Region retrieval treats a `Region` input as a hard search scope. Crop-local provider
 boxes are mapped back to absolute original-image pixel coordinates and clipped to the
 scope. `REGION_FROM_BBOX` uses the same coordinate convention and scales dataset boxes
-when `params.image_size` differs from the loaded image.
+when `params.image_size` differs from the loaded image. It also accepts a nested `Region`,
+keeps bbox coordinates absolute, clips to that scope, and rejects reversed or disjoint boxes.
+
+`FIND_MARKER` performs color masking plus connected components, returns every accepted
+component as an absolute `Region`, and filters pixel noise, implausibly large color fields,
+and shape-aspect mismatches. `GROUP` is a real deterministic row/column/cluster grouping
+operation and records stable group IDs and group boxes.
 
 ## Operator mapping
 
@@ -108,6 +114,15 @@ when `params.image_size` differs from the loaded image.
 | `RELATION`, `VLM_REASON` | semantic reasoning | **REAL:** Qwen3-VL-2B |
 | `ROUTE_REASON` | route semantics | **REAL:** Qwen3-VL-4B route role |
 | final choice | deterministic mapping or same-model KV-cached constrained choice | **REAL:** shared 2B, or the active 4B Route session |
+
+Route V1 resolves singleton endpoints or a unique highest score only when every candidate
+is scored; ties and partially scored sets are explicit ambiguity errors. Context geometry
+uses an endpoint union, margin, minimum side, image clipping, optional aspect-preserving
+resize, and runtime START/GOAL overlays. The route prompt treats endpoint descriptions as
+already-resolved identity context while preserving navigation constraints. Trace-safe score
+metadata includes prompt version, crop/render sizes, global-to-render transform, marker style,
+provider/model identity, cache reuse, and latency. Route reasoning and option scoring stay in
+one 4B cached session; no route-specific answer parser exists.
 
 The LAE adapter consumes the existing dependency-light `ProposalProvider`, including
 the isolated LAE sidecar and generic tiled wrapper. It converts crop-local boxes back
@@ -194,14 +209,17 @@ REAL:
 - Qwen3-VL-4B only for the route-specialist role.
 - Existing UHR Locator and VisRAG scoring implementations are available through adapters.
 
-PLACEHOLDER / replaceable contract:
+Replaceable contract:
 
 - Final local Planner checkpoint: `PlannerProvider` plus `FixturePlannerProvider`.
 - Lightweight region retriever/checkpoint: `RegionRetrieverProvider` plus fake,
   UHR Locator, and score-based adapters. This contract returns candidate boxes; it does
   not claim that CLIP natively produces bounding boxes.
-- Evidence sufficiency: typed contract plus `FakeEvidenceSufficiencyProvider`; it is not
-  forced into the critical path.
+- Evidence sufficiency: `EvidenceSufficiencyExecutor` reuses `semantic_2b` and its existing
+  finite KV-cache primitive. It returns only `SUFFICIENT`, `NEED_MORE_EVIDENCE`,
+  `UNRESOLVED`, or `ERROR` plus trace-safe confidence/metadata; reasoning text is never
+  exposed. It is an auxiliary runtime service, not a TaskGraph operator, and never controls
+  exhaustive counting or graph traversal. See [Answerability](architecture/answerability.md).
 
 ## Failure and trace contract
 

@@ -332,6 +332,34 @@ def test_group_assigns_deterministic_geometry_groups(tmp_path: Path, mode: str) 
     assert len(result.provenance["groups"]) == 2
 
 
+@pytest.mark.parametrize("mode", ["ROW", "COLUMN", "CLUSTER"])
+def test_group_handles_empty_and_single_entity(tmp_path: Path, mode: str) -> None:
+    image = _image(tmp_path / f"group_edge_{mode}.png")
+    empty = GeometryExecutor._group(EntitySet(()), mode)
+    single = GeometryExecutor._group(
+        EntitySet((_entity(image, (20, 20, 40, 40)),)),
+        mode,
+    )
+    assert empty.entities == ()
+    assert empty.provenance["group_count"] == 0
+    assert single.provenance["group_count"] == 1
+    assert single.entities[0].provenance["group_id"] == 0
+
+
+def test_group_row_boundary_is_deterministic(tmp_path: Path) -> None:
+    image = _image(tmp_path / "group_boundary.png")
+    # Median height is 20, so the inclusive row tolerance is exactly 15 px.
+    entities = EntitySet(
+        (
+            _entity(image, (10, 10, 30, 30)),
+            _entity(image, (50, 25, 70, 45)),
+            _entity(image, (90, 41, 110, 61)),
+        )
+    )
+    result = GeometryExecutor._group(entities, "ROW")
+    assert [entity.provenance["group_id"] for entity in result.entities] == [0, 0, 1]
+
+
 @pytest.mark.parametrize("shape", ["rectangle", "circle", "partial_border"])
 def test_find_marker_returns_connected_components(tmp_path: Path, shape: str) -> None:
     path = tmp_path / f"marker_{shape}.png"
@@ -351,6 +379,38 @@ def test_find_marker_returns_connected_components(tmp_path: Path, shape: str) ->
     assert result.provenance["component_count"] == 2
 
 
+def test_find_marker_filters_pixel_noise_and_oversized_color_regions(tmp_path: Path) -> None:
+    path = tmp_path / "marker_filter.png"
+    canvas = Image.new("RGB", (200, 120), "white")
+    draw = ImageDraw.Draw(canvas)
+    draw.point((2, 2), fill="red")
+    draw.rectangle((0, 50, 199, 119), fill="red")
+    draw.ellipse((25, 15, 45, 35), outline="red", width=3)
+    draw.ellipse((80, 15, 100, 35), outline="red", width=3)
+    canvas.save(path)
+
+    result = GeometryExecutor._marker(ImageRef(str(path)), "red", "circle")
+    assert [region.bbox_xyxy_global for region in result.regions] == [
+        (25.0, 15.0, 46.0, 36.0),
+        (80.0, 15.0, 101.0, 36.0),
+    ]
+    assert result.provenance["component_count"] == 2
+    assert result.provenance["rejected_component_count"] == 2
+
+
+@pytest.mark.parametrize("count", [1, 2])
+def test_find_marker_keeps_one_or_two_nearby_circles(tmp_path: Path, count: int) -> None:
+    path = tmp_path / f"marker_nearby_{count}.png"
+    canvas = Image.new("RGB", (100, 70), "white")
+    draw = ImageDraw.Draw(canvas)
+    draw.ellipse((10, 15, 30, 35), outline="red", width=3)
+    if count == 2:
+        draw.ellipse((33, 15, 53, 35), outline="red", width=3)
+    canvas.save(path)
+    result = GeometryExecutor._marker(ImageRef(str(path)), "red", "circle")
+    assert len(result.regions) == count
+
+
 def test_region_from_bbox_scales_dataset_coordinates(tmp_path: Path) -> None:
     image = _image(tmp_path / "bbox.png", (200, 100))
     node = _node(
@@ -368,6 +428,54 @@ def test_region_from_bbox_scales_dataset_coordinates(tmp_path: Path) -> None:
         assert isinstance(result.value, Region)
         assert result.value.bbox_xyxy_global == (20.0, 10.0, 40.0, 30.0)
         assert result.value.provenance["scale_xy"] == [2.0, 2.0]
+    finally:
+        composer.close()
+
+
+def test_region_from_bbox_uses_absolute_coordinates_and_clips_nested_scope(
+    tmp_path: Path,
+) -> None:
+    image = _image(tmp_path / "nested_bbox.png", (300, 200))
+    scope = Region(image, (100, 50, 250, 180))
+    composer = InputComposer(tmp_path / "nested_bbox_inputs")
+    try:
+        clipped = (
+            GeometryExecutor()
+            .execute(
+                _node(
+                    "REGION_FROM_BBOX",
+                    {"image": "$n1"},
+                    {"bbox": [80, 40, 180, 100], "image_size": None},
+                ),
+                {"image": scope},
+                OperatorContext("bbox", (), composer),
+            )
+            .value
+        )
+        assert isinstance(clipped, Region)
+        assert clipped.bbox_xyxy_global == (100.0, 50.0, 180.0, 100.0)
+        assert clipped.provenance["coordinates"] == "absolute_xyxy_global"
+
+        with pytest.raises(ValueError, match="positive area before clipping"):
+            GeometryExecutor().execute(
+                _node(
+                    "REGION_FROM_BBOX",
+                    {"image": "$n1"},
+                    {"bbox": [180, 100, 80, 40], "image_size": None},
+                ),
+                {"image": scope},
+                OperatorContext("bbox", (), composer),
+            )
+        with pytest.raises(ValueError, match="does not intersect"):
+            GeometryExecutor().execute(
+                _node(
+                    "REGION_FROM_BBOX",
+                    {"image": "$n1"},
+                    {"bbox": [0, 0, 20, 20], "image_size": None},
+                ),
+                {"image": scope},
+                OperatorContext("bbox", (), composer),
+            )
     finally:
         composer.close()
 
@@ -396,3 +504,52 @@ def test_route_entityset_uses_highest_score_and_rejects_unscored_ambiguity(
     )
     with pytest.raises(ValueError, match="ambiguous"):
         GeometryExecutor._route_context(image, ambiguous, goal)
+
+    partially_scored = EntitySet(
+        (
+            _entity(image, (10, 10, 20, 20), 0.9),
+            _entity(image, (40, 40, 50, 50)),
+        )
+    )
+    with pytest.raises(ValueError, match="every candidate needs a score"):
+        GeometryExecutor._route_context(image, partially_scored, goal)
+
+    tied = EntitySet(
+        (
+            _entity(image, (10, 10, 20, 20), 0.9),
+            _entity(image, (40, 40, 50, 50), 0.9),
+        )
+    )
+    with pytest.raises(ValueError, match="highest score is tied"):
+        GeometryExecutor._route_context(image, tied, goal)
+
+    assert context.provenance["context_size"] == [256.0, 200.0]
+
+
+def test_route_visual_resize_preserves_endpoint_coordinate_mapping(tmp_path: Path) -> None:
+    image = _image(tmp_path / "large_route.png", (1200, 800))
+    start = _entity(image, (30, 40, 80, 90), 0.9)
+    goal = _entity(image, (1050, 680, 1120, 750), 0.8)
+    context = GeometryExecutor._route_context(image, start, goal)
+    composer = InputComposer(tmp_path / "route_render", route_max_side=256)
+    try:
+        model_input = composer.compose_named(
+            {"context": context},
+            question="Choose the route.",
+            options=("A", "B"),
+        )
+    finally:
+        composer.close()
+    metadata = model_input.metadata["route_context"]
+    assert max(metadata["render_size"]) == 256
+    assert metadata["resize_scale"] < 1.0
+    origin_x, origin_y = metadata["coordinate_transform"]["origin_global"]
+    scale_x, scale_y = metadata["coordinate_transform"]["scale_xy"]
+    rendered = metadata["endpoints"]["start"]["bbox_xyxy_render"]
+    restored = [
+        rendered[0] / scale_x + origin_x,
+        rendered[1] / scale_y + origin_y,
+        rendered[2] / scale_x + origin_x,
+        rendered[3] / scale_y + origin_y,
+    ]
+    assert restored == pytest.approx(list(start.region.bbox_xyxy_global))

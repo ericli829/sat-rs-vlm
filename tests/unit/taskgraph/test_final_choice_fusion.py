@@ -131,7 +131,11 @@ def test_final_attribute_fusion_sees_original_options_and_transports_score() -> 
         request = runtime.providers.semantic_2b.choice_calls[0]
         assert request.purpose == "final_attribute_choice_fusion"
         assert request.model_input.options == options
-        assert "Original benchmark question" in request.model_input.question
+        assert "Residual final question" in request.model_input.question
+        assert (
+            "Choose the option supported by the resolved evidence." in request.model_input.question
+        )
+        assert str(graph["question"]) not in request.model_input.question
         assert "already selected target" in request.model_input.question
         assert request.model_input.metadata["source_types"] == ["Entity"]
     finally:

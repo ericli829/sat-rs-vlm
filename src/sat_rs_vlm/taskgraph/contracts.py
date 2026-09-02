@@ -18,6 +18,7 @@ class OperatorInputContract:
     required: frozenset[str] = field(default_factory=frozenset)
     exactly_one: tuple[frozenset[str], ...] = ()
     require_any: frozenset[str] = field(default_factory=frozenset)
+    valid_role_sets: tuple[frozenset[str], ...] = ()
 
     def validate_keys(self, inputs: dict[str, Any], *, operator: str) -> None:
         keys = set(inputs)
@@ -35,6 +36,11 @@ class OperatorInputContract:
                 )
         if self.require_any and not keys.intersection(self.require_any):
             raise ValueError(f"{operator} requires at least one of {sorted(self.require_any)}")
+        if self.valid_role_sets and frozenset(keys) not in self.valid_role_sets:
+            expected = [sorted(group) for group in self.valid_role_sets]
+            raise ValueError(
+                f"{operator} input roles must match one of {expected}, got {sorted(keys)}"
+            )
         for role, value in inputs.items():
             is_list = isinstance(value, list)
             if is_list and not self.roles[role].allow_list:
@@ -73,7 +79,9 @@ ANY_RUNTIME_TYPES = frozenset(
 
 OPERATOR_INPUT_CONTRACTS: dict[str, OperatorInputContract] = {
     "REGION": OperatorInputContract({"image": _role(*VISUAL_SCOPE)}, frozenset({"image"})),
-    "REGION_FROM_BBOX": OperatorInputContract({"image": _role("ImageRef")}, frozenset({"image"})),
+    "REGION_FROM_BBOX": OperatorInputContract(
+        {"image": _role("ImageRef", "Region")}, frozenset({"image"})
+    ),
     "FIND_MARKER": OperatorInputContract({"image": _role(*VISUAL_SCOPE)}, frozenset({"image"})),
     "LOCATE": OperatorInputContract({"image": _role(*VISUAL_SCOPE)}, frozenset({"image"})),
     "SELECT": OperatorInputContract(
@@ -105,8 +113,12 @@ OPERATOR_INPUT_CONTRACTS: dict[str, OperatorInputContract] = {
         frozenset({"source"}),
     ),
     "MOTION": OperatorInputContract(
-        {"source": _role("Region", "Entity", "EntitySet", "SelectResult")},
-        frozenset({"source"}),
+        {
+            "source": _role("ImageRef", "Region", "Entity", "EntitySet", "SelectResult"),
+            "before": _role("ImageRef", "Region", "Entity", "EntitySet", "SelectResult"),
+            "after": _role("ImageRef", "Region", "Entity", "EntitySet", "SelectResult"),
+        },
+        valid_role_sets=(frozenset({"source"}), frozenset({"before", "after"})),
     ),
     "RELATION": OperatorInputContract(
         {

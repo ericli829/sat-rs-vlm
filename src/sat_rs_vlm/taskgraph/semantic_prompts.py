@@ -50,6 +50,13 @@ _FINAL_FUSION = (
     "constrained continuation will select the answer."
 )
 
+_ROUTE_V1_CONTEXT = (
+    "START and GOAL have already been resolved by upstream localization and are marked in the "
+    "supplied route crop. Treat referring descriptions of those endpoints as identity context "
+    "only; do not search for replacement endpoints. Preserve and apply all navigation, direction, "
+    "obstacle, and shortest-route constraints. Prompt version: route-v1."
+)
+
 
 def semantic_question(
     node: GraphNode,
@@ -63,17 +70,32 @@ def semantic_question(
             f"Determine the {node.params['attribute']}{part} of the already selected target. "
             "The upstream target selection is authoritative; do not localize a replacement."
         )
+    elif node.op is OperatorName.MOTION and set(node.inputs) == {"before", "after"}:
+        base = (
+            "Compare the supplied BEFORE observation to the supplied AFTER observation in that "
+            "temporal order. Determine whether the target moved between them; do not swap the "
+            "roles or infer order from filenames."
+        )
     elif node.op in {OperatorName.VLM_REASON, OperatorName.ROUTE_REASON}:
         configured = str(node.params["question"])
         base = original_question if configured == "$question" else configured
     else:
         base = _INTERMEDIATE_QUESTIONS.get(node.op, original_question)
-    if final_choice_fusion and node.op is not OperatorName.ROUTE_REASON:
-        return f"{base}\n\nOriginal benchmark question:\n{original_question}\n\n{_FINAL_FUSION}"
+    if node.op is OperatorName.ROUTE_REASON:
+        residual = base or "Determine which supplied route option satisfies the route constraints."
+        return f"{_ROUTE_V1_CONTEXT}\n\nResidual route question:\n{residual}"
+    if final_choice_fusion:
+        residual = original_question or "Match the resolved visual evidence to the options."
+        return f"{base}\n\nResidual final question:\n{residual}\n\n{_FINAL_FUSION}"
     return base
 
 
 def semantic_reasoning_instruction(node: GraphNode) -> str:
+    if node.op is OperatorName.MOTION and set(node.inputs) == {"before", "after"}:
+        return (
+            "Use BEFORE as time t0 and AFTER as time t1. Compare the same supplied target across "
+            "those observations. A separate binary decision step will determine YES or NO."
+        )
     return _INTERMEDIATE_INSTRUCTIONS.get(
         node.op,
         "Analyze the supplied evidence freely. A separate finite decision step will select the "

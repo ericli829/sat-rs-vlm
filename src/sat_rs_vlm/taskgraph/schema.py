@@ -388,7 +388,7 @@ class GraphNode(StrictModel):
 
 class FinalSpec(StrictModel):
     sources: list[str] = Field(min_length=1)
-    question: str = Field(min_length=1)
+    question: str
     answer_type: AnswerType
 
     @field_validator("sources")
@@ -403,10 +403,10 @@ class FinalSpec(StrictModel):
     @field_validator("question")
     @classmethod
     def static_question(cls, value: str) -> str:
-        value = value.strip()
-        if not value:
-            raise ValueError("final.question must not be empty")
-        return value
+        # Structured final sources do not need a residual VLM question.  Visual
+        # finals may still provide one, and the execution plan passes it through
+        # without restoring the full benchmark question.
+        return value.strip()
 
 
 class PlannerTarget(StrictModel):

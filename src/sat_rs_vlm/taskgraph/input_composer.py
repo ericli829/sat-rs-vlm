@@ -40,9 +40,12 @@ class InputComposer:
         output_dir: str | Path | None = None,
         *,
         candidate_halo_ratio: float = 0.2,
+        route_max_side: int = 1536,
     ) -> None:
         if not 0.0 <= candidate_halo_ratio <= 1.0:
             raise ValueError("candidate_halo_ratio must be between 0 and 1")
+        if route_max_side < 256:
+            raise ValueError("route_max_side must be at least 256")
         self._temporary = None
         if output_dir is None:
             self._temporary = tempfile.TemporaryDirectory(prefix="taskgraph_inputs_")
@@ -50,6 +53,7 @@ class InputComposer:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.candidate_halo_ratio = candidate_halo_ratio
+        self.route_max_side = route_max_side
         self._counter = 0
 
     def close(self) -> None:
@@ -210,31 +214,91 @@ class InputComposer:
             canvas.save(output)
         return str(output)
 
-    def _route_visual(self, context: RouteContext) -> str:
+    def _route_visual_with_metadata(self, context: RouteContext) -> tuple[str, dict[str, object]]:
         if context.marker_visual_path:
-            return context.marker_visual_path
+            return context.marker_visual_path, {
+                "prompt_version": "route-v1",
+                "marker_source": "precomputed",
+                "context_bbox_xyxy_global": list(context.context_region.bbox_xyxy_global),
+            }
         output = self._next_path()
+        crop_box = tuple(
+            int(value)
+            for value in (
+                math.floor(context.context_region.bbox_xyxy_global[0]),
+                math.floor(context.context_region.bbox_xyxy_global[1]),
+                math.ceil(context.context_region.bbox_xyxy_global[2]),
+                math.ceil(context.context_region.bbox_xyxy_global[3]),
+            )
+        )
         with Image.open(context.image.path.resolve()) as source:
-            canvas = source.convert("RGB").crop(context.context_region.bbox_xyxy_global)
+            canvas = source.convert("RGB").crop(crop_box)
+            crop_size = canvas.size
+            resize_scale = min(1.0, self.route_max_side / float(max(crop_size)))
+            if resize_scale < 1.0:
+                render_size = (
+                    max(1, round(crop_size[0] * resize_scale)),
+                    max(1, round(crop_size[1] * resize_scale)),
+                )
+                canvas = canvas.resize(render_size, Image.Resampling.LANCZOS)
+            else:
+                render_size = crop_size
             draw = ImageDraw.Draw(canvas)
+            marker_width = max(3, round(4 * resize_scale))
+            endpoint_mapping: dict[str, object] = {}
             for label, value, color in (
                 ("START", context.start, "green"),
                 ("GOAL", context.goal, "red"),
             ):
                 entity = value.entities[0] if isinstance(value, EntitySet) else value
                 region = entity.region if isinstance(entity, Entity) else entity
-                origin_x, origin_y, _, _ = context.context_region.bbox_xyxy_global
                 box = region.bbox_xyxy_global
                 local = (
-                    box[0] - origin_x,
-                    box[1] - origin_y,
-                    box[2] - origin_x,
-                    box[3] - origin_y,
+                    (box[0] - crop_box[0]) * resize_scale,
+                    (box[1] - crop_box[1]) * resize_scale,
+                    (box[2] - crop_box[0]) * resize_scale,
+                    (box[3] - crop_box[1]) * resize_scale,
                 )
-                draw.rectangle(local, outline=color, width=4)
-                draw.text((local[0], local[1]), label, fill=color)
+                draw.rectangle(local, outline=color, width=marker_width)
+                center = ((local[0] + local[2]) / 2.0, (local[1] + local[3]) / 2.0)
+                radius = max(4.0, 6.0 * resize_scale)
+                draw.ellipse(
+                    (
+                        center[0] - radius,
+                        center[1] - radius,
+                        center[0] + radius,
+                        center[1] + radius,
+                    ),
+                    outline=color,
+                    width=marker_width,
+                )
+                text_y = max(0.0, local[1] - 12.0)
+                draw.text((max(0.0, local[0]), text_y), label, fill=color)
+                endpoint_mapping[label.casefold()] = {
+                    "bbox_xyxy_global": list(box),
+                    "bbox_xyxy_render": list(local),
+                    "marker_color": color,
+                }
             canvas.save(output)
-        return str(output)
+        return str(output), {
+            "prompt_version": "route-v1",
+            "marker_source": "runtime",
+            "marker_style": "bbox_plus_center_ring",
+            "context_bbox_xyxy_global": list(crop_box),
+            "context_size": list(crop_size),
+            "render_size": list(render_size),
+            "resize_scale": resize_scale,
+            "max_side": self.route_max_side,
+            "coordinate_transform": {
+                "global_to_render": "translate_then_scale",
+                "origin_global": [crop_box[0], crop_box[1]],
+                "scale_xy": [resize_scale, resize_scale],
+            },
+            "endpoints": endpoint_mapping,
+        }
+
+    def _route_visual(self, context: RouteContext) -> str:
+        return self._route_visual_with_metadata(context)[0]
 
     def _visuals(self, value: RuntimeObject) -> list[str]:
         if isinstance(value, SelectResult):
@@ -274,8 +338,46 @@ class InputComposer:
             return f"{header}\nvalues:\n{values}"
         if isinstance(value, Answer):
             return f"{header}\nvalue: {value.text}"
+        if isinstance(value, Region):
+            return f"{header}\nbbox_xyxy_global: {list(value.bbox_xyxy_global)}"
+        if isinstance(value, RegionSet):
+            boxes = "\n".join(f"- {list(region.bbox_xyxy_global)}" for region in value.regions)
+            return f"{header}\nboxes_xyxy_global:\n{boxes or '- []'}"
+        if isinstance(value, Entity):
+            return (
+                f"{header}\nlabel: {value.label}\nscore: {value.score}\n"
+                f"bbox_xyxy_global: {list(value.region.bbox_xyxy_global)}"
+            )
+        if isinstance(value, EntitySet):
+            entities = "\n".join(
+                f"- index: {index}; label: {entity.label}; score: {entity.score}; "
+                f"bbox_xyxy_global: {list(entity.region.bbox_xyxy_global)}"
+                for index, entity in enumerate(value.entities)
+            )
+            return f"{header}\nentities:\n{entities or '- []'}"
+        if isinstance(value, RouteContext):
+            start = value.start.entities[0] if isinstance(value.start, EntitySet) else value.start
+            goal = value.goal.entities[0] if isinstance(value.goal, EntitySet) else value.goal
+            start_region = start.region if isinstance(start, Entity) else start
+            goal_region = goal.region if isinstance(goal, Entity) else goal
+            return (
+                f"{header}\nstart_bbox_xyxy_global: {list(start_region.bbox_xyxy_global)}\n"
+                f"goal_bbox_xyxy_global: {list(goal_region.bbox_xyxy_global)}\n"
+                f"context_bbox_xyxy_global: {list(value.context_region.bbox_xyxy_global)}"
+            )
         if isinstance(value, Evidence):
-            return InputComposer._structured(value.value, role)
+            nested = InputComposer._structured(value.value, role)
+            return (
+                f"{nested}\nevidence_description: {value.description}"
+                if nested is not None
+                else None
+            )
+        if isinstance(value, EvidenceSet):
+            entries = [
+                InputComposer._structured(item, f"{role}_{index + 1}")
+                for index, item in enumerate(value.evidence)
+            ]
+            return "\n\n".join(item for item in entries if item is not None) or None
         return None
 
     @staticmethod
@@ -316,6 +418,13 @@ class InputComposer:
         options: list[str] | tuple[str, ...] | None = None,
     ) -> ModelInput:
         named = self._materialize_select_values(named)
+        if "before" in named and "after" in named:
+            # Temporal ordering is semantic, not JSON/dict insertion order.
+            named = {
+                "before": named["before"],
+                "after": named["after"],
+                **{role: value for role, value in named.items() if role not in {"before", "after"}},
+            }
         visuals: list[str] = []
         visual_roles: list[str] = []
         structured: list[str] = []
@@ -338,7 +447,12 @@ class InputComposer:
         for source in sources:
             root_role = source.role.casefold().split("_", 1)[0]
             if root_role not in consumed:
-                source_visuals = self._visuals(source.value)
+                if isinstance(source.value, RouteContext):
+                    route_path, route_metadata = self._route_visual_with_metadata(source.value)
+                    source_visuals = [route_path]
+                    metadata["route_context"] = route_metadata
+                else:
+                    source_visuals = self._visuals(source.value)
                 visuals.extend(source_visuals)
                 visual_roles.extend([source.role] * len(source_visuals))
             value = self._structured(source.value, source.role)

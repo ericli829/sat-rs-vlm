@@ -11,6 +11,7 @@ from sat_rs_vlm.taskgraph.runtime_types import (
     Answer,
     ChoiceResult,
     ChoiceScoreResult,
+    RouteContext,
     ScalarInt,
 )
 
@@ -93,6 +94,50 @@ def test_case_a_high_res_count_is_structured_text_only_choice() -> None:
         assert result.store.get("$n1").value == 7
         assert runtime.choice_resolver.last_model_input.visual_inputs == ()
         assert "value: 7" in runtime.choice_resolver.last_model_input.structured_context
+        assert runtime.providers.choice.choice_calls == []
+    finally:
+        runtime.close()
+
+
+def test_structured_final_accepts_empty_residual_question_without_restoring_original() -> None:
+    question = "How many ships are there?"
+    options = ["A 1", "B 2"]
+    graph = _graph(
+        question=question,
+        options=options,
+        nodes=[
+            {
+                "id": "n1",
+                "op": "COUNT",
+                "inputs": {"image": "$image0"},
+                "params": {
+                    "target": {"category": "ship", "attributes": {}},
+                    "entire": True,
+                },
+            }
+        ],
+        sources=["$n1"],
+        final_question="",
+        intent="SIMPLE_COUNT",
+    )
+    runtime = fake_runtime(detection_boxes=[[0, 0, 1, 1], [2, 0, 3, 1]])
+    try:
+        result = runtime.run(
+            RuntimeRequest(
+                "empty-final-question",
+                "XLRS_Bench",
+                "count",
+                question,
+                (IMAGE,),
+                tuple(options),
+                graph=graph,
+            )
+        )
+        assert result.output.choice_id == "B"
+        assert runtime.choice_resolver.last_model_input.question == (
+            "Match the resolved evidence to the original options."
+        )
+        assert question not in runtime.choice_resolver.last_model_input.question
         assert runtime.providers.choice.choice_calls == []
     finally:
         runtime.close()
@@ -351,7 +396,7 @@ def test_case_e_route_accepts_entityset_start_and_goal() -> None:
         intent="ROUTE_PLANNING",
     )
     runtime = fake_runtime(
-        detection_boxes=[[1, 1, 3, 3], [4, 4, 6, 6]],
+        detection_boxes=[[0.2, 0.2, 1.2, 1.2], [2.5, 2.5, 3.5, 3.5]],
         route_responses={"route_reason": "route evidence"},
         choice_responses={"choice": "A"},
     )
@@ -365,10 +410,23 @@ def test_case_e_route_accepts_entityset_start_and_goal() -> None:
         assert result.trace.nodes[-1].provider == "fake_vlm"
         assert len(runtime.providers.route_4b.choice_calls) == 1
         assert runtime.providers.route_4b.choice_calls[0].purpose == "route_choice"
-        assert runtime.providers.route_4b.choice_calls[0].model_input.options == tuple(options)
+        route_request = runtime.providers.route_4b.choice_calls[0]
+        assert route_request.model_input.options == tuple(options)
+        assert "START and GOAL have already been resolved" in route_request.model_input.question
+        assert "Residual route question" in route_request.model_input.question
+        route_metadata = route_request.model_input.metadata["route_context"]
+        assert route_metadata["prompt_version"] == "route-v1"
+        assert route_metadata["marker_style"] == "bbox_plus_center_ring"
+        assert route_metadata["context_size"] == [4, 4]
+        assert route_metadata["render_size"] == [4, 4]
+        assert route_metadata["resize_scale"] == 1.0
         assert runtime.providers.semantic_2b.choice_calls == []
         route_output = result.store.get("$n6")
         assert route_output.cache_reused is True
+        assert route_output.metadata["input_metadata"]["visual_roles"] == ["CONTEXT"]
+        route_context = result.store.get("$n5")
+        assert isinstance(route_context, RouteContext)
+        assert route_context.provenance["ambiguity_policy"].startswith("single_or_unique")
     finally:
         runtime.close()
 

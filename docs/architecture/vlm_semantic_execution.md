@@ -32,7 +32,9 @@ operator -> InputComposer -> free reasoning -> same-model KV
 ```
 
 - `RELATION` scores the values of the canonical `SpatialRelation` enum and stores `Label`.
-- `MOTION` scores `YES` against `NO` and stores `Boolean`. A score inside the configured
+- `MOTION` accepts either the legacy single `source` or an explicit `before` + `after`
+  temporal pair. The paired path preserves `BEFORE`/`AFTER` visual roles and never infers
+  ordering from filenames. It scores `YES` against `NO` and stores `Boolean`. A score inside the configured
   uncertainty margin raises `SemanticDecisionUnresolvedError`; it never becomes `False` by
   parse failure.
 - `CLASSIFY` with `label_space` scores one canonical label and stores `Label`.
@@ -71,7 +73,7 @@ trace-safe scalar metadata such as `visual_prefill_count` and `session_released`
 The fused final path is:
 
 ```text
-operator evidence + original question + original options
+operator evidence + residual final question + original options
   -> free reasoning -> same-model KV -> benchmark option scoring
   -> ChoiceScoreResult -> RuntimeStore
   -> ChoiceResolver precomputed path -> ChoiceResult
@@ -85,6 +87,11 @@ retain their normal typed output contracts.
 
 `ROUTE_REASON` remains on its frozen same-4B path: 4B route reasoning and 4B cached option
 scoring produce `ChoiceScoreResult`; a 2B model never consumes its cache.
+
+`final.question` is a residual question and may be empty for structured final sources. The
+runtime does not restore the full benchmark question when it is empty. Visual finals receive
+the residual question plus operator-owned evidence instructions, so upstream localization or
+typed computation is not repeated.
 
 ## Fusion eligibility
 

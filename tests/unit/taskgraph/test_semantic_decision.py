@@ -26,6 +26,7 @@ from sat_rs_vlm.taskgraph.schema import GraphNode
 from sat_rs_vlm.taskgraph.semantic_decision import SemanticDecisionConfig
 
 IMAGE = str(Path("tests/fixtures/miniature_dataset/images/vqa.ppm").resolve())
+SECOND_IMAGE = str(Path("tests/fixtures/miniature_dataset/images/counting.ppm").resolve())
 
 
 def _node(op: str, inputs: dict[str, str], params: dict[str, object]) -> GraphNode:
@@ -94,6 +95,39 @@ def test_motion_uses_binary_scores_even_when_reasoning_is_uncertain(
     assert outcome.value.provenance["method"] == "kv_cached_binary"
     assert outcome.value.provenance["cache_reused"] is True
     assert provider.calls == []
+
+
+def test_motion_before_after_roles_are_ordered_and_swappable(tmp_path: Path) -> None:
+    provider = FakeSemanticVLMProvider(choice_scores={"semantic_motion": {"YES": 2.0, "NO": -1.0}})
+    composer = InputComposer(tmp_path / "paired-motion")
+    node = _node("MOTION", {"after": "$image1", "before": "$image0"}, {})
+    try:
+        SemanticExecutor(provider).execute(
+            node,
+            {"after": ImageRef(SECOND_IMAGE), "before": ImageRef(IMAGE)},
+            OperatorContext("Did it move?", (), composer),
+        )
+        first = provider.semantic_calls[-1].model_input
+        SemanticExecutor(provider).execute(
+            node,
+            {"after": ImageRef(IMAGE), "before": ImageRef(SECOND_IMAGE)},
+            OperatorContext("Did it move?", (), composer),
+        )
+        swapped = provider.semantic_calls[-1].model_input
+    finally:
+        composer.close()
+
+    assert first.visual_roles == ("BEFORE", "AFTER")
+    assert first.visual_inputs == (IMAGE, SECOND_IMAGE)
+    assert swapped.visual_roles == ("BEFORE", "AFTER")
+    assert swapped.visual_inputs == (SECOND_IMAGE, IMAGE)
+    assert "BEFORE observation" in first.question
+    assert "time t0" in provider.semantic_calls[0].reasoning_instruction
+
+
+def test_motion_rejects_incomplete_temporal_pair() -> None:
+    with pytest.raises(ValueError, match="input roles must match"):
+        _node("MOTION", {"before": "$image0"}, {})
 
 
 def test_classify_with_label_space_is_canonical_cached_decision(tmp_path: Path) -> None:

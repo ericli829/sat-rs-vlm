@@ -59,6 +59,16 @@ semantic_region_categories:
   - harbor
   - industrial area
 
+input_composer:
+  candidate_halo_ratio: 0.2
+  route_max_side: 1536
+
+# Auxiliary service only. It reuses semantic_2b and never controls COUNT or graph traversal.
+answerability:
+  enabled: true
+  return_error_result: true
+  prompt_version: answerability-v1
+
 choice:
   backend: kv_cached_logits
   single_choice_suffix: "\n\nFinal choice:"
