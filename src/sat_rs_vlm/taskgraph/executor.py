@@ -236,6 +236,7 @@ class GraphExecutor:
                         error=dict(exc.details),
                     )
                 )
+                exc.execution_trace = trace
                 raise
             trace.nodes.append(
                 NodeTrace(

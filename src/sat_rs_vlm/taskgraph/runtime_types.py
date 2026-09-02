@@ -249,9 +249,7 @@ def unwrap_select_result(
                 f"{consumer} refuses SELECT status {value.status.value}"
             )
     elif value.status is not SelectStatus.OK:
-        raise SelectResultConsumptionError(
-            f"{consumer} refuses SELECT status {value.status.value}"
-        )
+        raise SelectResultConsumptionError(f"{consumer} refuses SELECT status {value.status.value}")
 
     selected: RuntimeObject = value.selected
     if not require_single:
@@ -274,12 +272,29 @@ def unwrap_select_result(
         f"{consumer} requires one selected object, got {cardinality}"
     )
 
+
 STRUCTURED_AUTHORITATIVE_TYPES = (ScalarInt, ScalarFloat, Boolean, Label, LabelSet)
 VISUAL_TYPES = (ImageRef, Region, RegionSet, Entity, EntitySet, SelectResult, RouteContext)
 
 
 def runtime_type_name(value: RuntimeObject | ChoiceResult) -> str:
     return type(value).__name__
+
+
+def _trace_safe(value: Any, *, depth: int = 0) -> Any:
+    if depth > 8:
+        return "<trace_depth_limit>"
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(key): _trace_safe(item, depth=depth + 1) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return [_trace_safe(item, depth=depth + 1) for item in value]
+    return str(value)
 
 
 def runtime_summary(value: RuntimeObject | ChoiceResult) -> dict[str, Any]:
@@ -340,4 +355,7 @@ def runtime_summary(value: RuntimeObject | ChoiceResult) -> dict[str, Any]:
             confidence=value.confidence,
             provenance=dict(value.provenance),
         )
+    provenance = getattr(value, "provenance", None)
+    if isinstance(provenance, dict) and provenance and "provenance" not in summary:
+        summary["provenance"] = _trace_safe(provenance)
     return summary

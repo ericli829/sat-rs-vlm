@@ -5,7 +5,9 @@ from __future__ import annotations
 import hashlib
 import json
 import tempfile
+import threading
 import time
+from collections import OrderedDict
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -117,6 +119,9 @@ class TiledProposalProvider:
         self.parallel_max_workers = int(self.config.get("parallel_max_workers", 3))
         self.parallel_worker_vram_gb = float(self.config.get("parallel_worker_vram_gb", 4.0))
         self.parallel_vram_reserve_gb = float(self.config.get("parallel_vram_reserve_gb", 6.0))
+        self.proposal_cache_size = int(self.config.get("proposal_cache_size", 8))
+        if self.proposal_cache_size < 0:
+            raise ProposalError("proposal_cache_size must be non-negative")
         top_k_value = self.config.get("global_top_k")
         self.global_top_k = int(top_k_value) if top_k_value is not None else None
         if self.tile_size < 1:
@@ -149,23 +154,94 @@ class TiledProposalProvider:
             "tiling": tiling_identity,
             "tiling_sha256": self.tiling_sha256,
         }
+        self._parallel_workers: int | None = None
+        self._parallel_lock = threading.Lock()
+        self._proposal_cache: OrderedDict[tuple[str, int, int, str], ProposalResult] = OrderedDict()
+        self._proposal_cache_lock = threading.Lock()
+
+    def _resolved_parallel_workers(self) -> int:
+        if self._parallel_workers is not None:
+            return self._parallel_workers
+        with self._parallel_lock:
+            if self._parallel_workers is None:
+                self._parallel_workers = resolve_parallel_workers(
+                    self.parallel_workers_requested,
+                    max_workers=self.parallel_max_workers,
+                    worker_vram_gb=self.parallel_worker_vram_gb,
+                    vram_reserve_gb=self.parallel_vram_reserve_gb,
+                )
+        assert self._parallel_workers is not None
+        return self._parallel_workers
+
+    def _proposal_cache_key(
+        self, image_path: Path, target_phrase: str
+    ) -> tuple[str, int, int, str]:
+        stat = image_path.stat()
+        return (
+            str(image_path),
+            int(stat.st_size),
+            int(stat.st_mtime_ns),
+            target_phrase.strip().casefold(),
+        )
+
+    def _cached_proposal(self, key: tuple[str, int, int, str]) -> ProposalResult | None:
+        if self.proposal_cache_size == 0:
+            return None
+        with self._proposal_cache_lock:
+            result = self._proposal_cache.get(key)
+            if result is not None:
+                self._proposal_cache.move_to_end(key)
+            return result
+
+    def _cache_proposal(self, key: tuple[str, int, int, str], result: ProposalResult) -> None:
+        if self.proposal_cache_size == 0:
+            return
+        with self._proposal_cache_lock:
+            self._proposal_cache[key] = result
+            self._proposal_cache.move_to_end(key)
+            while len(self._proposal_cache) > self.proposal_cache_size:
+                self._proposal_cache.popitem(last=False)
+
+    @staticmethod
+    def _cache_view(
+        result: ProposalResult, *, cache_hit: bool, latency_ms: float
+    ) -> ProposalResult:
+        metadata = dict(result.metadata)
+        metadata.update(
+            {
+                "proposal_cache_hit": cache_hit,
+                "base_latency_ms": (0.0 if cache_hit else metadata.get("base_latency_ms", 0.0)),
+                "wrapper_latency_ms": latency_ms,
+            }
+        )
+        return ProposalResult(
+            boxes_xyxy=[list(box) for box in result.boxes_xyxy],
+            scores=list(result.scores),
+            latency_ms=latency_ms,
+            provider=result.provider,
+            model_id=result.model_id,
+            metadata=metadata,
+        )
 
     def predict(self, image_path: Path, target_phrase: str) -> ProposalResult:
         resolved_image = Path(image_path).expanduser().resolve()
         if not resolved_image.is_file():
             raise ProposalError(f"tiled detector image does not exist: {resolved_image}")
         started = time.perf_counter()
+        cache_key = self._proposal_cache_key(resolved_image, target_phrase)
+        cached = self._cached_proposal(cache_key)
+        if cached is not None:
+            return self._cache_view(
+                cached,
+                cache_hit=True,
+                latency_ms=(time.perf_counter() - started) * 1000.0,
+            )
         raw_boxes: list[list[float]] = []
         raw_scores: list[float] = []
         raw_records: list[dict[str, Any]] = []
         tile_records: list[dict[str, Any]] = []
         base_latency_ms = 0.0
-        parallel_workers = resolve_parallel_workers(
-            self.parallel_workers_requested,
-            max_workers=self.parallel_max_workers,
-            worker_vram_gb=self.parallel_worker_vram_gb,
-            vram_reserve_gb=self.parallel_vram_reserve_gb,
-        )
+        parallel_workers = self._resolved_parallel_workers()
         with Image.open(resolved_image) as source:
             image = source.convert("RGB")
             tiles = generate_tiles(
@@ -267,7 +343,7 @@ class TiledProposalProvider:
             top_k=self.global_top_k,
         )
         latency_ms = (time.perf_counter() - started) * 1000.0
-        return ProposalResult(
+        result = ProposalResult(
             boxes_xyxy=boxes,
             scores=scores,
             latency_ms=latency_ms,
@@ -288,6 +364,8 @@ class TiledProposalProvider:
                 "parallel_workers_requested": str(self.parallel_workers_requested),
                 "parallel_workers": parallel_workers,
                 "parallel_max_workers": self.parallel_max_workers,
+                "proposal_cache_hit": False,
+                "proposal_cache_size": self.proposal_cache_size,
                 "tile_count": len(tile_records),
                 "tiles": tile_records,
                 "raw_proposal_count": len(raw_boxes),
@@ -298,6 +376,10 @@ class TiledProposalProvider:
                 "wrapper_latency_ms": latency_ms,
             },
         )
+        self._cache_proposal(cache_key, result)
+        return result
 
     def close(self) -> None:
         self.base_provider.close()
+        with self._proposal_cache_lock:
+            self._proposal_cache.clear()

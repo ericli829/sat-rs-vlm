@@ -8,10 +8,11 @@ from sat_rs_vlm.taskgraph.evaluation_runner import (
     run_taskgraph_evaluation,
     runtime_request_from_sample,
 )
+from sat_rs_vlm.taskgraph.input_composer import InputComposer
 from sat_rs_vlm.taskgraph.providers import PlannerFailedError
 from sat_rs_vlm.taskgraph.routing import ExecutionMode
 from sat_rs_vlm.taskgraph.runtime import RuntimeResult
-from sat_rs_vlm.taskgraph.runtime_types import ChoiceResult
+from sat_rs_vlm.taskgraph.runtime_types import ChoiceResult, ImageRef, Region
 from sat_rs_vlm.taskgraph.tracing import ExecutionTrace
 
 
@@ -64,9 +65,70 @@ def test_runner_writes_failure_and_continues(tmp_path: Path) -> None:
     assert [row["status"] for row in rows] == ["failure", "success"]
     assert rows[0]["error_type"] == "planner_failed"
     assert rows[0]["stage"] == "planner"
+    assert rows[0]["answer"] is None
+    assert rows[0]["answer_judgment"]["status"] == "unavailable"
+    assert rows[0]["reasoning_chain"]["failure"]["stage"] == "planner"
     assert summary["failure_count"] == 1
     assert summary["success_count"] == 1
     assert runtime.calls == ["bad", "good"]
+
+
+def test_runner_writes_answer_and_artifact_paths(tmp_path: Path) -> None:
+    runtime = _Runtime()
+    output = tmp_path / "predictions.jsonl"
+    visual_path = tmp_path / "visual.png"
+    runtime_result = RuntimeResult(
+        execution_mode=ExecutionMode.TASKGRAPH_UHR,
+        output=ChoiceResult(selected_ids=("B",), answer_type="CHOICE_SINGLE", raw_response="B"),
+        trace=ExecutionTrace(
+            sample_id="good",
+            execution_mode=ExecutionMode.TASKGRAPH_UHR.value,
+            intermediate_output_paths=[str(visual_path)],
+        ),
+    )
+
+    runtime.run = lambda _request: runtime_result
+    run_taskgraph_evaluation(runtime, [_sample("good")], output)
+
+    row = json.loads(output.read_text(encoding="utf-8").splitlines()[0])
+    assert row["answer"] == "B"
+    assert row["prediction"]["answer"] == "B"
+    assert row["input_image_paths"] == ["fixture.png"]
+    assert row["intermediate_output_paths"] == [str(visual_path)]
+
+
+def test_runner_records_answer_judgment_and_reasoning_chain(tmp_path: Path) -> None:
+    runtime = _Runtime()
+    output = tmp_path / "predictions.jsonl"
+    sample = {**_sample("judged"), "reference_answer": "(A) 1"}
+
+    run_taskgraph_evaluation(runtime, [sample], output)
+
+    row = json.loads(output.read_text(encoding="utf-8").splitlines()[0])
+    assert row["answer_judgment"]["status"] == "correct"
+    assert row["answer_judgment"]["comparison"] == "normalized_choice"
+    assert row["reasoning_chain"]["final"]["answer"] == "A"
+    assert row["reasoning_chain"]["input_image_paths"] == ["fixture.png"]
+    assert row["reasoning_chain"]["planner"]["status"] == "not_used"
+
+
+def test_input_composer_keeps_persistent_visual_paths(tmp_path: Path) -> None:
+    from PIL import Image
+
+    source = tmp_path / "source.png"
+    Image.new("RGB", (20, 20), "white").save(source)
+    composer = InputComposer(tmp_path / "artifacts")
+    try:
+        checkpoint = composer.artifact_checkpoint()
+        model_input = composer.compose_named(
+            {"region": Region(ImageRef(str(source)), (2, 3, 12, 14))},
+            question="What is here?",
+        )
+        paths = composer.artifact_paths_since(checkpoint)
+        assert list(paths) == model_input.metadata["visual_paths"]
+        assert all(Path(path).is_file() for path in paths)
+    finally:
+        composer.close()
 
 
 def test_runner_resumes_only_successful_sample_ids(tmp_path: Path) -> None:

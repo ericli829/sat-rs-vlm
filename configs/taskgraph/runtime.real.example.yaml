@@ -51,6 +51,7 @@ providers:
     parallel_max_workers: 3
     parallel_worker_vram_gb: 4.0
     parallel_vram_reserve_gb: 6.0
+    proposal_cache_size: 8
     base_provider: lae_dino_lae1m
     base_config:
       source_root: ${LAE_DINO_SOURCE_ROOT}

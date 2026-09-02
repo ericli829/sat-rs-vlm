@@ -67,6 +67,7 @@ class InputComposer:
         self.entity_set_max_crops = entity_set_max_crops
         self.route_max_side = route_max_side
         self._counter = 0
+        self._artifact_paths: list[str] = []
 
     def close(self) -> None:
         if self._temporary is not None:
@@ -74,8 +75,20 @@ class InputComposer:
             self._temporary = None
 
     def _next_path(self, suffix: str = ".png") -> Path:
-        self._counter += 1
-        return self.output_dir / f"visual_{self._counter:05d}{suffix}"
+        while True:
+            self._counter += 1
+            output = self.output_dir / f"visual_{self._counter:05d}{suffix}"
+            if not output.exists():
+                self._artifact_paths.append(str(output))
+                return output
+
+    def artifact_checkpoint(self) -> int:
+        return len(self._artifact_paths)
+
+    def artifact_paths_since(self, checkpoint: int) -> tuple[str, ...]:
+        if checkpoint < 0 or checkpoint > len(self._artifact_paths):
+            raise ValueError("artifact checkpoint is outside the composer history")
+        return tuple(path for path in self._artifact_paths[checkpoint:] if Path(path).is_file())
 
     def _crop(self, region: Region) -> str:
         source_path = region.image.path.resolve()
@@ -254,16 +267,12 @@ class InputComposer:
                         index,
                     ),
                 )
-                selected_candidate_indices = sorted(
-                    ranked_indices[: self.entity_set_max_crops]
-                )
+                selected_candidate_indices = sorted(ranked_indices[: self.entity_set_max_crops])
                 selected_set = set(selected_candidate_indices)
                 omitted_candidate_indices = [
                     index for index in range(len(boxes)) if index not in selected_set
                 ]
-                crop_sources = [
-                    (index, boxes[index]) for index in selected_candidate_indices
-                ]
+                crop_sources = [(index, boxes[index]) for index in selected_candidate_indices]
             for source_index, source_box in crop_sources:
                 source_width = source_box[2] - source_box[0]
                 source_height = source_box[3] - source_box[1]
@@ -603,8 +612,8 @@ class InputComposer:
                     source_visuals = [route_path]
                     metadata["route_context"] = route_metadata
                 elif isinstance(source.value, EntitySet) and len(source.value.entities) > 1:
-                    source_visuals, entity_set_metadata = (
-                        self._entity_set_visuals_with_metadata(source.value)
+                    source_visuals, entity_set_metadata = self._entity_set_visuals_with_metadata(
+                        source.value
                     )
                     existing = cast(list[dict[str, object]], metadata.setdefault("entity_sets", []))
                     existing.append({"role": source.role, **entity_set_metadata})
@@ -620,6 +629,7 @@ class InputComposer:
                 "source_roles": [source.role for source in sources],
                 "source_types": [type(source.value).__name__ for source in sources],
                 "visual_roles": visual_roles,
+                "visual_paths": list(visuals),
             }
         )
         return ModelInput(

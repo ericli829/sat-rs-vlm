@@ -42,12 +42,23 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--provider-config", type=Path, required=True)
     parser.add_argument("--image-root", type=Path)
+    parser.add_argument(
+        "--artifact-dir",
+        type=Path,
+        help="Persistent directory for generated intermediate visual inputs.",
+    )
     parser.add_argument("--no-resume", action="store_true")
     parser.add_argument("--fail-fast", action="store_true")
     parser.add_argument("--stop-on-sample-error", action="store_true")
     args = parser.parse_args()
     config = yaml.safe_load(args.provider_config.read_text(encoding="utf-8")) or {}
-    runtime = runtime_from_config(config)
+    configured_composer = config.get("input_composer", {})
+    artifact_dir = args.artifact_dir
+    if artifact_dir is None and (
+        not isinstance(configured_composer, dict) or configured_composer.get("output_dir") is None
+    ):
+        artifact_dir = args.output.with_name(f"{args.output.stem}_artifacts")
+    runtime = runtime_from_config(config, input_output_dir=artifact_dir)
     try:
         summary = run_taskgraph_evaluation(
             runtime,
@@ -60,6 +71,7 @@ def main() -> int:
         )
     finally:
         runtime.close()
+    summary["artifact_dir"] = str(runtime.composer.output_dir.resolve())
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0
 

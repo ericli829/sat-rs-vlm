@@ -125,6 +125,8 @@ def test_planner_retries_once_after_invalid_dsl(
     assert graph.nodes[0].op.value == "COUNT"
     assert len(provider.last_metadata["attempts"]) == 2
     assert provider.last_metadata["status"] == "executed"
+    assert provider.last_metadata["planner_output"] == DSL
+    assert provider.last_metadata["attempts"][-1]["planner_output"] == DSL
 
 
 def test_planner_failure_is_bounded_and_typed(

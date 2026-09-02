@@ -401,6 +401,7 @@ class TaskGraphRuntime:
     def _taskgraph(self, request: RuntimeRequest, images: dict[str, ImageRef]) -> RuntimeResult:
         planner_ms = 0.0
         planner_status = "deferred"
+        planner_metadata: Mapping[str, Any] | None = None
         if request.graph is not None:
             graph = (
                 request.graph
@@ -420,6 +421,9 @@ class TaskGraphRuntime:
             )
             planner_ms = (time.perf_counter() - planner_started) * 1000.0
             planner_status = "executed"
+            candidate_metadata = getattr(self.providers.planner, "last_metadata", None)
+            if isinstance(candidate_metadata, Mapping):
+                planner_metadata = candidate_metadata
         else:
             raise ValueError("TASKGRAPH_UHR requires graph input or a configured PlannerProvider")
         if graph.question != request.question:
@@ -429,39 +433,51 @@ class TaskGraphRuntime:
         store = RuntimeStore({f"${key}": value for key, value in images.items()})
         context = OperatorContext(request.question, request.options, self.composer)
         graph_started = time.perf_counter()
-        trace = self.graph_executor.execute(
-            graph,
-            store,
-            sample_id=request.sample_id,
-            execution_mode=ExecutionMode.TASKGRAPH_UHR.value,
-            context=context,
-        )
+        try:
+            trace = self.graph_executor.execute(
+                graph,
+                store,
+                sample_id=request.sample_id,
+                execution_mode=ExecutionMode.TASKGRAPH_UHR.value,
+                context=context,
+            )
+        except Exception as exc:
+            failed_trace = getattr(exc, "execution_trace", None)
+            if isinstance(failed_trace, ExecutionTrace):
+                failed_trace.telemetry["planner_status"] = planner_status
+                failed_trace.telemetry["planner_ms"] = planner_ms
+                if planner_metadata is not None:
+                    failed_trace.telemetry["planner_metadata"] = dict(planner_metadata)
+            raise
         trace.telemetry["graph_execution_ms"] = (time.perf_counter() - graph_started) * 1000.0
         trace.telemetry["planner_status"] = planner_status
         trace.telemetry["planner_ms"] = planner_ms
-        planner_metadata = getattr(self.providers.planner, "last_metadata", None)
-        if isinstance(planner_metadata, Mapping):
+        if planner_metadata is not None:
             trace.telemetry["planner_metadata"] = dict(planner_metadata)
         postprocess_started = time.perf_counter()
         choice_requested = graph.final.answer_type in {
             AnswerType.CHOICE_SINGLE,
             AnswerType.CHOICE_MULTI,
         }
-        sources = tuple(
-            unwrap_select_result(
-                store.get(ref),
-                allow_empty=False,
-                consumer=f"final.sources[{ref}]",
+        try:
+            sources = tuple(
+                unwrap_select_result(
+                    store.get(ref),
+                    allow_empty=False,
+                    consumer=f"final.sources[{ref}]",
+                )
+                for ref in graph.final.sources
             )
-            for ref in graph.final.sources
-        )
-        choice_started = time.perf_counter()
-        output = self._choice_or_answer(
-            sources,
-            graph.final.question or None,
-            request.options,
-            graph.final.answer_type,
-        )
+            choice_started = time.perf_counter()
+            output = self._choice_or_answer(
+                sources,
+                graph.final.question or None,
+                request.options,
+                graph.final.answer_type,
+            )
+        except Exception as exc:
+            exc.execution_trace = trace
+            raise
         choice_ms = (time.perf_counter() - choice_started) * 1000.0 if choice_requested else 0.0
         choice_model_called = bool(
             choice_requested
@@ -523,9 +539,7 @@ class TaskGraphRuntime:
             model_input = self.composer.compose(list(sources), question=request.question)
             semantic_started = time.perf_counter()
             result = self.providers.semantic_2b.infer(VLMRequest(model_input, "direct_vlm"))
-            trace.telemetry["semantic_vlm_ms"] = (
-                time.perf_counter() - semantic_started
-            ) * 1000.0
+            trace.telemetry["semantic_vlm_ms"] = (time.perf_counter() - semantic_started) * 1000.0
             trace.telemetry["choice_model_called"] = False
             trace.telemetry["choice_status"] = "not_used"
             trace.telemetry["semantic_metadata"] = dict(result.metadata)
@@ -548,24 +562,22 @@ class TaskGraphRuntime:
             if counting is None:
                 raise RuntimeError("COUNT requires RuntimeProviders.counting")
             counted = counting.count(CountingRequest(scope, target, entire=True))
-            trace.telemetry["counting_ms"] = (
-                time.perf_counter() - counting_started
-            ) * 1000.0
+            trace.telemetry["counting_ms"] = (time.perf_counter() - counting_started) * 1000.0
             trace.telemetry["counting_metadata"] = dict(counted.metadata)
             source: RuntimeObject = ScalarInt(
                 counted.count,
                 {"provider": counted.provider, "detection": counted.detections.provenance},
             )
+            trace.result = runtime_summary(source)
         else:
             detector_started = time.perf_counter()
             detected = self.providers.detection.detect(
                 DetectionRequest(scope, target, request.task_category)
             )
-            trace.telemetry["detector_ms"] = (
-                time.perf_counter() - detector_started
-            ) * 1000.0
+            trace.telemetry["detector_ms"] = (time.perf_counter() - detector_started) * 1000.0
             trace.telemetry["detector_metadata"] = dict(detected.metadata)
             source = detected.detections
+            trace.result = runtime_summary(source)
         if request.options:
             choice_started = time.perf_counter()
             choice_output = self.choice_resolver.resolve(
@@ -726,9 +738,7 @@ class TaskGraphRuntime:
             if isinstance(postprocess_value, (int, float))
             else 0.0
         )
-        stage_status["postprocess_ms"] = (
-            "executed" if postprocess_value is not None else "not_used"
-        )
+        stage_status["postprocess_ms"] = "executed" if postprocess_value is not None else "not_used"
         for stage_name in (
             "retriever",
             "detector",
@@ -800,9 +810,7 @@ class TaskGraphRuntime:
                 "runtime_telemetry_version": "taskgraph_runtime_v1",
                 "execution_mode": mode.value,
                 "timing_source": "wall_clock_with_provider_metadata_when_available",
-                "stage_values_ms": {
-                    name: getattr(trace, name) for name in SYSTEM_TELEMETRY_STAGES
-                },
+                "stage_values_ms": {name: getattr(trace, name) for name in SYSTEM_TELEMETRY_STAGES},
                 "measurement_window": trace.resource_metrics.get("measurement_window"),
             }
         )
@@ -811,17 +819,43 @@ class TaskGraphRuntime:
         if not request.image_paths:
             raise ValueError("runtime request requires at least one image")
         started = time.perf_counter()
+        artifact_checkpoint = self.composer.artifact_checkpoint()
         torch = _reset_runtime_resources(self.providers)
         images = self._images(request)
         routing_started = time.perf_counter()
         mode = self.mode_router.route(request.dataset, request.task_category)
         routing_ms = (time.perf_counter() - routing_started) * 1000.0
-        if mode is ExecutionMode.DIRECT_VLM:
-            result = self._direct_vlm(request, images)
-        elif mode is ExecutionMode.DIRECT_DETECTION:
-            result = self._direct_detection(request, images)
-        else:
-            result = self._taskgraph(request, images)
+        try:
+            if mode is ExecutionMode.DIRECT_VLM:
+                result = self._direct_vlm(request, images)
+            elif mode is ExecutionMode.DIRECT_DETECTION:
+                result = self._direct_detection(request, images)
+            else:
+                result = self._taskgraph(request, images)
+        except Exception as exc:
+            failed_trace = getattr(exc, "execution_trace", None)
+            if isinstance(failed_trace, ExecutionTrace):
+                failed_trace.input_image_paths = list(request.image_paths)
+                failed_trace.intermediate_output_paths = list(
+                    self.composer.artifact_paths_since(artifact_checkpoint)
+                )
+                failed_trace.telemetry.update(
+                    {
+                        "input_image_paths": list(failed_trace.input_image_paths),
+                        "intermediate_output_paths": list(failed_trace.intermediate_output_paths),
+                    }
+                )
+            raise
+        result.trace.input_image_paths = list(request.image_paths)
+        result.trace.intermediate_output_paths = list(
+            self.composer.artifact_paths_since(artifact_checkpoint)
+        )
+        result.trace.telemetry.update(
+            {
+                "input_image_paths": list(result.trace.input_image_paths),
+                "intermediate_output_paths": list(result.trace.intermediate_output_paths),
+            }
+        )
         self._finalize_trace(
             result.trace,
             mode=mode,
@@ -876,7 +910,9 @@ def fake_runtime(
     )
 
 
-def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
+def runtime_from_config(
+    config: dict[str, Any], *, input_output_dir: str | Path | None = None
+) -> TaskGraphRuntime:
     """Build providers lazily from an explicit YAML/JSON-style mapping."""
 
     import os
@@ -915,8 +951,7 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
         counting = CountingSystemProvider.from_config(counting_cfg)
     else:
         raise ValueError(
-            f"unsupported counting provider kind: {counting_kind}; "
-            "use fake or counting_system"
+            f"unsupported counting provider kind: {counting_kind}; use fake or counting_system"
         )
 
     def semantic_provider(name: str, role: str) -> SemanticVLMProvider:
@@ -996,9 +1031,7 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
             locator_config["provider_configs"] = {
                 "retriever": {provider_name: dict(provider_config)}
             }
-        retriever = LocatorRegionRetrieverAdapter(
-            create_locator("hierarchical", locator_config)
-        )
+        retriever = LocatorRegionRetrieverAdapter(create_locator("hierarchical", locator_config))
     else:
         from sat_rs_vlm.integrations.retrievers.registry import create_retriever_provider
 
@@ -1069,6 +1102,9 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
     if not isinstance(composer_cfg, dict):
         raise TypeError("input_composer config must be a mapping")
     composer = InputComposer(
+        output_dir=(
+            input_output_dir if input_output_dir is not None else composer_cfg.get("output_dir")
+        ),
         candidate_halo_ratio=float(composer_cfg.get("candidate_halo_ratio", 0.2)),
         entity_set_union_area_threshold=float(
             composer_cfg.get("entity_set_union_area_threshold", 0.55)
@@ -1078,9 +1114,7 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
         route_max_side=int(composer_cfg.get("route_max_side", 1536)),
     )
     return TaskGraphRuntime(
-        RuntimeProviders(
-            detection, semantic_2b, route_4b, retriever, choice, planner, counting
-        ),
+        RuntimeProviders(detection, semantic_2b, route_4b, retriever, choice, planner, counting),
         policy=policy,
         composer=composer,
         semantic_categories=set(config.get("semantic_region_categories", [])),

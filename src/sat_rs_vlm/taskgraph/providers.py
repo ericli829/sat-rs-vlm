@@ -345,9 +345,7 @@ class Qwen3VLPlannerProvider:
             or ""
         ).strip()
         self.processor_id = str(
-            self.config.get("processor_id")
-            or self.config.get("processor_path")
-            or self.model_id
+            self.config.get("processor_id") or self.config.get("processor_path") or self.model_id
         ).strip()
         self.device = str(self.config.get("device", "auto"))
         self.dtype = str(self.config.get("dtype", self.config.get("torch_dtype", "auto")))
@@ -638,9 +636,7 @@ class Qwen3VLPlannerProvider:
         constraint = GreedyDSLLogitsProcessor(
             tokenizer,
             prompt_width=prompt_width,
-            image_refs_by_row=[
-                tuple(f"${str(key).removeprefix('$')}" for key in request.inputs)
-            ],
+            image_refs_by_row=[tuple(f"${str(key).removeprefix('$')}" for key in request.inputs)],
             initial_top_k=self.constraint_top_k,
             max_candidate_checks=self.constraint_max_candidate_checks,
             max_nodes=self.constraint_max_nodes,
@@ -768,6 +764,8 @@ class Qwen3VLPlannerProvider:
                 {
                     "attempt": attempt_number,
                     "termination_reason": "final",
+                    "prediction": prediction,
+                    "planner_output": prediction,
                     **generation_metadata,
                 }
             )
@@ -775,6 +773,7 @@ class Qwen3VLPlannerProvider:
                 "role": self.role,
                 "provider": self.provider_name,
                 "status": "executed",
+                "planner_output": prediction,
                 "attempts": attempts,
                 "load": self.load_info,
                 "vision_inputs": 0,
@@ -1108,9 +1107,7 @@ class LocatorRegionRetrieverAdapter:
                 "locator": self.provider_name,
                 "provider_provenance": dict(getattr(result, "provider_provenance", {})),
                 "latency_ms": dict(result.latency_ms),
-                "search_plan": (
-                    search_plan.to_dict() if hasattr(search_plan, "to_dict") else None
-                ),
+                "search_plan": (search_plan.to_dict() if hasattr(search_plan, "to_dict") else None),
                 "depth_reached": getattr(result, "depth_reached", None),
             },
         )

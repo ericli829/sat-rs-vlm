@@ -46,6 +46,8 @@ class NodeTrace:
 class ExecutionTrace:
     sample_id: str
     execution_mode: str
+    input_image_paths: list[str] = field(default_factory=list)
+    intermediate_output_paths: list[str] = field(default_factory=list)
     taskgraph: dict[str, Any] | None = None
     nodes: list[NodeTrace] = field(default_factory=list)
     final_sources: list[str] = field(default_factory=list)

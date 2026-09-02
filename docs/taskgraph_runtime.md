@@ -230,6 +230,15 @@ contains image bytes, tensors, or full crops. The router allows one explicitly c
 same-capability fallback; otherwise failure is surfaced and is never silently converted
 into a different semantic operation.
 
+The batch evaluator additionally writes a sample-level `reasoning_chain`. It records the
+planner's generated DSL and validation attempts, the canonical TaskGraph, every module's
+inputs/provider/output/provenance, final source references, model-generated intermediate
+text, and all persisted visual artifact paths. If a sample fails after graph execution,
+the partial node trace is retained with the failure stage and message. The evaluator also
+writes `answer_judgment` with normalized choice/text comparison when the input contains
+`ground_truth`, `Ground truth`, `reference_answer`, or `answer`; these reference fields
+are used only after runtime inference and are never passed to a model.
+
 ## CLI
 
 Fake single-sample execution:
@@ -250,6 +259,13 @@ python -m sat_rs_vlm.taskgraph.run `
 The same command is available as `sat-rs-vlm taskgraph run`. Pass a full graph with
 `--graph-json path/to/taskgraph.json`, or configure a fixture planner. Real providers
 require `--real-model` and paths supplied through environment-backed config.
+
+Batch evaluation with `scripts/taskgraph/evaluate_runtime.py` writes each row's
+`answer`, `answer_judgment`, resolved `input_image_paths`, persistent
+`intermediate_output_paths`, and an explainability-oriented `reasoning_chain`.
+When `--artifact-dir` is omitted, generated visual inputs are stored beside the
+JSONL output in `<output-stem>_artifacts`; pass an explicit directory when the
+artifacts must be retained across runs or devices.
 
 ## Verification
 

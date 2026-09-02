@@ -100,3 +100,69 @@ def test_tiled_provider_parallelizes_base_requests_and_preserves_order(
     assert result.metadata["tile_count"] == 3
     assert result.metadata["parallel_workers"] == 3
     assert [item["tile_id"] for item in result.metadata["tiles"]] == [0, 1, 2]
+
+
+def test_tiled_provider_reuses_first_auto_worker_count(monkeypatch, tmp_path: Path) -> None:
+    image_path = tmp_path / "cached-workers.png"
+    Image.new("RGB", (10, 10), "white").save(image_path)
+    worker_counts = iter((3, 1))
+
+    class Provider:
+        provider_name = "fixture"
+        model_id = "fixture-v1"
+
+        def predict(self, _tile_path: Path, _target_phrase: str) -> ProposalResult:
+            return ProposalResult([], [], 1.0, self.provider_name, self.model_id)
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        "sat_rs_vlm.integrations.detectors.tiled.resolve_parallel_workers",
+        lambda *_args, **_kwargs: next(worker_counts),
+    )
+    provider = TiledProposalProvider(
+        Provider(),
+        {"tile_size": 10, "parallel_workers": "auto"},
+        base_provider_name="fixture",
+    )
+    try:
+        assert provider.predict(image_path, "aircraft").metadata["parallel_workers"] == 3
+        assert provider.predict(image_path, "ships").metadata["parallel_workers"] == 3
+    finally:
+        provider.close()
+
+
+def test_tiled_provider_caches_same_image_and_query(tmp_path: Path) -> None:
+    image_path = tmp_path / "cached-query.png"
+    Image.new("RGB", (10, 10), "white").save(image_path)
+
+    class Provider:
+        provider_name = "fixture"
+        model_id = "fixture-v1"
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def predict(self, _tile_path: Path, _target_phrase: str) -> ProposalResult:
+            self.calls += 1
+            return ProposalResult([], [], 1.0, self.provider_name, self.model_id)
+
+        def close(self) -> None:
+            return None
+
+    base = Provider()
+    provider = TiledProposalProvider(
+        base,
+        {"tile_size": 10, "parallel_workers": 1, "proposal_cache_size": 2},
+        base_provider_name="fixture",
+    )
+    try:
+        first = provider.predict(image_path, "aircraft")
+        second = provider.predict(image_path, " AIRCRAFT ")
+        assert base.calls == 1
+        assert first.metadata["proposal_cache_hit"] is False
+        assert second.metadata["proposal_cache_hit"] is True
+        assert second.boxes_xyxy == first.boxes_xyxy
+    finally:
+        provider.close()
