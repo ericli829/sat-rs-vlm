@@ -1,0 +1,125 @@
+# 开放词汇 detector 的类别 prompt profile。
+# 文本格式与 LAE-DINO / GroundingDINO 一致：用 " . " 连接同义类别。
+
+default_prompt: "{name}"
+
+profiles:
+  ship:
+    canonical: ship
+    tiny: true
+    default: "ship . vessel"
+    variants:
+      - ship
+      - "ship . vessel"
+      - "ship . boat . vessel"
+      - boat
+      - vessel
+  airplane:
+    canonical: airplane
+    tiny: true
+    default: "airplane . aircraft . plane"
+    variants:
+      - airplane
+      - aircraft
+      - plane
+      - "airplane . aircraft . plane"
+  vehicle:
+    canonical: vehicle
+    tiny: true
+    default: "vehicle . car . truck"
+    variants:
+      - vehicle
+      - car
+      - truck
+      - "vehicle . car . truck"
+  boat:
+    canonical: boat
+    tiny: true
+    default: "boat . ship . vessel"
+    variants:
+      - boat
+      - "boat . ship"
+      - vessel
+  building:
+    canonical: building
+    tiny: false
+    default: "building . house"
+    variants:
+      - building
+      - house
+      - "building . house"
+  storage_tank:
+    canonical: storage tank
+    tiny: false
+    default: "storage tank . tank"
+    variants:
+      - "storage tank"
+      - tank
+  harbor:
+    canonical: harbor
+    tiny: false
+    default: harbor
+    variants:
+      - harbor
+      - port
+  playground:
+    canonical: playground
+    tiny: false
+    default: playground
+    variants:
+      - playground
+  windmill:
+    canonical: windmill
+    tiny: true
+    default: "windmill . wind turbine"
+    variants:
+      - windmill
+      - "wind turbine"
+  bridge:
+    canonical: bridge
+    tiny: false
+    default: bridge
+    variants:
+      - bridge
+  aircraft:
+    canonical: airplane
+    tiny: true
+    default: "airplane . aircraft . plane"
+    variants:
+      - airplane
+      - aircraft
+  car:
+    canonical: vehicle
+    tiny: true
+    default: "vehicle . car"
+    variants:
+      - car
+      - vehicle
+  truck:
+    canonical: vehicle
+    tiny: true
+    default: "truck . vehicle"
+    variants:
+      - truck
+      - vehicle
+  house:
+    canonical: building
+    tiny: false
+    default: "house . building"
+    variants:
+      - house
+      - building
+
+tiny_classes:
+  - ship
+  - airplane
+  - aircraft
+  - plane
+  - vehicle
+  - car
+  - truck
+  - boat
+  - vessel
+  - windmill
+  - helicopter
+  - small vehicle

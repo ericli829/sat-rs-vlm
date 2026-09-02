@@ -1,0 +1,32 @@
+dataset_policy:
+  VRSBench:
+    count: DIRECT_DETECTION
+    counting: DIRECT_DETECTION
+    default: DIRECT_VLM
+  MME_RealWorld_RS:
+    default: TASKGRAPH_UHR
+  XLRS_Bench:
+    default: TASKGRAPH_UHR
+
+providers:
+  planner:
+    kind: fixture
+    fixture_file: tests/fixtures/taskgraph/planner_fixtures.json
+  detection:
+    kind: counting_system
+    backend: fake
+  semantic_2b:
+    kind: fake
+    default: A
+  route_4b:
+    kind: fake
+    default: A
+  choice:
+    reuse: semantic_2b
+  region_retriever:
+    kind: fake
+    candidates: []
+
+semantic_region_categories:
+  - harbor
+  - industrial area

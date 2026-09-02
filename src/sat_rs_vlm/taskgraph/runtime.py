@@ -393,6 +393,10 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
     detection_kind = str(detection_cfg.pop("kind", "fake"))
     if detection_kind == "fake":
         detection: DetectionProvider = FakeDetectionProvider(detection_cfg.get("boxes"))
+    elif detection_kind == "counting_system":
+        from sat_rs_vlm.integrations.counting import CountingSystemDetectionAdapter
+
+        detection = CountingSystemDetectionAdapter.from_config(detection_cfg)
     else:
         from sat_rs_vlm.integrations.detectors.registry import create_proposal_provider
 

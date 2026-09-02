@@ -105,7 +105,7 @@ operation and records stable group IDs and group boxes.
 | `BUILD_ROUTE_CONTEXT` | route context construction | deterministic geometry/markers |
 | `LOCATE` object target | object perception | **REAL:** existing LAE-DINO `ProposalProvider` adapter |
 | `LOCATE` semantic region | region retrieval | existing UHR Locator or score-only Retriever adapter |
-| `COUNT(image/Region)` | tiled detection/count | **REAL:** existing LAE-DINO; existing tiled wrapper handles global transform/NMS |
+| `COUNT(image/Region)` | tiled detection/count | **REAL:** `counting_system` adapter (`providers.detection.kind: counting_system`) or LAE-DINO `ProposalProvider`; both return global-coordinate `EntitySet`, then COUNT does `len(entities)` |
 | `COUNT(EntitySet)` | cardinality | deterministic Python; detector is not called again |
 | `SELECT` rank/ordinal/extreme | geometry | deterministic Python |
 | `SELECT` `LEFT_OF`/`RIGHT_OF`/`ABOVE`/`BELOW`/`INSIDE`/`OVERLAP` | geometry first | deterministic Python; boundary cases fall back to Qwen3-VL-2B |

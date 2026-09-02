@@ -1,0 +1,11 @@
+numpy
+pillow
+pyyaml
+opencv-python-headless
+torch
+torchvision
+transformers==4.51.3
+open_clip_torch
+huggingface_hub
+datasets
+pytest

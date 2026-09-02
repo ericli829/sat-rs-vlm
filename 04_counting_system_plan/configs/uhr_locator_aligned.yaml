@@ -1,0 +1,40 @@
+# 与 sat-rs-vlm feature/uhr-locator 的 configs/locator/uhr_hierarchical.yaml
+# detector.tiled 段对齐。COUNT 在全局坐标系去重计数，不得累加 per-crop 计数。
+
+count:
+  score_threshold: 0.20
+  nms_iou: 0.40
+  cross_scale_iou: 0.50
+  max_detections_per_tile: 300
+
+scale:
+  source_scales: [1333, 1024, 896]
+  default_source_scale: 1333
+  global:
+    enabled: true
+  native:
+    enabled: true
+    tile_size: 1333
+    overlap_ratio: 0.15
+    overlap: 200
+  fine:
+    enabled: true
+    tile_size: 512
+    overlap_ratio: 0.25
+    overlap: 128
+    only_for_tiny: true
+
+gate:
+  coarse_tile_size: 1333
+  coarse_overlap_ratio: 0.15
+  coarse_overlap: 200
+
+integration:
+  upstream_branch: feature/uhr-locator
+  upstream_repo: https://github.com/ericli829/sat-rs-vlm
+  locator_config: configs/locator/uhr_hierarchical.yaml
+  detector_registry: src/sat_rs_vlm/integrations/detectors/
+  counting_protocol: formal_e2_parse_count_plus_exact_cardinality_eligibility_v1
+  notes:
+    - TiledProposalProvider 与 COUNT native tile 使用相同 1333/0.15/0.4 NMS 默认值
+    - Locator 选区后 COUNT 仍须在全局坐标 dedup，禁止 per-crop 直接相加
