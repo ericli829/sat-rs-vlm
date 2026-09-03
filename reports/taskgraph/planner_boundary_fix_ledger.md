@@ -65,6 +65,21 @@ done on the archived JSONL artifacts; no result files were modified.
    reference Region instead of UNRESOLVED, mirroring RELATION's plural
    reference handling.  Single-candidate groups keep the exact-reference path;
    empty/cross-image groups remain UNRESOLVED.
+8. **Detector-recall VLM fallback** (`operators.py`, `runtime.py`, commit
+   `f1e9a3d` + provenance follow-up).  Two layers of tolerance when detection
+   recall is zero:
+   - *LOCATE DETECTOR path*: when both the primary detector and the regional
+     coarse-grid fallback find no candidates, call
+     `ReferentRefiner.visual_fallback` to hand the whole search scope to the
+     semantic VLM as a single candidate (marked `fallback_required`).  Downstream
+     ATTRIBUTE/CLASSIFY compose a visual from the scope and the final Choice VLM
+     can still pick an option; the sample no longer hard-fails on an empty
+     EntitySet.  Guarded by `should_refine` so COUNT/RELATIONAL flows (which
+     legitimately produce zero counts) keep exact semantics.
+   - *Final choice stage*: if the graph's final sources resolve to empty /
+     unresolved evidence for a CHOICE question, answer the residual question
+     directly from the input images (direct-VLM style) and record
+     `final_evidence_fallback` in telemetry instead of raising.
 
 ## Regression safety
 
@@ -92,6 +107,10 @@ GPU-state failures; the full count-recovery requires re-running.
 
 Baseline (memory-patch commit): 6 success / 14 failure.
 After ea35afe + 9197129 + bf1dfd3: **14 success / 6 failure**, zero regressions.
+After + recall-VLM fallback (f1e9a3d): **17 success / 3 failure**, zero
+regressions.  The additional 3 recoveries are exactly the detector-recall
+targets: color/0174 (final EMPTY → direct image VLM), color/0225 and color/2235
+(empty EntitySet → scope visual fallback).
 
 Recovered samples:
 
