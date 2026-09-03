@@ -186,6 +186,25 @@ question explicitly allows absence), (b) count head calibration on MME
 real-world remote sensing, (c) after the boundary fixes, a full 2,013-sample
 re-run to measure the real recovery (predicted: 15.45% → ~28-35%).
 
+## Count under-count vs over-count verdict
+
+On the 131 answered count samples with a COUNT node value:
+
+- **Detector layer under-counts heavily**: 63/131 (48%) COUNT node value = 0
+  while the Choice VLM visually sees >= 1 target (raw_response "single small
+  vehicle" etc.).
+- **VLM spoken count vs node value**: spoken > node in 53 pairs, equal in 23,
+  spoken < node in 25 — the dominant direction is "node misses, VLM sees
+  more", i.e. the LAE detector misses small objects.
+- **Answered accuracy by node value**: node=0 → 4.8% (3/63); node>=2 → ~25-33%
+  (2/8=25%, 4/3=33%, 5/4=25%).  Zero evidence basically guarantees a wrong
+  choice because the Choice VLM picks from the option text without grounding.
+
+**Verdict: under-count (漏记), not over-count.**  The miss originates at the
+detector (LAE) on small/dense objects; the Choice VLM sees the object but its
+spoken count is also biased low.
+
+
 ## Remaining planner-semantic families (not boundary gaps)
 
 - `input_type_mismatch`, `dedicated_operator_bypass`, `dead_node`,
