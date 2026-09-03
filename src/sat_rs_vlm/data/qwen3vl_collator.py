@@ -18,6 +18,7 @@ from sat_rs_vlm.data.object_adapter_v0 import (
     extract_prompt,
 )
 from sat_rs_vlm.data.task_protocol import parse_count
+from sat_rs_vlm.infrastructure.telemetry import visual_input_telemetry
 
 QWEN_UTILS_ERROR = 'qwen-vl-utils is required. Install with: pip install -e ".[model]"'
 
@@ -46,6 +47,7 @@ class Qwen3VLDataCollator:
         # 正式语言模型训练保持默认截断；仅视觉特征提取可显式关闭它，避免把
         # 图像占位 token 截断后再与完整 pixel_values 配对。
         self.truncation = truncation
+        self.last_batch_telemetry: dict[str, Any] = {}
 
     def __call__(self, batch: list[dict[str, Any]]) -> dict[str, Any]:
         """编码一个 batch 并生成 labels。"""
@@ -124,6 +126,14 @@ class Qwen3VLDataCollator:
                 encoded["auxiliary_counts"] = [
                     self._auxiliary_count_target(sample) for sample in batch
                 ]
+        image_groups = [
+            list(images) if isinstance(images, list | tuple) else []
+            for images in image_inputs
+        ]
+        self.last_batch_telemetry = visual_input_telemetry(
+            image_groups,
+            encoded.get("image_grid_thw"),
+        )
         if self.debug_shapes:
             shapes = {
                 key: tuple(value.shape) for key, value in encoded.items() if hasattr(value, "shape")

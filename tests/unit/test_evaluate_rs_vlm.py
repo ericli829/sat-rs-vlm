@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
+import scripts.evaluate_rs_vlm as evaluate_script
 from scripts.evaluate_rs_vlm import (
     build_generation_kwargs,
     generate_prediction,
@@ -14,6 +16,8 @@ from scripts.evaluate_rs_vlm import (
     summarize,
     validate_local_adapter,
 )
+
+from sat_rs_vlm.evaluation.inference import count_decoded_output_tokens
 
 
 class FakeTensor:
@@ -52,6 +56,14 @@ def test_sampling_generation_includes_sampling_parameters() -> None:
     assert kwargs["temperature"] == 0.7
     assert kwargs["top_p"] == 0.8
     assert kwargs["top_k"] == 20
+
+
+def test_count_decoded_output_tokens_reports_method_input() -> None:
+    tokenizer = SimpleNamespace(encode=lambda text, **_: text.split())
+
+    assert count_decoded_output_tokens(
+        SimpleNamespace(tokenizer=tokenizer), ["one two", "three"]
+    ) == [2, 1]
 
 
 def test_validate_local_adapter_requires_config_and_weights(tmp_path: Path) -> None:
@@ -159,3 +171,105 @@ def test_evaluation_outputs_keep_legacy_files_and_isolate_v15(tmp_path: Path) ->
     assert summary == tmp_path / "run" / "summary.json"
     assert predictions == tmp_path / "run" / "predictions.jsonl"
     assert evaluation_dir == tmp_path / "run" / "evaluation_v1_5"
+
+
+def test_evaluate_writes_system_telemetry_and_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    eval_file = tmp_path / "eval.jsonl"
+    eval_file.write_text("{}\n", encoding="utf-8")
+    output_dir = tmp_path / "run"
+    sample = {
+        "id": "sample-1",
+        "task_type": "vqa",
+        "messages": [{"role": "assistant", "content": "yes"}],
+        "metadata": {"dataset": "fixture"},
+    }
+
+    class Parameter:
+        dtype = "torch.float32"
+
+        @staticmethod
+        def numel() -> int:
+            return 4
+
+        @staticmethod
+        def element_size() -> int:
+            return 4
+
+    class Model:
+        def eval(self) -> None:
+            return None
+
+        @staticmethod
+        def parameters():
+            return iter((Parameter(),))
+
+    class Cuda:
+        @staticmethod
+        def is_available() -> bool:
+            return False
+
+    torch = SimpleNamespace(cuda=Cuda(), __version__="test", version=SimpleNamespace(cuda=None))
+
+    monkeypatch.setattr(evaluate_script, "Qwen3VLDataset", lambda *_: [sample])
+    monkeypatch.setattr(evaluate_script, "Qwen3VLDataCollator", lambda *_args, **_kwargs: object())
+    prediction_calls: list[None] = []
+
+    def fake_timed_predictions(*_args, **_kwargs):
+        prediction_calls.append(None)
+        return ["yes"], 12.5
+
+    monkeypatch.setattr(evaluate_script, "timed_predictions", fake_timed_predictions)
+
+    evaluation_arguments: dict[str, Any] = {}
+
+    def fake_run_evaluation(*_args, **kwargs):
+        evaluation_arguments.update(kwargs)
+        destination = Path(_args[1])
+        destination.mkdir(parents=True)
+        metrics = destination / "metrics.json"
+        metrics.write_text("{}\n", encoding="utf-8")
+        return {"metrics": metrics}
+
+    monkeypatch.setattr(evaluate_script, "run_evaluation", fake_run_evaluation)
+    config = {
+        "model": {"base_model": "fixture/model", "torch_dtype": "float32"},
+        "data": {
+            "eval_file": str(eval_file),
+            "image_root": str(tmp_path),
+            "eval_batch_size": 1,
+        },
+        "generation": {"max_new_tokens": 8, "do_sample": False},
+        "evaluation": {"semantic": False, "warmup_runs": 1, "repeat_runs": 2},
+        "output": {"summary_file": "unused", "predictions_file": "unused"},
+    }
+
+    result = evaluate_script.evaluate(
+        tmp_path / "config.yaml",
+        output_dir=output_dir,
+        loaded_model=Model(),
+        loaded_processor=SimpleNamespace(
+            tokenizer=SimpleNamespace(encode=lambda text, **_: text.split())
+        ),
+        loaded_modules={"torch": torch},
+        config_override=config,
+    )
+
+    metadata = json.loads((output_dir / "evaluation_metadata.json").read_text(encoding="utf-8"))
+    telemetry = json.loads((output_dir / "telemetry_summary.json").read_text(encoding="utf-8"))
+    manifest = json.loads((output_dir / "system_manifest.json").read_text(encoding="utf-8"))
+    prediction = json.loads((output_dir / "predictions.jsonl").read_text(encoding="utf-8"))
+
+    assert metadata["peak_cpu_rss_mb"] > 0
+    assert metadata["failed_samples"] == 0
+    assert telemetry["prediction_loop"]["success"] is True
+    assert telemetry["single_sample_full_system_e2e_available"] is False
+    assert manifest["system"]["total_parameter_count"] == 4
+    assert manifest["benchmark"]["warmup_runs"] == 1
+    assert manifest["benchmark"]["repeat_runs"] == 2
+    assert telemetry["tokens"]["output_token_count"] == 1
+    assert len(prediction_calls) == 3
+    assert evaluation_arguments["resource_benchmark"]["resources"]["peak_cpu_rss_mb"] > 0
+    assert prediction["latency_semantics"] == "batch_amortized_model_path"
+    assert result["system_manifest"] == str(output_dir / "system_manifest.json")

@@ -18,6 +18,7 @@ class NodeTrace:
     latency_ms: float
     output_runtime_type: str | None = None
     output_summary: dict[str, Any] = field(default_factory=dict)
+    telemetry: dict[str, Any] = field(default_factory=dict)
     error: dict[str, Any] | None = None
     fallback: str | None = None
 
@@ -33,6 +34,7 @@ class ExecutionTrace:
     choice_provider: str | None = None
     choice_result: dict[str, Any] | None = None
     result: dict[str, Any] | None = None
+    telemetry: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

@@ -56,7 +56,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src", "."]
-addopts = "--basetemp=.tmp/pytest"
+cache_dir = ".pytest_cache_local"
 markers = [
     "real_model: requires a local real model and RUN_REAL_MODEL_TESTS=1",
     "gpu: requires a CUDA GPU and RUN_REAL_MODEL_TESTS=1",

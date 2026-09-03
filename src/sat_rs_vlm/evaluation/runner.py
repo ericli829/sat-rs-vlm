@@ -25,6 +25,11 @@ from sat_rs_vlm.evaluation.extended_metrics import (
     text_task_scores,
 )
 from sat_rs_vlm.evaluation.metrics import score_sample
+from sat_rs_vlm.evaluation.official_mcq import (
+    parse_mme_realworld_choice,
+    parse_reference_choices,
+    parse_xlrs_choices,
+)
 from sat_rs_vlm.evaluation.parsers import (
     CONTEXTUAL_CHANGE_PARSER_VERSION,
     LEGACY_CHANGE_PARSER_VERSION,
@@ -179,7 +184,7 @@ def _sha256(path: Path) -> str:
 def _image_size(metadata: dict[str, Any]) -> tuple[int, int] | None:
     width = metadata.get("image_width", metadata.get("width"))
     height = metadata.get("image_height", metadata.get("height"))
-    if isinstance(width, (int, float)) and isinstance(height, (int, float)):
+    if isinstance(width, int | float) and isinstance(height, int | float):
         return int(width), int(height)
     return None
 
@@ -190,9 +195,72 @@ def _base_output(record: PredictionRecord, resolution: ProtocolResolution) -> di
         {
             "eval_protocol": resolution.name,
             "metric_profile": resolution.metric_profile,
+            "metric_label": resolution.metric_label,
+            "protocol_status": resolution.status,
+            "protocol_provenance": resolution.provenance,
         }
     )
     return output
+
+
+def _metadata_choices(metadata: dict[str, Any]) -> tuple[str, ...]:
+    for key in ("answer_choices", "choices", "multi-choice options", "options"):
+        value = metadata.get(key)
+        if isinstance(value, list | tuple):
+            return tuple(str(item) for item in value)
+    return ()
+
+
+def _evaluate_official_mcq(
+    record: PredictionRecord,
+    resolution: ProtocolResolution,
+    *,
+    strict: bool,
+    multi_select: bool,
+) -> EvaluatedRow:
+    allowed = frozenset("ABCD" if resolution.name.startswith("xlrs_") else "ABCDE")
+    reference = parse_reference_choices(record.reference, allowed=allowed, single=not multi_select)
+    if not reference.parse_ok:
+        message = f"sample {record.id}: invalid official MCQ reference: {reference.reason}"
+        if strict:
+            raise InputValidationError(message)
+        output = _base_output(record, resolution)
+        output.update(
+            {
+                "parsed_prediction": None,
+                "parse_ok": False,
+                "parse_error": f"invalid_reference:{reference.reason}",
+                "sample_metrics": {},
+            }
+        )
+        return EvaluatedRow(output, resolution.name, resolution.kind, "data_error")
+
+    choices = _metadata_choices(record.metadata)
+    if resolution.name == "mme_realworld_rs_mcq":
+        prediction = parse_mme_realworld_choice(record.prediction, choices)
+    else:
+        prediction = parse_xlrs_choices(record.prediction)
+    predicted = set(prediction.choices)
+    expected = set(reference.choices)
+    exact = prediction.parse_ok and predicted == expected
+    output = _base_output(record, resolution)
+    output.update(
+        {
+            "parsed_prediction": list(prediction.choices) if prediction.parse_ok else None,
+            "parse_ok": prediction.parse_ok,
+            "parse_error": prediction.reason,
+            "sample_metrics": {
+                "choice_parse_success": prediction.parse_ok,
+                "exact_choice_match": exact,
+                "predicted_choices": list(prediction.choices),
+                "reference_choices": list(reference.choices),
+                "choice_count": len(prediction.choices),
+                "reference_choice_count": len(reference.choices),
+                "official_parser_profile": prediction.parser_profile,
+            },
+        }
+    )
+    return EvaluatedRow(output, resolution.name, resolution.kind, resolution.status)
 
 
 def _evaluate_grounding(
@@ -389,6 +457,9 @@ def _evaluate_change_caption(
         )
     reference_changeflag = cast(int, raw_changeflag) if changeflag_valid else None
     decision_priority = change_decision_profile in SUPPORTED_CHANGE_DECISION_PROFILES
+    predicted_changeflag: int | None
+    binary_parse_reason: str
+    binary_mode: str
     binary_source = "caption_fallback"
     explicit_raw = record.raw.get("binary_prediction")
     requested_source = record.raw.get("binary_prediction_source")
@@ -429,17 +500,17 @@ def _evaluate_change_caption(
             raise InputValidationError(message)
         decision_warnings.append(message)
         predicted_changeflag = None
-        binary_reason = "pending_required_local_judge"
+        binary_parse_reason = "pending_required_local_judge"
         binary_mode = "unresolved"
     elif decision_priority and is_server_pending:
         # server_rule_only intentionally preserves this as an unresolved
         # partial-coverage row; it is not a completed local-judge decision.
         predicted_changeflag = None
-        binary_reason = "server_rule_unresolved"
+        binary_parse_reason = "server_rule_unresolved"
         binary_mode = "unresolved"
     elif decision_priority and terminal_audit_allowed:
         predicted_changeflag = None
-        binary_reason = (
+        binary_parse_reason = (
             "server_input_guard"
             if requested_source_name == "server_input_guard"
             else "local_judge_unresolved"
@@ -454,7 +525,7 @@ def _evaluate_change_caption(
             raise InputValidationError(message)
         decision_warnings.append(message)
         predicted_changeflag = None
-        binary_reason = "missing_required_local_judge_decision"
+        binary_parse_reason = "missing_required_local_judge_decision"
         binary_mode = "unresolved"
         binary_source = "missing_required_local_judge_decision"
     elif server_rule_required and not (
@@ -470,27 +541,27 @@ def _evaluate_change_caption(
             raise InputValidationError(message)
         decision_warnings.append(message)
         predicted_changeflag = None
-        binary_reason = "missing_required_server_rule_decision"
+        binary_parse_reason = "missing_required_server_rule_decision"
         binary_mode = "unresolved"
         binary_source = "missing_required_server_rule_decision"
     elif decision_priority and "prediction_changeflag" in record.raw:
         explicit_flag = record.raw.get("prediction_changeflag")
         if type(explicit_flag) is int and explicit_flag in {0, 1}:
-            predicted_changeflag = cast(int, explicit_flag)
-            binary_reason = None
+            predicted_changeflag = explicit_flag
+            binary_parse_reason = ""
             binary_mode = "explicit_changeflag"
             if change_decision_profile not in SUPPORTED_CHANGE_DECISION_PROFILES:
                 binary_source = "explicit_changeflag"
         elif explicit_flag is None and isinstance(explicit_raw, str):
             explicit = parse_explicit_change_prediction(explicit_raw)
             predicted_changeflag = explicit.value
-            binary_reason = explicit.reason
-            binary_mode = explicit.match_type
+            binary_parse_reason = explicit.reason or ""
+            binary_mode = explicit.match_type or "unresolved"
             if change_decision_profile not in SUPPORTED_CHANGE_DECISION_PROFILES:
                 binary_source = "binary_prediction_text"
         else:
             predicted_changeflag = None
-            binary_reason = "invalid_prediction_changeflag"
+            binary_parse_reason = "invalid_prediction_changeflag"
             binary_mode = "unresolved"
             if change_decision_profile not in SUPPORTED_CHANGE_DECISION_PROFILES:
                 binary_source = "invalid_explicit_changeflag"
@@ -498,13 +569,13 @@ def _evaluate_change_caption(
         if isinstance(explicit_raw, str):
             explicit = parse_explicit_change_prediction(explicit_raw)
             predicted_changeflag = explicit.value
-            binary_reason = explicit.reason
-            binary_mode = explicit.match_type
+            binary_parse_reason = explicit.reason or ""
+            binary_mode = explicit.match_type or "unresolved"
             if change_decision_profile not in SUPPORTED_CHANGE_DECISION_PROFILES:
                 binary_source = "binary_prediction_text"
         else:
             predicted_changeflag = None
-            binary_reason = "binary_prediction_must_be_string"
+            binary_parse_reason = "binary_prediction_must_be_string"
             binary_mode = "unresolved"
             if change_decision_profile not in SUPPORTED_CHANGE_DECISION_PROFILES:
                 binary_source = "invalid_binary_prediction"
@@ -514,8 +585,8 @@ def _evaluate_change_caption(
         else:
             parsed = parse_change_prediction(record.prediction)
         predicted_changeflag = parsed.value
-        binary_reason = parsed.reason
-        binary_mode = parsed.match_type
+        binary_parse_reason = parsed.reason or ""
+        binary_mode = parsed.match_type or "unresolved"
     binary_correct = (
         predicted_changeflag == reference_changeflag
         if predicted_changeflag is not None and reference_changeflag is not None
@@ -540,7 +611,7 @@ def _evaluate_change_caption(
                 record.prediction.strip() if decision_priority else parsed.normalized_text or None
             ),
             "parse_ok": predicted_changeflag is not None,
-            "parse_error": binary_reason,
+            "parse_error": binary_parse_reason or None,
             "reference_changeflag": reference_changeflag,
             "predicted_changeflag": predicted_changeflag,
             "binary_correct": binary_correct,
@@ -603,6 +674,20 @@ def evaluate_record(
         return _evaluate_counting(record, resolution, strict=strict), []
     if resolution.kind == "text":
         return _evaluate_text(record, resolution, strict=strict), []
+    if resolution.kind == "official_mcq_single":
+        return _evaluate_official_mcq(
+            record,
+            resolution,
+            strict=strict,
+            multi_select=False,
+        ), []
+    if resolution.kind == "official_mcq_multiselect":
+        return _evaluate_official_mcq(
+            record,
+            resolution,
+            strict=strict,
+            multi_select=True,
+        ), []
     if resolution.kind == "caption":
         return _evaluate_caption(record, resolution, strict=strict), []
     if resolution.kind == "change_caption":
@@ -644,6 +729,21 @@ def _common_metrics(rows: list[EvaluatedRow]) -> dict[str, dict[str, Any]]:
         note="Unimplemented protocols are excluded from this denominator.",
     )
     return metrics
+
+
+def _official_metric(
+    value: Any,
+    *,
+    num_samples: int,
+    note: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "value": value,
+        "label": "official",
+        "status": "ok",
+        "num_samples": num_samples,
+        "note": note,
+    }
 
 
 def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
@@ -725,6 +825,32 @@ def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
                 ),
             }
         )
+        unique_rows = [
+            (row, sample)
+            for row, sample in zip(rows, samples, strict=True)
+            if isinstance(row.output.get("metadata", {}).get("is_unique"), bool)
+        ]
+        if len(unique_rows) == total:
+            for group_name, group_value in (
+                ("unique", True),
+                ("non_unique", False),
+                ("all", None),
+            ):
+                selected = [
+                    sample
+                    for row, sample in unique_rows
+                    if group_value is None
+                    or row.output["metadata"].get("is_unique") is group_value
+                ]
+                for _threshold, metric_suffix in ((0.5, "0_5"), (0.7, "0_7")):
+                    metrics[f"official_acc_at_{metric_suffix}_{group_name}"] = _official_metric(
+                        mean(sample[f"correct_at_{metric_suffix}"] for sample in selected),
+                        num_samples=len(selected),
+                        note=(
+                            "VRSBench official deterministic Grounding evaluator profile; "
+                            "invalid predictions remain in the denominator."
+                        ),
+                    )
     elif kinds == {"counting"}:
         samples = [row.output["sample_metrics"] for row in rows]
         total = len(samples)
@@ -827,6 +953,67 @@ def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
             metrics["macro_qa_type_accuracy"] = metric_value(
                 mean(type_scores), num_samples=len(type_scores)
             )
+    elif kinds in ({"official_mcq_single"}, {"official_mcq_multiselect"}):
+        samples = [row.output["sample_metrics"] for row in rows]
+        total = len(samples)
+        exact = [bool(sample["exact_choice_match"]) for sample in samples]
+        mcq_parse_values = [bool(sample["choice_parse_success"]) for sample in samples]
+        category_groups: dict[str, list[bool]] = defaultdict(list)
+        subtask_groups: dict[str, list[bool]] = defaultdict(list)
+        task_groups: dict[str, list[bool]] = defaultdict(list)
+        for row, sample in zip(rows, samples, strict=True):
+            metadata = row.output.get("metadata", {})
+            category = str(
+                metadata.get("official_category", metadata.get("category", "unknown"))
+            ).strip() or "unknown"
+            if "attribute" in category.lower():
+                category = category.split("/")[0] + "/attribute"
+            subtask = str(
+                metadata.get("official_subtask", metadata.get("subtask", "unknown"))
+            ).strip() or "unknown"
+            task = (
+                str(metadata.get("official_task", metadata.get("task", "unknown"))).strip()
+                or "unknown"
+            )
+            category_groups[category].append(bool(sample["exact_choice_match"]))
+            subtask_groups[subtask].append(bool(sample["exact_choice_match"]))
+            task_groups[task].append(bool(sample["exact_choice_match"]))
+
+        def grouped_accuracy(groups: dict[str, list[bool]]) -> dict[str, float]:
+            return {
+                name: float(mean(values) or 0.0)
+                for name, values in sorted(groups.items())
+            }
+
+        metrics.update(
+            {
+                "official_exact_accuracy": _official_metric(mean(exact), num_samples=total),
+                "official_parse_success_rate": _official_metric(
+                    mean(mcq_parse_values), num_samples=total
+                ),
+                "official_micro_accuracy": _official_metric(mean(exact), num_samples=total),
+                "official_category_accuracy": _official_metric(
+                    grouped_accuracy(category_groups),
+                    num_samples=total,
+                ),
+                "official_subtask_accuracy": _official_metric(
+                    grouped_accuracy(subtask_groups),
+                    num_samples=total,
+                ),
+                "official_task_accuracy": _official_metric(
+                    grouped_accuracy(task_groups),
+                    num_samples=total,
+                ),
+                "official_macro_subtask_accuracy": _official_metric(
+                    mean(float(mean(values) or 0.0) for values in subtask_groups.values()),
+                    num_samples=len(subtask_groups),
+                    note=(
+                        "Matches the XLRS-lite lmms-eval macro only when the complete "
+                        "official task population is present; otherwise this is observed-only."
+                    ),
+                ),
+            }
+        )
     elif kinds == {"caption"}:
         samples = [row.output["sample_metrics"] for row in rows]
         total = len(samples)
@@ -1251,7 +1438,7 @@ def _repository_native_summary(
             numeric = [
                 value
                 for value in (score.get(key) for score in scores)
-                if isinstance(value, (int, float, bool))
+                if isinstance(value, int | float | bool)
             ]
             task_metrics[metric_names.get(key, key)] = mean(numeric)
         by_task[task] = task_metrics
@@ -1283,6 +1470,7 @@ def _build_summary(
     warnings: list[str],
     semantic_summary: dict[str, Any] | None,
     latency_context: LatencyContext,
+    resource_benchmark: dict[str, Any] | None,
 ) -> dict[str, Any]:
     by_task_rows: dict[str, list[EvaluatedRow]] = defaultdict(list)
     by_protocol_rows: dict[str, list[EvaluatedRow]] = defaultdict(list)
@@ -1297,6 +1485,17 @@ def _build_summary(
     ]
     latency = latency_statistics(latencies)
     overall_metrics = _common_metrics(rows)
+    failed_samples = sum(
+        not bool(row.output.get("telemetry", {}).get("success", True))
+        for row in rows
+        if isinstance(row.output.get("telemetry", {}), dict)
+    )
+    overall_metrics["failed_samples"] = metric_value(
+        failed_samples, num_samples=len(rows), status="ok"
+    )
+    overall_metrics["successful_samples"] = metric_value(
+        len(rows) - failed_samples, num_samples=len(rows), status="ok"
+    )
     latency_samples = len(latencies)
     for name in ("mean", "p50", "p95", "min", "max"):
         overall_metrics[f"latency_ms_{name}"] = metric_value(
@@ -1328,6 +1527,9 @@ def _build_summary(
         ),
         "overall": {
             "metrics": overall_metrics,
+            "input_samples": len(rows),
+            "failed_samples": failed_samples,
+            "successful_samples": len(rows) - failed_samples,
             "latency_context": latency_context.to_dict(),
             "task_distribution": dict(
                 sorted(Counter(str(row.output.get("task_type", "unknown")) for row in rows).items())
@@ -1339,6 +1541,14 @@ def _build_summary(
         },
         "by_protocol": {
             name: _group_summary(protocol_rows)
+            for name, protocol_rows in sorted(by_protocol_rows.items())
+        },
+        "protocol_provenance": {
+            name: {
+                "status": protocol_rows[0].protocol_status,
+                "metric_label": protocol_rows[0].output.get("metric_label", "internal"),
+                "source": protocol_rows[0].output.get("protocol_provenance", {}),
+            }
             for name, protocol_rows in sorted(by_protocol_rows.items())
         },
         "by_qa_type": {
@@ -1359,6 +1569,63 @@ def _build_summary(
             latency_context,
         ),
     }
+    official_required_metadata = (
+        "dataset_version",
+        "split",
+        "language",
+        "prompt_profile",
+        "evaluation_scope",
+        "official_task",
+        "official_subtask",
+        "official_category",
+    )
+    official_comparability: dict[str, Any] = {}
+    for name, protocol_rows in sorted(by_protocol_rows.items()):
+        if protocol_rows[0].output.get("metric_label") != "official":
+            continue
+        metadata_coverage: dict[str, float] = {}
+        values: dict[str, list[str]] = {}
+        for field in official_required_metadata:
+            present = [
+                str(row.output.get("metadata", {}).get(field, "")).strip()
+                for row in protocol_rows
+            ]
+            metadata_coverage[field] = sum(bool(value) for value in present) / len(
+                protocol_rows
+            )
+            values[field] = sorted({value for value in present if value})
+        expected_prompt = str(
+            protocol_rows[0].output.get("protocol_provenance", {}).get("prompt_profile", "")
+        )
+        prompt_matches = (
+            bool(expected_prompt)
+            and values["prompt_profile"] == [expected_prompt]
+            and metadata_coverage["prompt_profile"] == 1.0
+        )
+        complete_scope = (
+            values["evaluation_scope"] == ["official_full_split"]
+            and metadata_coverage["evaluation_scope"] == 1.0
+        )
+        complete_metadata = all(value == 1.0 for value in metadata_coverage.values())
+        stable_metadata = all(
+            len(values[field]) == 1
+            for field in ("dataset_version", "split", "language", "prompt_profile")
+        )
+        official_comparability[name] = {
+            "status": (
+                "eligible_for_official_comparison"
+                if complete_metadata and stable_metadata and prompt_matches and complete_scope
+                else "protocol_only"
+            ),
+            "required_metadata_coverage": metadata_coverage,
+            "observed_values": values,
+            "expected_prompt_profile": expected_prompt or None,
+            "note": (
+                "Official parser/scoring is active. Official comparison additionally requires "
+                "the unmodified prompt and complete official split metadata."
+            ),
+        }
+    summary["official_comparability"] = official_comparability
     if change_decision_profile in SUPPORTED_CHANGE_DECISION_PROFILES:
         summary["change_decision_version"] = change_decision_profile
     if semantic_summary is not None:
@@ -1394,16 +1661,26 @@ def _build_summary(
             ),
             "Required for paper-comparable multi-reference caption metrics, especially LEVIR-CC.",
         ),
-        "resource_benchmark": {
-            "value": None,
-            "label": "internal",
-            "status": "not_available_from_predictions",
-            "num_samples": 0,
-            "note": (
-                "Parameters, file size, peak VRAM and throughput require benchmark_report.json; "
-                "they are not inferred from predictions.jsonl."
-            ),
-        },
+        "resource_benchmark": (
+            {
+                "value": resource_benchmark,
+                "label": "internal",
+                "status": "ok",
+                "num_samples": len(rows),
+                "note": "Measured by the main evaluation execution path.",
+            }
+            if resource_benchmark is not None
+            else {
+                "value": None,
+                "label": "internal",
+                "status": "not_available_from_predictions",
+                "num_samples": 0,
+                "note": (
+                    "Parameters, file size, peak VRAM and throughput require an execution "
+                    "telemetry report; they are not inferred from predictions.jsonl."
+                ),
+            }
+        ),
     }
     return summary
 
@@ -1456,6 +1733,7 @@ def run_evaluation(
     evaluation_tier: str | None = None,
     evaluation_tier_version: str | None = None,
     evaluation_tier_sha256: str | None = None,
+    resource_benchmark: dict[str, Any] | None = None,
 ) -> dict[str, Path]:
     """只读 Prediction JSONL，并将全部产物写到受保护仓库之外。"""
 
@@ -1547,6 +1825,7 @@ def run_evaluation(
         warnings=warnings,
         semantic_summary=semantic_summary,
         latency_context=latency_context,
+        resource_benchmark=resource_benchmark,
     )
     outputs = {
         "evaluated_predictions": destination / "evaluated_predictions.jsonl",
@@ -1582,10 +1861,16 @@ def run_evaluation(
             _sha256(semantic_ontology_file) if semantic_evaluator is not None else None
         ),
         "strict": strict,
+        "failed_samples": sum(
+            not bool(row.output.get("telemetry", {}).get("success", True))
+            for row in evaluated
+            if isinstance(row.output.get("telemetry", {}), dict)
+        ),
         "latency_context": latency_context.to_dict(),
         "evaluation_tier": evaluation_tier,
         "evaluation_tier_version": evaluation_tier_version,
         "evaluation_tier_sha256": evaluation_tier_sha256,
+        "resource_benchmark": resource_benchmark,
         "change_parser_version": (
             CONTEXTUAL_CHANGE_PARSER_VERSION
             if str(contract.get("change_decision_profile", ""))

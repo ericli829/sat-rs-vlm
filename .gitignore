@@ -3,6 +3,7 @@ venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.pytest_cache_local/
 .mypy_cache/
 .ruff_cache/
 .cache/

@@ -133,21 +133,21 @@ def aggregate_sensitivity_conditions(
         for condition in repeats:
             comparison = condition.get("comparison", {})
             for row in task_degradations(comparison if isinstance(comparison, Mapping) else {}):
-                key = (str(row["task"]), str(row["metric"]))
-                task_values[key].append(float(row["degradation"]))
-                task_metadata[key] = row
+                metric_key = (str(row["task"]), str(row["metric"]))
+                task_values[metric_key].append(float(row["degradation"]))
+                task_metadata[metric_key] = row
         task_rows: list[dict[str, Any]] = []
-        for key in sorted(task_values):
-            stats = _mean_ci95(task_values[key])
+        for metric_key in sorted(task_values):
+            stats = _mean_ci95(task_values[metric_key])
             task_rows.append(
                 {
-                    "task": key[0],
-                    "metric": key[1],
+                    "task": metric_key[0],
+                    "metric": metric_key[1],
                     "degradation_mean": stats["mean"],
                     "degradation_std": stats["std"],
                     "degradation_ci95_across_repeats": stats["ci95"],
                     "repeats": stats["samples"],
-                    "paired_num_samples": task_metadata[key].get("num_samples"),
+                    "paired_num_samples": task_metadata[metric_key].get("num_samples"),
                 }
             )
         changed = _mean_ci95(

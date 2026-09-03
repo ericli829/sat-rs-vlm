@@ -763,15 +763,16 @@ class SemanticExecutor:
         )
         model_input = context.composer.compose_named(inputs, question=question, options=options)
         result = self.provider.infer(VLMRequest(model_input, node.op.value.casefold()))
+        provenance = {"provider": result.provider, **result.metadata}
         if node.op in {OperatorName.ATTRIBUTE, OperatorName.CLASSIFY, OperatorName.RELATION}:
-            value: RuntimeObject = Label(result.text, {"provider": result.provider})
+            value: RuntimeObject = Label(result.text, provenance)
         elif node.op is OperatorName.MULTILABEL_CLASSIFY:
-            value = LabelSet(self._label_set(result.text), {"provider": result.provider})
+            value = LabelSet(self._label_set(result.text), provenance)
         elif node.op is OperatorName.MOTION:
             value = Boolean(
                 result.text.strip().casefold() in {"true", "yes", "1"},
-                {"provider": result.provider},
+                provenance,
             )
         else:
-            value = Answer(result.text, result.confidence, {"provider": result.provider})
+            value = Answer(result.text, result.confidence, provenance)
         return OperatorOutcome(value, result.provider)

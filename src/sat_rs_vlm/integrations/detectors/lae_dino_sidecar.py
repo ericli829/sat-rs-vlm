@@ -231,7 +231,11 @@ class LAEDinoSidecarProvider:
             "provider": self.provider_name,
             "checkpoint": stable_file_identity(self._client.checkpoint),
             "config": stable_file_identity(self._client.config_path),
-            "bert": stable_file_identity(self._client.bert_root),
+            "bert": (
+                stable_file_identity(self._client.bert_root)
+                if self._client.bert_root is not None
+                else None
+            ),
             "checkpoint_training_regime": self.config.get(
                 "checkpoint_training_regime", "unspecified"
             ),

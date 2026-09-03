@@ -31,6 +31,15 @@ protocols:
     kind: visual_grounding
     status: implemented
     metric_profile: continuous_normalized_v2
+    official_profiles:
+      vrsbench_grounding_v1:
+        status: implemented
+        coordinate_source_format: scaled_0_100
+        metrics: [Acc@0.5, Acc@0.7]
+        stratification: [unique, non_unique, all]
+        source_repository: https://github.com/lx709/VRSBench
+        source_commit: 56e1ed1baabaaafef19b07fa937cfbdc1924e922
+        evaluator: eval_fianl/compute_metrics.ipynb
   vrsbench_counting:
     kind: counting
     status: implemented
@@ -75,3 +84,49 @@ protocols:
     kind: unimplemented
     status: registered_not_implemented
     metric_profile: null
+  mme_realworld_rs_mcq:
+    kind: official_mcq_single
+    status: implemented
+    metric_profile: mme_realworld_official_v1
+    metric_label: official
+    official_protocol:
+      benchmark: MME-RealWorld
+      task: Remote Sensing
+      answer_space: "A-E"
+      prompt_profile: mme_realworld_official_mcq_v1
+      scoring: exact_match_on_official_choice
+      aggregation: weighted_micro_accuracy_by_question
+      source_repository: https://github.com/MME-Benchmarks/MME-RealWorld
+      source_commit: bee58edb82c883843ae93be61c2ae3b452c781d1
+      evaluator: evaluation/eval_your_results.py
+      parser: lmms_eval/tasks/mme_realworld/utils.py
+  xlrs_vqa_mcq:
+    kind: official_mcq_single
+    status: implemented
+    metric_profile: xlrs_lmms_eval_v1
+    metric_label: official
+    official_protocol:
+      benchmark: XLRS-Bench
+      task: VQA
+      answer_space: "A-D"
+      prompt_profile: xlrs_bench_official_vqa_v1
+      scoring: exact_match_on_official_choice
+      aggregation: micro_accuracy_and_macro_subtask_accuracy
+      source_repository: https://github.com/AI9Stars/XLRS-Bench
+      source_commit: 828ac0ae8f200f6b05ac9ab12554caee6078e336
+      evaluator: lmms-eval/tasks/xlrs/mcq_utils.py
+  xlrs_vqa_multiselect:
+    kind: official_mcq_multiselect
+    status: implemented
+    metric_profile: xlrs_lmms_eval_v1
+    metric_label: official
+    official_protocol:
+      benchmark: XLRS-Bench
+      task: Overall Land Use Classification
+      answer_space: "A-D set"
+      prompt_profile: xlrs_bench_official_multiselect_v1
+      scoring: exact_set_match
+      aggregation: micro_accuracy_and_macro_subtask_accuracy
+      source_repository: https://github.com/AI9Stars/XLRS-Bench
+      source_commit: 828ac0ae8f200f6b05ac9ab12554caee6078e336
+      evaluator: lmms-eval/tasks/xlrs/mcq_utils.py

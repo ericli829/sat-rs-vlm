@@ -210,6 +210,9 @@ def test_case_c_relational_select_flows_into_entityset_count() -> None:
         count_trace = next(item for item in result.trace.nodes if item.node_id == "n5")
         assert count_trace.input_refs == {"entities": "$n4"}
         assert count_trace.provider == "cardinality"
+        assert result.trace.telemetry["executor"]["node_count"] == 5
+        assert result.trace.telemetry["executor"]["timing_ms"]["e2e"] >= 0
+        assert result.trace.telemetry["system"]["execution_mode"] == "TASKGRAPH_UHR"
     finally:
         runtime.close()
 
@@ -316,6 +319,9 @@ def test_case_f_vrs_vqa_bypasses_planner_and_dag() -> None:
         assert isinstance(result.output, Answer)
         assert result.output.text == "direct answer"
         assert result.trace.taskgraph is None
+        assert "executor" not in result.trace.telemetry
+        assert result.trace.telemetry["system"]["execution_mode"] == "DIRECT_VLM"
+        assert result.trace.telemetry["system"]["timing_ms"]["e2e"] >= 0
     finally:
         runtime.close()
 

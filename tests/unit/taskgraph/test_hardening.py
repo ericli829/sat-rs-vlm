@@ -407,7 +407,9 @@ def test_relation_canvas_preserves_subject_and_reference_roles(tmp_path: Path) -
             OperatorContext("relation", (), composer),
         )
         model_input = provider.calls[0].model_input
-        assert result.value == Label("LEFT_OF", {"provider": "fake_vlm"})
+        assert result.value == Label(
+            "LEFT_OF", {"provider": "fake_vlm", "deterministic": True}
+        )
         assert model_input.visual_roles == ("RELATION_CANVAS",)
         roles = model_input.metadata["role_mapping"]
         assert roles["subject"][0]["id"] == "SUBJECT"

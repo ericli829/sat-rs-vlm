@@ -19,6 +19,20 @@ class ProtocolResolution:
     status: str
     metric_profile: str | None
     reason: str
+    metric_label: str
+    provenance: dict[str, Any]
+
+
+def _normalized_dataset(value: Any) -> str:
+    return "".join(character for character in str(value).lower() if character.isalnum())
+
+
+def _metadata_text(record: PredictionRecord, *keys: str) -> str:
+    for key in keys:
+        value = record.metadata.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
 
 
 def load_contract(path: Path) -> dict[str, Any]:
@@ -43,12 +57,12 @@ def _protocol_name(record: PredictionRecord) -> tuple[str, str]:
     if isinstance(explicit, str) and explicit.strip():
         return explicit.strip(), "explicit eval_protocol"
 
-    dataset = str(record.metadata.get("dataset", "")).strip().lower()
+    dataset = _normalized_dataset(record.metadata.get("dataset", ""))
     source_task = str(record.metadata.get("source_task", "")).strip().lower()
     task = record.task_type
-    if dataset in {"levir-cc", "levir_cc", "levircc"} and task == "change_detection":
+    if dataset == "levircc" and task == "change_detection":
         return "levir_cc_change_caption", "LEVIR-CC change detection caption"
-    if dataset == "vrsbench":
+    if dataset in {"vrsbench", "rsbench"}:
         if task == "detection" and source_task == "referring":
             return "vrsbench_visual_grounding", "VRSBench detection + referring"
         if task == "counting":
@@ -57,6 +71,28 @@ def _protocol_name(record: PredictionRecord) -> tuple[str, str]:
             return "vrsbench_detailed_caption", "VRSBench captioning task"
         if task in {"vqa", "scene_classification"}:
             return "vrsbench_open_vqa", "VRSBench text question task"
+
+    if dataset in {
+        "mmerealworldrs",
+        "mmerealworldremotesensing",
+    }:
+        return "mme_realworld_rs_mcq", "MME-RealWorld-RS dataset"
+    if dataset in {"mmerealworld", "mmerealworldcn"}:
+        subtask = _metadata_text(record, "official_subtask", "subtask")
+        if _normalized_dataset(subtask) == "remotesensing":
+            return "mme_realworld_rs_mcq", "MME-RealWorld Remote Sensing subtask"
+
+    if dataset in {"xlrs", "xlrsbench", "xlrsbenchlite"}:
+        category = _metadata_text(record, "official_category", "category")
+        normalized_category = _normalized_dataset(category)
+        if task in {"detection", "visual_grounding"}:
+            return "xlrs_visual_grounding", "XLRS visual grounding task"
+        if task == "captioning":
+            return "xlrs_caption", "XLRS detailed caption task"
+        if normalized_category == "landuseclassificationoveralllanduseclassification":
+            return "xlrs_vqa_multiselect", "XLRS Overall Land Use Classification"
+        if task in {"vqa", "scene_classification", "counting"}:
+            return "xlrs_vqa_mcq", "XLRS VQA task"
 
     generic = {
         "detection": "generic_single_target_grounding_internal",
@@ -83,6 +119,8 @@ def resolve_protocol(
             status="protocol_unresolved",
             metric_profile=None,
             reason=f"{reason}; protocol is absent from contract",
+            metric_label="internal",
+            provenance={},
         )
     return ProtocolResolution(
         name=name,
@@ -92,6 +130,14 @@ def resolve_protocol(
             str(spec["metric_profile"]) if spec.get("metric_profile") is not None else None
         ),
         reason=reason,
+        metric_label=str(
+            spec.get("metric_label", contract.get("default_metric_label", "internal"))
+        ),
+        provenance=(
+            dict(spec["official_protocol"])
+            if isinstance(spec.get("official_protocol"), dict)
+            else {}
+        ),
     )
 
 

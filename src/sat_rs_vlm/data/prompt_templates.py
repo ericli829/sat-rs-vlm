@@ -112,14 +112,14 @@ def strengthen_answer(
     text = str(answer).strip()
     if task == "counting":
         if profile == "qwen3vl_4b_stage_a":
-            parsed = counting_json(answer)
-            if parsed is not None:
-                return str(json.loads(parsed)["count"])
+            counted = counting_json(answer)
+            if counted is not None:
+                return str(json.loads(counted)["count"])
         return counting_json(answer) or text
     if task == "detection":
-        parsed = parse_detection(answer)
-        if parsed is None or not parsed.valid_coordinate_range:
+        detection = parse_detection(answer)
+        if detection is None or not detection.valid_coordinate_range:
             return text
-        payload = {"label": parsed.label, "bbox": list(parsed.bbox)}
+        payload = {"label": detection.label, "bbox": list(detection.bbox)}
         return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     return text

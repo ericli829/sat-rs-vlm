@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from sat_rs_vlm.infrastructure.config import ModelConfig
+from sat_rs_vlm.infrastructure.telemetry import SystemTelemetry, collect_provider_inventory
 
 from .choice import ChoiceRequest, ChoiceResolver
 from .executor import CapabilityRouter, ExecutorBinding, GraphExecutor
@@ -169,6 +171,11 @@ class TaskGraphRuntime:
         return sources[0] if len(sources) == 1 else sources
 
     def _taskgraph(self, request: RuntimeRequest, images: dict[str, ImageRef]) -> RuntimeResult:
+        phase_timing: dict[str, float | None] = {
+            "planner": None,
+            "executor": None,
+            "postprocess": None,
+        }
         if request.graph is not None:
             graph = (
                 request.graph
@@ -176,6 +183,7 @@ class TaskGraphRuntime:
                 else parse_taskgraph(request.graph)
             )
         elif self.providers.planner is not None:
+            planner_started = time.perf_counter()
             graph = self.providers.planner.plan(
                 PlannerRequest(
                     request.question,
@@ -185,6 +193,7 @@ class TaskGraphRuntime:
                     request.sample_id,
                 )
             )
+            phase_timing["planner"] = (time.perf_counter() - planner_started) * 1000.0
         else:
             raise ValueError("TASKGRAPH_UHR requires graph input or a configured PlannerProvider")
         if graph.question != request.question:
@@ -200,6 +209,10 @@ class TaskGraphRuntime:
             execution_mode=ExecutionMode.TASKGRAPH_UHR.value,
             context=context,
         )
+        executor_timing = trace.telemetry.get("executor", {}).get("timing_ms", {})
+        if isinstance(executor_timing, dict):
+            phase_timing["executor"] = executor_timing.get("e2e")
+        postprocess_started = time.perf_counter()
         sources = tuple(store.get(ref) for ref in graph.final.sources)
         output = self._choice_or_answer(
             sources, graph.final.question, request.options, graph.final.answer_type
@@ -218,6 +231,17 @@ class TaskGraphRuntime:
                 if not isinstance(output, tuple)
                 else {"sources": [runtime_summary(item) for item in output]}
             )
+        phase_timing["postprocess"] = (time.perf_counter() - postprocess_started) * 1000.0
+        trace.telemetry["phase_timing_ms"] = phase_timing
+        trace.telemetry["generation_events"] = [
+            dict(node.telemetry["generation"])
+            for node in trace.nodes
+            if isinstance(node.telemetry.get("generation"), dict)
+        ]
+        if trace.choice_result is not None:
+            choice_generation = trace.choice_result.get("provenance", {}).get("generation")
+            if isinstance(choice_generation, dict):
+                trace.telemetry["generation_events"].append(dict(choice_generation))
         return RuntimeResult(ExecutionMode.TASKGRAPH_UHR, output, trace, store)
 
     def _direct_vlm(self, request: RuntimeRequest, images: dict[str, ImageRef]) -> RuntimeResult:
@@ -235,8 +259,15 @@ class TaskGraphRuntime:
         else:
             model_input = self.composer.compose(list(sources), question=request.question)
             result = self.providers.semantic_2b.infer(VLMRequest(model_input, "direct_vlm"))
-            output = Answer(result.text, result.confidence, {"provider": result.provider})
+            output = Answer(
+                result.text,
+                result.confidence,
+                {"provider": result.provider, **result.metadata},
+            )
             trace.result = runtime_summary(output)
+            generation = result.metadata.get("generation")
+            if isinstance(generation, dict):
+                trace.telemetry["generation_events"] = [dict(generation)]
         return RuntimeResult(ExecutionMode.DIRECT_VLM, output, trace)
 
     def _direct_detection(
@@ -273,15 +304,58 @@ class TaskGraphRuntime:
         return RuntimeResult(ExecutionMode.DIRECT_DETECTION, output, trace)
 
     def run(self, request: RuntimeRequest) -> RuntimeResult:
-        if not request.image_paths:
-            raise ValueError("runtime request requires at least one image")
-        images = self._images(request)
-        mode = self.mode_router.route(request.dataset, request.task_category)
-        if mode is ExecutionMode.DIRECT_VLM:
-            return self._direct_vlm(request, images)
-        if mode is ExecutionMode.DIRECT_DETECTION:
-            return self._direct_detection(request, images)
-        return self._taskgraph(request, images)
+        monitor = SystemTelemetry("taskgraph_runtime_request", reset_cuda_peaks=True)
+        preprocess_started = time.perf_counter()
+        with monitor:
+            if not request.image_paths:
+                raise ValueError("runtime request requires at least one image")
+            images = self._images(request)
+            preprocess_ms = (time.perf_counter() - preprocess_started) * 1000.0
+            mode = self.mode_router.route(request.dataset, request.task_category)
+            if mode is ExecutionMode.DIRECT_VLM:
+                result = self._direct_vlm(request, images)
+            elif mode is ExecutionMode.DIRECT_DETECTION:
+                result = self._direct_detection(request, images)
+            else:
+                result = self._taskgraph(request, images)
+        system_telemetry = monitor.to_dict()
+        system_telemetry.update(
+            {
+                "sample_id": request.sample_id,
+                "dataset": request.dataset,
+                "task_category": request.task_category,
+                "execution_mode": result.execution_mode.value,
+                "provider_inventory": collect_provider_inventory(
+                    [
+                        self.providers.detection,
+                        self.providers.semantic_2b,
+                        self.providers.route_4b,
+                        self.providers.retriever,
+                        self.providers.choice,
+                        self.providers.planner,
+                    ]
+                ),
+            }
+        )
+        result.trace.telemetry["system"] = system_telemetry
+        phase_timing = result.trace.telemetry.setdefault("phase_timing_ms", {})
+        if isinstance(phase_timing, dict):
+            phase_timing.setdefault("preprocess", preprocess_ms)
+            phase_timing.setdefault("e2e", system_telemetry["timing_ms"]["e2e"])
+            phase_timing.setdefault("ttft", None)
+        generation_events = result.trace.telemetry.setdefault("generation_events", [])
+        if not generation_events:
+            candidates: list[dict[str, Any]] = []
+            if result.trace.result and isinstance(result.trace.result.get("provenance"), dict):
+                generation = result.trace.result["provenance"].get("generation")
+                if isinstance(generation, dict):
+                    candidates.append(generation)
+            if result.trace.choice_result:
+                generation = result.trace.choice_result.get("provenance", {}).get("generation")
+                if isinstance(generation, dict):
+                    candidates.append(generation)
+            generation_events.extend(candidates)
+        return result
 
     def close(self) -> None:
         self.providers.close()

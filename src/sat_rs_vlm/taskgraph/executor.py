@@ -5,6 +5,8 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 
+from sat_rs_vlm.infrastructure.telemetry import SystemTelemetry
+
 from .contracts import validate_runtime_inputs
 from .operators import OperatorContext, OperatorExecutor, OperatorOutcome
 from .runtime_types import RuntimeObject, runtime_summary, runtime_type_name
@@ -110,6 +112,44 @@ class GraphExecutor:
         execution_mode: str,
         context: OperatorContext,
     ) -> ExecutionTrace:
+        monitor = SystemTelemetry("taskgraph_executor", reset_cuda_peaks=False)
+        try:
+            with monitor:
+                trace = self._execute_graph(
+                    graph,
+                    store,
+                    sample_id=sample_id,
+                    execution_mode=execution_mode,
+                    context=context,
+                )
+        except TaskGraphExecutionError as exc:
+            exc.details["executor_telemetry"] = monitor.to_dict()
+            raise
+        executor_telemetry = monitor.to_dict()
+        executor_telemetry["activated_providers"] = sorted(
+            {
+                provider
+                for node in trace.nodes
+                for provider in (node.provider, node.fallback)
+                if provider
+            }
+        )
+        executor_telemetry["fallback_count"] = sum(
+            node.fallback is not None for node in trace.nodes
+        )
+        executor_telemetry["node_count"] = len(trace.nodes)
+        trace.telemetry["executor"] = executor_telemetry
+        return trace
+
+    def _execute_graph(
+        self,
+        graph: TaskGraph,
+        store: RuntimeStore,
+        *,
+        sample_id: str,
+        execution_mode: str,
+        context: OperatorContext,
+    ) -> ExecutionTrace:
         trace = ExecutionTrace(
             sample_id=sample_id,
             execution_mode=execution_mode,
@@ -135,6 +175,7 @@ class GraphExecutor:
                         },
                         provider=str(exc.details["provider"]),
                         latency_ms=(time.perf_counter() - started) * 1000.0,
+                        telemetry={},
                         error=dict(exc.details),
                     )
                 )
@@ -151,6 +192,7 @@ class GraphExecutor:
                     latency_ms=(time.perf_counter() - started) * 1000.0,
                     output_runtime_type=runtime_type_name(outcome.value),
                     output_summary=runtime_summary(outcome.value),
+                    telemetry=dict(getattr(outcome.value, "provenance", {})),
                     fallback=fallback,
                 )
             )

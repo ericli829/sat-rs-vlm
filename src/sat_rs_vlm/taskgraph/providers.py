@@ -581,7 +581,10 @@ class LazyQwenSemanticProvider:
         return VLMResult(
             generated,
             f"{self.provider_name}:{self.role}",
-            metadata={"output_contract": request.output_contract},
+            metadata={
+                "output_contract": request.output_contract,
+                "generation": dict(getattr(engine, "last_generation_telemetry", {})),
+            },
         )
 
     def close(self) -> None:
