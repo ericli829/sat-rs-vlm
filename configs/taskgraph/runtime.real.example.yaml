@@ -12,6 +12,9 @@ dataset_policy:
     default: TASKGRAPH_UHR
 
 providers:
+  planner:
+    kind: semantic
+    provider: route_4b
   detection:
     kind: tiled
     tile_size: 1333

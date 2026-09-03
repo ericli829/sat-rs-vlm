@@ -111,6 +111,41 @@ def test_collect_model_inventory_counts_parameters_and_unique_storage(tmp_path) 
     assert inventory["local_model_storage_bytes"] == 6
 
 
+def test_unloaded_model_does_not_claim_parameter_accounting(tmp_path) -> None:
+    weights = tmp_path / "model.bin"
+    weights.write_bytes(b"weights")
+
+    inventory = collect_model_inventory(None, [weights])
+
+    assert inventory["parameter_count"] is None
+    assert inventory["loaded_parameter_bytes"] is None
+    assert inventory["local_model_storage_bytes"] == len(b"weights")
+
+
+def test_provider_inventory_walks_wrappers_and_deduplicates_provider_objects(tmp_path) -> None:
+    checkpoint = tmp_path / "detector.pth"
+    checkpoint.write_bytes(b"checkpoint")
+    bert = tmp_path / "bert"
+    bert.mkdir()
+    (bert / "pytorch_model.bin").write_bytes(b"bert")
+
+    class DetectorLeaf:
+        provider_name = "lae_dino_lae1m"
+        telemetry_parameter_count = 123
+
+        def telemetry_model_paths(self):
+            return [checkpoint, bert]
+
+    leaf = DetectorLeaf()
+    wrapper = SimpleNamespace(provider_name="tiled", base_provider=leaf)
+    inventory = collect_provider_inventory([wrapper, leaf])
+
+    assert [item["provider"] for item in inventory["models"]] == ["lae_dino_lae1m"]
+    assert inventory["total_parameter_count"] == 123
+    assert inventory["parameter_accounting_status"] == "complete"
+    assert inventory["total_model_storage_bytes"] == len(b"checkpoint") + len(b"bert")
+
+
 def test_collect_runtime_environment_reports_cuda_device(monkeypatch) -> None:
     cuda = FakeCuda()
     torch = SimpleNamespace(
@@ -174,6 +209,12 @@ def test_collect_provider_inventory_keeps_lazy_and_non_model_states_explicit(
         "declared_only",
         "not_a_model",
     ]
+
+    only_non_model = collect_provider_inventory([detector])
+    assert only_non_model["total_parameter_count"] is None
+    assert only_non_model["total_model_storage_bytes"] is None
+    assert only_non_model["parameter_accounting_status"] == "partial"
+    assert only_non_model["storage_accounting_status"] == "partial"
 
 
 def test_generation_telemetry_reports_ttft_decode_rate_and_visual_grid() -> None:

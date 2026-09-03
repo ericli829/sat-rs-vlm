@@ -1,16 +1,23 @@
 """Build portable Qwen3-VL JSONL files from multiple remote-sensing datasets."""
 
+# ruff: noqa: E402
 from __future__ import annotations
 
 import argparse
 import json
 import os
 import random
+import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+SRC_ROOT = PROJECT_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
 
 from sat_rs_vlm.configuration.environment import expand_environment
 from sat_rs_vlm.data.cyclic_training import (

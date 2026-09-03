@@ -128,7 +128,7 @@ class Qwen3VLDataCollator:
                 ]
         image_groups = [
             list(images) if isinstance(images, list | tuple) else []
-            for images in image_inputs
+            for images in (image_inputs if image_inputs is not None else [None] * len(batch))
         ]
         self.last_batch_telemetry = visual_input_telemetry(
             image_groups,

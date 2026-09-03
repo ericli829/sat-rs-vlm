@@ -315,6 +315,8 @@ def audit_taskgraph_performance(
     inventory_ok = (
         _number(system.get("total_parameter_count"), positive=True)
         and _number(system.get("total_model_storage_bytes"), positive=True)
+        and system.get("parameter_accounting_status") == "complete"
+        and system.get("storage_accounting_status") == "complete"
     )
     check(
         "system.inventory",
@@ -324,6 +326,8 @@ def audit_taskgraph_performance(
         details={
             "total_parameter_count": system.get("total_parameter_count"),
             "total_model_storage_bytes": system.get("total_model_storage_bytes"),
+            "parameter_accounting_status": system.get("parameter_accounting_status"),
+            "storage_accounting_status": system.get("storage_accounting_status"),
         },
     )
     paths_section = manifest.get("paths", {})
@@ -338,6 +342,21 @@ def audit_taskgraph_performance(
         "system.paths",
         path_ok,
         "Typical, heaviest, and path-distribution summaries are required.",
+    )
+    path_accounting_ok = bool(
+        path_ok
+        and all(
+            path.get("parameter_accounting_status") == "complete"
+            and path.get("storage_accounting_status") == "complete"
+            for path in [paths_section.get("typical"), paths_section.get("heaviest")]
+            if isinstance(path, dict)
+        )
+    )
+    check(
+        "system.path_accounting",
+        path_accounting_ok,
+        "Typical and heaviest paths must have complete parameter and storage accounting.",
+        submission_only=True,
     )
 
     prompt = manifest.get("prompt", {})

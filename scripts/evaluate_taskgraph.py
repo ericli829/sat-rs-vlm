@@ -29,6 +29,7 @@ from sat_rs_vlm.infrastructure.telemetry import (
     collect_provider_inventory,
     collect_repository_provenance,
     collect_runtime_environment,
+    preload_provider_models,
     visual_input_telemetry,
 )
 from sat_rs_vlm.taskgraph.runtime import RuntimeRequest, runtime_from_config
@@ -115,13 +116,64 @@ def _row_request(row: dict[str, Any], image_root: Path) -> RuntimeRequest:
         image_paths=images,
         options=tuple(str(item) for item in list(raw_options or [])),
         question_type=question_type,
+        target_category=(
+            str(row.get("target_category", metadata.get("target_category", ""))).strip()
+            or None
+        ),
         graph=graph,
     )
 
 
-def _prediction_text(output: RuntimeObject | ChoiceResult | tuple[RuntimeObject, ...]) -> str:
+def _grounding_prediction(
+    output: RuntimeObject,
+    image_paths: tuple[str, ...],
+    metadata: dict[str, Any],
+) -> dict[str, Any] | None:
+    entity = output
+    if hasattr(output, "entities"):
+        entities = output.entities  # type: ignore[union-attr]
+        if not entities:
+            return None
+        entity = max(
+            entities,
+            key=lambda item: float(item.score) if item.score is not None else float("-inf"),
+        )
+    if not hasattr(entity, "region") or not hasattr(entity, "label"):
+        return None
+    bbox = tuple(float(value) for value in entity.region.bbox_xyxy_global)
+    if not image_paths:
+        return None
+    try:
+        with Image.open(image_paths[0]) as image:
+            width, height = image.size
+    except (OSError, ValueError):
+        return None
+    normalized = [bbox[0] / width, bbox[1] / height, bbox[2] / width, bbox[3] / height]
+    target_format = str(metadata.get("bbox_target_format", "normalized_0_1"))
+    if target_format == "percent_0_100":
+        values = [value * 100.0 for value in normalized]
+    elif target_format == "scaled_0_1000":
+        values = [value * 1000.0 for value in normalized]
+    elif target_format == "pixel_xyxy":
+        values = list(bbox)
+    else:
+        values = normalized
+    return {"label": str(entity.label), "bbox": values}
+
+
+def _prediction_text(
+    output: RuntimeObject | ChoiceResult | tuple[RuntimeObject, ...],
+    *,
+    image_paths: tuple[str, ...] = (),
+    metadata: dict[str, Any] | None = None,
+    task_category: str = "",
+) -> str:
     if isinstance(output, ChoiceResult):
         return str(output.choice_id)
+    if task_category.casefold() in {"detection", "grounding", "visual_grounding", "referring"}:
+        grounding = _grounding_prediction(output, image_paths, metadata or {})
+        if grounding is not None:
+            return json.dumps(grounding, ensure_ascii=False, separators=(",", ":"))
     if isinstance(output, Answer):
         return str(output.text)
     if isinstance(output, ScalarInt | ScalarFloat | Boolean | Label):
@@ -141,6 +193,21 @@ def _activated_providers(trace: ExecutionTrace) -> list[str]:
     result = {str(item) for item in values}
     if trace.choice_provider:
         result.add(trace.choice_provider)
+    if isinstance(trace.result, dict):
+        provenance = trace.result.get("provenance")
+        if isinstance(provenance, dict) and provenance.get("provider"):
+            result.add(str(provenance["provider"]))
+    provider_metadata = trace.telemetry.get("provider_metadata", {})
+    if isinstance(provider_metadata, dict):
+        provider = provider_metadata.get("base_provider") or provider_metadata.get("provider")
+        if provider:
+            result.add(str(provider))
+    for node in trace.nodes:
+        if isinstance(node.telemetry, dict) and node.telemetry.get("base_provider"):
+            result.add(str(node.telemetry["base_provider"]))
+    planner = trace.telemetry.get("planner", {})
+    if isinstance(planner, dict) and planner.get("provider"):
+        result.add(str(planner["provider"]))
     return sorted(result)
 
 
@@ -182,12 +249,13 @@ def _path_summary(
         "known_model_storage_bytes": known_storage,
         "parameter_accounting_status": (
             "complete"
-            if all(model.get("parameter_count") is not None for model in models)
+            if bool(models) and all(model.get("parameter_count") is not None for model in models)
             else "partial"
         ),
         "storage_accounting_status": (
             "complete"
-            if all(model.get("local_model_storage_bytes") is not None for model in models)
+            if bool(models)
+            and all(model.get("local_model_storage_bytes") is not None for model in models)
             else "partial"
         ),
         "sample_count": count,
@@ -406,6 +474,40 @@ def _source_visual_metadata(image_paths: tuple[str, ...]) -> dict[str, Any]:
     )
 
 
+def _execution_visual_metadata(
+    trace: ExecutionTrace, image_paths: tuple[str, ...]
+) -> dict[str, Any]:
+    """Combine source geometry with provider-reported tiling and crop work."""
+
+    result = _source_visual_metadata(image_paths)
+    tile_records: list[Any] = []
+    crop_records: list[Any] = []
+
+    def walk(value: Any) -> None:
+        if isinstance(value, dict):
+            if isinstance(value.get("tile_count"), int | float):
+                tile_records.append(
+                    {
+                        key: value.get(key)
+                        for key in ("tile_count", "tile_size", "overlap_ratio")
+                    }
+                )
+            if isinstance(value.get("crop_count"), int | float):
+                crop_records.append({key: value.get(key) for key in ("crop_count", "model_id")})
+            for child in value.values():
+                walk(child)
+        elif isinstance(value, list):
+            for child in value:
+                walk(child)
+
+    walk(trace.to_dict())
+    result["tile_count"] = int(sum(int(item.get("tile_count", 0)) for item in tile_records))
+    result["crop_count"] = int(sum(int(item.get("crop_count", 0)) for item in crop_records))
+    result["provider_tile_records"] = tile_records
+    result["provider_crop_records"] = crop_records
+    return result
+
+
 def _prompt_provenance(row: dict[str, Any], request: RuntimeRequest) -> dict[str, Any]:
     metadata = row.get("metadata", {})
     return cast(
@@ -458,6 +560,15 @@ def main() -> int:
     runtime_started = time.perf_counter()
     runtime = runtime_from_config(config)
     runtime_init_ms = (time.perf_counter() - runtime_started) * 1000.0
+    configured_providers = [
+        runtime.providers.detection,
+        runtime.providers.semantic_2b,
+        runtime.providers.route_4b,
+        runtime.providers.retriever,
+        runtime.providers.choice,
+        runtime.providers.planner,
+    ]
+    cold_start: dict[str, Any] | None = None
     predictions: list[dict[str, Any]] = []
     path_counts: Counter[tuple[str, ...]] = Counter()
     path_rows: dict[tuple[str, ...], list[dict[str, Any]]] = defaultdict(list)
@@ -466,6 +577,9 @@ def main() -> int:
     warmup_attempts = 0
     warmup_failures: list[dict[str, str]] = []
     try:
+        cold_start = preload_provider_models(
+            [provider for provider in configured_providers if provider is not None]
+        )
         warmup_rows = rows[:1]
         for _ in range(args.warmup_runs):
             for row in warmup_rows:
@@ -565,13 +679,30 @@ def main() -> int:
             telemetry["timing_ms"].update(repeat_telemetry["timing_ms"])
             telemetry["tokens"] = repeat_telemetry["tokens"]
             telemetry["vision_input"] = generation["vision_input"]
+            provider_visual = _execution_visual_metadata(trace, request.image_paths)
             if telemetry["vision_input"]["events"] == []:
-                telemetry["vision_input"] = _source_visual_metadata(request.image_paths)
+                telemetry["vision_input"] = provider_visual
+            else:
+                telemetry["vision_input"].update(
+                    {
+                        "tile_count": provider_visual["tile_count"],
+                        "crop_count": provider_visual["crop_count"],
+                        "provider_tile_records": provider_visual["provider_tile_records"],
+                        "provider_crop_records": provider_visual["provider_crop_records"],
+                    }
+                )
             predictions.append(
                 {
                     "id": sample_id,
                     "task_type": str(row.get("task_type", row.get("task_category", "unknown"))),
-                    "prediction": _prediction_text(result.output),
+                    "prediction": _prediction_text(
+                        result.output,
+                        image_paths=request.image_paths,
+                        metadata=dict(row.get("metadata", {})),
+                        task_category=str(
+                            row.get("task_type", row.get("task_category", ""))
+                        ),
+                    ),
                     "reference": reference,
                     "metadata": dict(row.get("metadata", {})),
                     "inference_latency_ms": measured_latency_ms,
@@ -581,17 +712,19 @@ def main() -> int:
                 }
             )
     finally:
-        final_inventory = collect_provider_inventory(
-            [
-                runtime.providers.detection,
-                runtime.providers.semantic_2b,
-                runtime.providers.route_4b,
-                runtime.providers.retriever,
-                runtime.providers.choice,
-                runtime.providers.planner,
-            ]
-        )
-        runtime.close()
+        try:
+            final_inventory = collect_provider_inventory(
+                [
+                    runtime.providers.detection,
+                    runtime.providers.semantic_2b,
+                    runtime.providers.route_4b,
+                    runtime.providers.retriever,
+                    runtime.providers.choice,
+                    runtime.providers.planner,
+                ]
+            )
+        finally:
+            runtime.close()
 
     output_dir.mkdir(parents=True, exist_ok=True)
     prediction_path = output_dir / "predictions.jsonl"
@@ -612,6 +745,12 @@ def main() -> int:
         resource_benchmark={
             "scope": "complete_taskgraph_system",
             "runtime_init_ms": runtime_init_ms,
+            "cold_start": cold_start or {
+                "scope": "all_configured_model_providers",
+                "latency_ms": None,
+                "providers": [],
+                "all_supported": False,
+            },
             "warmup_runs": args.warmup_runs,
             "repeat_runs": args.repeat_runs,
             "failed_samples": failed_samples,
@@ -658,6 +797,8 @@ def main() -> int:
             "known_parameter_count": final_inventory.get("known_parameter_count"),
             "total_model_storage_bytes": final_inventory.get("total_model_storage_bytes"),
             "known_model_storage_bytes": final_inventory.get("known_model_storage_bytes"),
+            "parameter_accounting_status": final_inventory.get("parameter_accounting_status"),
+            "storage_accounting_status": final_inventory.get("storage_accounting_status"),
         },
         "models": final_inventory.get("models", []),
         "paths": {
@@ -680,6 +821,12 @@ def main() -> int:
             "repeat_runs": args.repeat_runs,
             "repeat_output_policy": "first_repeat_used_for_scoring_all_repeats_profiled",
             "runtime_init_ms": runtime_init_ms,
+            "cold_start": cold_start or {
+                "scope": "all_configured_model_providers",
+                "latency_ms": None,
+                "providers": [],
+                "all_supported": False,
+            },
             "latency_semantics": "complete_system_single_sample_e2e_repeat_mean",
             "cache_policy": str(evaluation_config.get("cache_policy", "unspecified")),
             "timing_boundaries": {

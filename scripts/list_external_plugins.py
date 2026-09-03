@@ -1,21 +1,25 @@
 """列出显式本地根目录中的外部插件。"""
 
+# ruff: noqa: E402, I001
 from __future__ import annotations
 
 import argparse
 import json
+import sys
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = PROJECT_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
 
 from sat_rs_vlm.plugins.capability import validate_platform_capability
 from sat_rs_vlm.plugins.dependency import check_requirements
 from sat_rs_vlm.plugins.discovery import discover_plugins, resolve_plugin_roots
 from sat_rs_vlm.plugins.loader import load_external_plugin
 from sat_rs_vlm.plugins.manifest import resolve_inside
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="List external fine-tuning plugins.")

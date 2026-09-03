@@ -31,6 +31,7 @@ from .providers import (
     FixturePlannerProvider,
     LazyQwenSemanticProvider,
     LocatorRegionRetrieverAdapter,
+    ModelTaskGraphPlannerProvider,
     PlannerProvider,
     PlannerRequest,
     ProposalDetectionAdapter,
@@ -176,6 +177,7 @@ class TaskGraphRuntime:
             "executor": None,
             "postprocess": None,
         }
+        planner_telemetry: dict[str, Any] | None = None
         if request.graph is not None:
             graph = (
                 request.graph
@@ -189,11 +191,17 @@ class TaskGraphRuntime:
                     request.question,
                     request.question_type.value,
                     request.options,
-                    {f"${key}": value for key, value in images.items()},
+                    dict(images),
                     request.sample_id,
                 )
             )
             phase_timing["planner"] = (time.perf_counter() - planner_started) * 1000.0
+            planner_telemetry = {
+                "provider": self.providers.planner.provider_name,
+                "generation": dict(
+                    getattr(self.providers.planner, "last_generation_telemetry", {})
+                ),
+            }
         else:
             raise ValueError("TASKGRAPH_UHR requires graph input or a configured PlannerProvider")
         if graph.question != request.question:
@@ -233,7 +241,13 @@ class TaskGraphRuntime:
             )
         phase_timing["postprocess"] = (time.perf_counter() - postprocess_started) * 1000.0
         trace.telemetry["phase_timing_ms"] = phase_timing
-        trace.telemetry["generation_events"] = [
+        if planner_telemetry is not None:
+            trace.telemetry["planner"] = planner_telemetry
+        trace.telemetry["generation_events"] = (
+            [planner_telemetry["generation"]]
+            if planner_telemetry is not None and planner_telemetry["generation"]
+            else []
+        ) + [
             dict(node.telemetry["generation"])
             for node in trace.nodes
             if isinstance(node.telemetry.get("generation"), dict)
@@ -289,6 +303,22 @@ class TaskGraphRuntime:
             else detected.detections
         )
         trace = ExecutionTrace(request.sample_id, ExecutionMode.DIRECT_DETECTION.value)
+        trace.telemetry["provider_metadata"] = {
+            "provider": detected.provider,
+            **{
+                key: detected.metadata[key]
+                for key in (
+                    "model_id",
+                    "base_provider",
+                    "base_model_id",
+                    "tile_count",
+                    "tile_size",
+                    "overlap_ratio",
+                    "crop_count",
+                )
+                if key in detected.metadata
+            },
+        }
         if request.options:
             output: RuntimeObject | ChoiceResult = self.choice_resolver.resolve(
                 ChoiceRequest((source,), request.question, request.options)
@@ -451,11 +481,25 @@ def runtime_from_config(config: dict[str, Any]) -> TaskGraphRuntime:
     planner_cfg = dict(providers.get("planner", {}))
     if planner_cfg:
         kind = str(planner_cfg.get("kind", "fixture"))
-        if kind != "fixture":
-            raise ValueError("only fixture planner is available until a checkpoint is selected")
-        fixture_path = Path(str(planner_cfg["fixture_file"]))
-        payload = json.loads(fixture_path.read_text(encoding="utf-8"))
-        planner = FixturePlannerProvider(payload)
+        if kind == "fixture":
+            fixture_path = Path(str(planner_cfg["fixture_file"]))
+            payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+            planner = FixturePlannerProvider(payload)
+        elif kind == "semantic":
+            provider_name = str(planner_cfg.get("provider", "route_4b"))
+            semantic_providers = {
+                "semantic_2b": semantic_2b,
+                "route_4b": route_4b,
+                "choice": choice,
+            }
+            try:
+                planner = ModelTaskGraphPlannerProvider(semantic_providers[provider_name])
+            except KeyError as exc:
+                raise ValueError(
+                    "semantic planner provider must be semantic_2b, route_4b, or choice"
+                ) from exc
+        else:
+            raise ValueError("planner kind must be fixture or semantic")
 
     policy = DatasetExecutionPolicy.from_mapping(config.get("dataset_policy"))
     composer_cfg = config.get("input_composer", {})

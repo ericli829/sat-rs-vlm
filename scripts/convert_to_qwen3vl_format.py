@@ -1,20 +1,25 @@
 """将项目内部 rs_*.jsonl 转换为 Qwen3-VL chat message JSONL。"""
 
+# ruff: noqa: E402
 from __future__ import annotations
 
 import argparse
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = PROJECT_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
 from sat_rs_vlm.configuration.environment import expand_environment
 from sat_rs_vlm.data.prompt_templates import strengthen_answer, strengthen_instruction
 from sat_rs_vlm.data.task_protocol import counting_json, parse_detection
 from sat_rs_vlm.utils.jsonl import read_jsonl, write_jsonl
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 SUPPORTED_TASKS = {
     "detection",

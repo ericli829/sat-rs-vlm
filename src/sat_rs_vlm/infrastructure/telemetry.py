@@ -180,7 +180,7 @@ def visual_input_telemetry(
         "original_size": original_sizes,
         "processed_size": processed_sizes,
         "resize_policy": resize_policy,
-        "tile_count": image_count,
+        "tile_count": 0,
         "crop_count": 0,
         "image_count": image_count,
         "image_grid_thw": grids,
@@ -535,11 +535,13 @@ def collect_runtime_environment(torch_module: Any | None = None) -> dict[str, An
 def collect_model_inventory(model: Any, model_paths: list[str | Path]) -> dict[str, Any]:
     """Summarize loaded parameters and actual local model file storage."""
 
-    parameter_count = 0
-    parameter_bytes = 0
+    parameter_count: int | None = None
+    parameter_bytes: int | None = None
     dtype_parameters: dict[str, int] = {}
     parameters = getattr(model, "parameters", None)
     if callable(parameters):
+        parameter_count = 0
+        parameter_bytes = 0
         for parameter in parameters():
             count = int(parameter.numel())
             parameter_count += count
@@ -577,12 +579,127 @@ def collect_model_inventory(model: Any, model_paths: list[str | Path]) -> dict[s
                 "files": root_files,
             }
         )
+    storage_complete = bool(roots) and all(root.get("available") is True for root in roots)
     return {
-        "parameter_count": parameter_count or None,
-        "loaded_parameter_bytes": parameter_bytes or None,
+        "parameter_count": parameter_count,
+        "loaded_parameter_bytes": parameter_bytes,
         "parameters_by_dtype": dict(sorted(dtype_parameters.items())),
-        "local_model_storage_bytes": storage_bytes or None,
+        "local_model_storage_bytes": storage_bytes if storage_complete else None,
         "storage_roots": roots,
+    }
+
+
+_PROVIDER_CHILD_ATTRIBUTES = (
+    "_provider",
+    "provider",
+    "base_provider",
+    "_locator",
+    "detector_provider",
+    "retriever_provider",
+    "_delegate",
+)
+
+
+def _provider_children(provider: Any) -> list[Any]:
+    children: list[Any] = []
+    for name in _PROVIDER_CHILD_ATTRIBUTES:
+        child = getattr(provider, name, None)
+        if child is None or isinstance(child, str | bytes | int | float | bool):
+            continue
+        if child is provider or not hasattr(child, "provider_name"):
+            continue
+        children.append(child)
+    return children
+
+
+def _provider_model(provider: Any) -> Any | None:
+    model = getattr(provider, "_model", None)
+    if model is not None:
+        return model
+    engine = getattr(provider, "_engine", None)
+    return getattr(engine, "_model", None) if engine is not None else None
+
+
+def _provider_model_paths(provider: Any) -> list[str | Path]:
+    paths: list[str | Path] = []
+    for name in ("checkpoint", "model_path"):
+        value = getattr(provider, name, None)
+        if value:
+            paths.append(value)
+    config = getattr(provider, "model_config", None)
+    model_id = getattr(config, "model_id", None) if config is not None else None
+    if model_id and Path(str(model_id)).expanduser().exists():
+        paths.append(str(model_id))
+    extra = getattr(provider, "telemetry_model_paths", None)
+    if callable(extra):
+        paths.extend(extra())
+    return list(dict.fromkeys(str(Path(item).expanduser()) for item in paths))
+
+
+def _walk_provider_leaves(providers: list[Any]) -> tuple[list[Any], list[Any]]:
+    leaves: list[Any] = []
+    non_models: list[Any] = []
+    seen: set[int] = set()
+
+    def visit(provider: Any) -> None:
+        if provider is None or id(provider) in seen:
+            return
+        seen.add(id(provider))
+        children = _provider_children(provider)
+        for child in children:
+            visit(child)
+        model = _provider_model(provider)
+        paths = _provider_model_paths(provider)
+        declared = getattr(provider, "telemetry_parameter_count", None)
+        if (
+            model is not None
+            or paths
+            or declared is not None
+            or getattr(provider, "model_config", None)
+        ):
+            leaves.append(provider)
+        elif not children:
+            non_models.append(provider)
+
+    for provider in providers:
+        visit(provider)
+    return leaves, non_models
+
+
+def preload_provider_models(providers: list[Any]) -> dict[str, Any]:
+    """Explicitly initialize lazy model leaves and report isolated load time."""
+
+    leaves, _ = _walk_provider_leaves(providers)
+    records: list[dict[str, Any]] = []
+    started = time.perf_counter()
+    for provider in leaves:
+        preload = getattr(provider, "preload", None)
+        provider_started = time.perf_counter()
+        status = "not_supported"
+        error: str | None = None
+        if callable(preload):
+            try:
+                preload()
+                status = "loaded"
+            except Exception as exc:
+                status = "failed"
+                error = f"{type(exc).__name__}: {exc}"
+        records.append(
+            {
+                "provider": str(getattr(provider, "provider_name", type(provider).__name__)),
+                "role": str(getattr(provider, "role", "")) or None,
+                "status": status,
+                "latency_ms": (time.perf_counter() - provider_started) * 1000.0,
+                "error": error,
+            }
+        )
+        if error is not None:
+            raise RuntimeError(f"provider preload failed for {records[-1]['provider']}: {error}")
+    return {
+        "scope": "all_configured_model_providers",
+        "latency_ms": (time.perf_counter() - started) * 1000.0,
+        "providers": records,
+        "all_supported": bool(records) and all(item["status"] == "loaded" for item in records),
     }
 
 
@@ -599,30 +716,23 @@ def collect_provider_inventory(providers: list[Any]) -> dict[str, Any]:
     total_storage = 0
     counted_parameters = True
     counted_storage = True
-    seen: set[int] = set()
-    for provider in providers:
-        if id(provider) in seen:
-            continue
-        seen.add(id(provider))
+    counted_storage_roots: set[Path] = set()
+    leaves, non_models = _walk_provider_leaves(providers)
+    for provider in leaves:
         provider_name = str(getattr(provider, "provider_name", type(provider).__name__))
         config = getattr(provider, "model_config", None)
-        model_id = str(getattr(config, "model_id", "") or "") if config is not None else ""
-        engine = getattr(provider, "_engine", None)
-        model = getattr(engine, "_model", None) if engine is not None else None
-        if config is None and model is None:
-            models.append(
-                {
-                    "provider": provider_name,
-                    "role": None,
-                    "model_id": None,
-                    "status": "not_a_model",
-                    "parameter_count": None,
-                    "local_model_storage_bytes": None,
-                }
-            )
-            continue
+        model_id = str(
+            getattr(config, "model_id", "")
+            or getattr(provider, "model_id", "")
+            or ""
+        )
+        model = _provider_model(provider)
         role = str(getattr(provider, "role", "")) or None
-        inventory = collect_model_inventory(model, [model_id] if model_id else [])
+        inventory = collect_model_inventory(model, _provider_model_paths(provider))
+        declared_parameter_count = getattr(provider, "telemetry_parameter_count", None)
+        if inventory["parameter_count"] is None and declared_parameter_count is not None:
+            inventory["parameter_count"] = int(declared_parameter_count)
+        model_loaded = model is not None or bool(getattr(provider, "telemetry_model_loaded", False))
         parameter_count = inventory["parameter_count"]
         storage_bytes = inventory["local_model_storage_bytes"]
         if parameter_count is None:
@@ -632,15 +742,37 @@ def collect_provider_inventory(providers: list[Any]) -> dict[str, Any]:
         if storage_bytes is None:
             counted_storage = False
         else:
-            total_storage += int(storage_bytes)
+            for root in inventory["storage_roots"]:
+                if not root.get("available") or root.get("bytes") is None:
+                    continue
+                root_path = Path(str(root["path"])).resolve()
+                if root_path in counted_storage_roots:
+                    continue
+                counted_storage_roots.add(root_path)
+                total_storage += int(root["bytes"])
         models.append(
             {
                 "provider": provider_name,
                 "identity": f"{provider_name}:{role}" if role else provider_name,
                 "role": role,
                 "model_id": model_id or None,
-                "status": "loaded" if model is not None else "declared_only",
+                "status": "loaded" if model_loaded else "declared_only",
+                "model_load_ms": getattr(provider, "telemetry_model_load_ms", None),
                 **inventory,
+            }
+        )
+    for provider in non_models:
+        counted_parameters = False
+        counted_storage = False
+        models.append(
+            {
+                "provider": str(getattr(provider, "provider_name", type(provider).__name__)),
+                "identity": str(getattr(provider, "provider_name", type(provider).__name__)),
+                "role": None,
+                "model_id": None,
+                "status": "not_a_model",
+                "parameter_count": None,
+                "local_model_storage_bytes": None,
             }
         )
     return {

@@ -1,17 +1,24 @@
 """Qwen3-VL 本地 LoRA/QLoRA 遥感指令微调脚本。"""
 
+# ruff: noqa: E402
 from __future__ import annotations
 
 import argparse
 import json
 import re
 import shutil
+import sys
 import time
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = PROJECT_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
 
 from sat_rs_vlm.data.qwen3vl_collator import Qwen3VLDataCollator
 from sat_rs_vlm.data.qwen3vl_dataset import Qwen3VLDataset

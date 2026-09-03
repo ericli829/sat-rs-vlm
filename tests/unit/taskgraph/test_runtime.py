@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
 from sat_rs_vlm.taskgraph import RuntimeRequest, fake_runtime, parse_taskgraph
+from sat_rs_vlm.taskgraph.providers import (
+    FakeSemanticVLMProvider,
+    ModelTaskGraphPlannerProvider,
+    PlannerRequest,
+)
 from sat_rs_vlm.taskgraph.routing import ExecutionMode
-from sat_rs_vlm.taskgraph.runtime_types import Answer, ChoiceResult, ScalarInt
+from sat_rs_vlm.taskgraph.runtime_types import Answer, ChoiceResult, ImageRef, ScalarInt
 
 IMAGE = str(Path("tests/fixtures/miniature_dataset/images/counting.ppm").resolve())
 SECOND_IMAGE = str(Path("tests/fixtures/miniature_dataset/images/vqa.ppm").resolve())
@@ -377,3 +383,43 @@ def test_production_schema_parses_lab_v1_1_canonical_fixture() -> None:
     parsed = parse_taskgraph(graph)
     assert parsed.version == "taskgraph-v1.1"
     assert parsed.final.sources == ["$n1"]
+
+
+def test_semantic_planner_normalizes_image_input_names_and_validates_target() -> None:
+    response = {
+        "intent": "SIMPLE_COUNT",
+        "nodes": [
+            {
+                "id": "n1",
+                "op": "COUNT",
+                "inputs": {"image": "$image0"},
+                "params": {
+                    "target": {"category": "ship", "attributes": {}},
+                    "entire": True,
+                },
+            }
+        ],
+        "final": {
+            "sources": ["$n1"],
+            "question": "Which result should be reported?",
+            "answer_type": "TEXT",
+        },
+    }
+    provider = ModelTaskGraphPlannerProvider(
+        FakeSemanticVLMProvider(
+            {"taskgraph_planner_target": json.dumps(response)}
+        )
+    )
+
+    graph = provider.plan(
+        PlannerRequest(
+            question="How many ships are there?",
+            question_type="FREE_FORM",
+            choices=(),
+            inputs={"image0": ImageRef(IMAGE)},
+            sample_id="planner-test",
+        )
+    )
+
+    assert list(graph.inputs) == ["image0"]
+    assert graph.nodes[0].inputs["image"] == "$image0"

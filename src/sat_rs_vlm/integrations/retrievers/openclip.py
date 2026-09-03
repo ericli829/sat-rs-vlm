@@ -54,6 +54,7 @@ class OpenCLIPRetrieverProvider:
     def _load(self) -> None:
         if self._model is not None:
             return
+        started = time.perf_counter()
         try:
             import open_clip
             import torch
@@ -86,6 +87,14 @@ class OpenCLIPRetrieverProvider:
             tokenizer,
         )
         self._resolved_device = device
+        self._model_load_ms = (time.perf_counter() - started) * 1000.0
+
+    def preload(self) -> None:
+        self._load()
+
+    @property
+    def telemetry_model_load_ms(self) -> float | None:
+        return getattr(self, "_model_load_ms", None)
 
     @staticmethod
     def _crop(image: Any, region: RegionXYXY, index: int) -> tuple[Any, list[float]]:
@@ -181,6 +190,7 @@ class OpenCLIPRetrieverProvider:
                 self.model_id,
                 {
                     "regions_xyxy": boxes,
+                    "crop_count": len(boxes),
                     "batch_size": self.batch_size,
                     "crop_batch_count": 0,
                     "query_cache_hit": str(query).strip() in self._query_cache,
@@ -251,6 +261,7 @@ class OpenCLIPRetrieverProvider:
             {
                 "raw_scores": final,
                 "regions_xyxy": boxes,
+                "crop_count": len(boxes),
                 "batch_size": self.batch_size,
                 "crop_batch_count": batches,
                 "query_cache_hit": query_cache_hit,

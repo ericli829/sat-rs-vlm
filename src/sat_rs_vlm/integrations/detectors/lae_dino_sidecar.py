@@ -117,6 +117,7 @@ class _LAESidecarClient:
             )
         ).expanduser().resolve()
         self._stderr_handle: Any = None
+        self.model_inventory: dict[str, Any] = {}
 
     def start(self) -> None:
         if self.process is not None and self.process.poll() is None:
@@ -140,7 +141,7 @@ class _LAESidecarClient:
         if self.process.stdin is None or self.process.stdout is None:
             raise ProposalError("failed to open LAE-DINO sidecar pipes")
 
-    def request(self, image_path: Path, target_phrase: str) -> dict[str, Any]:
+    def _exchange(self, request: dict[str, Any]) -> dict[str, Any]:
         self.start()
         assert self.process is not None
         if self.process.poll() is not None:
@@ -148,11 +149,6 @@ class _LAESidecarClient:
                 f"LAE-DINO sidecar exited with code {self.process.returncode}; "
                 f"stderr_log={self.stderr_path}"
             )
-        request = {
-            "id": uuid.uuid4().hex,
-            "image": str(Path(image_path).expanduser().resolve()),
-            "target_phrase": target_phrase.strip().lower(),
-        }
         assert self.process.stdin is not None and self.process.stdout is not None
         try:
             self.process.stdin.write(json.dumps(request) + "\n")
@@ -187,6 +183,25 @@ class _LAESidecarClient:
                 f"{response.get('error')}; stderr_log={self.stderr_path}"
             )
         return response
+
+    def initialize(self) -> dict[str, Any]:
+        if self.model_inventory:
+            return dict(self.model_inventory)
+        request = {"id": uuid.uuid4().hex, "operation": "initialize"}
+        response = self._exchange(request)
+        inventory = response.get("model_inventory", {})
+        if not isinstance(inventory, dict):
+            raise SidecarProtocolError("LAE-DINO initialize response has no model inventory")
+        self.model_inventory = dict(inventory)
+        return dict(self.model_inventory)
+
+    def request(self, image_path: Path, target_phrase: str) -> dict[str, Any]:
+        request = {
+            "id": uuid.uuid4().hex,
+            "image": str(Path(image_path).expanduser().resolve()),
+            "target_phrase": target_phrase.strip().lower(),
+        }
+        return self._exchange(request)
 
     def close(self) -> None:
         if self.process is None:
@@ -284,6 +299,29 @@ class LAEDinoSidecarProvider:
             model_id=self.model_id,
             metadata=metadata,
         )
+
+    def preload(self) -> None:
+        self._client.initialize()
+
+    @property
+    def telemetry_parameter_count(self) -> int | None:
+        value = self._client.model_inventory.get("parameter_count")
+        return int(value) if value is not None else None
+
+    @property
+    def telemetry_model_load_ms(self) -> float | None:
+        value = self._client.model_inventory.get("model_load_ms")
+        return float(value) if value is not None else None
+
+    @property
+    def telemetry_model_loaded(self) -> bool:
+        return bool(self._client.model_inventory)
+
+    def telemetry_model_paths(self) -> list[Path]:
+        paths = [self._client.checkpoint]
+        if self._client.bert_root is not None:
+            paths.append(self._client.bert_root)
+        return paths
 
     def close(self) -> None:
         self._client.close()

@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import importlib
+import time
 from pathlib import Path
 from typing import Any
 
@@ -77,6 +78,7 @@ class HuggingFaceVLMEngine:
                 "--model-id <id>."
             )
 
+        load_started = time.perf_counter()
         try:
             self._torch = importlib.import_module("torch")
         except ModuleNotFoundError as exc:
@@ -118,6 +120,7 @@ class HuggingFaceVLMEngine:
         model_device = getattr(self._model, "device", None)
         if model_device is not None:
             self.device = str(model_device)
+        self.model_load_ms = (time.perf_counter() - load_started) * 1000.0
 
     @staticmethod
     def _resolve_model_class(transformers: Any) -> Any:

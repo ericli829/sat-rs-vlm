@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import re
 import tempfile
@@ -27,7 +28,7 @@ from .runtime_types import (
     Region,
     RuntimeObject,
 )
-from .schema import TargetSpec, TaskGraph
+from .schema import InputSpec, PlannerTarget, TargetSpec, TaskGraph
 
 
 def _bbox_contains(
@@ -192,6 +193,71 @@ class PlannerProvider(Protocol):
     provider_name: str
 
     def plan(self, request: PlannerRequest) -> TaskGraph: ...
+
+
+class ModelTaskGraphPlannerProvider:
+    """Generate a validated TaskGraph target with an existing offline VLM provider."""
+
+    provider_name = "model_taskgraph_planner"
+
+    def __init__(self, provider: SemanticVLMProvider) -> None:
+        self.provider = provider
+        role = str(getattr(provider, "role", ""))
+        self.provider_name = (
+            f"{provider.provider_name}:{role}" if role else provider.provider_name
+        )
+        self.last_generation_telemetry: dict[str, Any] = {}
+        self.last_raw_response: str | None = None
+
+    @staticmethod
+    def _json_object(text: str) -> dict[str, Any]:
+        decoder = json.JSONDecoder()
+        for offset, character in enumerate(text):
+            if character != "{":
+                continue
+            try:
+                value, _ = decoder.raw_decode(text[offset:])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(value, dict):
+                return value
+        raise ValueError("planner model did not return a JSON object")
+
+    def plan(self, request: PlannerRequest) -> TaskGraph:
+        input_names = list(request.inputs)
+        prompt = (
+            "Create a TaskGraph v1.1 planner target for this remote-sensing question. "
+            "Return JSON only with keys intent, nodes, and final. Node ids must be n1, n2, ... "
+            "in dependency order. Inputs may reference only "
+            f"{[f'${name}' for name in input_names]} or earlier nodes. "
+            "The final object must contain sources, a static question, and answer_type.\n"
+            f"Question type: {request.question_type}\n"
+            f"Question: {request.question}\n"
+            f"Choices: {list(request.choices)}"
+        )
+        result = self.provider.infer(
+            VLMRequest(
+                ModelInput((), "", prompt),
+                output_contract="taskgraph_planner_target",
+            )
+        )
+        self.last_raw_response = result.text
+        generation = result.metadata.get("generation")
+        self.last_generation_telemetry = dict(generation) if isinstance(generation, dict) else {}
+        target = PlannerTarget.model_validate(self._json_object(result.text))
+        inputs = {
+            name: InputSpec(type="image", uri_or_key=value.uri_or_key)
+            for name, value in request.inputs.items()
+        }
+        return TaskGraph(
+            question=request.question,
+            question_type=request.question_type,
+            choices=list(request.choices) or None,
+            inputs=inputs,
+            intent=target.intent,
+            nodes=target.nodes,
+            final=target.final,
+        )
 
 
 @dataclass(frozen=True)
@@ -409,6 +475,11 @@ class ScoredGridRegionRetrieverAdapter:
         self.default_max_candidates = default_max_candidates
         self.candidate_window_ratio = candidate_window_ratio
 
+    def preload(self) -> None:
+        preload = getattr(self._provider, "preload", None)
+        if callable(preload):
+            preload()
+
     def retrieve(self, request: RegionRetrievalRequest) -> RegionCandidates:
         image = request.image if isinstance(request.image, ImageRef) else request.image.image
         with Image.open(image.path) as source:
@@ -551,6 +622,15 @@ class LazyQwenSemanticProvider:
                 local_files_only=self.model_config.local_files_only,
             )
         return self._engine
+
+    def preload(self) -> None:
+        """Load model weights before warmup so cold start is measured separately."""
+
+        self._load()
+
+    @property
+    def telemetry_model_load_ms(self) -> float | None:
+        return getattr(self._engine, "model_load_ms", None) if self._engine is not None else None
 
     def infer(self, request: VLMRequest) -> VLMResult:
         model_input = request.model_input

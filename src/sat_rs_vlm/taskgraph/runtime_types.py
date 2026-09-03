@@ -158,7 +158,16 @@ def runtime_summary(value: RuntimeObject) -> dict[str, Any]:
     """Return trace-safe metadata, never image bytes or tensors."""
 
     summary: dict[str, Any] = {"type": runtime_type_name(value)}
-    if isinstance(value, (ScalarInt, ScalarFloat, Boolean, Label)):
+    provenance = getattr(value, "provenance", None)
+    if isinstance(provenance, dict):
+        trace_provenance = {
+            key: provenance[key]
+            for key in ("provider", "model_id")
+            if provenance.get(key) is not None
+        }
+        if trace_provenance:
+            summary["provenance"] = trace_provenance
+    if isinstance(value, ScalarInt | ScalarFloat | Boolean | Label):
         summary["value"] = value.value
     elif isinstance(value, LabelSet):
         summary["values"] = list(value.values)
