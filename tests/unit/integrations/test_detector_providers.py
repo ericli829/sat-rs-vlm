@@ -348,6 +348,16 @@ def test_lae_sidecar_rejects_response_id_mismatch(tmp_path: Path) -> None:
         client.close()
 
 
+def test_lae_sidecar_reports_worker_failure_before_id_validation(tmp_path: Path) -> None:
+    body = '{"status":"failed","failure_stage":"model_init","error":"missing weights"}'
+    client, image = _sidecar_fixture(tmp_path, body)
+    try:
+        with pytest.raises(ProposalError, match="failure at model_init: missing weights"):
+            client.request(image, "airplanes")
+    finally:
+        client.close()
+
+
 def test_lae_sidecar_reports_process_crash(tmp_path: Path) -> None:
     source_root = tmp_path / "source"
     source_root.mkdir()

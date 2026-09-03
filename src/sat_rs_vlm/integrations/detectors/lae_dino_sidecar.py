@@ -181,16 +181,16 @@ class _LAESidecarClient:
             raise SidecarProtocolError(
                 f"LAE-DINO sidecar response must be an object; stderr_log={self.stderr_path}"
             )
+        if response.get("status") != "ok":
+            raise ProposalError(
+                f"LAE-DINO sidecar failure at {response.get('failure_stage')}: "
+                f"{response.get('error')}; stderr_log={self.stderr_path}"
+            )
         if response.get("id") != request["id"]:
             raise SidecarProtocolError(
                 "LAE-DINO sidecar response id mismatch: "
                 f"expected {request['id']!r}, got {response.get('id')!r}; "
                 f"stderr_log={self.stderr_path}"
-            )
-        if response.get("status") != "ok":
-            raise ProposalError(
-                f"LAE-DINO sidecar failure at {response.get('failure_stage')}: "
-                f"{response.get('error')}; stderr_log={self.stderr_path}"
             )
         return response
 
