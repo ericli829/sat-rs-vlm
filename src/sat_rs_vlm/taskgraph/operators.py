@@ -1937,6 +1937,13 @@ class SelectExecutor:
             for index in all_indices
             if index in set(clear_positive_indices).union(semantic_positive_indices)
         )
+        if not final_indices and all_indices:
+            # The VLM verified every candidate independently and rejected all
+            # of them: keep the empty result as the contract (the relation does
+            # not hold for any candidate).  Downstream cardinality consumers
+            # require the exact EMPTY semantics; a visually-grounded fallback
+            # is handled by the consumer/choice layer instead.
+            pass
         semantic_ids = self._candidate_ids(items, semantic_positive_indices)
         final_ids = self._candidate_ids(items, final_indices)
         status = self._cardinality_status(len(final_indices), selection_type)
@@ -2597,6 +2604,46 @@ class SemanticExecutor:
         fusion_reason = hint.fusion_reason if hint is not None else "not_final_source"
         question = semantic_question(node, context.question, final_choice_fusion=False)
         instruction = semantic_reasoning_instruction(node)
+
+        def _is_empty_visual(value: RuntimeObject) -> bool:
+            if isinstance(value, EntitySet):
+                return len(value.entities) == 0
+            if isinstance(value, RegionSet):
+                return len(value.regions) == 0
+            return False
+
+        empty_visual_evidence = any(
+            _is_empty_visual(item)
+            for item in inputs.values()
+            if not isinstance(item, list)
+        )
+        if empty_visual_evidence and node.op in {
+            OperatorName.ATTRIBUTE,
+            OperatorName.CLASSIFY,
+            OperatorName.MULTILABEL_CLASSIFY,
+            OperatorName.RELATION,
+            OperatorName.MOTION,
+        }:
+            # Detector/relation evidence is empty: answer from the question
+            # (with the configured option space when available) so the sample
+            # still yields a label instead of hard-failing on materialization.
+            option_fallback = tuple(
+                str(value) for value in node.params.get("label_space") or ()
+            ) or None
+            if node.op is OperatorName.RELATION:
+                option_fallback = tuple(relation.value for relation in SpatialRelation)
+            elif node.op is OperatorName.MOTION:
+                option_fallback = ("YES", "NO")
+            elif node.op is OperatorName.MULTILABEL_CLASSIFY:
+                option_fallback = tuple(
+                    str(value) for value in node.params.get("label_space") or ()
+                )
+            elif node.op is OperatorName.ATTRIBUTE:
+                configured_values = self.semantic_config.attribute_values(
+                    str(node.params["attribute"])
+                )
+                option_fallback = tuple(str(value) for value in configured_values or ())
+            return self._free_text(node, inputs, context, options=option_fallback or ())
 
         candidates: tuple[str, ...] | None = None
         if node.op is OperatorName.RELATION:

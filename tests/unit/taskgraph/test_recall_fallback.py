@@ -173,8 +173,6 @@ def test_empty_detection_semantic_executor_answers_from_fallback_scope(
 def test_final_choice_falls_back_to_image_vlm_on_empty_evidence(
     tmp_path: Path,
 ) -> None:
-    """A choice question whose final source is an EMPTY SelectResult must still
-    produce an answer via the input images instead of failing the sample."""
     from sat_rs_vlm.taskgraph.runtime import (
         RuntimeRequest,
         fake_runtime,
@@ -241,3 +239,45 @@ def test_final_choice_falls_back_to_image_vlm_on_empty_evidence(
         assert bool(result.trace.telemetry.get("final_evidence_fallback"))
     finally:
         runtime.close()
+
+
+def test_semantic_attribute_answers_on_empty_entity_evidence(tmp_path: Path) -> None:
+    """ATTRIBUTE with an empty EntitySet answers from the question instead of
+    hard-failing on materialization (recall-fallback chain)."""
+    image = _image(tmp_path)
+    composer, context = _context(tmp_path)
+
+    class EmptyEvidenceSemantic:
+        """Stand-in provider that records the composed request."""
+
+        provider_name = "semantic_2b"
+
+        def __init__(self) -> None:
+            self.requests: list = []
+            self.responses: dict[str, str] = {}
+
+        def infer(self, request: object) -> object:
+            from sat_rs_vlm.taskgraph.providers import VLMResult
+
+            self.requests.append(request)
+            return VLMResult("unknown", 0.0, {})
+
+    provider = EmptyEvidenceSemantic()
+    semantic = SemanticExecutor(provider, model_role="semantic_2b")  # type: ignore[arg-type]
+    try:
+        node = GraphNode.model_validate(
+            {
+                "id": "n3",
+                "op": "ATTRIBUTE",
+                "inputs": {"entity": "$n2"},
+                "params": {"attribute": "color"},
+            }
+        )
+        result = semantic.execute(
+            node,
+            {"entity": EntitySet((), {"provider": "fake_lae", "capability": "DETECTOR"})},
+            context,
+        )
+        assert isinstance(result.value, Label)
+    finally:
+        composer.close()

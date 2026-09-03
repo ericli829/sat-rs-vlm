@@ -258,6 +258,12 @@ def unwrap_select_result(
                 f"{consumer} refuses SELECT status {value.status.value}"
                 f"{_select_failure_context(value)}"
             )
+        # An empty selection is a valid "no match" payload for downstream
+        # semantic consumers even when a singleton would normally be required:
+        # the operator answers from the question/options or the consumer
+        # choice layer, instead of hard-failing the sample.
+        if require_single:
+            return value.selected
     elif value.status is not SelectStatus.OK:
         raise SelectResultConsumptionError(
             f"{consumer} refuses SELECT status {value.status.value}"
