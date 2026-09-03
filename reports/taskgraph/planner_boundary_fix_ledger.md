@@ -59,6 +59,12 @@ done on the archived JSONL artifacts; no result files were modified.
    `LOCATE($subregion_result, ...)` and `COUNT_IMAGE($subregion_result, ...)`
    work.  (Previously the raw SelectResult was rejected against
    `LOCATE.image expected ['ImageRef','Region']`.)
+7. **SUBREGION group-extent reference** (`operators.py`, commit `bf1dfd3`).
+   `SELECT_SUBREGION(candidates, null, ...)` over a multi-candidate LOCATE
+   group (e.g. 13 ships) now falls back to the union bbox of the group as the
+   reference Region instead of UNRESOLVED, mirroring RELATION's plural
+   reference handling.  Single-candidate groups keep the exact-reference path;
+   empty/cross-image groups remain UNRESOLVED.
 
 ## Regression safety
 
