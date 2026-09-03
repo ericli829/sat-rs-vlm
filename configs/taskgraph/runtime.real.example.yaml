@@ -110,9 +110,11 @@ providers:
       fine:
         enabled: false
     count:
-      # 0.20 -> 0.10: recover small-object counts the fine threshold misses;
-      # cross-scale NMS and the count head fuse the raw proposals.
-      score_threshold: 0.10
+      # 0.10 did NOT help: at 0.05 box floor the LAE raw pool is huge
+      # (21000 boxes -> fuse 11..202 vs refs 1..11), i.e. over-count.
+      # Restore 0.20 for the count-head fusion; LOCATE keeps 0.05 because
+      # CLIP reranking + max_candidates preserve precision there.
+      score_threshold: 0.20
       nms_iou: 0.40
       cross_scale_iou: 0.50
       keep_raw_proposals: true
