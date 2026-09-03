@@ -134,6 +134,24 @@ Remaining 6 failures are detection-recall or planner-semantic:
 - color/1419 — planner repeatedly emits `SELECT_REL → ATTRIBUTE` without a
   singleton select; the validator correctly rejects it on both attempts.
 
+## Fresh 24-sample error eval — recall/select fallback validation
+
+24 previously-failing samples (8 empty EntitySet, 8 final-EMPTY SELECT, 8
+unresolved SUBREGION/RELATION), all outside the 20-sample replay set, run on
+the cloud with the real 4B planner:
+
+- After recall-VLM fallback (f1e9a3d): **11 success / 13 failure** (0 → 46%).
+- After + relation semantic fallback (plural reference / zero geometric match):
+  pending (relation_fallback_eval_20260903).
+
+The remaining failures after f1e9a3d split into:
+- 8× `RELATION requires exactly one reference` — plural reference; now fixed
+  by the relation semantic fallback (deterministic relations with a plural
+  reference defer to the VLM),
+- 4× `ATTRIBUTE refuses SELECT status EMPTY` — zero positive geometric match;
+  now fixed by the zero-match semantic fallback,
+- 1× planner semantic (`dedicated_operator_bypass`, correctly rejected).
+
 ## Remaining planner-semantic families (not boundary gaps)
 
 - `input_type_mismatch`, `dedicated_operator_bypass`, `dead_node`,
