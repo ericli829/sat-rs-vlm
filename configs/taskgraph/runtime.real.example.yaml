@@ -98,7 +98,10 @@ providers:
       bert_root: ${LAE_DINO_BERT_ROOT}
       worker_python: ${LAE_DINO_PYTHON}
       stderr_log: ${LAE_DINO_STDERR_LOG}
-      score_threshold: 0.0
+      # 0.0 -> 0.25: the 0.05 box floor floods the count head (raw 1200..21000
+      # boxes -> fused 27..153 on refs 1..11).  Raise the effective LAE cut
+      # (max(detector.score_threshold, 0.05)) so the head sees sane pools.
+      score_threshold: 0.25
       top_k: 300
     scale:
       global:

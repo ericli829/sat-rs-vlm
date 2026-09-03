@@ -91,6 +91,66 @@ class ChoiceResolver:
             return tuple(value.strip().casefold() for value in source.values)
         return None
 
+    _NUMBER_WORDS = {
+        "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+        "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+        "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
+        "fifteen": 15, "sixteen": 16,
+    }
+
+    @classmethod
+    def _option_number(cls, option: str) -> int | None:
+        text = cls._option_value(option).rstrip(".")
+        numeric = re.fullmatch(r"(\d+)", text)
+        if numeric:
+            return int(numeric.group(1))
+        return cls._NUMBER_WORDS.get(text)
+
+    @classmethod
+    def _closest_numeric_score(cls, request: ChoiceRequest) -> ChoiceScoreResult | None:
+        """Map a single ScalarInt count to the closest numeric option.
+
+        Non-numeric options (typically the 'does not feature the count'
+        fallback) are excluded: when the graph resolved a numeric count, the
+        answer must be a number.  Ties stay ambiguous and fall through to the
+        semantic provider.
+        """
+        numeric = [source for source in request.sources if isinstance(source, ScalarInt)]
+        if (
+            request.answer_type is not AnswerType.CHOICE_SINGLE
+            or len(numeric) != 1
+            or len(numeric) != len(request.sources)
+        ):
+            return None
+        target = int(numeric[0].value)
+        choice_ids = cls._choice_ids(request.options)
+        scored: list[tuple[int, str]] = []
+        for choice_id, option in zip(choice_ids, request.options, strict=True):
+            option_number = cls._option_number(option)
+            if option_number is not None:
+                scored.append((abs(target - option_number), choice_id))
+        if not scored:
+            return None
+        best = min(distance for distance, _ in scored)
+        winners = [choice_id for distance, choice_id in scored if distance == best]
+        if len(winners) != 1:
+            return None
+        selected = winners[0]
+        return ChoiceScoreResult(
+            selected_ids=(selected,),
+            scores={
+                choice_id: (1.0 if choice_id == selected else 0.0) for choice_id in choice_ids
+            },
+            answer_type=request.answer_type.value,
+            reasoning_text=f"Resolved numeric evidence {target}; selected the closest numeric option.",
+            provider="structured_deterministic",
+            model_id="none",
+            method="structured_closest_numeric_mapping",
+            cache_reused=False,
+            latency_ms={"total_ms": 0.0},
+            metadata={"model_called": False, "numeric_evidence": target},
+        )
+
     def _structured_score(self, request: ChoiceRequest) -> ChoiceScoreResult | None:
         source_values: list[str] = []
         for source in request.sources:
@@ -105,6 +165,8 @@ class ChoiceResolver:
             for choice_id, option in zip(choice_ids, request.options, strict=True)
             if self._option_value(option) in normalized_values
         )
+        if not matches and (answer_id := self._closest_numeric_score(request)):
+            return answer_id
         if request.answer_type is AnswerType.CHOICE_SINGLE and len(matches) != 1:
             return None
         if request.answer_type is AnswerType.CHOICE_MULTI and not matches:

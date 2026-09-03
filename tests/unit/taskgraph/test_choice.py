@@ -49,6 +49,48 @@ def test_structured_authoritative_value_maps_without_model_call(tmp_path: Path) 
     assert resolver.last_model_input.visual_inputs == ()
 
 
+def test_out_of_range_count_maps_to_closest_numeric_option_without_model(
+    tmp_path: Path,
+) -> None:
+    provider = FakeSemanticVLMProvider(choice_scores={"final_choice": {"A": 10.0}})
+    resolver = ChoiceResolver(provider, InputComposer(tmp_path / "closest"))
+
+    result = resolver.resolve(
+        ChoiceRequest(
+            (ScalarInt(153),),
+            "How many vehicles are there?",
+            ("(A) 9", "(B) 1", "(C) 2", "(D) 3", "(E) This image does not feature the count."),
+        )
+    )
+
+    assert result.selected_ids == ("A",)
+    assert result.choice_id == "A"
+    assert result.answer_type == "CHOICE_SINGLE"
+    assert result.provenance["method"] == "structured_closest_numeric_mapping"
+    assert result.provenance["numeric_evidence"] == 153
+    # the non-numeric E option must never win when numeric evidence exists
+    assert result.selected_ids[0] != "E"
+    assert provider.choice_calls == []
+    assert provider.calls == []
+
+
+def test_count_near_option_range_maps_to_closest_and_never_e(tmp_path: Path) -> None:
+    provider = FakeSemanticVLMProvider(choice_scores={"final_choice": {"E": 100.0}})
+    resolver = ChoiceResolver(provider, InputComposer(tmp_path / "closest2"))
+
+    result = resolver.resolve(
+        ChoiceRequest(
+            (ScalarInt(2),),
+            "How many count?",
+            ("(A) One", "(B) Two", "(C) Five", "(D) Eight", "(E) It does not feature the count."),
+        )
+    )
+
+    assert result.selected_ids == ("B",)
+    assert result.provenance["method"] == "structured_closest_numeric_mapping"
+    assert provider.choice_calls == []
+
+
 def test_reasoning_letters_never_determine_single_choice(tmp_path: Path) -> None:
     provider = FakeSemanticVLMProvider(
         {"final_choice_reasoning": "A looks possible; B is weak; therefore C appears plausible."},
