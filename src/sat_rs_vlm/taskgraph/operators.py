@@ -2302,13 +2302,12 @@ class SelectExecutor:
             reference = self._single_reference(reference_value)
             relation = str(node.params["relation"])
             if reference is None:
-                # A plural upstream reference is still a valid visual context
-                # for fuzzy relations.  It is not valid for a deterministic
-                # one-to-one geometry calculation.
-                if (
-                    relation in {"NEAR", "NEXT_TO", "AROUND", "BETWEEN"}
-                    and reference_value is not None
-                ):
+                # A plural upstream reference is still a valid visual context:
+                # ask the semantic VLM which candidate satisfies the relation.
+                # Deterministic relations keep the exact geometry path when a
+                # single reference exists; only plural/unresolved references
+                # fall back to semantic evidence.
+                if reference_value is not None:
                     return self._semantic_select(
                         candidates,
                         reference_value,
@@ -2358,6 +2357,20 @@ class SelectExecutor:
                     provenance,
                     clear_positive_indices=partition.positive,
                     grey_indices=partition.grey,
+                )
+            if not partition.positive and items:
+                # Geometry found no exact match but candidates exist: the
+                # relation is likely fuzzy (e.g. "truck in the intersection").
+                # Ask the semantic VLM instead of hard-failing downstream.
+                return self._semantic_select(
+                    candidates,
+                    reference_value,
+                    relation,
+                    node,
+                    context,
+                    provenance,
+                    clear_positive_indices=(),
+                    grey_indices=tuple(range(len(items))),
                 )
             relation_selected = self._selected_like(
                 candidates,
