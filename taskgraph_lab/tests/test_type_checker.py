@@ -130,3 +130,76 @@ def test_select_result_requires_visual_scope_and_attribute_singleton() -> None:
     }
     _, attribute_report = validate_candidate(attribute_graph, inputs={"image0": {}})
     assert "attribute_requires_singleton" in {item.code for item in attribute_report.errors}
+
+
+def test_subregion_select_is_singleton_for_attribute() -> None:
+    graph = {
+        "nodes": [
+            {
+                "id": "n1",
+                "op": "LOCATE",
+                "inputs": {"image": "$image0"},
+                "params": {"target": {"category": "building", "attributes": {}}},
+            },
+            {
+                "id": "n2",
+                "op": "SELECT",
+                "inputs": {"candidates": "$n1"},
+                "params": {
+                    "mode": "RANK",
+                    "criterion": "bbox_area",
+                    "rank": 1,
+                    "order": "DESCENDING",
+                },
+            },
+            {
+                "id": "n3",
+                "op": "SELECT",
+                "inputs": {"candidates": "$n2"},
+                "params": {"mode": "SUBREGION", "subregion": "ABOVE"},
+            },
+            {
+                "id": "n4",
+                "op": "ATTRIBUTE",
+                "inputs": {"entity": "$n3"},
+                "params": {"attribute": "color", "part": "top"},
+            },
+        ],
+        "final": {"sources": ["$n4"], "answer_type": "LABEL"},
+    }
+    _, report = validate_candidate(graph, inputs={"image0": {}})
+    assert report.valid, report.model_dump()
+
+
+def test_subregion_select_is_valid_visual_scope_for_locate_and_count() -> None:
+    graph = {
+        "nodes": [
+            {
+                "id": "n1",
+                "op": "LOCATE",
+                "inputs": {"image": "$image0"},
+                "params": {"target": {"category": "parking lot", "attributes": {}}},
+            },
+            {
+                "id": "n2",
+                "op": "SELECT",
+                "inputs": {"candidates": "$n1"},
+                "params": {"mode": "SUBREGION", "subregion": "RIGHT_SIDE"},
+            },
+            {
+                "id": "n3",
+                "op": "LOCATE",
+                "inputs": {"image": "$n2"},
+                "params": {"target": {"category": "car", "attributes": {}}},
+            },
+            {
+                "id": "n4",
+                "op": "COUNT",
+                "inputs": {"entities": "$n3"},
+                "params": {"target": {"category": "car", "attributes": {}}, "entire": False},
+            },
+        ],
+        "final": {"sources": ["$n4"], "answer_type": "CHOICE_SINGLE"},
+    }
+    _, report = validate_candidate(graph, inputs={"image0": {}})
+    assert report.valid, report.model_dump()

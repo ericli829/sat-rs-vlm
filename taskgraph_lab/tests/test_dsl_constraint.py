@@ -111,6 +111,32 @@ def test_every_sort_order_enum_is_accepted(order: SortOrder) -> None:
     assert _grammar().accepts(dsl)
 
 
+@pytest.mark.parametrize(
+    "criterion",
+    ["bbox_area", "bboxarea", "area", "size", "score"],
+)
+def test_supported_rank_criteria_are_accepted(criterion: str) -> None:
+    dsl = (
+        'n1=LOCATE($image0,T("ship"))\n'
+        f'n2=SELECT_RANK($n1,null,"{criterion}",1,DESCENDING)\n'
+        "FINAL_QUESTION($n2,CHOICE_SINGLE,\"Which one?\")"
+    )
+    assert _grammar().accepts(dsl)
+
+
+@pytest.mark.parametrize(
+    "criterion",
+    ["height", "width", "distance", "distance to center", "length", "cluster_size"],
+)
+def test_unsupported_rank_criteria_are_rejected(criterion: str) -> None:
+    dsl = (
+        'n1=LOCATE($image0,T("ship"))\n'
+        f'n2=SELECT_RANK($n1,null,"{criterion}",1,DESCENDING)\n'
+        "FINAL_QUESTION($n2,CHOICE_SINGLE,\"Which one?\")"
+    )
+    assert not _grammar().accepts(dsl)
+
+
 @pytest.mark.parametrize("direction", list(ExtremeDirection))
 def test_every_extreme_enum_is_accepted(direction: ExtremeDirection) -> None:
     dsl = (

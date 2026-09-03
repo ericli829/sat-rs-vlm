@@ -227,6 +227,15 @@ class SelectResultConsumptionError(ValueError):
     """A downstream consumer attempted to use an unsafe SELECT state."""
 
 
+def _select_failure_context(value: SelectResult) -> str:
+    details: list[str] = []
+    if value.method:
+        details.append(f"method={value.method}")
+    if value.reason:
+        details.append(f"reason={value.reason!r}")
+    return " (" + "; ".join(details) + ")" if details else ""
+
+
 def unwrap_select_result(
     value: RuntimeObject,
     *,
@@ -247,9 +256,13 @@ def unwrap_select_result(
         if not allow_empty:
             raise SelectResultConsumptionError(
                 f"{consumer} refuses SELECT status {value.status.value}"
+                f"{_select_failure_context(value)}"
             )
     elif value.status is not SelectStatus.OK:
-        raise SelectResultConsumptionError(f"{consumer} refuses SELECT status {value.status.value}")
+        raise SelectResultConsumptionError(
+            f"{consumer} refuses SELECT status {value.status.value}"
+            f"{_select_failure_context(value)}"
+        )
 
     selected: RuntimeObject = value.selected
     if not require_single:
@@ -270,6 +283,7 @@ def unwrap_select_result(
         )
     raise SelectResultConsumptionError(
         f"{consumer} requires one selected object, got {cardinality}"
+        f"{_select_failure_context(value)}"
     )
 
 

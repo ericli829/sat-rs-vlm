@@ -278,7 +278,24 @@ class InputComposer:
         self, entities: EntitySet
     ) -> tuple[list[VisualInput], dict[str, object]]:
         if not entities.entities:
-            raise ValueError("cannot materialize an empty EntitySet")
+            provenance = entities.provenance or {}
+            clue = ""
+            for key in (
+                "proposal_query",
+                "proposal_query_mode",
+                "provider",
+                "capability",
+                "select_empty",
+            ):
+                value = provenance.get(key)
+                if value is not None:
+                    if clue:
+                        clue += "; "
+                    clue += f"{key}={value}"
+            raise ValueError(
+                "cannot materialize an empty EntitySet"
+                + (f" (upstream source: {clue})" if clue else "")
+            )
         image = entities.entities[0].region.image
         image_key = image.path.resolve()
         if any(entity.region.image.path.resolve() != image_key for entity in entities.entities):

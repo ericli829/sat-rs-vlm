@@ -1960,6 +1960,11 @@ class SelectExecutor:
             input_reference if not isinstance(input_reference, list) else None
         )
         if reference is None:
+            # ``SELECT_SUBREGION(candidates, null, ...)`` is the canonical DSL
+            # form for "the subregion relative to the previously selected single
+            # object": fall back to the (single) selected candidate itself.
+            reference = self._single_reference(candidates)
+        if reference is None:
             return self._result(
                 self._empty_like(candidates),
                 status=SelectStatus.UNRESOLVED,

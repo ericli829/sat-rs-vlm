@@ -50,6 +50,13 @@ STRING_LIST = rf"(?:\[\]|\[{JSON_STRING}(?:,{JSON_STRING})*\])"
 NONEMPTY_STRING_LIST = rf"\[{JSON_STRING}(?:,{JSON_STRING})*\]"
 CHOICES_REFERENCE = re.escape(json.dumps("$choices"))
 
+# An unquoted (but DSL-quoted) key whose value may be only one of the
+# production RankCriterion values.  ``area``/``size`` are lab synonyms that the
+# productionization boundary rewrites to ``bbox_area``; everything else (e.g.
+# ``height``, ``distance``, ``cluster_size``) is a Planner schema error and is
+# rejected at generation time instead of surfacing as a downstream retry.
+RANK_CRITERION_JSON = rf'"(?:{_alternation(("bbox_area", "bboxarea", "score", "area", "size"))})"'
+
 INTENT_PATTERN = regex.compile(rf"INTENT\({_enum_pattern(IntentLabel)}\)")
 ANSWER_TYPE_PATTERN = _enum_pattern(AnswerType)
 
@@ -253,7 +260,7 @@ class CanonicalDSLPrefixGrammar:
             rf"FIND_MARKER\({ref},{JSON_STRING}(?:,{JSON_STRING})?\)",
             rf"LOCATE\({ref},{TARGET}\)",
             rf"SELECT_REL\({ref},{ref_or_null},{relation}\)",
-            rf"SELECT_RANK\({ref},{ref_or_null},{JSON_STRING},{POSITIVE_INTEGER},{rank_order}\)",
+            rf"SELECT_RANK\({ref},{ref_or_null},{RANK_CRITERION_JSON},{POSITIVE_INTEGER},{rank_order}\)",
             rf"SELECT_ORD\({ref},{ref_or_null},{POSITIVE_INTEGER},{ordinal_order}\)",
             rf"SELECT_EXTREME\({ref},{ref_or_null},{extreme}\)",
             rf"SELECT_SUBREGION\({ref},{ref_or_null},{subregion}\)",

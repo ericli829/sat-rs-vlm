@@ -147,7 +147,11 @@ VISUAL_ONLY_INPUTS = {
     (OperatorName.BUILD_ROUTE_CONTEXT, "image"),
 }
 
-SINGLETON_SELECT_MODES = {"RANK", "ORDINAL", "EXTREME"}
+SINGLETON_SELECT_MODES = {"RANK", "ORDINAL", "EXTREME", "SUBREGION"}
+
+# A SELECT result is not a raw visual scope except for SUBREGION, which always
+# yields exactly one Region (a valid ImageRef/Region visual scope).
+VISUAL_SCOPE_SELECT_MODES = {"SUBREGION"}
 
 
 def _refs(value: str | list[str]) -> list[str]:
@@ -204,7 +208,12 @@ def check_types(target: PlannerTarget, input_names: set[str]) -> TypeCheckResult
                     )
                 producer = nodes_by_ref.get(ref)
                 if producer is not None and producer.op is OperatorName.SELECT:
-                    if (node.op, name) in VISUAL_ONLY_INPUTS:
+                    mode = producer.params.get("mode")
+                    mode = getattr(mode, "value", mode)
+                    producer_mode = str(mode).upper()
+                    if (node.op, name) in VISUAL_ONLY_INPUTS and (
+                        producer_mode not in VISUAL_SCOPE_SELECT_MODES
+                    ):
                         result.errors.append(
                             TypeIssue(
                                 "select_result_not_visual_scope",
@@ -215,9 +224,7 @@ def check_types(target: PlannerTarget, input_names: set[str]) -> TypeCheckResult
                             )
                         )
                     if node.op is OperatorName.ATTRIBUTE and name == "entity":
-                        mode = producer.params.get("mode")
-                        mode = getattr(mode, "value", mode)
-                        if str(mode).upper() not in SINGLETON_SELECT_MODES:
+                        if producer_mode not in SINGLETON_SELECT_MODES:
                             result.errors.append(
                                 TypeIssue(
                                     "attribute_requires_singleton",

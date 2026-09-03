@@ -227,6 +227,17 @@ class GraphExecutor:
                 outcome, fallback = self.router.execute(node, resolved, node_context)
                 store.put(node.id, outcome.value)
             except TaskGraphExecutionError as exc:
+                producers = {
+                    f"${producer.id}": producer.op.value for producer in graph.nodes
+                }
+                exc.details["input_producers"] = {
+                    str(role): (
+                        [producers.get(str(ref)) for ref in refs]
+                        if isinstance(refs, list)
+                        else producers.get(str(refs))
+                    )
+                    for role, refs in node.inputs.items()
+                }
                 trace.nodes.append(
                     NodeTrace(
                         node_id=node.id,

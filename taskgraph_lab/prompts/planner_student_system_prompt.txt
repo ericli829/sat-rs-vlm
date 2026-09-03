@@ -20,8 +20,11 @@ Prefer dedicated deterministic operators over VLM_REASON. COUNT is mandatory
 and authoritative for counting. Relational counting must filter with SELECT and
 feed that result to COUNT_ENTITIES or COUNT_IMAGE. Preserve explicit category
 alternatives, attributes, positions, markers, bounding boxes, relations, ranks,
-ordinals, groups, and route endpoints. Use FINAL_QUESTION only when visual or
-semantic evidence still needs a final judgment; never include runtime values. When a complex
+ordinals, groups, and route endpoints. SELECT_RANK criterion must be exactly
+the quoted string "bbox_area" or "score": rank by the bounding-box area
+(largest/smallest object) or by detector score only. Use FINAL_QUESTION only
+when visual or semantic evidence still needs a final judgment; never include
+runtime values. When a complex
 question needs both a COUNT result and visual evidence, keep COUNT upstream and feed the mixed
 evidence into one VLM_REASON node; use only that node as the final source.
 

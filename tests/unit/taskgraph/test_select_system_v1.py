@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from PIL import Image
 
 from sat_rs_vlm.infrastructure.config import ModelConfig
@@ -24,7 +25,9 @@ from sat_rs_vlm.taskgraph.runtime_types import (
     Region,
     ScalarInt,
     SelectResult,
+    SelectResultConsumptionError,
     SelectStatus,
+    unwrap_select_result,
 )
 from sat_rs_vlm.taskgraph.schema import GraphNode
 
@@ -189,6 +192,73 @@ def test_equal_rank_is_reported_as_ambiguous(tmp_path: Path) -> None:
         assert len(output.value.selected.entities) == 2
     finally:
         composer.close()
+
+
+def test_subregion_uses_single_selected_candidate_when_reference_is_absent(
+    tmp_path: Path,
+) -> None:
+    image = _image(tmp_path)
+    candidate_scope = EntitySet((_entity(image, (90, 40, 120, 70), "det-1"),))
+    node = _node({"mode": "SUBREGION", "subregion": "ABOVE", "margin": 5.0})
+    provider = FakeSemanticVLMProvider({})
+    composer, context = _context(tmp_path)
+    try:
+        output = SelectExecutor(provider).execute(
+            node,
+            {"candidates": candidate_scope},
+            context,
+        )
+        assert isinstance(output.value, SelectResult)
+        assert output.value.status is SelectStatus.OK
+        assert isinstance(output.value.selected, Region)
+        # ABOVE the single selected candidate, clipped to the image scope.
+        assert output.value.selected.bbox_xyxy_global == (0.0, 0.0, 200.0, 45.0)
+    finally:
+        composer.close()
+
+
+def test_subregion_requires_reference_when_candidates_are_multi(tmp_path: Path) -> None:
+    image = _image(tmp_path)
+    candidate_scope = EntitySet(
+        (
+            _entity(image, (10, 10, 20, 20), "det-1"),
+            _entity(image, (40, 10, 50, 20), "det-2"),
+        )
+    )
+    node = _node({"mode": "SUBREGION", "subregion": "ABOVE", "margin": 5.0})
+    provider = FakeSemanticVLMProvider({})
+    composer, context = _context(tmp_path)
+    try:
+        output = SelectExecutor(provider).execute(
+            node,
+            {"candidates": candidate_scope},
+            context,
+        )
+        assert isinstance(output.value, SelectResult)
+        assert output.value.status is SelectStatus.UNRESOLVED
+        assert output.value.reason == "SUBREGION requires one reference"
+    finally:
+        composer.close()
+
+
+def test_select_consumption_error_includes_upstream_reason(tmp_path: Path) -> None:
+    image = _image(tmp_path)
+    candidates = EntitySet((_entity(image, (10, 10, 20, 20), "det-1"),))
+    unresolved = SelectResult(
+        candidates,
+        SelectStatus.UNRESOLVED,
+        "geometry",
+        "RELATION requires exactly one reference",
+    )
+    with pytest.raises(SelectResultConsumptionError) as error:
+        unwrap_select_result(
+            unresolved,
+            allow_empty=False,
+            consumer="SELECT.candidates",
+        )
+    context = str(error.value)
+    assert "UNRESOLVED" in context
+    assert "RELATION requires exactly one reference" in context
 
 
 def test_selection_parser_accepts_explicit_ids_but_rejects_prose_counts() -> None:
