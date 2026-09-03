@@ -46,7 +46,11 @@ providers:
   detection:
     kind: clip_rerank
     locate_detector:
-      score_threshold: 0.15
+      # 0.15 -> 0.05: LAE-DINO needs a low threshold for small remote-sensing
+      # targets (official 0.4 finds nothing; the linked report proves 0.05
+      # scale thresholds recover small cars/buildings).  Downstream CLIP
+      # reranking and referent refinement keep precision.
+      score_threshold: 0.05
       max_candidates: 16
       clip_rerank_top_k: 16
     detector_weight: 0.35
@@ -83,7 +87,7 @@ providers:
         bert_root: ${LAE_DINO_BERT_ROOT}
         worker_python: ${LAE_DINO_PYTHON}
         stderr_log: ${LAE_DINO_STDERR_LOG}
-        score_threshold: 0.20
+        score_threshold: 0.05
   counting:
     kind: counting_system
     detector:
@@ -106,7 +110,9 @@ providers:
       fine:
         enabled: false
     count:
-      score_threshold: 0.20
+      # 0.20 -> 0.10: recover small-object counts the fine threshold misses;
+      # cross-scale NMS and the count head fuse the raw proposals.
+      score_threshold: 0.10
       nms_iou: 0.40
       cross_scale_iou: 0.50
       keep_raw_proposals: true

@@ -35,7 +35,7 @@ class CountingProposalDetectorBridge:
 
     def detect(self, request: DetectionRequest) -> DetectionResponse:
         self.calls.append(request)
-        phrase = request.texts or request.target.phrase()
+        phrase = request.texts or request.target.detection_phrase()
         local_w, local_h = request.image.size
         with tempfile.TemporaryDirectory(prefix="counting_tile_") as temp_dir:
             tile_path = Path(temp_dir) / "tile.png"
