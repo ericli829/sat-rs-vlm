@@ -51,6 +51,14 @@ done on the archived JSONL artifacts; no result files were modified.
      (`proposal_query`, `provider`, …).
 5. **Prompt** (`planner_student_system_prompt.txt`): explicitly documents that
    `SELECT_RANK` criterion must be `"bbox_area"` or `"score"`.
+6. **Visual-scope materialization at the runtime boundary** (`executor.py`,
+   commit `9197129`).  The lab type checker admits SUBREGION results to
+   image roles; the runtime now materializes select-aware inputs BEFORE the
+   contract check and adds image-role policies for
+   REGION/REGION_FROM_BBOX/FIND_MARKER/LOCATE/COUNT/BUILD_ROUTE_CONTEXT, so
+   `LOCATE($subregion_result, ...)` and `COUNT_IMAGE($subregion_result, ...)`
+   work.  (Previously the raw SelectResult was rejected against
+   `LOCATE.image expected ['ImageRef','Region']`.)
 
 ## Regression safety
 
