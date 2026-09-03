@@ -58,6 +58,7 @@ from .runtime_types import (
     ImageRef,
     RuntimeObject,
     ScalarInt,
+    SelectResultConsumptionError,
     runtime_summary,
     unwrap_select_result,
 )
@@ -535,6 +536,7 @@ class TaskGraphRuntime:
             AnswerType.CHOICE_SINGLE,
             AnswerType.CHOICE_MULTI,
         }
+        evidence_fallback = False
         try:
             sources = tuple(
                 unwrap_select_result(
@@ -544,6 +546,13 @@ class TaskGraphRuntime:
                 )
                 for ref in graph.final.sources
             )
+            if not sources and choice_requested and images:
+                # Detector/graph evidence is empty: answer the residual question
+                # directly from the input images so the Choice VLM can still
+                # select an option instead of hard-failing the sample.  A
+                # non-choice answer with no evidence still raises below.
+                sources = tuple(images.values())
+                evidence_fallback = True
             choice_started = time.perf_counter()
             output = self._choice_or_answer(
                 sources,
@@ -552,8 +561,31 @@ class TaskGraphRuntime:
                 graph.final.answer_type,
             )
         except Exception as exc:
-            exc.execution_trace = trace
-            raise
+            if (
+                choice_requested
+                and not evidence_fallback
+                and images
+                and isinstance(exc, (SelectResultConsumptionError, ValueError))
+            ):
+                # Last-resort tolerance: unresolved/empty SELECT evidence must not
+                # kill a CHOICE sample.  Fall back to a direct VLM answer over the
+                # input images and record the degradation in telemetry.
+                trace.telemetry["final_evidence_fallback"] = (
+                    f"{type(exc).__name__}: {exc}"
+                )
+                sources = tuple(images.values())
+                evidence_fallback = True
+                choice_started = time.perf_counter()
+                output = self._choice_or_answer(
+                    sources,
+                    graph.final.question or request.question or None,
+                    request.options,
+                    graph.final.answer_type,
+                )
+            else:
+                exc.execution_trace = trace
+                raise
+        trace.telemetry["final_evidence_fallback"] = bool(evidence_fallback)
         choice_ms = (time.perf_counter() - choice_started) * 1000.0 if choice_requested else 0.0
         choice_model_called = bool(
             choice_requested
@@ -971,6 +1003,7 @@ def fake_runtime(
     final_choice_fusion_config: FinalChoiceFusionConfig | None = None,
     answerability_config: AnswerabilityConfig | None = None,
     semantic_categories: set[str] | None = None,
+    locate_refinement_config: ReferentRefinementConfig | None = None,
 ) -> TaskGraphRuntime:
     shared_2b = FakeSemanticVLMProvider(
         {**(semantic_responses or {}), **(choice_responses or {})},
@@ -992,6 +1025,7 @@ def fake_runtime(
         semantic_decision_config=semantic_decision_config,
         final_choice_fusion_config=final_choice_fusion_config,
         answerability_config=answerability_config,
+        locate_refinement_config=locate_refinement_config,
     )
 
 

@@ -1197,6 +1197,39 @@ class LocateExecutor:
                         "fallback_scope": "bounded_candidate_set",
                     }
                 )
+        elif (
+            should_refine
+            and not value.entities
+            and self.refiner is not None
+            and self.refiner.config.enabled
+        ):
+            # Detector recall failure: the detector and its regional fallback both
+            # missed the target.  Hand the whole search scope to the semantic VLM
+            # as a single visual candidate so downstream ATTRIBUTE/CLASSIFY and the
+            # final Choice VLM can still answer from the visible region instead of
+            # failing on an empty EntitySet.
+            fallback = self.refiner.visual_fallback(
+                scope,
+                question=context.final_question or context.question,
+                target=target,
+                reason="EMPTY_PROPOSALS_AND_REGIONAL_FALLBACK",
+            )
+            value = fallback.entities
+            refinement_metadata.update(
+                {
+                    **fallback.metadata,
+                    "fallback_triggered": True,
+                    "fallback_reason": "EMPTY_PROPOSALS_AND_REGIONAL_FALLBACK",
+                    "fallback_provider": "semantic_2b",
+                    "fallback_scope": (
+                        "scoped_region" if isinstance(scope, Region) else "image"
+                    ),
+                    "candidate_count_after_refinement": len(value.entities),
+                    "resolution_status": "SEMANTIC_FALLBACK_RESOLVED",
+                    "refinement_status": "SEMANTIC_FALLBACK_RESOLVED",
+                    "final_resolution_status": "SEMANTIC_FALLBACK_RESOLVED",
+                }
+            )
         if "final_resolution_status" not in refinement_metadata:
             refinement_metadata["final_resolution_status"] = refinement_metadata[
                 "resolution_status"
@@ -1365,9 +1398,14 @@ class SelectExecutor:
 
     @staticmethod
     def _empty_like(value: EntitySet | Region | RegionSet) -> EntitySet | RegionSet:
+        # Preserve upstream provenance so an empty selection still carries the
+        # search-scope identity (image path / candidate origin) for downstream
+        # VLM fallback and tracing.
+        preserved = dict(getattr(value, "provenance", {}) or {})
+        preserved.setdefault("select_empty", True)
         if isinstance(value, EntitySet):
-            return EntitySet((), {"select_empty": True})
-        return RegionSet((), {"select_empty": True})
+            return EntitySet((), preserved)
+        return RegionSet((), preserved)
 
     @staticmethod
     def _items(value: EntitySet | Region | RegionSet) -> tuple[Entity | Region, ...]:
