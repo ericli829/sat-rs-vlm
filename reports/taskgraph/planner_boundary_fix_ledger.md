@@ -1,0 +1,87 @@
+# Planner boundary hardening — failure taxonomy and fix ledger
+
+Status of the evaluation-debugging work.  The only read-only result analysis was
+done on the archived JSONL artifacts; no result files were modified.
+
+## Fixes already committed before this session
+
+| Commit | Scope |
+|---|---|
+| `d61a7f1` | Planner graph boundary failures + runtime memory release. Adds the lab type-flow checks (`select_result_not_visual_scope`, `attribute_requires_singleton`), `input`→`source` role aliasing for CLASSIFY/MULTILABEL_CLASSIFY/MOTION, `area`/`size`→`bbox_area` criterion normalization, `_repair_mixed_count_final` for mixed count/visual finals, and memory release in planner/VLM/input-composer close paths. |
+| `aeab77e` | Release image-inference memory between requests. |
+| `e5442fa` | LOCATE proposal recall + fallback. |
+| `d813831` | LAE sidecar: check `status` before `id`. The 420 former "response id mismatch" failures were worker failures carrying `status=failed` with no `id`; the parent validated `id` first and misreported the root cause. |
+
+## `xlrs_eval_rest.jsonl` planner failures (1,144 rows, file from before d61a7f1)
+
+| Family | Count | Fix |
+|---|---|---|
+| CLASSIFY/MULTILABEL/MOTION unexpected role `input` | 1,084 | `d61a7f1` (`input_aliases` → `source`) |
+| `criterion=area` | 20 | `d61a7f1` (→ `bbox_area`) |
+| `criterion=size` | 9 | `d61a7f1` (→ `bbox_area`) |
+| `criterion=distance/length/cluster_size/number/roof area/color darkness` | 17 | `ea35afe` grammar rejects at generation (model forced to `bbox_area`/`score`) |
+| `invalid_taskgraph` (input_type_mismatch, dedicated_operator_bypass, dead_node, mixed-count final, duplicate sources) | 13 | planner-semantic; retry loop; not a schema-boundary gap |
+| DSL parse errors | 2 | planner-semantic |
+
+## Fixes committed in this session (`ea35afe`)
+
+1. **Rank-criterion grammar restriction** (`taskgraph_lab/taskgraph/dsl/constraint.py`).
+   `SELECT_RANK` criterion is now limited to the JSON strings `bbox_area`,
+   `bboxarea`, `area`, `size`, `score` (the latter three are normalized to
+   `bbox_area` by the productionization boundary).  The constrained decoder
+   rejects `"height"`, `"distance"`, `"distance to center"`, `"cluster_size"`,
+   etc. at generation time — these previously passed generation and then died
+   in the retry loop as a pydantic enum error.
+2. **SUBREGION is a singleton + valid visual scope** (`taskgraph_lab/taskgraph/type_checker.py`).
+   SUBREGION always yields exactly one `Region`, so it is a singleton mode for
+   `ATTRIBUTE` and a valid visual scope for `LOCATE.image`/`COUNT.image`/
+   `VLM_REASON.image`/etc.  Only non-SUBREGION SELECT results remain forbidden
+   as visual scopes.
+3. **SUBREGION runtime null-reference fallback** (`src/sat_rs_vlm/taskgraph/operators.py`).
+   `SELECT_SUBREGION(candidates, null, ...)` (the canonical DSL form, dominant
+   in lab training data) now falls back to the single previously-selected
+   candidate as the reference instead of UNRESOLVED.
+4. **SELECT cascade localization** (`runtime_types.py`, `executor.py`,
+   `input_composer.py`):
+   - `SelectResultConsumptionError` now carries the upstream `method` and
+     `reason` (e.g. `RELATION requires exactly one reference`).
+   - `TaskGraphExecutionError.details` gains `input_producers` mapping each
+     input role to the producing operator (e.g. `candidates → SELECT`).
+   - Empty-EntitySet materialization errors report upstream provenance
+     (`proposal_query`, `provider`, …).
+5. **Prompt** (`planner_student_system_prompt.txt`): explicitly documents that
+   `SELECT_RANK` criterion must be `"bbox_area"` or `"score"`.
+
+## Regression safety
+
+- All 26 lab DSL compiler fixtures still pass under the tightened grammar.
+- 331 tests pass (taskgraph unit + lab tests + detector providers); the only
+  failing test (`test_hierarchical_locator_adapter_preserves_nested_global_scope`)
+  fails identically at the base commit (environment `LocatorError`, unrelated).
+
+## Estimated impact on the original 2,013-sample MME run
+
+Of the 1,382 failures in that run, 456 rows belong to the now-fixed families:
+
+- 420 LAE sidecar worker-failures (surfaced correctly by `d813831`; the real
+  `failure_stage`/`error` is now visible),
+- 20 `criterion=height`, 7 `width`, 1 each `number of excavators`, `white roof
+  area`, `distance to railway`, `floor` (grammar-blocked),
+- 5 `criterion=area/size` (already normalized by `d61a7f1`).
+
+Note: `d813831` does not by itself make those 420 samples succeed — it exposes
+the real worker failure (model-init / proposal-generation) that the old id
+check masked.  The memory-patch replay (`aeab77e`) showed those are transient
+GPU-state failures; the full count-recovery requires re-running.
+
+## Remaining planner-semantic families (not boundary gaps)
+
+- `input_type_mismatch`, `dedicated_operator_bypass`, `dead_node`,
+  `relation_result_not_consumed`, `missing_residual_final_question`,
+  `authoritative_count_visual_reintroduction` — the planner emit invalid graphs
+  that the validator (correctly) rejects; today these only get the 2-attempt
+  retry loop.
+- `select_ordinal_then_locate` (LOCATE.image on a non-SUBREGION select) stays
+  rejected; the planner must instead use SELECT_SUBREGION first.
+- `relation_then_attribute` (RELATION→ATTRIBUTE without singleton select)
+  stays rejected; the planner must add RANK/ORDINAL/EXTREME first.
