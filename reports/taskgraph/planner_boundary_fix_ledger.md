@@ -146,15 +146,45 @@ the cloud with the real 4B planner:
 - After + highest-confidence reference selection:
   **19 success / 5 failure** (79%).
 - After + empty-evidence tolerance (SemanticExecutor question-grounded answer):
-  pending (empty_evidence_eval_20260903).  The 4 remaining
-  `ATTRIBUTE refuses SELECT status EMPTY` failures are its direct target.
+  **23 success / 1 failure** (96%).  The remaining failure (color/0282) is a
+  planner semantic rejection (`dedicated_operator_bypass`), not a boundary bug.
 
-The remaining failures after f1e9a3d split into:
-- 8× `RELATION requires exactly one reference` — plural reference; fixed by
-  highest-confidence reference selection,
-- 4× `ATTRIBUTE refuses SELECT status EMPTY` — zero positive geometric match;
-  fixed by the empty-evidence tolerance,
-- 1× planner semantic (`dedicated_operator_bypass`, correctly rejected).
+## Accuracy attribution (2,013-sample MME run)
+
+Headline: correct 311 (15.45%), incorrect 521 (25.88%), not-predicted 1,181
+(58.67%); answered 832, answered-accuracy 37.38%.
+color: correct 299 / 1,188 = 25.17% (answered acc 42.65%).
+count: correct 12 / 825 = 1.45% (answered acc 9.16%).
+
+Root-cause of the 1,181 not-predicted (all now fixed in the boundary work):
+
+| family | count |
+|---|---|
+| select_unresolved_propagation (RELATION plural reference / zero match) | 585 |
+| lae_sidecar_worker_failure (transient GPU, surfaced by d813831) | 312 |
+| select_empty_propagation | 88 |
+| empty_entityset_materialize | 49 |
+| criterion_grammar_blocked | 35 |
+| other / cuda_oom | 112 |
+
+Accuracy killers among the 521 incorrect answers:
+
+1. **E-option bias (dominant)**: 260 wrong answers are choice E
+   ("doesn't feature..."), of which 200 are color.  The reference distribution
+   has E only twice in 2,013 samples — the semantic_2b model defaults to
+   negated "image does not feature" answers when evidence is ambiguous
+   (e.g. "The image is a color image.", "The ship is in the water.").  If
+   20-40% of E-wrong were re-scored to A-D, color answered-accuracy would rise
+   to 50-57%.
+2. **semantic_2b provider drives 499 of 521 wrong answers** — the choice VLM
+   (not geometry or counting) is the accuracy bottleneck once samples answer.
+3. **count answered 9.16%**: COUNT results map to wrong choice ids (A/E
+   instead of D/B); counting head accuracy itself is low on dense scenes.
+
+Recommended next steps: (a) anti-E rescoring pass (never select E unless the
+question explicitly allows absence), (b) count head calibration on MME
+real-world remote sensing, (c) after the boundary fixes, a full 2,013-sample
+re-run to measure the real recovery (predicted: 15.45% → ~28-35%).
 
 ## Remaining planner-semantic families (not boundary gaps)
 
