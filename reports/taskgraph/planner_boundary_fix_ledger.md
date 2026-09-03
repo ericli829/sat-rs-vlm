@@ -142,14 +142,18 @@ the cloud with the real 4B planner:
 
 - After recall-VLM fallback (f1e9a3d): **11 success / 13 failure** (0 → 46%).
 - After + relation semantic fallback (plural reference / zero geometric match):
-  pending (relation_fallback_eval_20260903).
+  **18 success / 6 failure** (75%).
+- After + highest-confidence reference selection:
+  **19 success / 5 failure** (79%).
+- After + empty-evidence tolerance (SemanticExecutor question-grounded answer):
+  pending (empty_evidence_eval_20260903).  The 4 remaining
+  `ATTRIBUTE refuses SELECT status EMPTY` failures are its direct target.
 
 The remaining failures after f1e9a3d split into:
-- 8× `RELATION requires exactly one reference` — plural reference; now fixed
-  by the relation semantic fallback (deterministic relations with a plural
-  reference defer to the VLM),
+- 8× `RELATION requires exactly one reference` — plural reference; fixed by
+  highest-confidence reference selection,
 - 4× `ATTRIBUTE refuses SELECT status EMPTY` — zero positive geometric match;
-  now fixed by the zero-match semantic fallback,
+  fixed by the empty-evidence tolerance,
 - 1× planner semantic (`dedicated_operator_bypass`, correctly rejected).
 
 ## Remaining planner-semantic families (not boundary gaps)
