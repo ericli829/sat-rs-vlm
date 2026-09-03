@@ -104,6 +104,11 @@ def test_empty_detection_falls_back_to_semantic_visual_entity(tmp_path: Path) ->
         assert entity.provenance.get("fallback_kind") == "semantic_visual"
         assert entity.provenance.get("fallback_required") is True
         assert entity.region.bbox_xyxy_global == (5.0, 5.0, 155.0, 115.0)
+        # The fallback is visible on the EntitySet provenance for tracing.
+        assert outcome.value.provenance.get("fallback_triggered") is True
+        assert outcome.value.provenance.get("fallback_reason") == (
+            "EMPTY_PROPOSALS_AND_REGIONAL_FALLBACK"
+        )
         # The semantic VLM can compose a visual from the fallback entity.
         composed = composer.compose_named(
             {"entity": outcome.value},

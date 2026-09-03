@@ -1234,6 +1234,16 @@ class LocateExecutor:
             refinement_metadata["final_resolution_status"] = refinement_metadata[
                 "resolution_status"
             ]
+        if refinement_metadata.get("fallback_triggered"):
+            value.provenance.update(
+                {
+                    "fallback_triggered": True,
+                    "fallback_reason": refinement_metadata.get("fallback_reason"),
+                    "fallback_provider": refinement_metadata.get("fallback_provider"),
+                    "fallback_scope": refinement_metadata.get("fallback_scope"),
+                    "fallback_kind": value.provenance.get("fallback_kind", "semantic_visual"),
+                }
+            )
         value.provenance.update(
             {
                 "proposal_query": detector_target.category,
