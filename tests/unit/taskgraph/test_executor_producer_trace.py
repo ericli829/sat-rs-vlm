@@ -14,7 +14,7 @@ from sat_rs_vlm.taskgraph.executor import (
 )
 from sat_rs_vlm.taskgraph.operators import GeometryExecutor, OperatorContext, SelectExecutor
 from sat_rs_vlm.taskgraph.providers import FakeSemanticVLMProvider
-from sat_rs_vlm.taskgraph.runtime_types import ImageRef
+from sat_rs_vlm.taskgraph.runtime_types import ImageRef, Region, SelectResult, SelectStatus
 from sat_rs_vlm.taskgraph.schema import OperatorName, TaskGraph
 from sat_rs_vlm.taskgraph.store import RuntimeStore
 
@@ -79,3 +79,34 @@ def test_graph_error_reports_upstream_producer_ops(tmp_path: Path) -> None:
     assert details["node_id"] == "n3"
     # n3 consumes $n2, produced by SELECT.
     assert details["input_producers"]["candidates"] == "SELECT"
+
+
+def test_subregion_select_result_materializes_for_count_image() -> None:
+    """A SUBREGION SelectResult (single Region) is a valid COUNT.image scope."""
+    from sat_rs_vlm.taskgraph.operators import CountExecutor
+    from sat_rs_vlm.taskgraph.providers import FakeCountingProvider
+    from sat_rs_vlm.taskgraph.runtime_types import ScalarInt
+    from sat_rs_vlm.taskgraph.schema import GraphNode
+
+    image = ImageRef("fixture", width=100, height=100)
+    region = Region(image, (10, 10, 50, 50), {})
+    subregion = SelectResult(region, SelectStatus.OK, "geometry", None, 1.0, {})
+    router = CapabilityRouter(
+        {
+            OperatorName.COUNT: ExecutorBinding(CountExecutor(FakeCountingProvider())),
+        }
+    )
+    count_node = GraphNode.model_validate(
+        {
+            "id": "n4",
+            "op": "COUNT",
+            "inputs": {"image": "$n3"},
+            "params": {"target": {"category": "car", "attributes": {}}, "entire": False},
+        }
+    )
+    outcome, _ = router.execute(
+        count_node,
+        {"image": subregion},
+        OperatorContext("?", (), None),
+    )
+    assert isinstance(outcome.value, ScalarInt)

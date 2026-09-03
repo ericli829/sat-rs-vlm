@@ -58,7 +58,11 @@ class CapabilityRouter:
             "scope": (False, True),
         },
         OperatorName.GROUP: {"entities": (True, False)},
-        OperatorName.COUNT: {"entities": (True, False)},
+        OperatorName.COUNT: {
+            # COUNT.image accepts a SUBREGION SelectResult (always one Region).
+            "image": (False, True),
+            "entities": (True, False),
+        },
         OperatorName.ATTRIBUTE: {"entity": (False, True)},
         OperatorName.CLASSIFY: {"source": (False, True)},
         OperatorName.MULTILABEL_CLASSIFY: {"source": (False, True)},
@@ -75,6 +79,13 @@ class CapabilityRouter:
             "image": (False, True),
             "evidence": (False, False),
         },
+        # SUBREGION SELECT results (always exactly one Region) are valid visual
+        # scopes; materialize them before the runtime contract check.
+        OperatorName.REGION: {"image": (False, True)},
+        OperatorName.REGION_FROM_BBOX: {"image": (False, True)},
+        OperatorName.FIND_MARKER: {"image": (False, True)},
+        OperatorName.LOCATE: {"image": (False, True)},
+        OperatorName.BUILD_ROUTE_CONTEXT: {"image": (False, True)},
     }
 
     def __init__(self, bindings: dict[OperatorName, ExecutorBinding]) -> None:
@@ -125,7 +136,10 @@ class CapabilityRouter:
         except KeyError as exc:
             raise KeyError(f"no capability binding for operator {node.op.value}") from exc
         try:
-            validate_runtime_inputs(node.op.value, inputs)
+            # Materialize select-aware inputs FIRST: a SUBREGION SelectResult
+            # (always exactly one Region) is a valid visual scope for image
+            # roles but is not itself an ImageRef/Region.  The runtime contract
+            # validates what the operator actually receives.
             inputs = self._materialize_select_inputs(node, inputs)
             validate_runtime_inputs(node.op.value, inputs)
         except Exception as contract_error:
