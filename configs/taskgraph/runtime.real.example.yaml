@@ -6,12 +6,15 @@ dataset_policy:
     visual_question_answering: DIRECT_VLM
     attribute: DIRECT_VLM
     classification: DIRECT_VLM
-    count: DIRECT_DETECTION
-    counting: DIRECT_DETECTION
-    grounding: DIRECT_DETECTION
-    visual_grounding: DIRECT_DETECTION
-    referring_grounding: DIRECT_DETECTION
-    detection: DIRECT_DETECTION
+    # Counting/grounding/detection route fully through the semantic 2B VLM:
+    # the LAE detector under-counts small objects and the Choice VLM already
+    # outperforms it on VRSBench visuals.
+    count: DIRECT_VLM
+    counting: DIRECT_VLM
+    grounding: DIRECT_VLM
+    visual_grounding: DIRECT_VLM
+    referring_grounding: DIRECT_VLM
+    detection: DIRECT_VLM
     default: DIRECT_VLM
   LEVIR_CC:
     default: DIRECT_VLM

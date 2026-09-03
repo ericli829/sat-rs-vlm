@@ -458,7 +458,7 @@ def test_case_f_vrs_vqa_bypasses_planner_and_dag() -> None:
         runtime.close()
 
 
-def test_case_g_vrs_count_bypasses_taskgraph_and_keeps_choice_text_only() -> None:
+def test_case_g_vrs_count_routes_through_direct_vlm_with_visuals() -> None:
     runtime = fake_runtime(
         detection_boxes=[[1, 1, 2, 2], [3, 1, 4, 2]],
         choice_responses={"choice": "B"},
@@ -475,9 +475,11 @@ def test_case_g_vrs_count_bypasses_taskgraph_and_keeps_choice_text_only() -> Non
                 target_category="car",
             )
         )
-        assert result.execution_mode is ExecutionMode.DIRECT_DETECTION
+        # Counting is routed fully through the semantic 2B VLM: the choice
+        # resolver answers from the input image, not from detector boxes.
+        assert result.execution_mode is ExecutionMode.DIRECT_VLM
         assert result.output.choice_id == "B"
-        assert runtime.choice_resolver.last_model_input.visual_inputs == ()
+        assert runtime.choice_resolver.last_model_input.visual_inputs != ()
     finally:
         runtime.close()
 

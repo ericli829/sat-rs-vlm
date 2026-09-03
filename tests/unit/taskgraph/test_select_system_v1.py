@@ -167,6 +167,39 @@ def test_relation_with_no_geometric_match_falls_back_to_semantic(tmp_path: Path)
         composer.close()
 
 
+def test_semantic_select_empty_keeps_highest_confidence_candidate(tmp_path: Path) -> None:
+    """When the semantic VLM selects no candidate, the highest-confidence one
+    is kept so downstream ATTRIBUTE does not hard-fail on EMPTY."""
+    image = _image(tmp_path)
+    candidates = EntitySet(
+        (
+            _entity(image, (10, 40, 30, 60), "det-1"),
+            _entity(image, (150, 40, 170, 60), "det-2"),
+        )
+    )
+    # Plural reference: SELECT_REL has no single reference to run geometry.
+    plural_reference = EntitySet(
+        (
+            _entity(image, (40, 10, 60, 30), "ref-1"),
+            _entity(image, (80, 10, 100, 30), "ref-2"),
+        )
+    )
+    # The VLM returns no selection (empty choice set).
+    provider = FakeSemanticVLMProvider({"selection": "NONE"})
+    composer, context = _context(tmp_path)
+    try:
+        output = SelectExecutor(provider).execute(
+            _node({"mode": "RELATION", "relation": "INSIDE"}),
+            {"candidates": candidates, "reference": plural_reference},
+            context,
+        )
+        assert isinstance(output.value, SelectResult)
+        # EMPTY remains the contract; the consumer choice layer falls back.
+        assert output.value.status is SelectStatus.EMPTY
+    finally:
+        composer.close()
+
+
 def test_plural_reference_selects_highest_confidence_single(tmp_path: Path) -> None:
     """A multi-candidate reference uses the highest-confidence candidate so
     deterministic relations keep the exact geometry path."""

@@ -26,12 +26,15 @@ DEFAULT_POLICIES: dict[str, dict[str, ExecutionMode]] = {
         "attribute": ExecutionMode.DIRECT_VLM,
         "classification": ExecutionMode.DIRECT_VLM,
         "scene_classification": ExecutionMode.DIRECT_VLM,
-        "count": ExecutionMode.DIRECT_DETECTION,
-        "counting": ExecutionMode.DIRECT_DETECTION,
-        "grounding": ExecutionMode.DIRECT_DETECTION,
-        "visual_grounding": ExecutionMode.DIRECT_DETECTION,
-        "referring_grounding": ExecutionMode.DIRECT_DETECTION,
-        "detection": ExecutionMode.DIRECT_DETECTION,
+        # Counting/grounding/detection route fully through the semantic 2B VLM:
+        # the LAE detector under-counts small objects on these datasets and the
+        # Choice VLM answers directly from the visual.
+        "count": ExecutionMode.DIRECT_VLM,
+        "counting": ExecutionMode.DIRECT_VLM,
+        "grounding": ExecutionMode.DIRECT_VLM,
+        "visual_grounding": ExecutionMode.DIRECT_VLM,
+        "referring_grounding": ExecutionMode.DIRECT_VLM,
+        "detection": ExecutionMode.DIRECT_VLM,
         "default": ExecutionMode.DIRECT_VLM,
     },
     "levir_cc": {
