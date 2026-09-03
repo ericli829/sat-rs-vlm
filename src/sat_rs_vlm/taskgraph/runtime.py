@@ -1014,7 +1014,7 @@ def runtime_from_config(
         else None
     )
     locate_max_candidates = int(locate_detector_cfg.get("max_candidates", 16))
-    locate_clip_rerank_top_k = int(locate_detector_cfg.get("clip_rerank_top_k", 4))
+    locate_clip_rerank_top_k = int(locate_detector_cfg.get("clip_rerank_top_k", 16))
     if locate_max_candidates < 1:
         raise ValueError("providers.detection.locate_detector.max_candidates must be positive")
     if locate_clip_rerank_top_k < 1:

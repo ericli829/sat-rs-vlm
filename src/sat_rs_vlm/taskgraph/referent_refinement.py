@@ -12,7 +12,7 @@ from typing import Any
 from .choice_config import ChoiceSystemConfig
 from .input_composer import InputComposer
 from .providers import ChoiceScoringRequest, SemanticVLMProvider
-from .runtime_types import Entity, EntitySet, ImageRef, Region
+from .runtime_types import Entity, EntitySet, ImageRef, Region, RegionSet
 from .schema import TargetSpec
 
 
@@ -149,6 +149,161 @@ class ReferentRefiner:
 
         with Image.open(image.path.resolve()) as source:
             return float(source.width), float(source.height)
+
+    @classmethod
+    def _fallback_grid_indices(cls, question: str, count: int) -> tuple[int, ...]:
+        if count < 1:
+            return ()
+        spatial_indices = {
+            "upper_left": 0,
+            "top": 1,
+            "upper_right": 2,
+            "left": 3,
+            "center": 4,
+            "right": 5,
+            "lower_left": 6,
+            "bottom": 7,
+            "lower_right": 8,
+        }
+        index = spatial_indices.get(cls._spatial_hint(question), min(4, count - 1))
+        return (index,) if index < count else (count - 1,)
+
+    def select_grid_ids(
+        self,
+        grids: Sequence[Region],
+        *,
+        question: str,
+        target: TargetSpec,
+    ) -> tuple[tuple[int, ...], dict[str, Any]]:
+        started = time.perf_counter()
+        regions = tuple(grids)
+        choice_ids = tuple(chr(ord("A") + index) for index in range(len(regions)))
+        grid_ids = [
+            str(region.provenance.get("grid_id", f"grid_{index + 1:02d}"))
+            for index, region in enumerate(regions)
+        ]
+        metadata: dict[str, Any] = {
+            "method": "coarse_grid_semantic_selection",
+            "grid_count": len(regions),
+            "grid_ids": grid_ids,
+            "selected_grid_ids": [],
+            "selected_grid_indices": [],
+            "grid_scores": {},
+            "selection_status": "UNRESOLVED",
+            "question": question,
+            "target_spec": {
+                "category": target.category,
+                "attributes": dict(target.attributes),
+            },
+            "provider": None,
+            "model_id": None,
+            "reasoning_text": None,
+            "latency_ms": 0.0,
+        }
+        if not regions:
+            metadata["failure_reason"] = "no_grid_regions"
+            metadata["latency_ms"] = (time.perf_counter() - started) * 1000.0
+            return (), metadata
+
+        def geometry_fallback(reason: str | None = None) -> tuple[tuple[int, ...], dict[str, Any]]:
+            indices = self._fallback_grid_indices(question, len(regions))
+            metadata.update(
+                {
+                    "method": "coarse_grid_geometry_fallback",
+                    "selected_grid_ids": [grid_ids[index] for index in indices],
+                    "selected_grid_indices": list(indices),
+                    "selection_status": "GEOMETRY_FALLBACK",
+                    "failure_reason": reason,
+                    "latency_ms": (time.perf_counter() - started) * 1000.0,
+                }
+            )
+            return indices, metadata
+
+        if not self.config.enabled:
+            return geometry_fallback("semantic_refinement_disabled")
+
+        option_positions = (
+            "top-left",
+            "top-center",
+            "top-right",
+            "middle-left",
+            "center",
+            "middle-right",
+            "bottom-left",
+            "bottom-center",
+            "bottom-right",
+        )
+        option_texts = tuple(
+            f"Grid {choice_id}: "
+            f"{option_positions[index] if index < len(option_positions) else grid_id}"
+            for index, (choice_id, grid_id) in enumerate(zip(choice_ids, grid_ids, strict=True))
+        )
+        try:
+            model_input = self.composer.compose_named(
+                {"candidates": RegionSet(regions, {"coarse_grid": True, "grid_ids": grid_ids})},
+                question=(
+                    "Select one to three grid cells that most likely contain the target. "
+                    "Use only the marked 3x3 overview and do not answer the original question.\n\n"
+                    f"Original referring expression: {question}\n"
+                    f"Target specification: category={target.category}; "
+                    f"attributes={dict(target.attributes)}"
+                ),
+                options=option_texts,
+            )
+            mapping = model_input.metadata.get("candidate_mapping")
+            if not isinstance(mapping, Mapping) or len(mapping) != len(regions):
+                raise RuntimeError("grid candidate mapping unavailable")
+            scorer = getattr(self.semantic, "reason_and_choose", None)
+            if not callable(scorer):
+                raise RuntimeError("semantic provider lacks reason_and_choose")
+            scored = scorer(
+                ChoiceScoringRequest(
+                    model_input=model_input,
+                    answer_type="CHOICE_MULTI",
+                    choice_ids=choice_ids,
+                    option_texts=option_texts,
+                    single_choice_suffix=self.choice_config.single_choice_suffix,
+                    multi_verify_template=self.choice_config.multi_verify_template,
+                    multi_select_threshold=0.0,
+                    purpose="locate_grid_fallback",
+                )
+            )
+            scores = {
+                choice_id: float(scored.scores.get(choice_id, 0.0))
+                for choice_id in choice_ids
+            }
+            ranked = sorted(
+                range(len(choice_ids)),
+                key=lambda index: (-scores[choice_ids[index]], index),
+            )
+            selected = {
+                choice_id for choice_id in scored.selected_ids if choice_id in scores
+            }
+            selected_indices = tuple(index for index in ranked if choice_ids[index] in selected)[:3]
+            if not selected_indices:
+                selected_indices = (ranked[0],)
+            selected_indices = tuple(sorted(selected_indices))
+            metadata.update(
+                {
+                    "selected_grid_ids": [grid_ids[index] for index in selected_indices],
+                    "selected_grid_indices": list(selected_indices),
+                    "grid_scores": {
+                        grid_ids[index]: scores[choice_ids[index]]
+                        for index in range(len(regions))
+                    },
+                    "selection_status": "SEMANTIC_RESOLVED",
+                    "provider": scored.provider,
+                    "model_id": scored.model_id,
+                    "reasoning_text": scored.reasoning_text,
+                    "selected_model_choice_ids": [
+                        choice_ids[index] for index in selected_indices
+                    ],
+                    "latency_ms": (time.perf_counter() - started) * 1000.0,
+                }
+            )
+            return selected_indices, metadata
+        except Exception as exc:
+            return geometry_fallback(f"{type(exc).__name__}: {exc}")
 
     def _rank_for_budget(self, entities: tuple[Entity, ...], question: str) -> tuple[int, ...]:
         detector_scores = [

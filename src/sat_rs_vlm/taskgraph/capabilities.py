@@ -151,6 +151,16 @@ class TargetCapabilityClassifier:
             )
         self.detector_categories = frozenset(detector_categories)
         self.retriever_categories = frozenset(retriever_categories)
+        self._detector_aliases = tuple(
+            sorted(
+                (
+                    (alias, canonical)
+                    for alias, canonical in self._aliases.items()
+                    if _normalized(canonical) in self.detector_categories
+                ),
+                key=lambda item: (-len(item[0].split()), -len(item[0]), item[0]),
+            )
+        )
         self.metadata_source = source
 
     @classmethod
@@ -176,6 +186,18 @@ class TargetCapabilityClassifier:
         requested = target.category if isinstance(target, TargetSpec) else str(target)
         normalized = _normalized(requested)
         canonical = self._aliases.get(normalized)
+        if canonical is None:
+            tokens = normalized.split()
+            for alias, alias_canonical in self._detector_aliases:
+                alias_tokens = alias.split()
+                if len(alias_tokens) > len(tokens):
+                    continue
+                if any(
+                    tokens[index : index + len(alias_tokens)] == alias_tokens
+                    for index in range(len(tokens) - len(alias_tokens) + 1)
+                ):
+                    canonical = alias_canonical
+                    break
         canonical_key = _normalized(canonical) if canonical is not None else normalized
         if canonical_key in self.detector_categories:
             return TargetCapabilityDecision(

@@ -1045,6 +1045,11 @@ class ProposalDetectionAdapter:
                     crop.save(detector_path)
             proposal_query = request.target.category.strip()
             ranking_query = request.target.phrase()
+            effective_clip_top_k = (
+                max(self.clip_rerank_top_k, self.max_candidates)
+                if request.apply_locate_policy
+                else None
+            )
             rerank_predict = getattr(self._provider, "predict_with_rerank_query", None)
             detector_only_predict = getattr(self._provider, "predict_detector_only", None)
             if request.use_clip_rerank and callable(rerank_predict):
@@ -1052,7 +1057,7 @@ class ProposalDetectionAdapter:
                     detector_path,
                     proposal_query,
                     ranking_query,
-                    top_k=(self.clip_rerank_top_k if request.apply_locate_policy else None),
+                    top_k=effective_clip_top_k,
                 )
             elif not request.use_clip_rerank and callable(detector_only_predict):
                 result = detector_only_predict(detector_path, proposal_query)
@@ -1080,7 +1085,7 @@ class ProposalDetectionAdapter:
                     "max_candidates": self.max_candidates,
                     "policy_applied": request.apply_locate_policy,
                     "clip_rerank_top_k": (
-                        self.clip_rerank_top_k if request.apply_locate_policy else None
+                        effective_clip_top_k
                     ),
                     "raw_candidate_count": raw_candidate_count,
                     "retained_candidate_count": len(retained),

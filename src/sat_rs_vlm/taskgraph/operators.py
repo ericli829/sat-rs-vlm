@@ -786,43 +786,104 @@ class LocateExecutor:
                 break
         return tuple(kept)
 
+    @staticmethod
+    def _coarse_grid_regions(scope: ImageRef | Region) -> tuple[Region, ...]:
+        image = scope if isinstance(scope, ImageRef) else scope.image
+        if isinstance(scope, Region):
+            x0, y0, x1, y1 = scope.bbox_xyxy_global
+        else:
+            width, height = _dimensions(scope)
+            x0, y0, x1, y1 = 0.0, 0.0, float(width), float(height)
+        cell_width = (x1 - x0) / 3.0
+        cell_height = (y1 - y0) / 3.0
+        return tuple(
+            Region(
+                image,
+                (
+                    x0 + column * cell_width,
+                    y0 + row * cell_height,
+                    x0 + (column + 1) * cell_width,
+                    y0 + (row + 1) * cell_height,
+                ),
+                {"grid_id": f"grid_{row * 3 + column + 1:02d}"},
+            )
+            for row in range(3)
+            for column in range(3)
+        )
+
     def _regional_fallback(
         self,
         scope: ImageRef | Region,
         *,
         target: TargetSpec,
+        detector_target: TargetSpec | None = None,
+        question: str,
     ) -> tuple[EntitySet, dict[str, Any]]:
+        detector_target = detector_target or target
         query = target.phrase()
-        regions = self.retriever.retrieve(
-            RegionRetrievalRequest(
-                scope,
-                query,
-                search_scope=scope if isinstance(scope, Region) else None,
-                max_candidates=3,
+        grids = self._coarse_grid_regions(scope)
+        if self.refiner is not None:
+            selected_indices, grid_selection = self.refiner.select_grid_ids(
+                grids,
+                question=question,
+                target=target,
             )
+        else:
+            selected_indices = (4,)
+            grid_selection = {
+                "method": "coarse_grid_geometry_fallback",
+                "grid_count": len(grids),
+                "grid_ids": [
+                    str(region.provenance.get("grid_id", f"grid_{index + 1:02d}"))
+                    for index, region in enumerate(grids)
+                ],
+                "selected_grid_ids": [str(grids[4].provenance.get("grid_id", "grid_05"))],
+                "selected_grid_indices": [4],
+                "selection_status": "GEOMETRY_FALLBACK",
+                "failure_reason": "semantic_refiner_unavailable",
+                "latency_ms": 0.0,
+            }
+        selected_indices = tuple(
+            index for index in selected_indices[:3] if 0 <= index < len(grids)
         )
+        if not selected_indices:
+            selected_indices = (4,)
         regional_entities: list[Entity] = []
         detector_calls = 0
         region_records: list[dict[str, Any]] = []
         clip_records: list[dict[str, Any]] = []
-        for region_index, candidate in enumerate(regions.candidates):
+        for grid_index in selected_indices:
+            candidate = grids[grid_index]
             detector_calls += 1
-            regional_detection = self.detection.detect(
-                DetectionRequest(candidate.region, target, "LOCATE")
-            )
+            region_record: dict[str, Any] = {
+                "region_id": str(candidate.provenance.get("grid_id", f"grid_{grid_index + 1:02d}")),
+                "grid_index": grid_index,
+                "bbox_xyxy_global": list(candidate.bbox_xyxy_global),
+            }
+            try:
+                regional_detection = self.detection.detect(
+                    DetectionRequest(candidate, detector_target, "LOCATE")
+                )
+            except Exception as exc:
+                region_record.update(
+                    {
+                        "candidate_count": 0,
+                        "provider": self.detection.provider_name,
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
+                )
+                region_records.append(region_record)
+                continue
             clip_metadata = regional_detection.metadata.get("clip_rerank", {})
             if isinstance(clip_metadata, dict):
                 clip_records.append(dict(clip_metadata))
-            region_box = candidate.region.bbox_xyxy_global
-            region_records.append(
+            region_record.update(
                 {
-                    "region_id": f"region_{region_index + 1:02d}",
-                    "bbox_xyxy_global": list(region_box),
-                    "score": candidate.relevance_score,
                     "candidate_count": len(regional_detection.detections.entities),
                     "provider": regional_detection.provider,
                 }
             )
+            region_records.append(region_record)
             for candidate_index, entity in enumerate(regional_detection.detections.entities):
                 regional_entities.append(
                     Entity(
@@ -832,27 +893,39 @@ class LocateExecutor:
                         {
                             **entity.provenance,
                             "candidate_id": (
-                                f"regional_{region_index + 1:02d}_{candidate_index + 1:04d}"
+                                f"{region_record['region_id']}_{candidate_index + 1:04d}"
                             ),
                             "regional_fallback": True,
-                            "regional_fallback_region": f"region_{region_index + 1:02d}",
+                            "coarse_grid_fallback": True,
+                            "regional_fallback_region": region_record["region_id"],
                         },
                     )
                 )
         merged = self._merge_fallback_entities(regional_entities, self.max_candidates)
         metadata = {
             "regional_fallback_triggered": True,
+            "regional_fallback_method": "coarse_grid",
+            "coarse_grid_fallback_triggered": True,
+            "coarse_grid_fallback_grid_count": len(grids),
+            "coarse_grid_fallback_selected_grid_indices": list(selected_indices),
+            "coarse_grid_fallback_selected_grid_ids": [
+                str(grids[index].provenance.get("grid_id", f"grid_{index + 1:02d}"))
+                for index in selected_indices
+            ],
+            "coarse_grid_fallback_selection": grid_selection,
+            "coarse_grid_fallback_regions": region_records,
+            "coarse_grid_fallback_detector_calls": detector_calls,
+            "coarse_grid_fallback_candidate_count": len(merged),
             "regional_fallback_query": query,
             "regional_fallback_regions": region_records,
-            "regional_fallback_region_count": len(regions.candidates),
+            "regional_fallback_region_count": len(selected_indices),
             "regional_fallback_detector_calls": detector_calls,
             "regional_fallback_candidate_count": len(merged),
-            "regional_fallback_provider": regions.provider,
-            "regional_fallback_provider_metadata": dict(regions.metadata),
+            "regional_fallback_provider": self.detection.provider_name,
             "clip_rerank_applied": any(
                 item.get("status") == "applied" for item in clip_records
             ),
-            "clip_query": query,
+            "clip_query": detector_target.category,
             "clip_input_candidate_count": sum(
                 int(item.get("candidate_count", 0)) for item in clip_records
             ),
@@ -867,7 +940,8 @@ class LocateExecutor:
                 "provider": self.detection.provider_name,
                 "capability": "DETECTOR",
                 "regional_fallback": metadata,
-                "proposal_query": target.category,
+                "coarse_grid_fallback": metadata,
+                "proposal_query": detector_target.category,
                 "proposal_query_mode": "category_only",
             },
         ), metadata
@@ -998,11 +1072,17 @@ class LocateExecutor:
                     "referent_refinement": refinement_metadata,
                 },
             )
+        detector_target = (
+            target.model_copy(update={"category": decision.canonical_category})
+            if decision.canonical_category
+            and decision.canonical_category.casefold() != target.category.casefold()
+            else target
+        )
         should_refine, trigger_reason = self._needs_refinement(node, target, context)
         detected = self.detection.detect(
             DetectionRequest(
                 scope,
-                target,
+                detector_target,
                 "LOCATE",
                 apply_locate_policy=should_refine,
                 use_clip_rerank=should_refine,
@@ -1039,7 +1119,12 @@ class LocateExecutor:
         value = detected.detections
         if not before_entities and should_refine:
             try:
-                value, regional_metadata = self._regional_fallback(scope, target=target)
+                value, regional_metadata = self._regional_fallback(
+                    scope,
+                    target=target,
+                    detector_target=detector_target,
+                    question=context.final_question or context.question,
+                )
             except Exception as exc:
                 value = EntitySet(
                     (),
@@ -1051,12 +1136,14 @@ class LocateExecutor:
                 )
                 regional_metadata = {
                     "regional_fallback_triggered": True,
+                    "regional_fallback_method": "coarse_grid",
+                    "coarse_grid_fallback_triggered": True,
                     "regional_fallback_query": target.phrase(),
                     "regional_fallback_regions": [],
                     "regional_fallback_region_count": 0,
                     "regional_fallback_detector_calls": 0,
                     "regional_fallback_candidate_count": 0,
-                    "regional_fallback_provider": self.retriever.provider_name,
+                    "regional_fallback_provider": self.detection.provider_name,
                     "regional_fallback_error": f"{type(exc).__name__}: {exc}",
                 }
             refinement_metadata.update(
@@ -1065,9 +1152,9 @@ class LocateExecutor:
                     "fallback_triggered": True,
                     "fallback_reason": "EMPTY_PROPOSALS",
                     "fallback_provider": regional_metadata.get(
-                        "regional_fallback_provider", self.retriever.provider_name
+                        "regional_fallback_provider", self.detection.provider_name
                     ),
-                    "fallback_scope": "bounded_retriever_regions",
+                    "fallback_scope": "bounded_coarse_grid_regions",
                     "resolution_status": (
                         self._primary_resolution_status(len(value.entities))
                         if value.entities
@@ -1116,7 +1203,7 @@ class LocateExecutor:
             ]
         value.provenance.update(
             {
-                "proposal_query": target.category,
+                "proposal_query": detector_target.category,
                 "original_target_spec": {
                     "category": target.category,
                     "attributes": dict(target.attributes),
