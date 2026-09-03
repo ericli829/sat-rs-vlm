@@ -137,6 +137,19 @@ OPTIONAL_INPUTS = {
 }
 
 
+VISUAL_ONLY_INPUTS = {
+    (OperatorName.REGION, "image"),
+    (OperatorName.REGION_FROM_BBOX, "image"),
+    (OperatorName.FIND_MARKER, "image"),
+    (OperatorName.LOCATE, "image"),
+    (OperatorName.COUNT, "image"),
+    (OperatorName.VLM_REASON, "image"),
+    (OperatorName.BUILD_ROUTE_CONTEXT, "image"),
+}
+
+SINGLETON_SELECT_MODES = {"RANK", "ORDINAL", "EXTREME"}
+
+
 def _refs(value: str | list[str]) -> list[str]:
     return value if isinstance(value, list) else [value]
 
@@ -145,6 +158,7 @@ def check_types(target: PlannerTarget, input_names: set[str]) -> TypeCheckResult
     result = TypeCheckResult(
         inferred={f"${name}": {RuntimeType.IMAGE_REF} for name in sorted(input_names)}
     )
+    nodes_by_ref = {f"${node.id}": node for node in target.nodes}
     for node in target.nodes:
         signature = SIGNATURES[node.op]
         required = {name for name in signature if (node.op, name) not in OPTIONAL_INPUTS}
@@ -188,6 +202,30 @@ def check_types(target: PlannerTarget, input_names: set[str]) -> TypeCheckResult
                             node.id,
                         )
                     )
+                producer = nodes_by_ref.get(ref)
+                if producer is not None and producer.op is OperatorName.SELECT:
+                    if (node.op, name) in VISUAL_ONLY_INPUTS:
+                        result.errors.append(
+                            TypeIssue(
+                                "select_result_not_visual_scope",
+                                f"{node.op.value}.{name} cannot consume SELECT result {ref}; "
+                                "use the selected entity/region as semantic evidence or a source "
+                                "image scope",
+                                node.id,
+                            )
+                        )
+                    if node.op is OperatorName.ATTRIBUTE and name == "entity":
+                        mode = producer.params.get("mode")
+                        mode = getattr(mode, "value", mode)
+                        if str(mode).upper() not in SINGLETON_SELECT_MODES:
+                            result.errors.append(
+                                TypeIssue(
+                                    "attribute_requires_singleton",
+                                    f"ATTRIBUTE.entity={ref} requires a singleton SELECT; "
+                                    "add RANK, ORDINAL, or EXTREME before ATTRIBUTE",
+                                    node.id,
+                                )
+                            )
         result.inferred[f"${node.id}"] = set(OUTPUT_TYPES[node.op])
 
     final_types = set().union(

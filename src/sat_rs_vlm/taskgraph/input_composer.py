@@ -89,9 +89,14 @@ class InputComposer:
         self._artifact_paths: list[str] = []
 
     def close(self) -> None:
+        self.release_runtime_cache()
         if self._temporary is not None:
             self._temporary.cleanup()
             self._temporary = None
+
+    def release_runtime_cache(self) -> None:
+        _load_rgb_image.cache_clear()
+        self._artifact_paths.clear()
 
     def _next_path(self, suffix: str = ".png") -> Path:
         if not self.save_intermediate_artifacts:

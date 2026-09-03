@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import copy
+import gc
 import importlib
 import time
 import uuid
@@ -807,6 +808,20 @@ class HuggingFaceVLMEngine:
     def close(self) -> None:
         for session in list(self._active_sessions.values()):
             session.close()
+        model = self._model
+        torch = self._torch
+        close = getattr(model, "close", None)
+        if callable(close):
+            close()
+        self._active_sessions.clear()
+        self._model = None
+        self._processor = None
+        self._image_module = None
+        gc.collect()
+        cuda = getattr(torch, "cuda", None)
+        empty_cache = getattr(cuda, "empty_cache", None)
+        if callable(empty_cache):
+            empty_cache()
 
     def _resolve_device(self, device: str) -> str:
         """解析运行设备。

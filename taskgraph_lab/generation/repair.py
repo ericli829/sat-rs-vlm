@@ -8,6 +8,7 @@ from taskgraph_lab.taskgraph.validator import ValidationResult
 
 SEMANTIC_ERROR_CODES = {
     "authoritative_count_visual_reintroduction",
+    "attribute_requires_singleton",
     "choice_answer_type_mismatch",
     "count_entities_requires_non_entire",
     "count_input_xor",
@@ -25,6 +26,7 @@ SEMANTIC_ERROR_CODES = {
     "original_choices_copied_into_target",
     "relation_query_should_use_relation",
     "relation_result_not_consumed",
+    "select_result_not_visual_scope",
     "runtime_prediction_in_final_question",
 }
 

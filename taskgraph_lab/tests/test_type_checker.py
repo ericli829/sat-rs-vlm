@@ -82,3 +82,51 @@ def test_route_graph() -> None:
         graph, inputs={"image0": {}}, question_type="MULTIPLE_CHOICE_SINGLE"
     )
     assert report.valid, report.model_dump()
+
+
+def test_select_result_requires_visual_scope_and_attribute_singleton() -> None:
+    visual_scope = {
+        "nodes": [
+            {
+                "id": "n1",
+                "op": "LOCATE",
+                "inputs": {"image": "$image0"},
+                "params": {"target": {"category": "ship", "attributes": {}}},
+            },
+            {
+                "id": "n2",
+                "op": "SELECT",
+                "inputs": {"candidates": "$n1"},
+                "params": {"mode": "RELATION", "relation": "LEFT_OF"},
+            },
+            {
+                "id": "n3",
+                "op": "LOCATE",
+                "inputs": {"image": "$n2"},
+                "params": {"target": {"category": "boat", "attributes": {}}},
+            },
+        ],
+        "final": {
+            "sources": ["$n3"],
+            "question": "Which boat is selected?",
+            "answer_type": "CHOICE_SINGLE",
+        },
+    }
+    _, visual_report = validate_candidate(visual_scope, inputs={"image0": {}})
+    assert "select_result_not_visual_scope" in {item.code for item in visual_report.errors}
+
+    attribute_graph = {
+        "nodes": [
+            visual_scope["nodes"][0],
+            visual_scope["nodes"][1],
+            {
+                "id": "n3",
+                "op": "ATTRIBUTE",
+                "inputs": {"entity": "$n2"},
+                "params": {"attribute": "color"},
+            },
+        ],
+        "final": {"sources": ["$n3"], "answer_type": "LABEL"},
+    }
+    _, attribute_report = validate_candidate(attribute_graph, inputs={"image0": {}})
+    assert "attribute_requires_singleton" in {item.code for item in attribute_report.errors}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import json
 import time
 from collections.abc import Mapping
@@ -303,6 +304,17 @@ def _capture_runtime_resources(torch: Any | None) -> dict[str, Any]:
     }
 
 
+def _release_runtime_resources(torch: Any | None) -> None:
+    gc.collect()
+    try:
+        cuda = getattr(torch, "cuda", None)
+        empty_cache = getattr(cuda, "empty_cache", None)
+        if callable(empty_cache) and bool(getattr(cuda, "is_available", lambda: False)()):
+            empty_cache()
+    except Exception:
+        pass
+
+
 class TaskGraphRuntime:
     def __init__(
         self,
@@ -434,15 +446,47 @@ class TaskGraphRuntime:
             )
         elif self.providers.planner is not None:
             planner_started = time.perf_counter()
-            graph = self.providers.planner.plan(
-                PlannerRequest(
-                    request.question,
-                    request.question_type.value,
-                    request.options,
-                    {f"${key}": value for key, value in images.items()},
-                    request.sample_id,
+            try:
+                graph = self.providers.planner.plan(
+                    PlannerRequest(
+                        request.question,
+                        request.question_type.value,
+                        request.options,
+                        {f"${key}": value for key, value in images.items()},
+                        request.sample_id,
+                    )
                 )
-            )
+            except Exception as exc:
+                planner_ms = (time.perf_counter() - planner_started) * 1000.0
+                planner_status = "failed"
+                candidate_metadata = getattr(self.providers.planner, "last_metadata", None)
+                if isinstance(candidate_metadata, Mapping):
+                    planner_metadata = dict(candidate_metadata)
+                    try:
+                        exc.__dict__["planner_metadata"] = planner_metadata
+                    except (AttributeError, TypeError):
+                        pass
+                failure_trace = ExecutionTrace(
+                    request.sample_id,
+                    ExecutionMode.TASKGRAPH_UHR.value,
+                    input_image_paths=list(request.image_paths),
+                    final_question=request.question,
+                    planner_ms=planner_ms,
+                    telemetry={
+                        "planner_status": planner_status,
+                        "planner_ms": planner_ms,
+                        **(
+                            {"planner_metadata": dict(planner_metadata)}
+                            if planner_metadata is not None
+                            else {}
+                        ),
+                    },
+                )
+                try:
+                    exc.__dict__["execution_trace"] = failure_trace
+                except (AttributeError, TypeError):
+                    pass
+                raise
             planner_ms = (time.perf_counter() - planner_started) * 1000.0
             planner_status = "executed"
             candidate_metadata = getattr(self.providers.planner, "last_metadata", None)
@@ -862,6 +906,24 @@ class TaskGraphRuntime:
                 result = self._direct_detection(request, images)
             else:
                 result = self._taskgraph(request, images)
+            result.trace.input_image_paths = list(request.image_paths)
+            result.trace.intermediate_output_paths = list(
+                self.composer.artifact_paths_since(artifact_checkpoint)
+            )
+            result.trace.telemetry.update(
+                {
+                    "input_image_paths": list(result.trace.input_image_paths),
+                    "intermediate_output_paths": list(result.trace.intermediate_output_paths),
+                }
+            )
+            self._finalize_trace(
+                result.trace,
+                mode=mode,
+                routing_ms=routing_ms,
+                started=started,
+                torch=torch,
+            )
+            return result
         except Exception as exc:
             failed_trace = getattr(exc, "execution_trace", None)
             if isinstance(failed_trace, ExecutionTrace):
@@ -876,24 +938,9 @@ class TaskGraphRuntime:
                     }
                 )
             raise
-        result.trace.input_image_paths = list(request.image_paths)
-        result.trace.intermediate_output_paths = list(
-            self.composer.artifact_paths_since(artifact_checkpoint)
-        )
-        result.trace.telemetry.update(
-            {
-                "input_image_paths": list(result.trace.input_image_paths),
-                "intermediate_output_paths": list(result.trace.intermediate_output_paths),
-            }
-        )
-        self._finalize_trace(
-            result.trace,
-            mode=mode,
-            routing_ms=routing_ms,
-            started=started,
-            torch=torch,
-        )
-        return result
+        finally:
+            self.composer.release_runtime_cache()
+            _release_runtime_resources(torch)
 
     def close(self) -> None:
         self.providers.close()

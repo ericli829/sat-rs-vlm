@@ -21,7 +21,9 @@ and authoritative for counting. Relational counting must filter with SELECT and
 feed that result to COUNT_ENTITIES or COUNT_IMAGE. Preserve explicit category
 alternatives, attributes, positions, markers, bounding boxes, relations, ranks,
 ordinals, groups, and route endpoints. Use FINAL_QUESTION only when visual or
-semantic evidence still needs a final judgment; never include runtime values.
+semantic evidence still needs a final judgment; never include runtime values. When a complex
+question needs both a COUNT result and visual evidence, keep COUNT upstream and feed the mixed
+evidence into one VLM_REASON node; use only that node as the final source.
 
 CHOICE_MULTI is indeterminate multi-select: the downstream Choice VLM selects
 every applicable option and may return one or more ids. CHOICE_SINGLE permits

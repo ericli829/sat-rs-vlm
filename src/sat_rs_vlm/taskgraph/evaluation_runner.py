@@ -367,7 +367,9 @@ def _planner_chain(trace: ExecutionTrace, *, compact: bool = False) -> dict[str,
     generated_output = metadata.get("planner_output")
     if generated_output is None:
         for attempt in reversed(attempts):
-            if isinstance(attempt, Mapping) and attempt.get("termination_reason") == "final":
+            if isinstance(attempt, Mapping) and (
+                attempt.get("planner_output") is not None or attempt.get("prediction") is not None
+            ):
                 generated_output = attempt.get("planner_output", attempt.get("prediction"))
                 break
     metadata.pop("attempts", None)
@@ -394,6 +396,43 @@ def _planner_chain(trace: ExecutionTrace, *, compact: bool = False) -> dict[str,
         if trace.planner_ms is not None
         else telemetry.get("planner_ms"),
         "taskgraph": trace.taskgraph,
+        "attempts": attempts,
+        "metadata": metadata,
+    }
+
+
+def _planner_failure_chain(exc: BaseException, *, compact: bool = False) -> dict[str, Any]:
+    raw_metadata = getattr(exc, "planner_metadata", None)
+    metadata = dict(raw_metadata) if isinstance(raw_metadata, Mapping) else {}
+    raw_attempts = metadata.get("attempts")
+    if not isinstance(raw_attempts, list):
+        raw_attempts = getattr(exc, "attempts", [])
+    attempts = list(raw_attempts) if isinstance(raw_attempts, list) else []
+    generated_output = metadata.get("planner_output", getattr(exc, "generated_output", None))
+    if generated_output is None:
+        for attempt in reversed(attempts):
+            if isinstance(attempt, Mapping):
+                generated_output = attempt.get("planner_output", attempt.get("prediction"))
+                if generated_output is not None:
+                    break
+    metadata.pop("attempts", None)
+    metadata.pop("planner_output", None)
+    if compact:
+        attempts = [
+            {
+                key: attempt[key]
+                for key in ("attempt", "termination_reason", "error_type", "error")
+                if key in attempt
+            }
+            for attempt in attempts
+            if isinstance(attempt, Mapping)
+        ]
+        compact_metadata = _compact_trace_value(metadata)
+        metadata = compact_metadata if isinstance(compact_metadata, dict) else {}
+    return {
+        "status": "failed",
+        "generated_output": generated_output,
+        "taskgraph": None,
         "attempts": attempts,
         "metadata": metadata,
     }
@@ -641,6 +680,8 @@ def _error_row(
             },
             "failure": failure,
         }
+        if failure["stage"] == "planner":
+            reasoning_chain["planner"] = _planner_failure_chain(exc, compact=compact_trace)
     row: dict[str, Any] = {
         "sample_id": sample_id,
         "dataset": dataset,

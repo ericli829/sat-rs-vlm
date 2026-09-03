@@ -100,6 +100,48 @@ def test_planner_converts_lab_dsl_to_production_taskgraph() -> None:
     assert graph.inputs["image0"].uri_or_key == "fixture"
 
 
+def test_planner_boundary_normalizes_lab_roles_and_safe_rank_aliases() -> None:
+    request = _request()
+    classify = """INTENT(REGIONAL_CLASSIFICATION)
+n1=REGION($image0,CENTER)
+n2=CLASSIFY($n1)
+FINAL($n2,CHOICE_SINGLE)
+"""
+    graph = Qwen3VLPlannerProvider._to_production_graph(classify, request)
+    assert graph.nodes[1].inputs == {"source": "$n1"}
+
+    rank = """INTENT(OTHER)
+n1=LOCATE($image0,T("ship"))
+n2=SELECT_RANK($n1,null,"area",1,DESCENDING)
+FINAL_QUESTION($n2,CHOICE_SINGLE,"Which ship is selected?")
+"""
+    graph = Qwen3VLPlannerProvider._to_production_graph(rank, request)
+    assert graph.nodes[1].params["criterion"] == "bbox_area"
+
+
+def test_planner_repairs_mixed_count_and_visual_final() -> None:
+    text = """INTENT(COMPLEX_REASONING)
+n1=COUNT($image0,T("house"),false)
+n2=LOCATE($image0,T("farmland"))
+FINAL_QUESTION([$n1,$n2],CHOICE_SINGLE,"Does the small number of houses affect the farmland?")
+"""
+    graph = Qwen3VLPlannerProvider._to_production_graph(text, _request())
+    assert graph.final.sources == ["$n3"]
+    assert graph.nodes[2].op.value == "VLM_REASON"
+    assert graph.nodes[2].inputs == {"evidence": ["$n1", "$n2"]}
+
+
+def test_planner_rejects_select_result_as_visual_scope() -> None:
+    text = """INTENT(OBJECT_RELATION)
+n1=LOCATE($image0,T("ship"))
+n2=SELECT_RANK($n1,null,"score",1,DESCENDING)
+n3=LOCATE($n2,T("boat"))
+FINAL_QUESTION($n3,CHOICE_SINGLE,"Which boat is selected?")
+"""
+    with pytest.raises(Exception, match="select_result_not_visual_scope"):
+        Qwen3VLPlannerProvider._to_production_graph(text, _request())
+
+
 def test_planner_retries_once_after_invalid_dsl(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

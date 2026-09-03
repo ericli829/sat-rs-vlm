@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import gc
 import json
 import math
 import re
 import tempfile
 import time
 from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum
 from itertools import combinations
@@ -324,6 +326,12 @@ class PlannerFailedError(RuntimeError):
 
     error_type = "planner_failed"
     stage = "planner"
+
+    def __init__(self, message: str, *, metadata: Mapping[str, Any] | None = None) -> None:
+        self.planner_metadata = dict(metadata or {})
+        self.attempts = list(self.planner_metadata.get("attempts", ()))
+        self.generated_output = self.planner_metadata.get("planner_output")
+        super().__init__(message)
 
 
 class Qwen3VLPlannerProvider:
@@ -691,12 +699,142 @@ class Qwen3VLPlannerProvider:
         return text, metadata
 
     @staticmethod
+    def _productionize_canonical(canonical: Mapping[str, Any]) -> dict[str, Any]:
+        normalized = deepcopy(dict(canonical))
+        input_aliases = {
+            "CLASSIFY": "source",
+            "MULTILABEL_CLASSIFY": "source",
+            "MOTION": "source",
+        }
+        for node in normalized.get("nodes", []):
+            if not isinstance(node, dict):
+                continue
+            inputs = node.get("inputs")
+            if isinstance(inputs, dict):
+                role = input_aliases.get(str(node.get("op", "")))
+                if role is not None and "input" in inputs and role not in inputs:
+                    inputs[role] = inputs.pop("input")
+            params = node.get("params")
+            if not isinstance(params, dict):
+                continue
+            criterion = params.get("criterion")
+            mode = str(params.get("mode", "")).upper()
+            if str(node.get("op", "")) == "SELECT" and mode == "RANK":
+                criterion_key = str(criterion).strip().casefold().replace("-", "_")
+                criterion_key = "_".join(criterion_key.split())
+                if criterion_key in {"size", "area", "bboxarea", "bbox_area"}:
+                    params["criterion"] = "bbox_area"
+        return normalized
+
+    @staticmethod
+    def _repair_mixed_count_final(text: str, request: PlannerRequest) -> Any | None:
+        from taskgraph_lab.taskgraph.dsl import DSLParseError, parse_taskgraph_dsl_payload
+        from taskgraph_lab.taskgraph.validator import validate_candidate
+
+        try:
+            payload = parse_taskgraph_dsl_payload(text)
+        except DSLParseError:
+            return None
+        nodes = payload.get("nodes")
+        final = payload.get("final")
+        if not isinstance(nodes, list) or not isinstance(final, dict):
+            return None
+        sources = final.get("sources")
+        if not isinstance(sources, list) or len(sources) < 2:
+            return None
+        nodes_by_ref = {
+            f"${node.get('id')}": node
+            for node in nodes
+            if isinstance(node, dict) and node.get("id")
+        }
+        dependencies: dict[str, set[str]] = {}
+        for ref, node in nodes_by_ref.items():
+            raw_inputs = node.get("inputs")
+            if not isinstance(raw_inputs, dict):
+                dependencies[ref] = set()
+                continue
+            refs = (
+                item
+                for value in raw_inputs.values()
+                for item in (value if isinstance(value, list) else [value])
+            )
+            dependencies[ref] = {
+                item for item in refs if isinstance(item, str) and item.startswith("$n")
+            }
+
+        def lineage(source_ref: str) -> set[str]:
+            found: set[str] = set()
+            pending = [source_ref]
+            while pending:
+                current = pending.pop()
+                if current in found:
+                    continue
+                found.add(current)
+                pending.extend(dependencies.get(current, ()))
+            return found
+
+        visual_ops = {
+            "REGION",
+            "REGION_FROM_BBOX",
+            "FIND_MARKER",
+            "LOCATE",
+            "SELECT",
+            "GROUP",
+            "BUILD_ROUTE_CONTEXT",
+        }
+        lineage_ops = []
+        for source in sources:
+            current = lineage(str(source))
+            lineage_ops.append(
+                {
+                    str(nodes_by_ref[ref].get("op", ""))
+                    for ref in current
+                    if ref in nodes_by_ref
+                }
+            )
+        count_indexes = {
+            index for index, ops in enumerate(lineage_ops) if "COUNT" in ops
+        }
+        visual_indexes = {
+            index for index, ops in enumerate(lineage_ops) if ops.intersection(visual_ops)
+        }
+        if not count_indexes or not visual_indexes or count_indexes.intersection(visual_indexes):
+            return None
+        residual = final.get("question")
+        residual_question = str(residual).strip() if residual is not None else ""
+        residual_question = residual_question or "$question"
+        node_id = f"n{len(nodes) + 1}"
+        nodes.append(
+            {
+                "id": node_id,
+                "op": "VLM_REASON",
+                "inputs": {"evidence": [str(source) for source in sources]},
+                "params": {"question": residual_question},
+            }
+        )
+        final["sources"] = [f"${node_id}"]
+        final.pop("question", None)
+        input_names = {
+            str(key).removeprefix("$"): value
+            for key, value in request.inputs.items()
+        }
+        target, report = validate_candidate(payload, inputs=input_names)
+        if target is None or not report.valid:
+            return None
+        return target
+
+    @staticmethod
     def _to_production_graph(text: str, request: PlannerRequest) -> TaskGraph:
         from taskgraph_lab.taskgraph.canonicalize import canonicalize_target
-        from taskgraph_lab.taskgraph.dsl import parse_taskgraph_dsl
+        from taskgraph_lab.taskgraph.dsl import DSLParseError, parse_taskgraph_dsl
 
-        target = parse_taskgraph_dsl(text)
-        canonical = canonicalize_target(target)
+        try:
+            target = parse_taskgraph_dsl(text)
+        except DSLParseError:
+            target = Qwen3VLPlannerProvider._repair_mixed_count_final(text, request)
+            if target is None:
+                raise
+        canonical = Qwen3VLPlannerProvider._productionize_canonical(canonicalize_target(target))
         final = dict(canonical["final"])
         final.setdefault("question", "")
         payload = {
@@ -723,6 +861,12 @@ class Qwen3VLPlannerProvider:
             raise ValueError("Planner question must not be empty")
         system_prompt = self._system_prompt()
         attempts: list[dict[str, Any]] = []
+        self.last_metadata = {
+            "role": self.role,
+            "provider": self.provider_name,
+            "status": "running",
+            "attempts": attempts,
+        }
         messages = self._messages(request, system_prompt)
         for attempt_number in range(1, self.max_attempts + 1):
             prediction, generation_metadata = self._generate(request, messages)
@@ -733,23 +877,26 @@ class Qwen3VLPlannerProvider:
                     {
                         "attempt": attempt_number,
                         "prediction": prediction,
-                        "termination_reason": "planner_failed",
                         "error_type": type(exc).__name__,
                         "error": str(exc),
                         **generation_metadata,
+                        "termination_reason": "planner_failed",
                     }
                 )
                 if attempt_number >= self.max_attempts:
-                    self.last_metadata = {
+                    failure_metadata = {
                         "role": self.role,
                         "provider": self.provider_name,
                         "status": "planner_failed",
+                        "planner_output": prediction,
                         "attempts": attempts,
                         "load": self.load_info,
                     }
+                    self.last_metadata = failure_metadata
                     raise PlannerFailedError(
                         "planner_failed for sample "
-                        f"{request.sample_id or request.question!r}: {exc}"
+                        f"{request.sample_id or request.question!r}: {exc}",
+                        metadata=failure_metadata,
                     ) from exc
                 messages = self._messages(
                     request,
@@ -765,10 +912,10 @@ class Qwen3VLPlannerProvider:
             attempts.append(
                 {
                     "attempt": attempt_number,
-                    "termination_reason": "final",
                     "prediction": prediction,
                     "planner_output": prediction,
                     **generation_metadata,
+                    "termination_reason": "final",
                 }
             )
             self.last_metadata = {
@@ -784,13 +931,20 @@ class Qwen3VLPlannerProvider:
         raise AssertionError("Planner generated no attempts")
 
     def close(self) -> None:
-        close = getattr(self._model, "close", None)
+        model = self._model
+        torch = self._torch
+        close = getattr(model, "close", None)
         if callable(close):
             close()
         self._model = None
         self._processor = None
         self._tokenizer = None
         self._torch = None
+        gc.collect()
+        cuda = getattr(torch, "cuda", None)
+        empty_cache = getattr(cuda, "empty_cache", None)
+        if callable(empty_cache):
+            empty_cache()
 
 
 @dataclass(frozen=True)
