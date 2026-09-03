@@ -55,7 +55,12 @@ providers:
       clip_rerank_top_k: 16
     detector_weight: 0.35
     retriever_weight: 0.65
-    candidate_top_k: null
+    # null -> 64: cap the clip/GeoRSCLIP rerank pool at the top-64 candidates
+    # by detector score.  Without a cap the 0.05 LAE pool (500..600 boxes)
+    # makes the rerank dominate LOCATE (~127s/sample, 76s in rerank).  The
+    # fused top-16 is preserved; only lower-confidence candidates skip the
+    # rerank.
+    rerank_pool_k: 64
     fail_open: true
     retriever:
       provider: georsclip
@@ -64,7 +69,7 @@ providers:
         model_id: GeoRSCLIP-ViT-B-32
         arch: ViT-B-32
         device: auto
-        batch_size: 16
+        batch_size: 48
         cache_dir: reports/cache/georsclip_detector_rerank
         decoded_image_cache_size: 2
         decoded_image_cache_max_pixels: 4000000

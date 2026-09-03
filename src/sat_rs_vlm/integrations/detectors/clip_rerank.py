@@ -55,6 +55,10 @@ class CLIPRerankedProposalProvider:
         self.candidate_top_k = int(top_k_value) if top_k_value is not None else None
         if self.candidate_top_k is not None and self.candidate_top_k < 1:
             raise ProposalError("clip_rerank candidate_top_k must be positive")
+        pool_value = self.config.get("rerank_pool_k")
+        self.rerank_pool_k = int(pool_value) if pool_value is not None else None
+        if self.rerank_pool_k is not None and self.rerank_pool_k < 1:
+            raise ProposalError("clip_rerank rerank_pool_k must be positive")
         self.fail_open = bool(self.config.get("fail_open", True))
         self.model_id = (
             f"clip-rerank:{getattr(base_provider, 'model_id', base_provider_name)}:"
@@ -119,8 +123,8 @@ class CLIPRerankedProposalProvider:
             raise ProposalError("clip_rerank top_k must be positive")
         started = time.perf_counter()
         result = self.base_provider.predict(image_path, detector_phrase)
-        candidate_count = len(result.boxes_xyxy)
-        if candidate_count == 0:
+        raw_candidate_count = len(result.boxes_xyxy)
+        if raw_candidate_count == 0:
             metadata = self._base_metadata(result)
             metadata["clip_rerank"] = {
                 "status": "no_candidates",
@@ -141,16 +145,32 @@ class CLIPRerankedProposalProvider:
                 metadata=metadata,
             )
 
+        # Rerank-pool cap: score only the top `rerank_pool_k` candidates by
+        # detector confidence (when configured) so the CLIP/GeoRSCLIP rerank
+        # cost stays bounded instead of scaling with the whole LAE pool.
+        pool_order: list[int] | None = None
+        if self.rerank_pool_k is not None and raw_candidate_count > self.rerank_pool_k:
+            pool_order = sorted(
+                range(raw_candidate_count),
+                key=lambda index: (-float(result.scores[index]), index),
+            )[: self.rerank_pool_k]
+            candidate_boxes = [result.boxes_xyxy[index] for index in pool_order]
+            candidate_scores = [float(result.scores[index]) for index in pool_order]
+        else:
+            candidate_boxes = list(result.boxes_xyxy)
+            candidate_scores = [float(score) for score in result.scores]
+        candidate_count = len(candidate_boxes)
+
         try:
             scored = self.retriever.score_regions(
-                Path(image_path), ranking_phrase, result.boxes_xyxy
+                Path(image_path), ranking_phrase, candidate_boxes
             )
             if len(scored.scores) != candidate_count:
                 raise ProposalError(
                     "clip_rerank retriever returned an unexpected score count: "
                     f"{len(scored.scores)} != {candidate_count}"
                 )
-            detector_scores = [float(score) for score in result.scores]
+            detector_scores = [float(score) for score in candidate_scores]
             retriever_scores = [float(score) for score in scored.scores]
             detector_normalized = _min_max_normalize(detector_scores)
             retriever_normalized = _min_max_normalize(retriever_scores)
@@ -170,6 +190,16 @@ class CLIPRerankedProposalProvider:
                 if effective_top_k is not None
                 else order
             )
+            retained_indices = (
+                [pool_order[index] for index in retained]
+                if pool_order is not None
+                else list(retained)
+            )
+            filtered_pool_indices = (
+                [pool_order[index] for index in order if index not in retained]
+                if pool_order is not None
+                else [index for index in order if index not in retained]
+            )
             metadata = self._base_metadata(result)
             metadata["clip_rerank"] = {
                 "status": "applied",
@@ -177,16 +207,22 @@ class CLIPRerankedProposalProvider:
                 "base_model_id": str(getattr(self.base_provider, "model_id", "unknown")),
                 "retriever_provider": scored.provider,
                 "retriever_model_id": scored.model_id,
+                "raw_candidate_count": raw_candidate_count,
                 "candidate_count": candidate_count,
                 "detector_query": detector_phrase,
                 "clip_query": ranking_phrase,
                 "detector_weight": self.detector_weight,
                 "retriever_weight": self.retriever_weight,
                 "candidate_top_k": effective_top_k,
-                "original_order": list(range(candidate_count)),
+                "rerank_pool_k": (
+                    self.rerank_pool_k if pool_order is not None else None
+                ),
+                "rerank_pool_size": candidate_count,
+                "original_order": list(range(raw_candidate_count)),
+                "pool_order": pool_order,
                 "ranked_order": order,
-                "retained_indices": retained,
-                "filtered_indices": [index for index in order if index not in retained],
+                "retained_indices": retained_indices,
+                "filtered_indices": filtered_pool_indices,
                 "detector_scores": detector_scores,
                 "retriever_scores": retriever_scores,
                 "detector_normalized_scores": detector_normalized,
@@ -196,7 +232,7 @@ class CLIPRerankedProposalProvider:
                 "latency_ms": (time.perf_counter() - started) * 1000.0,
             }
             return ProposalResult(
-                boxes_xyxy=[list(result.boxes_xyxy[index]) for index in retained],
+                boxes_xyxy=[list(candidate_boxes[index]) for index in retained],
                 scores=[fused_scores[index] for index in retained],
                 latency_ms=(time.perf_counter() - started) * 1000.0,
                 provider=self.provider_name,
