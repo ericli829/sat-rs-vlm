@@ -1521,10 +1521,32 @@ class SelectExecutor:
             return value.region
         if isinstance(value, Region):
             return value
-        if isinstance(value, EntitySet) and len(value.entities) == 1:
-            return value.entities[0].region
-        if isinstance(value, RegionSet) and len(value.regions) == 1:
-            return value.regions[0]
+        if isinstance(value, EntitySet) and value.entities:
+            if len(value.entities) == 1:
+                return value.entities[0].region
+            # Multiple candidates: keep the highest-confidence one as the
+            # reference so deterministic relations still run exact geometry.
+            sorted_entities = sorted(
+                value.entities,
+                key=lambda entity: (
+                    -(float(entity.score) if entity.score is not None else float("-inf")),
+                    str(entity.provenance.get("candidate_id", "")),
+                ),
+            )
+            return sorted_entities[0].region
+        if isinstance(value, RegionSet) and value.regions:
+            if len(value.regions) == 1:
+                return value.regions[0]
+            # Regions expose confidence through provenance.confidence when
+            # available; fall back to the first region deterministically.
+            sorted_regions = sorted(
+                enumerate(value.regions),
+                key=lambda pair: (
+                    -float(pair[1].provenance.get("confidence") or 0.0),
+                    pair[0],
+                ),
+            )
+            return sorted_regions[0][1]
         return None
 
     @staticmethod

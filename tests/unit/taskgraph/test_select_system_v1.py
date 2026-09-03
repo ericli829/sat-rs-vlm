@@ -167,6 +167,49 @@ def test_relation_with_no_geometric_match_falls_back_to_semantic(tmp_path: Path)
         composer.close()
 
 
+def test_plural_reference_selects_highest_confidence_single(tmp_path: Path) -> None:
+    """A multi-candidate reference uses the highest-confidence candidate so
+    deterministic relations keep the exact geometry path."""
+    from dataclasses import replace
+
+    image = _image(tmp_path)
+    # Reference LOCATE returned three rivers; ref-0 carries the highest score.
+    plural_reference = EntitySet(
+        (
+            replace(_entity(image, (140, 10, 160, 30), "ref-1"), score=0.40),
+            replace(_entity(image, (60, 10, 80, 30), "ref-0"), score=0.95),
+            replace(_entity(image, (80, 10, 100, 30), "ref-2"), score=0.70),
+        )
+    )
+    composer, context = _context(tmp_path)
+    try:
+        selected = SelectExecutor._single_reference(plural_reference)
+        assert selected is not None
+        assert selected.bbox_xyxy_global == (60.0, 10.0, 80.0, 30.0)
+    finally:
+        composer.close()
+
+
+def test_plural_reference_with_scores_picks_maximum(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    image = _image(tmp_path)
+    refs = EntitySet(
+        (
+            replace(_entity(image, (60, 10, 80, 30), "ref-0"), score=0.95),
+            replace(_entity(image, (80, 10, 100, 30), "ref-1"), score=0.40),
+            replace(_entity(image, (120, 10, 140, 30), "ref-2"), score=0.70),
+        )
+    )
+    composer, context = _context(tmp_path)
+    try:
+        selected = SelectExecutor._single_reference(refs)
+        assert selected is not None
+        assert selected.bbox_xyxy_global == (60.0, 10.0, 80.0, 30.0)
+    finally:
+        composer.close()
+
+
 def test_subregion_is_computed_from_scope_and_reference_not_reference_inner_half(
     tmp_path: Path,
 ) -> None:
