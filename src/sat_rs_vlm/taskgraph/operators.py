@@ -1480,6 +1480,47 @@ class SelectExecutor:
         return None
 
     @staticmethod
+    def _group_extent_reference(value: RuntimeObject | None) -> Region | None:
+        """Union-bbox reference for a multi-candidate group (plural visual context).
+
+        Used by SUBREGION when no explicit reference is given: the group extent
+        is the union of every candidate bbox, turned into a Region of the shared
+        image.  Returns None for empty groups or cross-image groups.
+        """
+        if isinstance(value, SelectResult):
+            if value.status is not SelectStatus.OK:
+                return None
+            value = value.selected
+        if isinstance(value, EntitySet) and value.entities:
+            image = value.entities[0].region.image
+            boxes = [entity.region.bbox_xyxy_global for entity in value.entities]
+            if any(entity.region.image.path != image.path for entity in value.entities):
+                return None
+        elif isinstance(value, RegionSet) and value.regions:
+            image = value.regions[0].image
+            boxes = [region.bbox_xyxy_global for region in value.regions]
+            if any(region.image.path != image.path for region in value.regions):
+                return None
+        else:
+            return None
+        union = (
+            min(box[0] for box in boxes),
+            min(box[1] for box in boxes),
+            max(box[2] for box in boxes),
+            max(box[3] for box in boxes),
+        )
+        if union[0] >= union[2] or union[1] >= union[3]:
+            return None
+        return Region(
+            image,
+            union,
+            {
+                "select_reference": "group_extent_union",
+                "candidate_count": len(boxes),
+            },
+        )
+
+    @staticmethod
     def _box_center(box: tuple[float, float, float, float]) -> tuple[float, float]:
         return (box[0] + box[2]) / 2.0, (box[1] + box[3]) / 2.0
 
@@ -1964,6 +2005,13 @@ class SelectExecutor:
             # form for "the subregion relative to the previously selected single
             # object": fall back to the (single) selected candidate itself.
             reference = self._single_reference(candidates)
+        if reference is None:
+            # A multi-candidate group is still a valid visual context: use the
+            # group extent (union bbox) as the reference, mirroring RELATION's
+            # plural-reference handling.
+            group_reference = self._group_extent_reference(candidates)
+            if group_reference is not None:
+                reference = group_reference
         if reference is None:
             return self._result(
                 self._empty_like(candidates),

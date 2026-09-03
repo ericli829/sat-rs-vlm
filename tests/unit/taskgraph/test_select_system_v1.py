@@ -235,8 +235,10 @@ def test_subregion_requires_reference_when_candidates_are_multi(tmp_path: Path) 
             context,
         )
         assert isinstance(output.value, SelectResult)
-        assert output.value.status is SelectStatus.UNRESOLVED
-        assert output.value.reason == "SUBREGION requires one reference"
+        # Multi-candidate group falls back to the union extent as reference.
+        assert output.value.status is SelectStatus.OK
+        assert isinstance(output.value.selected, Region)
+        assert output.value.selected.bbox_xyxy_global == (0.0, 0.0, 200.0, 15.0)
     finally:
         composer.close()
 
