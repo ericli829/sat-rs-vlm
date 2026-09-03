@@ -35,12 +35,12 @@ from .runtime_types import (
 VisualInput = str | Image.Image
 
 
-@lru_cache(maxsize=8)
+@lru_cache(maxsize=2)
 def _load_rgb_image(path: str) -> Image.Image:
     """Decode a normalized source image once per process."""
 
     with Image.open(path) as source:
-        return source.convert("RGB").copy()
+        return source.convert("RGB")
 
 
 class InputComposer:

@@ -257,6 +257,7 @@ class TiledProposalProvider:
                     tile_path = temporary_root / f"tile_{tile_index:05d}.png"
                     image.crop((x1, y1, x2, y2)).save(tile_path)
                     tile_paths.append((tile_index, (x1, y1, x2, y2), tile_path))
+                del image
 
                 def predict_tile(
                     item: tuple[int, tuple[int, int, int, int], Path],

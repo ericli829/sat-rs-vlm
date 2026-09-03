@@ -313,6 +313,14 @@ def _release_runtime_resources(torch: Any | None) -> None:
             empty_cache()
     except Exception:
         pass
+    try:
+        import ctypes
+
+        trim = getattr(ctypes.CDLL(None), "malloc_trim", None)
+        if callable(trim):
+            trim(0)
+    except Exception:
+        pass
 
 
 class TaskGraphRuntime:

@@ -60,6 +60,7 @@ provider_configs:
       batch_size: 16
       cache_dir: reports/cache/georsclip
       decoded_image_cache_size: 2
+      decoded_image_cache_max_pixels: 4000000
       image_embedding_cache_size: 1024
 
 fusion:

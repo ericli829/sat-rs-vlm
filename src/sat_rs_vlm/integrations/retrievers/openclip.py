@@ -37,6 +37,9 @@ class OpenCLIPRetrieverProvider:
         self.decoded_image_cache_size = max(
             0, int(self.config.get("decoded_image_cache_size", 2))
         )
+        self.decoded_image_cache_max_pixels = max(
+            1, int(self.config.get("decoded_image_cache_max_pixels", 4_000_000))
+        )
         self.image_embedding_cache_size = max(
             0, int(self.config.get("image_embedding_cache_size", 1024))
         )
@@ -245,7 +248,11 @@ class OpenCLIPRetrieverProvider:
             return cached, True, key
         with Image.open(path) as source:
             image = source.convert("RGB")
-        if self.decoded_image_cache_size:
+        cacheable = (
+            self.decoded_image_cache_size > 0
+            and image.width * image.height <= self.decoded_image_cache_max_pixels
+        )
+        if cacheable:
             self._decoded_image_cache[key] = image
             while len(self._decoded_image_cache) > self.decoded_image_cache_size:
                 self._decoded_image_cache.popitem(last=False)
@@ -385,8 +392,9 @@ class OpenCLIPRetrieverProvider:
                 "crop_batch_count": batches,
                 "query_cache_hit": query_cache_hit,
                 "score_cache_hits": score_cache_hits,
-                "decoded_image_cache_hit": decoded_cache_hit,
-                "decoded_image_cache_size": len(self._decoded_image_cache),
+                    "decoded_image_cache_hit": decoded_cache_hit,
+                    "decoded_image_cache_size": len(self._decoded_image_cache),
+                    "decoded_image_cache_max_pixels": self.decoded_image_cache_max_pixels,
                 "image_embedding_cache_hits": embedding_cache_hits,
                 "image_embedding_cache_size": len(self._image_embedding_cache),
                 "load_info": dict(self._load_info),

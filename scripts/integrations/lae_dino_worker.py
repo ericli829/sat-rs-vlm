@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import ctypes
+import gc
 import io
 import json
 import os
@@ -199,6 +201,24 @@ def _load_detector(args: argparse.Namespace) -> Any:
     return model
 
 
+def _release_request_resources() -> None:
+    gc.collect()
+    try:
+        import torch
+
+        cuda = getattr(torch, "cuda", None)
+        if cuda is not None and bool(getattr(cuda, "is_available", lambda: False)()):
+            cuda.empty_cache()
+    except Exception:
+        pass
+    try:
+        trim = getattr(ctypes.CDLL(None), "malloc_trim", None)
+        if callable(trim):
+            trim(0)
+    except Exception:
+        pass
+
+
 def _predict(
     model: Any,
     request: dict[str, Any],
@@ -208,7 +228,8 @@ def _predict(
     from PIL import Image
 
     image_path = Path(str(request["image"])).expanduser().resolve()
-    image = Image.open(str(image_path)).convert("RGB")
+    with Image.open(str(image_path)) as source:
+        image_width, image_height = source.size
     started = time.perf_counter()
     # Keep detector/library diagnostics on stderr; the sidecar captures it.
     with contextlib.redirect_stdout(io.StringIO()):
@@ -241,8 +262,8 @@ def _predict(
     boxes, scores, stats = canonicalize_proposals(
         boxes,
         scores,
-        image_width=image.width,
-        image_height=image.height,
+        image_width=image_width,
+        image_height=image_height,
         coordinate_mode="pixel",
         # Apply final top-k after optional NMS, never before suppression.
         top_k=None,
@@ -272,8 +293,8 @@ def _predict(
             "top_k": args.top_k,
             "nms_threshold": args.nms_threshold,
             "coordinate_mode": "absolute_pixel_xyxy",
-            "image_width": image.width,
-            "image_height": image.height,
+            "image_width": image_width,
+            "image_height": image_height,
             "validation": stats,
         },
     }
@@ -336,7 +357,12 @@ def main() -> int:
                 "failure_stage": "proposal_generation",
                 "error": str(exc),
             }
-        print(json.dumps(response, ensure_ascii=False, separators=(",", ":")), flush=True)
+        try:
+            print(json.dumps(response, ensure_ascii=False, separators=(",", ":")), flush=True)
+        finally:
+            request = None
+            response = None
+            _release_request_resources()
     return 0
 
 
