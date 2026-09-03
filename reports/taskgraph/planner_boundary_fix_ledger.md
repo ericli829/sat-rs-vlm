@@ -88,6 +88,33 @@ the real worker failure (model-init / proposal-generation) that the old id
 check masked.  The memory-patch replay (`aeab77e`) showed those are transient
 GPU-state failures; the full count-recovery requires re-running.
 
+## Verified impact (20-sample error replay, cloud, real 4B planner)
+
+Baseline (memory-patch commit): 6 success / 14 failure.
+After ea35afe + 9197129 + bf1dfd3: **14 success / 6 failure**, zero regressions.
+
+Recovered samples:
+
+- color/0097 — criterion "distance to center" → planner now emits `bbox_area`
+- color/0180 — RANK→SUBREGION→ATTRIBUTE (singleton + null-reference)
+- color/0183, color/0186 — criterion "height" → planner now emits `bbox_area`/`size`
+- color/2391 — SUBREGION→LOCATE (visual-scope materialization)
+- count/0038 — SUBREGION→COUNT_IMAGE (visual-scope materialization)
+- count/0217 — SUBREGION(INSIDE) over 13-candidate ship group (group extent)
+- color/2235 — SUBREGION→LOCATE now executes; sample runs to ATTRIBUTE and
+  fails only on zero circle detections (detection recall, not boundary)
+
+Remaining 6 failures are detection-recall or planner-semantic:
+
+- color/0073, color/0082 — `SELECT_REL($boats, $rivers, RIGHT_OF/INSIDE)` with a
+  multi-candidate reference → UNRESOLVED "RELATION requires exactly one
+  reference" (planner should first singleton-select the reference).
+- color/0174 — NEAR found no flag detections (recall).
+- color/0225, color/2235 — LOCATE found 0 detections (recall; the error now
+  names the exact `proposal_query`).
+- color/1419 — planner repeatedly emits `SELECT_REL → ATTRIBUTE` without a
+  singleton select; the validator correctly rejects it on both attempts.
+
 ## Remaining planner-semantic families (not boundary gaps)
 
 - `input_type_mismatch`, `dedicated_operator_bypass`, `dead_node`,
