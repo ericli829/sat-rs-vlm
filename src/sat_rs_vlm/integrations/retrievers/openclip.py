@@ -70,6 +70,7 @@ class OpenCLIPRetrieverProvider:
         self._decoded_image_cache: OrderedDict[tuple[str, int, int], Any] = OrderedDict()
         self._image_embedding_cache: OrderedDict[tuple[Any, ...], Any] = OrderedDict()
         self._load_info: dict[str, Any] = {}
+        self._model_load_ms = 0.0
 
     @staticmethod
     def _patterns(value: Any, *, label: str) -> tuple[re.Pattern[str], ...]:
@@ -172,6 +173,7 @@ class OpenCLIPRetrieverProvider:
     def _load(self) -> None:
         if self._model is not None:
             return
+        started = time.perf_counter()
         try:
             import open_clip
             import torch
@@ -213,6 +215,14 @@ class OpenCLIPRetrieverProvider:
             tokenizer,
         )
         self._resolved_device = device
+        self._model_load_ms = (time.perf_counter() - started) * 1000.0
+
+    def preload(self) -> None:
+        self._load()
+
+    @property
+    def telemetry_model_load_ms(self) -> float:
+        return self._model_load_ms
 
     @staticmethod
     def _crop(image: Any, region: RegionXYXY, index: int) -> tuple[Any, list[float]]:
@@ -318,6 +328,7 @@ class OpenCLIPRetrieverProvider:
                 self.model_id,
                 {
                     "regions_xyxy": boxes,
+                    "crop_count": len(boxes),
                     "batch_size": self.batch_size,
                     "crop_batch_count": 0,
                     "query_cache_hit": query in self._query_cache,
@@ -388,6 +399,7 @@ class OpenCLIPRetrieverProvider:
             {
                 "raw_scores": final,
                 "regions_xyxy": boxes,
+                "crop_count": len(boxes),
                 "batch_size": self.batch_size,
                 "crop_batch_count": batches,
                 "query_cache_hit": query_cache_hit,
@@ -398,6 +410,7 @@ class OpenCLIPRetrieverProvider:
                 "image_embedding_cache_hits": embedding_cache_hits,
                 "image_embedding_cache_size": len(self._image_embedding_cache),
                 "load_info": dict(self._load_info),
+                "model_load_ms": self._model_load_ms,
                 "device": self._resolved_device,
                 "generation_used": False,
             },

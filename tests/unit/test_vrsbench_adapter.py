@@ -31,6 +31,8 @@ def create_vrsbench_fixture(root: Path) -> VRSBenchLayout:
                     "referring_sentence": "The building near the right edge.",
                     "obj_cls": "building",
                     "obj_coord": [-0.1, 0.2, 1.2, 0.8],
+                    "is_unique": True,
+                    "size_group": "small",
                 }
             ],
             "qa_pairs": [
@@ -101,6 +103,8 @@ def test_iter_vrsbench_samples_expands_tasks_and_clips_bbox(tmp_path: Path) -> N
     assert answer == {"label": "building", "bbox": [0.0, 0.2, 1.0, 0.8]}
     assert detection["metadata"]["bbox_raw"] == [-0.1, 0.2, 1.2, 0.8]
     assert detection["metadata"]["coordinate_clipped"] is True
+    assert detection["metadata"]["is_unique"] is True
+    assert detection["metadata"]["size_group"] == "small"
     assert detection["images"] == ["Images/Images_train/train_001.png"]
 
 

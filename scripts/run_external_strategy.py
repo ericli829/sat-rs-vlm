@@ -1,5 +1,6 @@
 """显式运行普通本地目录中的外部微调插件。"""
 
+# ruff: noqa: E402, I001
 from __future__ import annotations
 
 import argparse
@@ -9,6 +10,11 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = PROJECT_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
 
 from sat_rs_vlm.plugins.capability import validate_platform_capability
 from sat_rs_vlm.plugins.dependency import (
@@ -26,9 +32,6 @@ from sat_rs_vlm.plugins.runtime import (
     execute_external_plugin,
     load_external_config,
 )
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run an external fine-tuning plugin.")

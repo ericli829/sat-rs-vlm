@@ -17,6 +17,7 @@ search:
   temperature: 1.0
   cumulative_mass: 0.90
   max_beam: 4
+  spatial_first_depth_only: true
   max_regions: 64
   max_processed_area_ratio: 3.0
 
@@ -30,7 +31,7 @@ scorers:
   weights:
     detector: 1.0
     retrieval: 1.0
-    spatial: 0.5
+    spatial: 0.8
     parent: 0.25
     redundancy: 0.2
 
@@ -51,6 +52,7 @@ detector:
 
 retriever:
   enabled: true
+  # Dependency-free test/default config. Use uhr_hierarchical.georsclip.yaml in production.
   provider: mock
   config: {}
 
@@ -87,6 +89,36 @@ provider_configs:
       precision: bfloat16
       batch_size: 8
       trust_remote_code: true
+    clip:
+      model_path: ${CLIP_MODEL_PATH}
+      device: auto
+      batch_size: 16
+      trust_remote_code: true
+    siglip:
+      model_path: ${SIGLIP_MODEL_PATH}
+      device: auto
+      batch_size: 16
+      trust_remote_code: true
+    git_rsclip:
+      model_path: ${GIT_RSCLIP_MODEL_PATH}
+      device: auto
+      batch_size: 16
+      trust_remote_code: true
+    remoteclip:
+      checkpoint: ${REMOTECLIP_CHECKPOINT}
+      arch: ViT-B-32
+      device: auto
+      batch_size: 16
+    georsclip:
+      checkpoint: ${GEORSCLIP_CHECKPOINT}
+      arch: ViT-B-32
+      device: auto
+      batch_size: 16
+    farslip:
+      checkpoint: ${FARSLIP_CHECKPOINT}
+      arch: ViT-B-32
+      device: auto
+      batch_size: 16
 
 fusion:
   overlap_iou_threshold: 0.65

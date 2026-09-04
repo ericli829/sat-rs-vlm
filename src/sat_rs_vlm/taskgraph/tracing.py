@@ -37,6 +37,7 @@ class NodeTrace:
     fusion_reason: str | None = None
     output_runtime_type: str | None = None
     output_summary: dict[str, Any] = field(default_factory=dict)
+    telemetry: dict[str, Any] = field(default_factory=dict)
     error: dict[str, Any] | None = None
     fallback: str | None = None
     trace_metadata: dict[str, Any] = field(default_factory=dict)

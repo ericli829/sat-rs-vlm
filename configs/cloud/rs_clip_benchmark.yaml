@@ -1,0 +1,81 @@
+experiment:
+  name: rs_clip_five_model_gpu
+  seed: 20260830
+  output_root: ${RS_CLIP_OUTPUT_ROOT}
+  require_cuda: true
+  latency_warmup_rows: 3
+
+dataset:
+  manifest: ${RS_CLIP_MANIFEST}
+  root: ${RS_CLIP_DATA_ROOT}
+  coordinate_mode: absolute_xyxy
+
+protocol:
+  grid_size: 3
+  top_k: 5
+  query_mode: category
+  coverage_threshold: 0.5
+  gate_threshold: 0.0
+
+# Tiers are deliberately not chained automatically. Run one command per tier.
+tiers:
+  smoke50:
+    limit: 50
+    requires: null
+  standard500:
+    limit: 500
+    requires: smoke50
+  large2000:
+    limit: 2000
+    requires: standard500
+  full:
+    limit: null
+    requires: large2000
+
+models:
+  remoteclip:
+    display_name: RemoteCLIP-ViT-B-32
+    provider: remoteclip
+    checkpoint: ${REMOTECLIP_CHECKPOINT}
+    arch: ViT-B-32
+    model_id: RemoteCLIP-ViT-B-32
+    device: cuda
+    batch_size: 32
+    decoded_image_cache_size: 2
+    image_embedding_cache_size: 2048
+  georsclip:
+    display_name: GeoRSCLIP-ViT-B-32
+    provider: georsclip
+    checkpoint: ${GEORSCLIP_CHECKPOINT}
+    arch: ViT-B-32
+    model_id: GeoRSCLIP-ViT-B-32
+    device: cuda
+    batch_size: 32
+    decoded_image_cache_size: 2
+    image_embedding_cache_size: 2048
+  farslip:
+    display_name: FarSLIP1-ViT-B-32
+    provider: farslip
+    checkpoint: ${FARSLIP_CHECKPOINT}
+    arch: ViT-B-32
+    model_id: FarSLIP1-ViT-B-32
+    device: cuda
+    batch_size: 32
+    decoded_image_cache_size: 2
+    image_embedding_cache_size: 2048
+  satelliteclip:
+    display_name: SatelliteCLIP
+    provider: satelliteclip
+    model_path: ${SATELLITECLIP_MODEL_PATH}
+    model_id: SatelliteCLIP
+    device: cuda
+    batch_size: 32
+    trust_remote_code: true
+  git_rsclip:
+    display_name: Git-RSCLIP-base
+    provider: git_rsclip
+    model_path: ${GIT_RSCLIP_MODEL_PATH}
+    model_id: Git-RSCLIP-base
+    device: cuda
+    batch_size: 32
+    trust_remote_code: true

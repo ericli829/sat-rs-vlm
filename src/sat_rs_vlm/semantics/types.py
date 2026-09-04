@@ -32,6 +32,8 @@ SPATIAL_SCOPES = frozenset(
         "upper_right",
         "lower_left",
         "lower_right",
+        "center_left",
+        "center_right",
         "center",
         "north",
         "south",

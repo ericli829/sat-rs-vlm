@@ -1,14 +1,21 @@
 """使用统一 Evaluation v1.5 指标运行 GPU INT8 层或组件敏感度实验。"""
 
+# ruff: noqa: E402
 from __future__ import annotations
 
 import argparse
 import gc
 import json
 import re
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = PROJECT_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
 
 from sat_rs_vlm.models.qwen3vl_loader import load_qwen3vl_processor
 from sat_rs_vlm.quantization.benchmark import (

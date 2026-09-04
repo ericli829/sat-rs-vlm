@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from sat_rs_vlm.taskgraph.providers import (
+    ModelTaskGraphPlannerProvider,
     PlannerFailedError,
     PlannerRequest,
     Qwen3VLPlannerProvider,
@@ -72,6 +73,18 @@ def test_runtime_from_config_registers_qwen3vl_lora_planner(tmp_path: Path) -> N
         assert isinstance(runtime.providers.planner, Qwen3VLPlannerProvider)
         assert runtime.providers.planner.role == "planner_4b"
         assert runtime.providers.planner.provider_name == "qwen3vl_lora"
+    finally:
+        runtime.close()
+
+
+def test_runtime_from_config_keeps_semantic_planner_compatibility(tmp_path: Path) -> None:
+    base, adapter = _planner_dirs(tmp_path)
+    config = _config(base, adapter)
+    config["providers"]["planner"] = {"kind": "semantic", "provider": "route_4b"}
+    runtime = runtime_from_config(config)
+    try:
+        assert isinstance(runtime.providers.planner, ModelTaskGraphPlannerProvider)
+        assert runtime.providers.planner.provider is runtime.providers.route_4b
     finally:
         runtime.close()
 

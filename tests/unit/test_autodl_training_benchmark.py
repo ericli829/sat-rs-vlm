@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from scripts.training.benchmark_autodl_training import (
     Candidate,
     build_benchmark_config,
@@ -88,7 +90,8 @@ def test_child_environment_includes_source_tree(monkeypatch) -> None:  # type: i
 
     environment = build_child_environment()
 
-    assert "sat-rs-vlm/src" in environment["PYTHONPATH"].replace("\\", "/")
+    source_tree = str(Path(__file__).resolve().parents[2] / "src").replace("\\", "/")
+    assert source_tree in environment["PYTHONPATH"].replace("\\", "/")
     assert "/existing" in environment["PYTHONPATH"]
 
 

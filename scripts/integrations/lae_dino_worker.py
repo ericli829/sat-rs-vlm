@@ -136,7 +136,7 @@ def _extract_predictions(result: Any) -> tuple[list[Any], list[Any]]:
         if hasattr(scores, "detach"):
             scores = scores.detach().cpu().tolist()
         return list(boxes), list(scores)
-    if isinstance(result, (list, tuple)):
+    if isinstance(result, list | tuple):
         # MMDetection 2.x returns ``(bbox_results, segmentation_results)``;
         # only the first component is detector box evidence.
         class_results = result[0] if isinstance(result, tuple) and len(result) == 2 else result
@@ -217,6 +217,17 @@ def _release_request_resources() -> None:
             trim(0)
     except Exception:
         pass
+
+
+def _model_inventory(model: Any, load_ms: float) -> dict[str, Any]:
+    parameters = getattr(model, "parameters", None)
+    parameter_count = None
+    if callable(parameters):
+        parameter_count = sum(int(parameter.numel()) for parameter in parameters())
+    return {
+        "parameter_count": parameter_count,
+        "model_load_ms": load_ms,
+    }
 
 
 def _predict(
@@ -321,7 +332,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     try:
+        load_started = time.perf_counter()
         model = _load_detector(args)
+        model_inventory = _model_inventory(
+            model, (time.perf_counter() - load_started) * 1000.0
+        )
         # Import only after model initialization; custom LAE-DINO mmdet APIs can
         # expose inference_detector from different namespaces.
         try:
@@ -345,9 +360,17 @@ def main() -> int:
             if not isinstance(request, dict):
                 raise ValueError("request must be an object")
             for key in ("id", "image", "target_phrase"):
-                if key not in request:
+                if request.get("operation") != "initialize" and key not in request:
                     raise ValueError(f"missing request field: {key}")
-            response = _predict(model, request, args, inference_detector)
+            if request.get("operation") == "initialize":
+                response = {
+                    "id": request.get("id"),
+                    "status": "ok",
+                    "operation": "initialize",
+                    "model_inventory": model_inventory,
+                }
+            else:
+                response = _predict(model, request, args, inference_detector)
         except json.JSONDecodeError as exc:
             response = {"status": "failed", "failure_stage": "protocol_guard", "error": str(exc)}
         except Exception as exc:

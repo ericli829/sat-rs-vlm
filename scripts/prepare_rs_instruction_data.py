@@ -5,11 +5,13 @@ rs_*.jsonl 格式。第三阶段第一版保留真实数据集接入接口；当
 生成覆盖单图任务和双图变化检测任务的 sample 数据，便于训练 pipeline smoke test。
 """
 
+# ruff: noqa: E402
 from __future__ import annotations
 
 import argparse
 import os
 import struct
+import sys
 import zlib
 from collections import Counter
 from collections.abc import Iterable, Iterator
@@ -18,11 +20,14 @@ from typing import Any
 
 import yaml
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = PROJECT_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
 from sat_rs_vlm.configuration.environment import expand_environment
 from sat_rs_vlm.data.vrsbench import VRSBenchLayout, iter_vrsbench_samples
 from sat_rs_vlm.utils.jsonl import write_jsonl
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 TASK_TEMPLATES: tuple[tuple[str, str, str], ...] = (
     (

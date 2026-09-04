@@ -1,14 +1,19 @@
 """校验 sat-rs-vlm 数据集 manifest、分片、图片和标注。"""
 
+# ruff: noqa: E402
 from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
-from sat_rs_vlm.data.manifest import validate_dataset
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+SRC_ROOT = PROJECT_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
+from sat_rs_vlm.data.manifest import validate_dataset
 
 
 def parse_args() -> argparse.Namespace:

@@ -203,6 +203,16 @@ class HierarchicalLocator:
             latency,
         )
 
+    @staticmethod
+    def _retrieval_query(task: TaskSpec, depth: int) -> str:
+        """Use direction only for the coarse pass, then retrieve by target class."""
+
+        if depth <= 1 or task.spatial_scope == "global":
+            return task.raw_question
+        if task.targets:
+            return ", ".join(target.replace("_", " ") for target in task.targets)
+        return task.raw_question
+
     def _score_children(
         self,
         *,

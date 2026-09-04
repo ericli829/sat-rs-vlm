@@ -155,6 +155,18 @@ def test_fake_retriever_clips_candidates_to_region_and_nested_scope(tmp_path: Pa
         RegionRetrievalRequest(parent, "target", search_scope=Region(image, (0, 0, 20, 20)))
 
 
+def test_region_candidates_reject_non_finite_scores_and_latency(tmp_path: Path) -> None:
+    image = _image(tmp_path / "candidate.png", (32, 32))
+    region = Region(image, (0, 0, 16, 16))
+
+    with pytest.raises(ValueError, match="relevance_score"):
+        RegionCandidate(region, float("nan"))
+    with pytest.raises(ValueError, match="latency_ms"):
+        RegionCandidates((), "fixture", float("inf"))
+    with pytest.raises(ValueError, match="provider"):
+        RegionCandidates((), " ", 0.0)
+
+
 def test_locator_retriever_maps_local_crop_boxes_to_global(tmp_path: Path) -> None:
     image = _image(tmp_path / "locator.png", (100, 80))
 
@@ -262,6 +274,15 @@ def test_scored_grid_retriever_uses_region_scope(tmp_path: Path) -> None:
         RegionRetrievalRequest(scope, "object")
     )
     assert scorer.boxes[0] == (20.0, 10.0, 50.0, 40.0)
+    assert len(result.candidates) == 4
+    assert result.candidates[0].provenance["tile"] == {
+        "level": 1,
+        "index": 3,
+        "row": 1,
+        "column": 1,
+        "grid_size": 2,
+    }
+    assert result.candidates[0].provenance["bbox_xyxy_global"] == [50.0, 40.0, 80.0, 70.0]
     assert all(
         scope.bbox_xyxy_global[0] <= candidate.region.bbox_xyxy_global[0]
         and candidate.region.bbox_xyxy_global[2] <= scope.bbox_xyxy_global[2]
@@ -310,6 +331,25 @@ def test_scored_grid_retriever_supports_overlapping_windows(tmp_path: Path) -> N
         "window_ratio": 0.5,
         "overlapping": True,
     }
+
+
+def test_scored_grid_retriever_delegates_preload() -> None:
+    class Scorer:
+        provider_name = "preload_scorer"
+
+        def __init__(self) -> None:
+            self.preloaded = False
+
+        def preload(self) -> None:
+            self.preloaded = True
+
+        def close(self) -> None:
+            return None
+
+    scorer = Scorer()
+    adapter = ScoredGridRegionRetrieverAdapter(scorer)
+    adapter.preload()
+    assert scorer.preloaded is True
 
 
 def test_entity_set_composer_keeps_single_and_clustered_evidence_local(tmp_path: Path) -> None:

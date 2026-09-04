@@ -46,6 +46,51 @@ def test_mock_end_to_end_locator_emits_auditable_trace(tmp_path: Path) -> None:
     assert 0.0 <= payload["processed_union_area_ratio"] <= 1.0
 
 
+def test_directional_prior_is_first_depth_only(tmp_path: Path) -> None:
+    image = _image(tmp_path / "directional.png")
+    config = load_locator_config(CONFIG)
+    config["search"].update(
+        {
+            "target_view_size": 1,
+            "max_depth": 2,
+            "max_regions": 64,
+            "max_processed_area_ratio": 100.0,
+            "cumulative_mass": 1.0,
+        }
+    )
+    locator = create_locator("hierarchical", config)
+    retriever = locator.retriever_provider
+    try:
+        payload = locator.locate(
+            image,
+            "How many aircraft are visible in the upper-left part?",
+        ).to_dict()
+    finally:
+        locator.close()
+
+    depth_one = [item for item in payload["search_trace"] if item["depth"] == 1]
+    depth_two = [item for item in payload["search_trace"] if item["depth"] == 2]
+    for item in (*depth_one, *depth_two):
+        core = item["core_xyxy"]
+        view = item["view_xyxy"]
+        assert view[0] <= core[0] and view[1] <= core[1]
+        assert view[2] >= core[2] and view[3] >= core[3]
+        assert (view[2] - view[0]) * (view[3] - view[1]) > (
+            (core[2] - core[0]) * (core[3] - core[1])
+        )
+    assert depth_one
+    assert all(item["score_components"]["spatial"]["available"] for item in depth_one)
+    assert depth_two
+    assert all(not item["score_components"]["spatial"]["available"] for item in depth_two)
+    assert all(
+        item["score_components"]["spatial"]["reason"] == "spatial_only_first_depth"
+        for item in depth_two
+    )
+    assert retriever is not None
+    assert retriever.calls[0][1] == "How many aircraft are visible in the upper-left part?"
+    assert retriever.calls[1][1] == "aircraft"
+
+
 def test_global_beam_caps_multi_parent_frontier_per_depth(tmp_path: Path) -> None:
     image = _image(tmp_path / "global-beam.png")
     config = load_locator_config(CONFIG)

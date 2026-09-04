@@ -1,18 +1,22 @@
 """统一 Qwen3-VL baseline / INT8 公平 benchmark 入口。"""
 
+# ruff: noqa: E402, I001
 from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections.abc import Sequence
 from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = PROJECT_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
 
 from sat_rs_vlm.quantization.benchmark import run_benchmark
 from sat_rs_vlm.quantization.config import load_quantization_config
 from sat_rs_vlm.quantization.quantizer import create_backend
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Benchmark Qwen3-VL quantization backends.")
