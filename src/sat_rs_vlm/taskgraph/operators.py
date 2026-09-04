@@ -30,7 +30,7 @@ from .providers import (
     VLMResult,
     parse_selection_indices,
 )
-from .referent_refinement import ReferentRefiner
+from .referent_refinement import ReferentRefinementResult, ReferentRefiner
 from .runtime_types import (
     Answer,
     Boolean,
@@ -700,6 +700,76 @@ class LocateExecutor:
             return value == f"${node_id}"
         return isinstance(value, (list, tuple)) and f"${node_id}" in value
 
+    def _vlm_referent_outcome(
+        self,
+        result: ReferentRefinementResult,
+        scope: ImageRef | Region,
+        decision_metadata: dict[str, Any],
+        trigger_reason: str,
+    ) -> OperatorOutcome:
+        meta = dict(result.metadata)
+        value = result.entities
+        refinement_metadata: dict[str, Any] = {
+            "primary_provider": "semantic_2b",
+            "refinement_applied": True,
+            "refinement_method": "vlm_referent",
+            "candidate_count_before_refinement": 0,
+            "candidate_count_after_refinement": len(value.entities),
+            "selected_candidate_ids": ["vlm_referent_0001"],
+            "resolution_status": "VLM_REFERENT_RESOLVED",
+            "refinement_status": "VLM_REFERENT_RESOLVED",
+            "refinement_trigger": trigger_reason,
+            "fallback_triggered": False,
+            "fallback_reason": None,
+            "fallback_provider": None,
+            "fallback_scope": None,
+            "final_resolution_status": "VLM_REFERENT_RESOLVED",
+            **meta,
+        }
+        value.provenance.update(
+            {
+                "provider": "semantic_2b",
+                "capability": "vlm_referent",
+                "vlm_referent_applied": True,
+                "primary_provider": "semantic_2b",
+                "primary_candidate_count": 0,
+                "candidate_count_after_refinement": len(value.entities),
+                "refinement_applied": True,
+                "refinement_status": "VLM_REFERENT_RESOLVED",
+                "resolution_status": "VLM_REFERENT_RESOLVED",
+                "fallback_triggered": False,
+                "fallback_reason": None,
+                "fallback_provider": None,
+                "fallback_scope": None,
+                "final_resolution_status": "VLM_REFERENT_RESOLVED",
+                "refinement": refinement_metadata,
+            }
+        )
+        return OperatorOutcome(
+            value,
+            "semantic_2b:referent",
+            {
+                **decision_metadata,
+                "capability": "vlm_referent",
+                "latency_ms": meta.get("latency_ms", 0.0),
+                "activated_provider": "semantic_2b:referent",
+                "stage": "locate",
+                "provider_metadata": dict(meta),
+                "vlm_referent_applied": True,
+                "vlm_referent_trigger": trigger_reason,
+                "primary_provider": "semantic_2b",
+                "primary_candidate_count": 0,
+                "refinement_applied": True,
+                "refinement_status": "VLM_REFERENT_RESOLVED",
+                "fallback_triggered": False,
+                "fallback_reason": None,
+                "fallback_provider": None,
+                "fallback_scope": None,
+                "final_resolution_status": "VLM_REFERENT_RESOLVED",
+                "referent_refinement": refinement_metadata,
+            },
+        )
+
     @classmethod
     def _needs_refinement(
         cls, node: GraphNode, target: TargetSpec, context: OperatorContext
@@ -958,6 +1028,22 @@ class LocateExecutor:
         target = TargetSpec.model_validate(node.params["target"])
         decision = self.capability_classifier.classify(target)
         decision_metadata = {"capability_decision": decision.to_dict()}
+        if (
+            self.refiner is not None
+            and self.refiner.config.enabled
+            and self.refiner.config.singleton_vlm_primary
+        ):
+            should_refine, trigger_reason = self._needs_refinement(node, target, context)
+            if should_refine and self.refiner.config.enabled:
+                vlm_result = self.refiner.vlm_referent(
+                    scope,
+                    question=context.final_question or context.question,
+                    target=target,
+                )
+                if vlm_result is not None:
+                    return self._vlm_referent_outcome(
+                        vlm_result, scope, decision_metadata, trigger_reason
+                    )
         if decision.effective_capability is TargetCapability.RETRIEVER:
             result = self.retriever.retrieve(
                 RegionRetrievalRequest(

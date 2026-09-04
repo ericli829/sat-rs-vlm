@@ -11,7 +11,7 @@ from typing import Any
 
 from .choice_config import ChoiceSystemConfig
 from .input_composer import InputComposer
-from .providers import ChoiceScoringRequest, SemanticVLMProvider
+from .providers import ChoiceScoringRequest, SemanticVLMProvider, VLMRequest
 from .runtime_types import Entity, EntitySet, ImageRef, Region, RegionSet
 from .schema import TargetSpec
 
@@ -24,6 +24,10 @@ class ReferentRefinementConfig:
     geometry_weight: float = 0.25
     minimum_margin: float = 0.02
     candidate_halo_ratio: float = 0.2
+    # When the downstream graph consumes a SINGLE target, ask the semantic VLM
+    # to point at it directly (bbox) instead of relying on the detector +
+    # reranker chain; the detector path remains the fallback.
+    singleton_vlm_primary: bool = False
 
     def __post_init__(self) -> None:
         if self.max_candidates < 1:
@@ -48,6 +52,7 @@ class ReferentRefinementConfig:
             geometry_weight=float(value.get("geometry_weight", 0.25)),
             minimum_margin=float(value.get("minimum_margin", 0.02)),
             candidate_halo_ratio=float(value.get("candidate_halo_ratio", 0.2)),
+            singleton_vlm_primary=bool(value.get("singleton_vlm_primary", False)),
         )
 
 
@@ -531,6 +536,114 @@ class ReferentRefiner:
         common["latency_ms"] = (time.perf_counter() - started) * 1000.0
         output.provenance["referent_refinement"] = common
         return ReferentRefinementResult(output, common)
+
+    def vlm_referent(
+        self,
+        scope: ImageRef | Region,
+        *,
+        question: str,
+        target: TargetSpec,
+    ) -> ReferentRefinementResult | None:
+        """Ask the semantic VLM to point at a single target and return its bbox.
+
+        Returns a one-entity EntitySet with the pointed region, or None when the
+        model does not emit a parseable, sane box (caller falls back to the
+        detector/retriever chain).
+        """
+        if isinstance(scope, Region):
+            width, height = self._image_size(scope.image)
+            x0, y0, x1, y1 = scope.bbox_xyxy_global
+            if (x0, y0, x1, y1) != (0.0, 0.0, float(width), float(height)):
+                # Non-full-extent scopes need offset mapping; keep v1 simple.
+                return None
+        image = scope if isinstance(scope, ImageRef) else scope.image
+        width, height = self._image_size(image)
+        started = time.perf_counter()
+        model_input = self.composer.compose(
+            [image],
+            question=(
+                "Locate the target in the image and output its bounding box.\n"
+                f"Target: {target.phrase()}\n"
+                f"Original question: {question}\n"
+                "Return exactly four numbers: x1 y1 x2 y2 (pixel coordinates)."
+            ),
+            options=(),
+        )
+        try:
+            result = self.semantic.infer(VLMRequest(model_input, output_contract="text"))
+        except Exception:
+            return None
+        text = str(getattr(result, "text", "") or "").strip()
+        match = re.search(
+            r"(-?\d+(?:\.\d+)?)\s*[, ]+\s*(-?\d+(?:\.\d+)?)\s*[, ]+\s*"
+            r"(-?\d+(?:\.\d+)?)\s*[, ]+\s*(-?\d+(?:\.\d+)?)",
+            text,
+        )
+        if match is None:
+            return None
+        values = [float(value) for value in match.groups()]
+        x1, y1, x2, y2 = max(0.0, min(values[0], values[2])), max(
+            0.0, min(values[1], values[3])
+        ), min(float(width), max(values[0], values[2])), min(
+            float(height), max(values[1], values[3])
+        )
+        box_width = x2 - x1
+        box_height = y2 - y1
+        if box_width <= 0.0 or box_height <= 0.0:
+            return None
+        if box_width * box_height < 0.0001 * width * height:
+            return None
+        region = Region(
+            image,
+            (x1, y1, x2, y2),
+            {"vlm_referent": True, "origin": "semantic_2b", "pointer_text": text[:200]},
+        )
+        metadata = {
+            "applied": True,
+            "method": "vlm_referent",
+            "input_candidate_count": 0,
+            "output_candidate_count": 1,
+            "selected_candidate_ids": ["vlm_referent_0001"],
+            "semantic_scores": {},
+            "geometry_prior_scores": {},
+            "detector_scores": {},
+            "trigger_reason": "SINGLETON_VLM_PRIMARY",
+            "resolution_status": "VLM_REFERENT_RESOLVED",
+            "fallback_triggered": False,
+            "fallback_reason": None,
+            "fallback_provider": None,
+            "fallback_scope": None,
+            "question": question,
+            "target_spec": {
+                "category": target.category,
+                "attributes": dict(target.attributes),
+            },
+            "bbox_xyxy_global": [x1, y1, x2, y2],
+            "latency_ms": (time.perf_counter() - started) * 1000.0,
+        }
+        output = EntitySet(
+            (
+                Entity(
+                    region,
+                    target.category,
+                    1.0,
+                    {
+                        "candidate_id": "vlm_referent_0001",
+                        "vlm_referent": True,
+                        "fallback_required": False,
+                        "referent_refinement": metadata,
+                    },
+                ),
+            ),
+            {
+                "provider": "semantic_2b",
+                "capability": "vlm_referent",
+                "vlm_referent_applied": True,
+                "referent_refinement": metadata,
+                "resolution_status": "VLM_REFERENT_RESOLVED",
+            },
+        )
+        return ReferentRefinementResult(output, metadata)
 
     def visual_fallback(
         self,
