@@ -815,6 +815,22 @@ def run_taskgraph_evaluation(
                 failure_types[str(row["error_type"])] += 1
             output.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
             output.flush()
+            route_table = getattr(runtime, "route_table", None)
+            if route_table is not None and getattr(route_table, "path", None) is not None:
+                try:
+                    route_table.record(
+                        row["sample_id"],
+                        mode=row.get("execution_mode") or "",
+                        preset=(
+                            "tight"
+                            if getattr(runtime, "_route_table_preset_applied", False)
+                            else None
+                        ),
+                        note="runtime_record",
+                    )
+                except Exception:
+                    # table recording must never break the evaluation
+                    pass
             if row["status"] == "failure" and (fail_fast or not continue_on_sample_error):
                 raise RuntimeError(
                     f"TaskGraph evaluation stopped after sample failure: {row['sample_id']}"
