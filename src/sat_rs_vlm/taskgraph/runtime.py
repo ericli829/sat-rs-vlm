@@ -1264,6 +1264,9 @@ def runtime_from_config(
         entity_set_max_side=int(composer_cfg.get("entity_set_max_side", 1536)),
         entity_set_max_crops=int(composer_cfg.get("entity_set_max_crops", 16)),
         route_max_side=int(composer_cfg.get("route_max_side", 1536)),
+        entity_tight_crops=bool(composer_cfg.get("entity_tight_crops", False)),
+        entity_tight_min_side=int(composer_cfg.get("entity_tight_min_side", 512)),
+        entity_tight_max_visuals=int(composer_cfg.get("entity_tight_max_visuals", 4)),
         save_intermediate_artifacts=bool(composer_cfg.get("save_intermediate_artifacts", True)),
         compact_trace=bool(composer_cfg.get("compact_trace", False)),
     )

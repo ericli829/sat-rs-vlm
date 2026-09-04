@@ -55,6 +55,9 @@ class InputComposer:
         entity_set_max_side: int = 1536,
         entity_set_max_crops: int = 16,
         route_max_side: int = 1536,
+        entity_tight_crops: bool = False,
+        entity_tight_min_side: int = 512,
+        entity_tight_max_visuals: int = 4,
         save_intermediate_artifacts: bool = True,
         compact_trace: bool = False,
     ) -> None:
@@ -68,6 +71,10 @@ class InputComposer:
             raise ValueError("entity_set_max_side must be at least 256")
         if entity_set_max_crops < 1:
             raise ValueError("entity_set_max_crops must be positive")
+        if entity_tight_min_side < 128 or entity_tight_min_side > entity_set_max_side:
+            raise ValueError("entity_tight_min_side must be within [128, entity_set_max_side]")
+        if entity_tight_max_visuals < 1:
+            raise ValueError("entity_tight_max_visuals must be positive")
         self.save_intermediate_artifacts = bool(save_intermediate_artifacts)
         self.compact_trace = bool(compact_trace)
         self._temporary = None
@@ -85,6 +92,9 @@ class InputComposer:
         self.entity_set_max_side = entity_set_max_side
         self.entity_set_max_crops = entity_set_max_crops
         self.route_max_side = route_max_side
+        self.entity_tight_crops = bool(entity_tight_crops)
+        self.entity_tight_min_side = int(entity_tight_min_side)
+        self.entity_tight_max_visuals = int(entity_tight_max_visuals)
         self._counter = 0
         self._artifact_paths: list[str] = []
 
@@ -315,6 +325,8 @@ class InputComposer:
         image_area = float(width * height)
         union_area = (union_box[2] - union_box[0]) * (union_box[3] - union_box[1])
         union_area_ratio = union_area / image_area if image_area else 1.0
+        if self.entity_tight_crops:
+            return self._entity_tight_crops(entities, rgb, width, height, boxes)
         strategy = (
             "union_crop"
             if union_area_ratio <= self.entity_set_union_area_threshold
@@ -434,6 +446,121 @@ class InputComposer:
             ),
             "max_render_side": self.entity_set_max_side,
             "canvases": canvases_metadata,
+            "whole_image_visual_used": False,
+        }
+
+    def _entity_tight_crops(
+        self,
+        entities: EntitySet,
+        rgb: Image.Image,
+        width: int,
+        height: int,
+        boxes: list[list[float]],
+    ) -> tuple[list[VisualInput], dict[str, object]]:
+        """One enlarged crop per candidate (tight bbox + halo, min-side floor).
+
+        The default rendering draws candidate boxes on a wide region canvas, so
+        a 30px target stays 30px after downscaling.  Tight crops upscale the
+        located box to at least `entity_tight_min_side` px so the semantic VLM
+        actually sees the target; each visual gets a labelled mapping in the
+        structured context.
+        """
+        ranked_indices = sorted(
+            range(len(boxes)),
+            key=lambda index: (
+                -(
+                    float(entities.entities[index].score)
+                    if entities.entities[index].score is not None
+                    and math.isfinite(float(entities.entities[index].score))
+                    else float("-inf")
+                ),
+                index,
+            ),
+        )
+        selected = ranked_indices[: self.entity_tight_max_visuals]
+        outputs: list[VisualInput] = []
+        visual_map: list[dict[str, object]] = []
+        canvases_metadata: list[dict[str, object]] = []
+        for visual_index, entity_index in enumerate(selected, start=1):
+            entity = entities.entities[entity_index]
+            box = entity.region.bbox_xyxy_global
+            box_w = box[2] - box[0]
+            box_h = box[3] - box[1]
+            halo_px = max(4.0, self.candidate_halo_ratio * max(box_w, box_h))
+            crop_box = (
+                max(0, math.floor(box[0] - halo_px)),
+                max(0, math.floor(box[1] - halo_px)),
+                min(width, math.ceil(box[2] + halo_px)),
+                min(height, math.ceil(box[3] + halo_px)),
+            )
+            if crop_box[2] <= crop_box[0] or crop_box[3] <= crop_box[1]:
+                continue
+            canvas = rgb.crop(crop_box)
+            crop_size = canvas.size
+            scale = 1.0
+            if max(crop_size) > self.entity_set_max_side:
+                scale = self.entity_set_max_side / float(max(crop_size))
+            if min(crop_size) * scale < self.entity_tight_min_side:
+                scale = self.entity_tight_min_side / float(min(crop_size))
+                if max(crop_size) * scale > self.entity_set_max_side:
+                    scale = min(scale, self.entity_set_max_side / float(max(crop_size)))
+            render_size = (
+                max(1, round(crop_size[0] * scale)),
+                max(1, round(crop_size[1] * scale)),
+            )
+            if render_size != crop_size:
+                canvas = canvas.resize(render_size, Image.Resampling.LANCZOS)
+            output = self._materialize(canvas)
+            outputs.append(output)
+            marker = self._candidate_id(entity_index)
+            visual_map.append(
+                {
+                    "visual": visual_index,
+                    "id": marker,
+                    "index": entity_index,
+                    "label": entity.label,
+                    "score": entity.score,
+                    "bbox_xyxy_global": list(entity.region.bbox_xyxy_global),
+                }
+            )
+            canvases_metadata.append(
+                {
+                    "source_candidate_index": entity_index,
+                    "crop_bbox_xyxy_global": list(crop_box),
+                    "halo_px": halo_px,
+                    "crop_size": list(crop_size),
+                    "render_size": list(render_size),
+                    "global_to_local": {
+                        "operation": "translate_then_scale",
+                        "origin_global": [crop_box[0], crop_box[1]],
+                        "scale_xy": [scale, scale],
+                    },
+                    "candidate": visual_map[-1],
+                }
+            )
+        if not outputs:
+            raise ValueError("cannot materialize tight crops from an empty EntitySet")
+        return outputs, {
+            "strategy": "tight_per_candidate",
+            "union_bbox_xyxy_global": list(
+                (
+                    min(box[0] for box in boxes),
+                    min(box[1] for box in boxes),
+                    max(box[2] for box in boxes),
+                    max(box[3] for box in boxes),
+                )
+            ),
+            "requested_candidate_count": len(boxes),
+            "selected_candidate_indices": selected,
+            "omitted_candidate_indices": [
+                index for index in range(len(boxes)) if index not in selected
+            ],
+            "max_visuals": self.entity_tight_max_visuals,
+            "min_render_side": self.entity_tight_min_side,
+            "max_render_side": self.entity_set_max_side,
+            "crop_count": len(outputs),
+            "canvases": canvases_metadata,
+            "visual_entity_map": visual_map,
             "whole_image_visual_used": False,
         }
 
@@ -691,6 +818,24 @@ class InputComposer:
                     )
                     existing = cast(list[dict[str, object]], metadata.setdefault("entity_sets", []))
                     existing.append({"role": source.role, **entity_set_metadata})
+                    visual_map_items = entity_set_metadata.get("visual_entity_map")
+                    if isinstance(visual_map_items, list) and visual_map_items:
+                        lines = []
+                        for item in visual_map_items:
+                            if not isinstance(item, dict):
+                                continue
+                            score = item.get("score")
+                            score_text = (
+                                f"{float(score):.3f}"
+                                if isinstance(score, (int, float))
+                                else "n/a"
+                            )
+                            lines.append(
+                                f"Visual {item.get('visual')}: candidate {item.get('id')} "
+                                f"(index {item.get('index')}, label {item.get('label')}, "
+                                f"score {score_text})"
+                            )
+                        structured.append("[VISUAL_MAP]\n" + "\n".join(lines))
                 else:
                     source_visuals = self._visuals(source.value)
                 visuals.extend(source_visuals)
