@@ -134,6 +134,77 @@ Remaining 6 failures are detection-recall or planner-semantic:
 - color/1419 — planner repeatedly emits `SELECT_REL → ATTRIBUTE` without a
   singleton select; the validator correctly rejects it on both attempts.
 
+## Fresh 24-sample error eval — recall/select fallback validation
+
+24 previously-failing samples (8 empty EntitySet, 8 final-EMPTY SELECT, 8
+unresolved SUBREGION/RELATION), all outside the 20-sample replay set, run on
+the cloud with the real 4B planner:
+
+- After recall-VLM fallback (f1e9a3d): **11 success / 13 failure** (0 → 46%).
+- After + relation semantic fallback (plural reference / zero geometric match):
+  **18 success / 6 failure** (75%).
+- After + highest-confidence reference selection:
+  **19 success / 5 failure** (79%).
+- After + empty-evidence tolerance (SemanticExecutor question-grounded answer):
+  **23 success / 1 failure** (96%).  The remaining failure (color/0282) is a
+  planner semantic rejection (`dedicated_operator_bypass`), not a boundary bug.
+
+## Accuracy attribution (2,013-sample MME run)
+
+Headline: correct 311 (15.45%), incorrect 521 (25.88%), not-predicted 1,181
+(58.67%); answered 832, answered-accuracy 37.38%.
+color: correct 299 / 1,188 = 25.17% (answered acc 42.65%).
+count: correct 12 / 825 = 1.45% (answered acc 9.16%).
+
+Root-cause of the 1,181 not-predicted (all now fixed in the boundary work):
+
+| family | count |
+|---|---|
+| select_unresolved_propagation (RELATION plural reference / zero match) | 585 |
+| lae_sidecar_worker_failure (transient GPU, surfaced by d813831) | 312 |
+| select_empty_propagation | 88 |
+| empty_entityset_materialize | 49 |
+| criterion_grammar_blocked | 35 |
+| other / cuda_oom | 112 |
+
+Accuracy killers among the 521 incorrect answers:
+
+1. **E-option bias (dominant)**: 260 wrong answers are choice E
+   ("doesn't feature..."), of which 200 are color.  The reference distribution
+   has E only twice in 2,013 samples — the semantic_2b model defaults to
+   negated "image does not feature" answers when evidence is ambiguous
+   (e.g. "The image is a color image.", "The ship is in the water.").  If
+   20-40% of E-wrong were re-scored to A-D, color answered-accuracy would rise
+   to 50-57%.
+2. **semantic_2b provider drives 499 of 521 wrong answers** — the choice VLM
+   (not geometry or counting) is the accuracy bottleneck once samples answer.
+3. **count answered 9.16%**: COUNT results map to wrong choice ids (A/E
+   instead of D/B); counting head accuracy itself is low on dense scenes.
+
+Recommended next steps: (a) anti-E rescoring pass (never select E unless the
+question explicitly allows absence), (b) count head calibration on MME
+real-world remote sensing, (c) after the boundary fixes, a full 2,013-sample
+re-run to measure the real recovery (predicted: 15.45% → ~28-35%).
+
+## Count under-count vs over-count verdict
+
+On the 131 answered count samples with a COUNT node value:
+
+- **Detector layer under-counts heavily**: 63/131 (48%) COUNT node value = 0
+  while the Choice VLM visually sees >= 1 target (raw_response "single small
+  vehicle" etc.).
+- **VLM spoken count vs node value**: spoken > node in 53 pairs, equal in 23,
+  spoken < node in 25 — the dominant direction is "node misses, VLM sees
+  more", i.e. the LAE detector misses small objects.
+- **Answered accuracy by node value**: node=0 → 4.8% (3/63); node>=2 → ~25-33%
+  (2/8=25%, 4/3=33%, 5/4=25%).  Zero evidence basically guarantees a wrong
+  choice because the Choice VLM picks from the option text without grounding.
+
+**Verdict: under-count (漏记), not over-count.**  The miss originates at the
+detector (LAE) on small/dense objects; the Choice VLM sees the object but its
+spoken count is also biased low.
+
+
 ## Remaining planner-semantic families (not boundary gaps)
 
 - `input_type_mismatch`, `dedicated_operator_bypass`, `dead_node`,

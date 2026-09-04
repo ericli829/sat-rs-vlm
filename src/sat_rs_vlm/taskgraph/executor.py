@@ -65,9 +65,13 @@ class CapabilityRouter:
             "image": (False, True),
             "entities": (True, False),
         },
-        OperatorName.ATTRIBUTE: {"entity": (False, True)},
-        OperatorName.CLASSIFY: {"source": (False, True)},
-        OperatorName.MULTILABEL_CLASSIFY: {"source": (False, True)},
+        # Semantic consumers tolerate an empty selection: the empty EntitySet
+        # reaches the operator, which falls back to question-grounded VLM
+        # answering instead of hard-failing.  require_single keeps multi-select
+        # rejection intact.
+        OperatorName.ATTRIBUTE: {"entity": (True, True)},
+        OperatorName.CLASSIFY: {"source": (True, True)},
+        OperatorName.MULTILABEL_CLASSIFY: {"source": (True, True)},
         OperatorName.MOTION: {
             "source": (False, True),
             "before": (False, True),

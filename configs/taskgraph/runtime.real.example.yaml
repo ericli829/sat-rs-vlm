@@ -6,12 +6,15 @@ dataset_policy:
     visual_question_answering: DIRECT_VLM
     attribute: DIRECT_VLM
     classification: DIRECT_VLM
-    count: DIRECT_DETECTION
-    counting: DIRECT_DETECTION
-    grounding: DIRECT_DETECTION
-    visual_grounding: DIRECT_DETECTION
-    referring_grounding: DIRECT_DETECTION
-    detection: DIRECT_DETECTION
+    # Counting/grounding/detection route fully through the semantic 2B VLM:
+    # the LAE detector under-counts small objects and the Choice VLM already
+    # outperforms it on VRSBench visuals.
+    count: DIRECT_VLM
+    counting: DIRECT_VLM
+    grounding: DIRECT_VLM
+    visual_grounding: DIRECT_VLM
+    referring_grounding: DIRECT_VLM
+    detection: DIRECT_VLM
     default: DIRECT_VLM
   LEVIR_CC:
     default: DIRECT_VLM
@@ -43,12 +46,21 @@ providers:
   detection:
     kind: clip_rerank
     locate_detector:
-      score_threshold: 0.15
+      # 0.15 -> 0.05: LAE-DINO needs a low threshold for small remote-sensing
+      # targets (official 0.4 finds nothing; the linked report proves 0.05
+      # scale thresholds recover small cars/buildings).  Downstream CLIP
+      # reranking and referent refinement keep precision.
+      score_threshold: 0.05
       max_candidates: 16
       clip_rerank_top_k: 16
     detector_weight: 0.35
     retriever_weight: 0.65
-    candidate_top_k: null
+    # null -> 64: cap the clip/GeoRSCLIP rerank pool at the top-64 candidates
+    # by detector score.  Without a cap the 0.05 LAE pool (500..600 boxes)
+    # makes the rerank dominate LOCATE (~127s/sample, 76s in rerank).  The
+    # fused top-16 is preserved; only lower-confidence candidates skip the
+    # rerank.
+    rerank_pool_k: 64
     fail_open: true
     retriever:
       provider: georsclip
@@ -57,7 +69,7 @@ providers:
         model_id: GeoRSCLIP-ViT-B-32
         arch: ViT-B-32
         device: auto
-        batch_size: 16
+        batch_size: 48
         cache_dir: reports/cache/georsclip_detector_rerank
         decoded_image_cache_size: 2
         decoded_image_cache_max_pixels: 4000000
@@ -80,7 +92,7 @@ providers:
         bert_root: ${LAE_DINO_BERT_ROOT}
         worker_python: ${LAE_DINO_PYTHON}
         stderr_log: ${LAE_DINO_STDERR_LOG}
-        score_threshold: 0.20
+        score_threshold: 0.05
   counting:
     kind: counting_system
     detector:
@@ -91,7 +103,10 @@ providers:
       bert_root: ${LAE_DINO_BERT_ROOT}
       worker_python: ${LAE_DINO_PYTHON}
       stderr_log: ${LAE_DINO_STDERR_LOG}
-      score_threshold: 0.0
+      # 0.0 -> 0.25: the 0.05 box floor floods the count head (raw 1200..21000
+      # boxes -> fused 27..153 on refs 1..11).  Raise the effective LAE cut
+      # (max(detector.score_threshold, 0.05)) so the head sees sane pools.
+      score_threshold: 0.25
       top_k: 300
     scale:
       global:
@@ -103,6 +118,10 @@ providers:
       fine:
         enabled: false
     count:
+      # 0.10 did NOT help: at 0.05 box floor the LAE raw pool is huge
+      # (21000 boxes -> fuse 11..202 vs refs 1..11), i.e. over-count.
+      # Restore 0.20 for the count-head fusion; LOCATE keeps 0.05 because
+      # CLIP reranking + max_candidates preserve precision there.
       score_threshold: 0.20
       nms_iou: 0.40
       cross_scale_iou: 0.50

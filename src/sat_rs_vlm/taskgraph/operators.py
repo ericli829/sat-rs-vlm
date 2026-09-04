@@ -1551,10 +1551,32 @@ class SelectExecutor:
             return value.region
         if isinstance(value, Region):
             return value
-        if isinstance(value, EntitySet) and len(value.entities) == 1:
-            return value.entities[0].region
-        if isinstance(value, RegionSet) and len(value.regions) == 1:
-            return value.regions[0]
+        if isinstance(value, EntitySet) and value.entities:
+            if len(value.entities) == 1:
+                return value.entities[0].region
+            # Multiple candidates: keep the highest-confidence one as the
+            # reference so deterministic relations still run exact geometry.
+            sorted_entities = sorted(
+                value.entities,
+                key=lambda entity: (
+                    -(float(entity.score) if entity.score is not None else float("-inf")),
+                    str(entity.provenance.get("candidate_id", "")),
+                ),
+            )
+            return sorted_entities[0].region
+        if isinstance(value, RegionSet) and value.regions:
+            if len(value.regions) == 1:
+                return value.regions[0]
+            # Regions expose confidence through provenance.confidence when
+            # available; fall back to the first region deterministically.
+            sorted_regions = sorted(
+                enumerate(value.regions),
+                key=lambda pair: (
+                    -float(pair[1].provenance.get("confidence") or 0.0),
+                    pair[0],
+                ),
+            )
+            return sorted_regions[0][1]
         return None
 
     @staticmethod
@@ -1945,6 +1967,13 @@ class SelectExecutor:
             for index in all_indices
             if index in set(clear_positive_indices).union(semantic_positive_indices)
         )
+        if not final_indices and all_indices:
+            # The VLM verified every candidate independently and rejected all
+            # of them: keep the empty result as the contract (the relation does
+            # not hold for any candidate).  Downstream cardinality consumers
+            # require the exact EMPTY semantics; a visually-grounded fallback
+            # is handled by the consumer/choice layer instead.
+            pass
         semantic_ids = self._candidate_ids(items, semantic_positive_indices)
         final_ids = self._candidate_ids(items, final_indices)
         status = self._cardinality_status(len(final_indices), selection_type)
@@ -2332,13 +2361,12 @@ class SelectExecutor:
             reference = self._single_reference(reference_value)
             relation = str(node.params["relation"])
             if reference is None:
-                # A plural upstream reference is still a valid visual context
-                # for fuzzy relations.  It is not valid for a deterministic
-                # one-to-one geometry calculation.
-                if (
-                    relation in {"NEAR", "NEXT_TO", "AROUND", "BETWEEN"}
-                    and reference_value is not None
-                ):
+                # A plural upstream reference is still a valid visual context:
+                # ask the semantic VLM which candidate satisfies the relation.
+                # Deterministic relations keep the exact geometry path when a
+                # single reference exists; only plural/unresolved references
+                # fall back to semantic evidence.
+                if reference_value is not None:
                     return self._semantic_select(
                         candidates,
                         reference_value,
@@ -2388,6 +2416,20 @@ class SelectExecutor:
                     provenance,
                     clear_positive_indices=partition.positive,
                     grey_indices=partition.grey,
+                )
+            if not partition.positive and items:
+                # Geometry found no exact match but candidates exist: the
+                # relation is likely fuzzy (e.g. "truck in the intersection").
+                # Ask the semantic VLM instead of hard-failing downstream.
+                return self._semantic_select(
+                    candidates,
+                    reference_value,
+                    relation,
+                    node,
+                    context,
+                    provenance,
+                    clear_positive_indices=(),
+                    grey_indices=tuple(range(len(items))),
                 )
             relation_selected = self._selected_like(
                 candidates,
@@ -2592,6 +2634,46 @@ class SemanticExecutor:
         fusion_reason = hint.fusion_reason if hint is not None else "not_final_source"
         question = semantic_question(node, context.question, final_choice_fusion=False)
         instruction = semantic_reasoning_instruction(node)
+
+        def _is_empty_visual(value: RuntimeObject) -> bool:
+            if isinstance(value, EntitySet):
+                return len(value.entities) == 0
+            if isinstance(value, RegionSet):
+                return len(value.regions) == 0
+            return False
+
+        empty_visual_evidence = any(
+            _is_empty_visual(item)
+            for item in inputs.values()
+            if not isinstance(item, list)
+        )
+        if empty_visual_evidence and node.op in {
+            OperatorName.ATTRIBUTE,
+            OperatorName.CLASSIFY,
+            OperatorName.MULTILABEL_CLASSIFY,
+            OperatorName.RELATION,
+            OperatorName.MOTION,
+        }:
+            # Detector/relation evidence is empty: answer from the question
+            # (with the configured option space when available) so the sample
+            # still yields a label instead of hard-failing on materialization.
+            option_fallback = tuple(
+                str(value) for value in node.params.get("label_space") or ()
+            ) or None
+            if node.op is OperatorName.RELATION:
+                option_fallback = tuple(relation.value for relation in SpatialRelation)
+            elif node.op is OperatorName.MOTION:
+                option_fallback = ("YES", "NO")
+            elif node.op is OperatorName.MULTILABEL_CLASSIFY:
+                option_fallback = tuple(
+                    str(value) for value in node.params.get("label_space") or ()
+                )
+            elif node.op is OperatorName.ATTRIBUTE:
+                configured_values = self.semantic_config.attribute_values(
+                    str(node.params["attribute"])
+                )
+                option_fallback = tuple(str(value) for value in configured_values or ())
+            return self._free_text(node, inputs, context, options=option_fallback or ())
 
         candidates: tuple[str, ...] | None = None
         if node.op is OperatorName.RELATION:

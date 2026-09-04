@@ -1159,7 +1159,7 @@ class ProposalDetectionAdapter:
                     crop = source.convert("RGB").crop(request.scope.bbox_xyxy_global)
                     detector_path = Path(temp_dir) / "scope.png"
                     crop.save(detector_path)
-            proposal_query = request.target.category.strip()
+            proposal_query = request.target.detection_phrase()
             ranking_query = request.target.phrase()
             effective_clip_top_k = (
                 max(self.clip_rerank_top_k, self.max_candidates)

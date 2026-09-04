@@ -173,6 +173,37 @@ RUNTIME_RESULT_HINT = re.compile(
 )
 NUMERIC_VALUE_HINT = re.compile(r"(?<![\w$])-?\d+(?:\.\d+)?(?!\w)")
 
+# Open-set detection synonym groups for the LAE-DINO BERT text backbone.
+# Grouping near-synonyms in one prompt strengthens visual-text attention for
+# small targets (verified empirically: recall rises without new false
+# positives); see https://eclipse-desu.github.io/posts/lae-dino-report/.
+DETECTION_SYNONYMS: dict[str, tuple[str, ...]] = {
+    "vehicle": ("car", "truck", "bus"),
+    "car": ("vehicle", "truck", "sedan"),
+    "truck": ("vehicle", "lorry", "container truck"),
+    "bus": ("vehicle", "coach"),
+    "building": ("house", "home", "residential"),
+    "house": ("building", "home", "residential"),
+    "road": ("highway", "street", "laneway"),
+    "highway": ("road", "street", "motorway"),
+    "ship": ("boat", "vessel", "yacht"),
+    "boat": ("ship", "vessel", "yacht"),
+    "airplane": ("aircraft", "plane", "jet"),
+    "aircraft": ("airplane", "plane", "jet"),
+    "bridge": ("overpass", "viaduct"),
+    "parking lot": ("parking area", "parking", "car park"),
+    "parking area": ("parking lot", "parking", "car park"),
+    "rhombus": ("diamond", "rhombic shape"),
+    "container": ("shipping container", "cargo box"),
+    "railway": ("railroad", "train track", "rail line"),
+    "railway station": ("train station", "rail station"),
+    "stadium": ("sports stadium", "arena", "stadium structure"),
+    "tennis court": ("tennis field", "tennis playground"),
+    "football field": ("football playground", "soccer field", "football pitch"),
+    "playground": ("sports ground", "exercise area"),
+    "tower": ("tall structure", "spire"),
+}
+
 
 class InputSpec(StrictModel):
     type: Literal["image"] = "image"
@@ -200,6 +231,24 @@ class TargetSpec(StrictModel):
     def phrase(self) -> str:
         prefix = " ".join(str(value) for value in self.attributes.values())
         return f"{prefix} {self.category}".strip()
+
+    def detection_phrase(self) -> str:
+        """Open-set detection query: the category plus synonyms.
+
+        LAE-DINO uses a BERT text backbone, so near-synonyms in one prompt
+        (separated by ``.``) reinforce the visual-text attention and improve
+        recall on small targets without hurting precision (see
+        https://eclipse-desu.github.io/posts/lae-dino-report/).  Category-only
+        prompts are preserved for categories without a synonym group.
+        """
+        synonyms = DETECTION_SYNONYMS.get(self.category.strip().casefold())
+        if not synonyms:
+            return self.category.strip()
+        return " . ".join((self.category.strip(), *synonyms))
+
+    def detection_category(self) -> str:
+        """Primary category label used as the ``label`` field of detections."""
+        return self.category.strip()
 
 
 class MarkerSpec(StrictModel):

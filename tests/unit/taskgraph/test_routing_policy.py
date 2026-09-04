@@ -35,10 +35,12 @@ def test_vrsbench_semantic_tasks_use_direct_vlm(task_category: str) -> None:
         "detection",
     ),
 )
-def test_vrsbench_localization_and_counting_use_direct_lae(task_category: str) -> None:
+def test_vrsbench_localization_and_counting_use_direct_vlm(task_category: str) -> None:
+    # Counting/grounding route fully through the semantic 2B VLM (the LAE
+    # detector under-counts small objects on VRSBench visuals).
     assert (
         ExecutionModeRouter().route("VRSBench", task_category)
-        is ExecutionMode.DIRECT_DETECTION
+        is ExecutionMode.DIRECT_VLM
     )
 
 

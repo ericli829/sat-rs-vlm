@@ -123,6 +123,34 @@ def test_clip_rerank_top_k_is_explicit_and_auditable() -> None:
     assert trace["filtered_indices"] == [1, 0]
 
 
+def test_clip_rerank_pool_cap_limits_retriever_call_and_maps_indices() -> None:
+    base = _FakeProposalProvider(_base_result())
+    retriever = _FakeRetriever([0.9, 0.1])
+    provider = CLIPRerankedProposalProvider(
+        base,
+        retriever,
+        {"rerank_pool_k": 2},
+        base_provider_name="fake_detector",
+        retriever_name="fake_retriever",
+    )
+
+    result = provider.predict_with_rerank_query(
+        Path("image.png"), "building", "white building", top_k=1
+    )
+    trace = result.metadata["clip_rerank"]
+
+    # detector scores [0.2, 0.8, 0.5] -> top-2 pool = global indices [1, 2]
+    assert retriever.calls == [(Path("image.png"), "white building", 2)]
+    assert trace["rerank_pool_k"] == 2
+    assert trace["rerank_pool_size"] == 2
+    assert trace["pool_order"] == [1, 2]
+    assert trace["raw_candidate_count"] == 3
+    assert [box[0] for box in result.boxes_xyxy] == [1.0]
+    # retained index is reported in the original candidate space
+    assert trace["retained_indices"] == [1]
+    provider.close()
+
+
 def test_clip_rerank_empty_candidates_does_not_call_retriever() -> None:
     base = _FakeProposalProvider(_base_result(0))
     retriever = _FakeRetriever([])

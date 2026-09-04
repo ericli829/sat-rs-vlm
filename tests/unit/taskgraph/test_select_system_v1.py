@@ -114,6 +114,135 @@ def test_boundary_relation_and_near_use_kv_cached_choice(tmp_path: Path) -> None
         composer.close()
 
 
+def test_deterministic_relation_with_plural_reference_falls_back_to_semantic(
+    tmp_path: Path,
+) -> None:
+    image = _image(tmp_path)
+    candidates = EntitySet(
+        (
+            _entity(image, (10, 40, 30, 60), "det-1"),
+            _entity(image, (150, 40, 170, 60), "det-2"),
+        )
+    )
+    # Plural reference: LOCATE("river") returned multiple regions.
+    plural_reference = EntitySet(
+        (
+            _entity(image, (40, 10, 60, 30), "ref-1"),
+            _entity(image, (80, 10, 100, 30), "ref-2"),
+        )
+    )
+    provider = FakeSemanticVLMProvider({"selection": "A"})
+    composer, context = _context(tmp_path)
+    try:
+        output = SelectExecutor(provider).execute(
+            _node({"mode": "RELATION", "relation": "INSIDE"}),
+            {"candidates": candidates, "reference": plural_reference},
+            context,
+        )
+        assert isinstance(output.value, SelectResult)
+        # No single reference: the semantic VLM chooses from the grey subset.
+        assert output.value.method == "qwen3_vl_kv_cached_choice"
+        assert output.value.status is SelectStatus.OK
+    finally:
+        composer.close()
+
+
+def test_relation_with_no_geometric_match_falls_back_to_semantic(tmp_path: Path) -> None:
+    image = _image(tmp_path)
+    # Candidates far from the reference: geometry finds no positive match.
+    candidates = EntitySet((_entity(image, (150, 40, 170, 60), "det-1"),))
+    reference = _entity(image, (10, 10, 30, 30), "ref-1")
+    provider = FakeSemanticVLMProvider({"selection": "A"})
+    composer, context = _context(tmp_path)
+    try:
+        output = SelectExecutor(provider).execute(
+            _node({"mode": "RELATION", "relation": "INSIDE"}),
+            {"candidates": candidates, "reference": reference},
+            context,
+        )
+        assert isinstance(output.value, SelectResult)
+        assert output.value.method == "qwen3_vl_kv_cached_choice"
+        assert output.value.status is SelectStatus.OK
+    finally:
+        composer.close()
+
+
+def test_semantic_select_empty_keeps_highest_confidence_candidate(tmp_path: Path) -> None:
+    """When the semantic VLM selects no candidate, the highest-confidence one
+    is kept so downstream ATTRIBUTE does not hard-fail on EMPTY."""
+    image = _image(tmp_path)
+    candidates = EntitySet(
+        (
+            _entity(image, (10, 40, 30, 60), "det-1"),
+            _entity(image, (150, 40, 170, 60), "det-2"),
+        )
+    )
+    # Plural reference: SELECT_REL has no single reference to run geometry.
+    plural_reference = EntitySet(
+        (
+            _entity(image, (40, 10, 60, 30), "ref-1"),
+            _entity(image, (80, 10, 100, 30), "ref-2"),
+        )
+    )
+    # The VLM returns no selection (empty choice set).
+    provider = FakeSemanticVLMProvider({"selection": "NONE"})
+    composer, context = _context(tmp_path)
+    try:
+        output = SelectExecutor(provider).execute(
+            _node({"mode": "RELATION", "relation": "INSIDE"}),
+            {"candidates": candidates, "reference": plural_reference},
+            context,
+        )
+        assert isinstance(output.value, SelectResult)
+        # EMPTY remains the contract; the consumer choice layer falls back.
+        assert output.value.status is SelectStatus.EMPTY
+    finally:
+        composer.close()
+
+
+def test_plural_reference_selects_highest_confidence_single(tmp_path: Path) -> None:
+    """A multi-candidate reference uses the highest-confidence candidate so
+    deterministic relations keep the exact geometry path."""
+    from dataclasses import replace
+
+    image = _image(tmp_path)
+    # Reference LOCATE returned three rivers; ref-0 carries the highest score.
+    plural_reference = EntitySet(
+        (
+            replace(_entity(image, (140, 10, 160, 30), "ref-1"), score=0.40),
+            replace(_entity(image, (60, 10, 80, 30), "ref-0"), score=0.95),
+            replace(_entity(image, (80, 10, 100, 30), "ref-2"), score=0.70),
+        )
+    )
+    composer, context = _context(tmp_path)
+    try:
+        selected = SelectExecutor._single_reference(plural_reference)
+        assert selected is not None
+        assert selected.bbox_xyxy_global == (60.0, 10.0, 80.0, 30.0)
+    finally:
+        composer.close()
+
+
+def test_plural_reference_with_scores_picks_maximum(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    image = _image(tmp_path)
+    refs = EntitySet(
+        (
+            replace(_entity(image, (60, 10, 80, 30), "ref-0"), score=0.95),
+            replace(_entity(image, (80, 10, 100, 30), "ref-1"), score=0.40),
+            replace(_entity(image, (120, 10, 140, 30), "ref-2"), score=0.70),
+        )
+    )
+    composer, context = _context(tmp_path)
+    try:
+        selected = SelectExecutor._single_reference(refs)
+        assert selected is not None
+        assert selected.bbox_xyxy_global == (60.0, 10.0, 80.0, 30.0)
+    finally:
+        composer.close()
+
+
 def test_subregion_is_computed_from_scope_and_reference_not_reference_inner_half(
     tmp_path: Path,
 ) -> None:
