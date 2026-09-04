@@ -562,10 +562,12 @@ class ReferentRefiner:
         model_input = self.composer.compose(
             [image],
             question=(
-                "Locate the target in the image and output its bounding box.\n"
+                "Locate the target in the image and output its bounding box as "
+                "pixel coordinates of the image.\n"
                 f"Target: {target.phrase()}\n"
                 f"Original question: {question}\n"
-                "Return exactly four numbers: x1 y1 x2 y2 (pixel coordinates)."
+                "Output format: x1 y1 x2 y2  (for example: 120 80 340 260)\n"
+                "Return only the four numbers."
             ),
             options=(),
         )

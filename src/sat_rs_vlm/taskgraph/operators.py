@@ -1037,7 +1037,7 @@ class LocateExecutor:
             if should_refine and self.refiner.config.enabled:
                 vlm_result = self.refiner.vlm_referent(
                     scope,
-                    question=context.final_question or context.question,
+                    question=context.question or context.final_question or "",
                     target=target,
                 )
                 if vlm_result is not None:
