@@ -678,6 +678,8 @@ class InputComposer:
                 # Empty evidence: no visual to crop.  The caller (semantic
                 # operator) answers from the question/options instead.
                 return []
+            if self.entity_tight_crops:
+                return self._entity_set_visuals_with_metadata(value)[0]
             if len(value.entities) == 1:
                 return [self._crop(value.entities[0].region)]
             return self._entity_set_visuals_with_metadata(value)[0]
