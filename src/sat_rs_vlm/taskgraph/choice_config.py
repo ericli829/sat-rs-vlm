@@ -23,6 +23,11 @@ class ChoiceSystemConfig:
     multi_select_threshold: float = 0.0
     multi_empty_policy: str = "EMPTY"
     preserve_reasoning_text: bool = True
+    # MME "This image doesn't feature the ..." options are selected by the
+    # semantic provider far more often than the reference ground truth uses
+    # them (E is the correct answer ~2 of 3538 samples).  When enabled the
+    # resolver removes such options before scoring.
+    forbid_non_feature_options: bool = False
 
     def __post_init__(self) -> None:
         if self.backend != "kv_cached_logits":
@@ -67,4 +72,5 @@ class ChoiceSystemConfig:
             multi_select_threshold=float(value.get("multi_select_threshold", 0.0)),
             multi_empty_policy=str(value.get("multi_empty_policy", "EMPTY")),
             preserve_reasoning_text=bool(value.get("preserve_reasoning_text", True)),
+            forbid_non_feature_options=bool(value.get("forbid_non_feature_options", False)),
         )

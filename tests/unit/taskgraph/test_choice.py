@@ -91,6 +91,40 @@ def test_count_near_option_range_maps_to_closest_and_never_e(tmp_path: Path) -> 
     assert provider.choice_calls == []
 
 
+def test_non_feature_option_removed_when_forbidden(tmp_path: Path) -> None:
+    from sat_rs_vlm.taskgraph.choice_config import ChoiceSystemConfig
+
+    options = (
+        "(A) lake",
+        "(B) farm",
+        "(C) mall",
+        "(D) residential",
+        "(E) This image doesn't feature the color.",
+    )
+    # semantic scores rank E highest; with the flag the option must vanish
+    provider = FakeSemanticVLMProvider(
+        choice_scores={"final_choice": {"A": 1.0, "B": 2.0, "C": 3.0, "D": 4.0, "E": 100.0}}
+    )
+    resolver = ChoiceResolver(
+        provider,
+        InputComposer(tmp_path / "noe"),
+        ChoiceSystemConfig(forbid_non_feature_options=True),
+    )
+    result = resolver.resolve(ChoiceRequest((ImageRef(IMAGE),), "Choose.", options))
+    assert result.selected_ids == ("D",)
+    # the E option must never be scored
+    assert "E" not in result.provenance["scores"]
+    assert result.choice_id == "D"
+
+    # without the flag E wins (old behavior)
+    provider2 = FakeSemanticVLMProvider(
+        choice_scores={"final_choice": {"A": 1.0, "B": 2.0, "C": 3.0, "D": 4.0, "E": 100.0}}
+    )
+    resolver2 = ChoiceResolver(provider2, InputComposer(tmp_path / "e"))
+    result2 = resolver2.resolve(ChoiceRequest((ImageRef(IMAGE),), "Choose.", options))
+    assert result2.selected_ids == ("E",)
+
+
 def test_reasoning_letters_never_determine_single_choice(tmp_path: Path) -> None:
     provider = FakeSemanticVLMProvider(
         {"final_choice_reasoning": "A looks possible; B is weak; therefore C appears plausible."},

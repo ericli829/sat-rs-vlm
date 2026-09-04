@@ -345,7 +345,34 @@ class ChoiceResolver:
             provenance=provenance,
         )
 
+    _NON_FEATURE_PATTERNS = (
+        re.compile(r"doesn'?t feature"),
+        re.compile(r"does not feature"),
+        re.compile(r"doesn'?t contain"),
+        re.compile(r"does not contain"),
+        re.compile(r"doesn'?t show"),
+        re.compile(r"does not show"),
+        re.compile(r"is not present"),
+        re.compile(r"no such"),
+    )
+
+    @classmethod
+    def _is_non_feature_option(cls, option: str) -> bool:
+        text = option.casefold()
+        return any(pattern.search(text) is not None for pattern in cls._NON_FEATURE_PATTERNS)
+
     def resolve(self, request: ChoiceRequest) -> ChoiceResult:
+        if (
+            self.config.forbid_non_feature_options
+            and request.answer_type is AnswerType.CHOICE_SINGLE
+        ):
+            kept = tuple(
+                option
+                for option in request.options
+                if not self._is_non_feature_option(option)
+            )
+            if kept and len(kept) < len(request.options):
+                request = replace(request, options=kept)
         fallback_score = self._semantic_fallback_score(request)
         if fallback_score is not None:
             self.last_score_result = fallback_score
