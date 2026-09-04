@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import Any
@@ -54,8 +55,8 @@ class RegionFusion:
             or self.context_margin < 0.0
         ):
             raise LocatorError("fusion region/gap/margin values are invalid")
-        if self.score_threshold is not None and not 0.0 <= self.score_threshold <= 1.0:
-            raise LocatorError("fusion score_threshold must be between 0 and 1")
+        if self.score_threshold is not None and not math.isfinite(self.score_threshold):
+            raise LocatorError("fusion score_threshold must be finite")
 
     def fuse(
         self,

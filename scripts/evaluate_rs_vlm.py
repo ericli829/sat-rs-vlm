@@ -32,6 +32,7 @@ from sat_rs_vlm.evaluation.inference import (
     build_generation_kwargs as _build_generation_kwargs,
 )
 from sat_rs_vlm.evaluation.inference import (
+    count_decoded_output_tokens,
     extract_message_inputs,
     extract_reference,
     timed_predictions,
@@ -47,6 +48,13 @@ from sat_rs_vlm.evaluation.performance import (
 )
 from sat_rs_vlm.evaluation.runner import run_evaluation, validate_output_directory
 from sat_rs_vlm.evaluation.tiers import resolve_tier_identity, validate_tier_asset
+from sat_rs_vlm.infrastructure.telemetry import (
+    GenerationTelemetry,
+    SystemTelemetry,
+    collect_model_inventory,
+    collect_repository_provenance,
+    collect_runtime_environment,
+)
 from sat_rs_vlm.models.qwen3vl_loader import (
     load_qwen3vl,
 )
@@ -309,16 +317,17 @@ def evaluate(
         model = loaded_model
         processor = loaded_processor
     model_load_ms = (time.perf_counter() - model_load_started) * 1000.0
+    model_load_time_ms = model_load_ms if loaded_modules is None else None
     startup_and_model_load_ms = (time.perf_counter() - startup_started) * 1000.0
     model.eval()
     torch = modules["torch"]
-    if torch.cuda.is_available():
-        torch.cuda.reset_peak_memory_stats()
     evaluation_started = time.perf_counter()
     generation_cfg = dict(config.get("generation", {}))
     dataset = Qwen3VLDataset(eval_file, data_cfg.get("max_eval_samples"))
     batch_size = int(batch_size_override or data_cfg.get("eval_batch_size", 1))
     group_by_task = bool(data_cfg.get("group_by_task", True))
+    warmup_runs = int(evaluation_cfg.get("warmup_runs", 0))
+    repeat_runs = int(evaluation_cfg.get("repeat_runs", 1))
     log_every = max(1, int(data_cfg.get("log_every_samples", 100)))
     if batch_size < 1:
         raise ValueError(f"Evaluation batch size must be positive, got {batch_size}")
@@ -339,61 +348,261 @@ def evaluate(
     if performance_monitor is not None:
         performance_monitor.start()
 
+    model_config = dict(config.get("model", {}))
+    model_name = str(model_config.get("base_model", type(model).__name__))
+    evaluation_batches = list(
+        iter_evaluation_batches(dataset, batch_size, group_by_task=group_by_task)
+    )
+    if warmup_runs < 0:
+        raise ValueError(f"Evaluation warmup_runs cannot be negative, got {warmup_runs}")
+    if repeat_runs < 1:
+        raise ValueError(f"Evaluation repeat_runs must be positive, got {repeat_runs}")
+    if evaluation_batches and warmup_runs:
+        warmup_task_type, warmup_batch = evaluation_batches[0]
+        warmup_samples = [sample for _, sample in warmup_batch]
+        for _ in range(warmup_runs):
+            timed_predictions(
+                model,
+                processor,
+                collator,
+                warmup_samples,
+                generation_cfg,
+                torch,
+                task_type=warmup_task_type,
+            )
+
     predictions_by_index: list[dict[str, Any] | None] = [None] * len(dataset)
+    measured_output_tokens_total = 0
+    measured_output_token_samples = 0
     evaluated = 0
+    failed_samples = 0
     next_log = 1
     print(
         f"Evaluating {len(dataset)} samples with batch_size={batch_size}, "
-        f"group_by_task={group_by_task}"
+        f"group_by_task={group_by_task}, warmup_runs={warmup_runs}, "
+        f"repeat_runs={repeat_runs}"
     )
-    for task_type, indexed_batch in iter_evaluation_batches(
-        dataset,
-        batch_size,
-        group_by_task=group_by_task,
-    ):
-        samples = [sample for _, sample in indexed_batch]
-        batch_predictions, latency_ms = timed_predictions(
-            model,
-            processor,
-            collator,
-            samples,
-            generation_cfg,
-            torch,
-            task_type=task_type,
-        )
-        for (original_index, sample), prediction in zip(
-            indexed_batch, batch_predictions, strict=True
-        ):
-            predictions_by_index[original_index] = {
-                "id": sample["id"],
-                "task_type": sample["task_type"],
-                "prediction": prediction,
-                "reference": extract_reference(sample["messages"]),
-                "metadata": sample.get("metadata", {}),
-                "inference_latency_ms": latency_ms,
-            }
-            if performance_monitor is not None:
-                performance_monitor.record(
-                    str(sample["task_type"]),
-                    {},
-                    system_latency_ms=latency_ms,
-                    input_profile={
-                        "image_count": len(
-                            extract_message_inputs(sample, collator.image_root)[0]
-                        ),
-                        "visual_token_count_status": "not_available_from_batched_backend",
-                    },
+    prediction_monitor = SystemTelemetry(
+        "main_evaluation_prediction_loop",
+        torch_module=torch,
+        reset_cuda_peaks=True,
+    )
+    with prediction_monitor:
+        for task_type, indexed_batch in evaluation_batches:
+            samples = [sample for _, sample in indexed_batch]
+            measured_latencies: list[float] = []
+            batch_predictions: list[str] = []
+            batch_output_token_counts: list[int | None] = []
+            batch_output_tokens_total = 0
+            batch_output_token_samples = 0
+            batch_generation_telemetry: GenerationTelemetry | None = None
+            try:
+                for _ in range(repeat_runs):
+                    generation_telemetry = GenerationTelemetry()
+                    repeated_predictions, repeated_latency_ms = timed_predictions(
+                        model,
+                        processor,
+                        collator,
+                        samples,
+                        generation_cfg,
+                        torch,
+                        task_type=task_type,
+                        telemetry=generation_telemetry,
+                    )
+                    repeated_token_counts = count_decoded_output_tokens(
+                        processor, repeated_predictions
+                    )
+                    available_repeated_counts = [
+                        count for count in repeated_token_counts if count is not None
+                    ]
+                    batch_output_tokens_total += sum(available_repeated_counts)
+                    batch_output_token_samples += len(available_repeated_counts)
+                    if not batch_predictions:
+                        batch_predictions = repeated_predictions
+                        batch_output_token_counts = repeated_token_counts
+                        batch_generation_telemetry = generation_telemetry
+                    measured_latencies.append(repeated_latency_ms)
+                latency_ms = sum(measured_latencies) / len(measured_latencies)
+                generation_payload = (
+                    batch_generation_telemetry.to_dict()
+                    if batch_generation_telemetry is not None
+                    else {}
                 )
-        evaluated += len(samples)
-        if evaluated >= next_log or evaluated == len(dataset):
-            print(f"Evaluated {evaluated}/{len(dataset)} samples")
-            next_log = ((evaluated // log_every) + 1) * log_every
+                if isinstance(generation_payload.get("timing_ms"), dict):
+                    generation_payload["timing_ms"]["batch_e2e"] = generation_payload[
+                        "timing_ms"
+                    ].get("e2e")
+                    generation_payload["timing_ms"]["e2e"] = latency_ms
+                for (original_index, sample), prediction, output_token_count in zip(
+                    indexed_batch, batch_predictions, batch_output_token_counts, strict=True
+                ):
+                    predictions_by_index[original_index] = {
+                        "id": sample["id"],
+                        "task_type": sample["task_type"],
+                        "prediction": prediction,
+                        "reference": extract_reference(sample["messages"]),
+                        "metadata": sample.get("metadata", {}),
+                        "inference_latency_ms": latency_ms,
+                        "latency_semantics": "batch_amortized_model_path",
+                        "output_token_count": output_token_count,
+                        "output_token_count_method": "retokenized_decoded_output",
+                        "telemetry": {
+                            "schema_version": "1.0",
+                            "success": True,
+                            "scope": "standalone_vlm_batch",
+                            "timing_ms": {
+                                "e2e": latency_ms,
+                                "preprocess": None,
+                                "model_generate": None,
+                                "decode": None,
+                                "ttft": None,
+                            },
+                            "tokens": {"output": output_token_count},
+                            "resources": {
+                                "scope": "main_evaluation_prediction_loop",
+                                "available_after_run": True,
+                            },
+                            "activated_models": [model_name],
+                            **generation_payload,
+                        },
+                    }
+                    if performance_monitor is not None:
+                        performance_monitor.record(
+                            str(sample["task_type"]),
+                            {},
+                            system_latency_ms=latency_ms,
+                            input_profile={
+                                "image_count": len(
+                                    extract_message_inputs(sample, collator.image_root)[0]
+                                ),
+                                "visual_token_count_status": (
+                                    "not_available_from_batched_backend"
+                                ),
+                            },
+                        )
+                measured_output_tokens_total += batch_output_tokens_total
+                measured_output_token_samples += batch_output_token_samples
+            except Exception as batch_error:
+                # Retry each item separately so one malformed sample is recorded explicitly.
+                for original_index, sample in indexed_batch:
+                    try:
+                        individual_predictions: list[str] = []
+                        individual_latencies: list[float] = []
+                        individual_counts: list[int | None] = []
+                        last_generation_payload: dict[str, Any] = {}
+                        for _ in range(repeat_runs):
+                            generation_telemetry = GenerationTelemetry()
+                            prediction_values, individual_latency = timed_predictions(
+                                model,
+                                processor,
+                                collator,
+                                [sample],
+                                generation_cfg,
+                                torch,
+                                task_type=task_type,
+                                telemetry=generation_telemetry,
+                            )
+                            individual_prediction = prediction_values[0]
+                            individual_predictions.append(individual_prediction)
+                            individual_latencies.append(individual_latency)
+                            individual_counts.extend(
+                                count_decoded_output_tokens(processor, [individual_prediction])
+                            )
+                            last_generation_payload = generation_telemetry.to_dict()
+                        prediction = individual_predictions[0]
+                        output_token_count = individual_counts[0]
+                        latency_ms = sum(individual_latencies) / len(individual_latencies)
+                        measured_output_tokens_total += sum(
+                            count for count in individual_counts if count is not None
+                        )
+                        measured_output_token_samples += sum(
+                            count is not None for count in individual_counts
+                        )
+                        predictions_by_index[original_index] = {
+                            "id": sample["id"],
+                            "task_type": sample["task_type"],
+                            "prediction": prediction,
+                            "reference": extract_reference(sample["messages"]),
+                            "metadata": sample.get("metadata", {}),
+                            "inference_latency_ms": latency_ms,
+                            "latency_semantics": "single_sample_retry_after_batch_failure",
+                            "output_token_count": output_token_count,
+                            "output_token_count_method": "retokenized_decoded_output",
+                            "telemetry": {
+                                "schema_version": "1.0",
+                                "success": True,
+                                "scope": "standalone_vlm_single_sample_retry",
+                                "timing_ms": {"e2e": latency_ms, "ttft": None},
+                                "tokens": {"output": output_token_count},
+                                "batch_error": type(batch_error).__name__,
+                                **last_generation_payload,
+                            },
+                        }
+                        if performance_monitor is not None:
+                            performance_monitor.record(
+                                str(sample["task_type"]),
+                                {},
+                                system_latency_ms=latency_ms,
+                                input_profile={
+                                    "image_count": len(
+                                        extract_message_inputs(sample, collator.image_root)[0]
+                                    ),
+                                    "visual_token_count_status": (
+                                        "not_available_from_batched_backend"
+                                    ),
+                                },
+                            )
+                    except Exception as sample_error:
+                        failed_samples += 1
+                        predictions_by_index[original_index] = {
+                            "id": sample["id"],
+                            "task_type": sample["task_type"],
+                            "prediction": "",
+                            "reference": extract_reference(sample["messages"]),
+                            "metadata": sample.get("metadata", {}),
+                            "inference_latency_ms": None,
+                            "latency_semantics": "failed_inference",
+                            "output_token_count": None,
+                            "output_token_count_method": None,
+                            "telemetry": {
+                                "schema_version": "1.0",
+                                "success": False,
+                                "scope": "standalone_vlm",
+                                "timing_ms": {"e2e": None, "ttft": None},
+                                "tokens": {"output": None},
+                                "error_type": type(sample_error).__name__,
+                                "error_message": str(sample_error),
+                                "batch_error_type": type(batch_error).__name__,
+                            },
+                        }
+            evaluated += len(samples)
+            if evaluated >= next_log or evaluated == len(dataset):
+                print(f"Evaluated {evaluated}/{len(dataset)} samples")
+                next_log = ((evaluated // log_every) + 1) * log_every
 
     if any(prediction is None for prediction in predictions_by_index):
         raise RuntimeError("Evaluation finished with missing predictions")
     predictions = [
         prediction for prediction in predictions_by_index if prediction is not None
     ]
+    prediction_telemetry = prediction_monitor.to_dict()
+    resources = dict(prediction_telemetry["resources"])
+    for prediction in predictions:
+        telemetry = prediction.get("telemetry")
+        if isinstance(telemetry, dict):
+            telemetry_resources = telemetry.setdefault("resources", {})
+            if isinstance(telemetry_resources, dict):
+                telemetry_resources.update(resources)
+                telemetry_resources["scope"] = "main_evaluation_prediction_loop"
+    resource_benchmark = {
+        "scope": prediction_telemetry["scope"],
+        "timing_ms": prediction_telemetry["timing_ms"],
+        "resources": resources,
+        "batch_size": batch_size,
+        "warmup_runs": warmup_runs,
+        "repeat_runs": repeat_runs,
+        "latency_semantics": "batch_amortized_model_path",
+    }
 
     predictions_file.parent.mkdir(parents=True, exist_ok=True)
     write_jsonl(predictions_file, predictions)
@@ -438,19 +647,158 @@ def evaluate(
             tier_identity["tier_version"] if tier_identity else None
         ),
         evaluation_tier_sha256=tier_identity["sha256"] if tier_identity else None,
+        resource_benchmark=resource_benchmark,
     )
     evaluation_runtime_seconds = time.perf_counter() - evaluation_started
-    peak_vram_mb = (
-        torch.cuda.max_memory_allocated() / (1024 * 1024)
-        if torch.cuda.is_available()
-        else None
+    peak_vram_mb = resources["peak_gpu_allocated_mb"]
+    output_token_counts = [
+        int(row["output_token_count"])
+        for row in predictions
+        if row.get("output_token_count") is not None
+    ]
+    generation_records = [
+        row.get("telemetry", {})
+        for row in predictions
+        if isinstance(row.get("telemetry", {}), dict)
+    ]
+    generation_timing = [
+        record.get("timing_ms", {})
+        for record in generation_records
+        if isinstance(record.get("timing_ms", {}), dict)
+    ]
+    ttft_values = [
+        float(timing["ttft"])
+        for timing in generation_timing
+        if timing.get("ttft") is not None
+    ]
+    decode_generation_ms = sum(
+        float(timing["decode_generation"])
+        for timing in generation_timing
+        if timing.get("decode_generation") is not None
     )
+    generated_tokens = sum(
+        int(record["tokens"]["generated"])
+        for record in generation_records
+        if isinstance(record.get("tokens"), dict)
+        and record["tokens"].get("generated") is not None
+    )
+    visual_token_values = [
+        int(record["vision_input"]["visual_token_count"])
+        for record in generation_records
+        if isinstance(record.get("vision_input"), dict)
+        and record["vision_input"].get("visual_token_count") is not None
+    ]
+    prediction_loop_ms = prediction_telemetry["timing_ms"]["e2e"]
     metadata_path = (
         output_dir / "evaluation_metadata.json"
         if output_dir is not None
         else evaluation_dir.parent / "evaluation_metadata.json"
     )
     metadata_path.parent.mkdir(parents=True, exist_ok=True)
+    telemetry_summary_path = metadata_path.parent / "telemetry_summary.json"
+    system_manifest_path = metadata_path.parent / "system_manifest.json"
+    telemetry_summary = {
+        "schema_version": "1.0",
+        "prediction_loop": prediction_telemetry,
+        "model_load": {
+            "latency_ms": model_load_time_ms,
+            "semantics": (
+                "dependencies_and_model_load"
+                if model_load_time_ms is not None
+                else "not_measured_for_preloaded_model"
+            ),
+        },
+        "evaluation_runtime_ms": evaluation_runtime_seconds * 1000.0,
+        "evaluation_runtime_semantics": (
+            "prediction_generation_plus_metric_evaluation_and_report_writes"
+        ),
+        "sample_count": len(predictions),
+        "failed_samples": failed_samples,
+        "batch_size": batch_size,
+        "warmup_runs": warmup_runs,
+        "repeat_runs": repeat_runs,
+        "latency_semantics": "batch_amortized_model_path",
+        "single_sample_full_system_e2e_available": False,
+        "single_sample_full_system_e2e_note": (
+            "This entry point measures the standalone VLM model path. "
+            "Full-system routing telemetry is emitted by TaskGraphRuntime."
+        ),
+        "tokens": {
+            "output_token_count": sum(output_token_counts) if output_token_counts else None,
+            "samples_with_output_token_count": len(output_token_counts),
+            "count_method": "retokenized_decoded_output",
+            "output_tokens_per_prediction_loop_second": (
+                measured_output_tokens_total / (prediction_loop_ms / 1000.0)
+                if measured_output_token_samples and prediction_loop_ms
+                else None
+            ),
+            "decode_tokens_per_second": (
+                generated_tokens / (decode_generation_ms / 1000.0)
+                if generated_tokens and decode_generation_ms > 0
+                else None
+            ),
+            "decode_tokens_per_second_status": (
+                "ok" if generated_tokens and decode_generation_ms > 0 else "unavailable"
+            ),
+            "ttft_ms": sum(ttft_values) / len(ttft_values) if ttft_values else None,
+            "ttft_status": "ok" if ttft_values else "unavailable",
+            "visual_token_count": (
+                sum(visual_token_values) if visual_token_values else None
+            ),
+            "visual_token_count_status": "ok" if visual_token_values else "unavailable",
+        },
+    }
+    model_cfg = model_config
+    model_paths: list[str | Path] = []
+    for key in ("base_model", "adapter_path"):
+        value = model_cfg.get(key)
+        if value:
+            model_paths.append(resolve_model_source(str(value)))
+    if checkpoint is not None:
+        model_paths.append(checkpoint)
+    model_inventory = collect_model_inventory(model, model_paths)
+    system_manifest = {
+        "schema_version": "1.0",
+        "system": {
+            "scope": "standalone_vlm_evaluation",
+            "total_parameter_count": model_inventory["parameter_count"],
+            "total_model_storage_bytes": model_inventory["local_model_storage_bytes"],
+        },
+        "models": [
+            {
+                "name": str(model_cfg.get("base_model", type(model).__name__)),
+                "role": "answer_vlm",
+                **model_inventory,
+            }
+        ],
+        "runtime": collect_runtime_environment(torch),
+        "benchmark": {
+            "sample_count": len(predictions),
+            "failed_samples": failed_samples,
+            "batch_size": batch_size,
+            "warmup_runs": warmup_runs,
+            "repeat_runs": repeat_runs,
+            "repeat_output_policy": "first_repeat_used_for_scoring_all_repeats_profiled",
+            "warmup_scope": "first_evaluation_batch",
+            "group_by_task": group_by_task,
+            "cache_policy": str(evaluation_cfg.get("cache_policy", "unspecified")),
+            "generation": generation_cfg,
+            "precision": model_cfg.get("torch_dtype", model_cfg.get("dtype", "auto")),
+            "timing_boundaries": {
+                "prediction_loop": "collation through device transfer, generate, and decode",
+                "model_load": "dependency import and model/checkpoint construction",
+            },
+        },
+        "repository": collect_repository_provenance(PROJECT_ROOT),
+    }
+    telemetry_summary_path.write_text(
+        json.dumps(telemetry_summary, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    system_manifest_path.write_text(
+        json.dumps(system_manifest, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
     metadata_path.write_text(
         json.dumps(
             {
@@ -463,6 +811,15 @@ def evaluate(
                     else None
                 ),
                 "peak_vram_mb": peak_vram_mb,
+                "peak_gpu_reserved_mb": resources["peak_gpu_reserved_mb"],
+                "peak_cpu_rss_mb": resources["peak_cpu_rss_mb"],
+                "model_load_time_ms": model_load_time_ms,
+                "failed_samples": failed_samples,
+                "warmup_runs": warmup_runs,
+                "repeat_runs": repeat_runs,
+                "latency_semantics": "batch_amortized_model_path",
+                "telemetry_summary_file": str(telemetry_summary_path),
+                "system_manifest_file": str(system_manifest_path),
             },
             ensure_ascii=False,
             indent=2,
@@ -476,9 +833,11 @@ def evaluate(
         performance_path.parent.mkdir(parents=True, exist_ok=True)
         performance_report = performance_monitor.finish(
             requested_samples=len(dataset),
-            completed_samples=len(predictions),
-            failed_samples=0,
-            warmup_samples=0,
+            completed_samples=len(predictions) - failed_samples,
+            failed_samples=failed_samples,
+            warmup_samples=(
+                len(evaluation_batches[0][1]) * warmup_runs if evaluation_batches else 0
+            ),
             startup_and_model_load_ms=startup_and_model_load_ms,
             model_load_ms=model_load_ms,
             config={
@@ -510,6 +869,9 @@ def evaluate(
         "evaluation_outputs": {
             name: str(path) for name, path in evaluation_outputs.items()
         },
+        "evaluation_metadata": str(metadata_path),
+        "telemetry_summary": str(telemetry_summary_path),
+        "system_manifest": str(system_manifest_path),
         "sample_count": len(predictions),
         "batch_size": batch_size,
         "performance_report": str(performance_path) if performance_path is not None else None,

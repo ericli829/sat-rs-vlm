@@ -105,7 +105,7 @@ operation and records stable group IDs and group boxes.
 | `BUILD_ROUTE_CONTEXT` | route context construction | deterministic geometry/markers |
 | `LOCATE` object target | object perception | **REAL:** existing LAE-DINO `ProposalProvider` adapter |
 | `LOCATE` semantic region | region retrieval | existing UHR Locator or score-only Retriever adapter |
-| `COUNT(image/Region)` | tiled detection/count | **REAL:** existing LAE-DINO; existing tiled wrapper handles global transform/NMS |
+| `COUNT(image/Region)` | tiled detection/count | **REAL:** existing LAE-DINO; optional Retriever high-recall gate; global NMS |
 | `COUNT(EntitySet)` | cardinality | deterministic Python; detector is not called again |
 | `SELECT` rank/ordinal/extreme | geometry | deterministic Python |
 | `SELECT` `LEFT_OF`/`RIGHT_OF`/`ABOVE`/`BELOW`/`INSIDE`/`OVERLAP` | geometry first | deterministic Python; boundary cases fall back to Qwen3-VL-2B |
@@ -207,7 +207,8 @@ REAL:
   existing sidecar registry; the `tiled` provider is the UHR count path.
 - Qwen3-VL-2B for general semantic operations and choice resolution.
 - Qwen3-VL-4B only for the route-specialist role.
-- Existing UHR Locator and VisRAG scoring implementations are available through adapters.
+- GeoRSCLIP (selected default), RemoteCLIP/FarSLIP, existing UHR Locator, and
+  VisRAG scoring implementations are available through model-agnostic adapters.
 
 Replaceable contract:
 

@@ -91,6 +91,11 @@ change_detection：
 - `region`：区域或城市。
 - `license`：数据授权信息。
 
+MME-RealWorld-RS 和 XLRS 的官方评测样本还应保留
+`dataset_version`、`split`、`language`、`prompt_profile`、`evaluation_scope`、
+`official_task`、`official_subtask`、`official_category` 和 `answer_choices`。
+这些字段用于区分“使用官方评分算法”和“可与完整官方 split 直接比较”。
+
 ## VRSBench 转换约定
 
 VRSBench 的每张原始图像会展开为 caption、object referring 和 QA 样本。检测任务的

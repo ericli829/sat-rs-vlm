@@ -52,6 +52,18 @@ _ATTRIBUTE_PATTERNS: dict[str, re.Pattern[str]] = {
 }
 
 _SPATIAL_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    (
+        "center_right",
+        re.compile(
+            r"cent(?:er|re)[- ]right|middle[- ]right|中右|右中|中间右侧|中间偏右|中心右侧"
+        ),
+    ),
+    (
+        "center_left",
+        re.compile(
+            r"cent(?:er|re)[- ]left|middle[- ]left|中左|左中|中间左侧|中间偏左|中心左侧"
+        ),
+    ),
     ("upper_left", re.compile(r"upper[- ]left|top[- ]left|north[- ]west|左上|西北")),
     ("upper_right", re.compile(r"upper[- ]right|top[- ]right|north[- ]east|右上|东北")),
     ("lower_left", re.compile(r"lower[- ]left|bottom[- ]left|south[- ]west|左下|西南")),

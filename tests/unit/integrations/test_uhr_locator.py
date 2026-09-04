@@ -190,6 +190,8 @@ def test_spatial_scorer_and_complex_relation_guard() -> None:
     assert result.available is True
     assert result.scores[0] > result.scores[1]
     assert spatial_prior(regions[0].core_xyxy, 1000, 1000, "north") > 0.9
+    assert spatial_prior((800, 450, 900, 550), 1000, 1000, "center_right") > 0.8
+    assert spatial_prior((800, 0, 900, 100), 1000, 1000, "center_right") < 0.2
 
     relation = TaskSpec(
         raw_question="Is the ship north of the harbor?",
@@ -219,6 +221,36 @@ def test_adaptive_beam_uses_minimum_cumulative_mass() -> None:
     assert result.selected_indices == (0, 1)
     assert result.cumulative_probability >= 0.8
     assert result.cumulative_probability - result.probabilities[1] < 0.8
+
+
+def test_adaptive_beam_keeps_all_threshold_hits_then_stops() -> None:
+    regions = [_region(str(index), (index * 10, 0, (index + 1) * 10, 10)) for index in range(5)]
+    result = adaptive_beam_select(
+        regions,
+        [0.91, 0.82, 0.73, 0.41, 0.20],
+        temperature=1.0,
+        cumulative_mass=0.9,
+        max_beam=5,
+        min_beam=2,
+        score_threshold=0.7,
+        redundancy_weight=0.0,
+    )
+    assert result.selected_indices == (0, 1, 2)
+
+
+def test_adaptive_beam_fills_minimum_when_threshold_hits_are_sparse() -> None:
+    regions = [_region(str(index), (index * 10, 0, (index + 1) * 10, 10)) for index in range(4)]
+    result = adaptive_beam_select(
+        regions,
+        [0.91, 0.42, 0.31, 0.20],
+        temperature=1.0,
+        cumulative_mass=0.9,
+        max_beam=4,
+        min_beam=3,
+        score_threshold=0.8,
+        redundancy_weight=0.0,
+    )
+    assert result.selected_indices == (0, 1, 2)
 
 
 def test_standardized_beam_uses_real_fused_score_range() -> None:
@@ -336,6 +368,31 @@ def test_region_fusion_suppresses_overlap_and_preserves_global_provenance() -> N
     assert [region.region_id for region in fused] == ["best", "other"]
     assert fused[0].view_xyxy == (0.0, 0.0, 110.0, 110.0)
     assert fused[0].metadata["coordinate_mode"] == "absolute_original_pixel_xyxy"
+
+
+def test_region_fusion_threshold_then_fill_policy() -> None:
+    regions = [
+        _region("high_a", (0, 0, 100, 100), score=0.9),
+        _region("high_b", (200, 0, 300, 100), score=0.8),
+        _region("fallback", (0, 200, 100, 300), score=0.2),
+    ]
+    fused = RegionFusion(
+        {"score_threshold": 0.75, "min_regions": 3, "max_regions": 3}
+    ).fuse(regions, 400, 400)
+    assert [region.region_id for region in fused] == ["high_a", "high_b", "fallback"]
+
+
+def test_region_fusion_does_not_fill_beyond_minimum() -> None:
+    regions = [
+        _region("high_a", (0, 0, 100, 100), score=0.9),
+        _region("high_b", (200, 0, 300, 100), score=0.8),
+        _region("low", (0, 200, 100, 300), score=0.2),
+    ]
+    fused = RegionFusion(
+        {"score_threshold": 0.75, "min_regions": 1, "max_regions": 3}
+    ).fuse(regions, 400, 400)
+    assert [region.region_id for region in fused] == ["high_a", "high_b"]
+    assert fused[0].metadata["selection_policy"] == "score_threshold_then_min_fill"
 
 
 def test_answer_model_boundary_requires_aligned_global_roi_provenance(tmp_path: Path) -> None:
@@ -525,8 +582,9 @@ def test_openclip_compatible_checkpoint_records_load_coverage(
         }
     )
     try:
-        provider._load()
+        provider.preload()
         report = provider.compatibility_report
+        assert provider.telemetry_model_load_ms > 0.0
         assert report["compatibility_status"] == "compatible"
         assert report["missing_key_count"] == 1
         assert report["unexpected_key_count"] == 1
@@ -610,7 +668,9 @@ def test_visrag_default_query_instruction_matches_official_model_card(tmp_path: 
     assert provider.query_instruction == _OFFICIAL_QUERY_INSTRUCTION
 
 
-def test_openclip_reuses_decode_embedding_and_score_caches(tmp_path: Path) -> None:
+def test_openclip_reuses_decode_embedding_and_score_caches_with_typed_fakes(
+    tmp_path: Path,
+) -> None:
     torch = pytest.importorskip("torch")
     from PIL import Image
 
@@ -716,6 +776,58 @@ def test_visrag_reuses_model_query_embedding_and_batches_crops(tmp_path: Path) -
     provider.close()
     assert provider.is_loaded is False
     assert provider._query_cache == {}
+
+
+def test_openclip_reuses_decode_embedding_and_score_caches(tmp_path: Path) -> None:
+    torch = pytest.importorskip("torch")
+    from PIL import Image
+
+    checkpoint = tmp_path / "remoteclip.pt"
+    checkpoint.touch()
+    image_path = tmp_path / "image.png"
+    Image.new("RGB", (40, 20), "white").save(image_path)
+    provider = OpenCLIPRetrieverProvider(
+        {
+            "checkpoint": str(checkpoint),
+            "cache_dir": str(tmp_path / "cache"),
+            "batch_size": 2,
+            "decoded_image_cache_size": 1,
+            "image_embedding_cache_size": 4,
+        }
+    )
+
+    class FakeModel:
+        def __init__(self) -> None:
+            self.image_calls = 0
+
+        def encode_text(self, tokens):
+            return torch.tensor([[1.0, 0.0]])
+
+        def encode_image(self, images):
+            self.image_calls += 1
+            return torch.tensor([[1.0, float(index + 1)] for index in range(len(images))])
+
+    model = FakeModel()
+    provider._torch = torch
+    provider._model = model
+    provider._preprocess = lambda image: torch.tensor([float(image.width), float(image.height)])
+    provider._tokenizer = lambda values: torch.tensor([[1, 2]])
+    provider._resolved_device = "cpu"
+    boxes = [(0, 0, 20, 20), (20, 0, 40, 20)]
+    try:
+        first = provider.score_regions(image_path, "airport", boxes)
+        second_query = provider.score_regions(image_path, "harbor", boxes)
+        repeated = provider.score_regions(image_path, "airport", boxes)
+    finally:
+        provider.close()
+
+    assert first.metadata["decoded_image_cache_hit"] is False
+    assert first.metadata["image_embedding_cache_hits"] == 0
+    assert second_query.metadata["decoded_image_cache_hit"] is True
+    assert second_query.metadata["image_embedding_cache_hits"] == 2
+    assert repeated.metadata["score_cache_hits"] == 2
+    assert repeated.metadata["crop_batch_count"] == 0
+    assert model.image_calls == 1
 
 
 def test_visrag_sidecar_is_lazy_and_worker_protocol_is_json_native(tmp_path: Path) -> None:

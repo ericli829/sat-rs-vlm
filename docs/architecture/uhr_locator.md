@@ -84,7 +84,12 @@ indices, and base/wrapper latency. Per-tile counts must never be added directly.
 
 `RetrieverProvider` answers *which crop is relevant to the complete question*.
 It must return one finite score per input region in the same order. The current
-providers are deterministic `mock` and a lazy, local-only `visrag` adapter.
+providers are deterministic `mock`, a lazy local-only `visrag` adapter, and a
+generic lazy HuggingFace `clip` adapter. The latter is available through the
+`clip`, `siglip`, `git_rsclip`, and `satelliteclip` aliases. Transformers-packaged
+CLIP models use the HuggingFace backend. Official
+GeoRSCLIP/RemoteCLIP/FarSLIP OpenCLIP checkpoints use the in-process OpenCLIP
+backend in `integrations/retrievers/openclip.py`.
 VisRAG encodes the question once per provider lifetime, batches original-image
 crops, applies the official retrieval instruction and weighted-mean pooling with
 L2 normalization, keeps raw cosine scores in metadata, performs no generation, and supports an
@@ -94,9 +99,24 @@ JSONL sidecar because official VisRAG pins Transformers 4.40.2 while the shared
 project environment uses Transformers 5.x. A direct runtime remains available
 for an already compatible environment.
 
+The OpenCLIP backend batches tile encoding and has four cache layers: bounded
+decoded-image and CPU image-embedding LRUs, a provider-lifetime query embedding
+cache, and an optional atomic disk score cache. Cache metadata is returned with
+every score batch for benchmark auditing.
+
 `SpatialRegionScorer` is model-free. It applies deterministic priors for image
 parts such as left, north, center, or lower-right. It reports unavailable for a
 complex object-object relation unless an anchor box is known.
+
+For directional queries, the production GeoRSCLIP profile treats this prior as a
+coarse first-pass hint: `spatial_first_depth_only: true` enables it only when
+evaluating the initial depth-1 grid. The later refinement depths mark the spatial
+component unavailable, so semantic retrieval can choose a target within the
+selected branch without being pulled toward the original quadrant again. The
+GeoRSCLIP profile uses `w_spatial=0.8` for that first pass (versus
+`w_retrieval=1.0` and `w_parent=0.25`); active weights are renormalized, making
+the directional prior about 39% of the first-pass composite weight. This is a
+ranking prior, not a hard crop (`spatial_prefilter` remains false).
 
 The composite score is configuration driven:
 
@@ -164,6 +184,20 @@ distilled retriever therefore replaces only this provider. If its dependencies
 conflict with the main environment, use a JSON sidecar following the existing
 LAE-DINO pattern.
 
+The offline comparison CLI accepts JSONL rows with `image`, `query`, and
+absolute-pixel `gt_boxes` fields:
+
+```powershell
+python scripts/retriever_benchmark.py --manifest manifest.jsonl --provider siglip `
+  --model-path C:\models\siglip --cache-dir .cache\siglip --output reports/siglip.json
+```
+
+Use the same grid, K, and thresholds for VisRAG, CLIP, SigLIP, and Git-RSCLIP.
+Reports include Recall@K, GT coverage, selected area ratio, latency,
+cache hits, and Count gate metrics (`gate_recall`, `detector_call_reduction`).
+Use `scripts/analyze_retriever_gate.py` to calibrate a score threshold on an
+image-disjoint calibration split before enabling a Count reject gate.
+
 FO1 is intentionally optional: it is an answer/proposal experiment with a
 separate compatibility surface, while localization must remain usable by any
 answer model and in CPU-only tests.
@@ -178,6 +212,20 @@ python scripts/locator/run_uhr_locator.py `
   --image C:\path\image.png `
   --question "How many airplanes are visible in the northern part?" `
   --output locator.json
+```
+
+The selected production RS-CLIP profile is separate from the dependency-free
+test profile:
+
+```powershell
+$env:GEORSCLIP_CHECKPOINT = 'C:\models\GeoRSCLIP-ViT-B-32.pt'
+python scripts/locator/run_uhr_locator.py `
+  --config configs/locator/uhr_hierarchical.georsclip.yaml `
+  --image C:\path\image.png `
+  --question "Where is the harbor?" `
+  --output locator.json `
+  --export-crops outputs\crops `
+  --export-debug-overlay outputs\overlay.png
 ```
 
 Provider selection is lazy. Only variables belonging to a selected provider are

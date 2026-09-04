@@ -216,8 +216,8 @@ def build_probe_dataset(
 
     requested_total = min(int(target_samples), len(population))
     if len(selected) < requested_total:
-        selected_ids = {str(row["id"]) for row in selected}
-        remaining = [row for row in population if str(row["id"]) not in selected_ids]
+        selected_id_set = {str(row["id"]) for row in selected}
+        remaining = [row for row in population if str(row["id"]) not in selected_id_set]
         extra, _ = _take_quota(
             remaining,
             requested_total - len(selected),

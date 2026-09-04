@@ -189,6 +189,43 @@ def _resolve_assets(
     return dataset_root, train_file, val_file
 
 
+def _localize_windows_mock_paths(
+    config: dict[str, Any],
+    *,
+    args: argparse.Namespace,
+    mock: bool,
+) -> None:
+    """Keep a cloud POSIX path layer from escaping a Windows mock run."""
+
+    if not mock or os.name != "nt":
+        return
+    configured_paths = dict(config.get("paths", {}))
+    has_posix_cloud_path = any(
+        str(value).startswith("/") for value in configured_paths.values() if value is not None
+    )
+    if not has_posix_cloud_path:
+        return
+    mock_root = PROJECT_ROOT / ".tmp" / "mock_runtime"
+    output_root = (
+        Path(args.output_dir).expanduser().resolve().parent
+        if args.output_dir
+        else mock_root / "outputs"
+    )
+    localized = {
+        "project_root": str(PROJECT_ROOT),
+        "output_root": str(output_root),
+        "cache_root": str(mock_root / "cache"),
+        "temp_root": str(mock_root / "temp"),
+        "tensorboard_root": str(mock_root / "tensorboard"),
+        "backup_root": str(mock_root / "backups"),
+        "hf_home": str(mock_root / "huggingface"),
+        "hf_hub_cache": str(mock_root / "huggingface" / "hub"),
+        "torch_home": str(mock_root / "torch"),
+        "pip_cache_dir": str(mock_root / "pip"),
+    }
+    config["paths"] = {**configured_paths, **localized}
+
+
 def _legacy_config(
     config: dict[str, Any],
     *,
@@ -338,6 +375,7 @@ def run(args: argparse.Namespace) -> Path:
     config = load_config(args)
     mock = bool(args.mock or config.get("runtime", {}).get("mock", False))
     precision = _resolve_precision(config, mock=mock)
+    _localize_windows_mock_paths(config, args=args, mock=mock)
     path_config = PathConfig.from_mapping(
         config.get("paths", {}),
         project_root=PROJECT_ROOT,

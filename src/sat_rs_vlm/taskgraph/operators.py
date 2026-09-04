@@ -466,7 +466,7 @@ class GeometryExecutor:
     def _resolve_route_endpoint(
         value: RuntimeObject, role: str
     ) -> tuple[Entity | Region, dict[str, object]]:
-        if isinstance(value, (Entity, Region)):
+        if isinstance(value, Entity | Region):
             return value, {"policy": "single", "selected_index": 0}
         if not isinstance(value, EntitySet):
             raise TypeError(f"BUILD_ROUTE_CONTEXT.{role} must be Entity, EntitySet, or Region")
@@ -598,7 +598,7 @@ class GeometryExecutor:
     ) -> OperatorOutcome:
         if node.op is OperatorName.REGION:
             source = inputs["image"]
-            if not isinstance(source, (ImageRef, Region)):
+            if not isinstance(source, ImageRef | Region):
                 raise TypeError("REGION.image must be ImageRef or Region")
             value: RuntimeObject = self._position_region(source, str(node.params["position"]))
         elif node.op is OperatorName.REGION_FROM_BBOX:
@@ -644,7 +644,7 @@ class GeometryExecutor:
             )
         elif node.op is OperatorName.FIND_MARKER:
             source = inputs["image"]
-            if not isinstance(source, (ImageRef, Region)):
+            if not isinstance(source, ImageRef | Region):
                 raise TypeError("FIND_MARKER.image must be ImageRef or Region")
             value = self._marker(
                 source,
@@ -879,7 +879,7 @@ class LocateExecutor:
         context: OperatorContext,
     ) -> OperatorOutcome:
         scope = inputs["image"]
-        if not isinstance(scope, (ImageRef, Region)):
+        if not isinstance(scope, ImageRef | Region):
             raise TypeError("LOCATE.image must be ImageRef or Region")
         target = TargetSpec.model_validate(node.params["target"])
         decision = self.capability_classifier.classify(target)
@@ -890,7 +890,7 @@ class LocateExecutor:
                     scope,
                     target.phrase(),
                     search_scope=scope if isinstance(scope, Region) else None,
-                    max_candidates=8,
+                    max_candidates=self.max_candidates,
                 )
             )
             entities = EntitySet(
@@ -1193,6 +1193,36 @@ class CountExecutor:
         self.counting = counting
         self.provider_name = counting.provider_name
 
+    @staticmethod
+    def _iou(left: Entity, right: Entity) -> float:
+        a, b = left.region.bbox_xyxy_global, right.region.bbox_xyxy_global
+        intersection = (
+            max(a[0], b[0]),
+            max(a[1], b[1]),
+            min(a[2], b[2]),
+            min(a[3], b[3]),
+        )
+        if intersection[0] >= intersection[2] or intersection[1] >= intersection[3]:
+            return 0.0
+        intersection_area = (intersection[2] - intersection[0]) * (
+            intersection[3] - intersection[1]
+        )
+        left_area = (a[2] - a[0]) * (a[3] - a[1])
+        right_area = (b[2] - b[0]) * (b[3] - b[1])
+        return intersection_area / (left_area + right_area - intersection_area)
+
+    def _merge_detections(self, entities: list[Entity]) -> tuple[Entity, ...]:
+        ordered = sorted(
+            entities,
+            key=lambda item: float(item.score) if item.score is not None else 0.0,
+            reverse=True,
+        )
+        kept: list[Entity] = []
+        for entity in ordered:
+            if all(self._iou(entity, previous) <= self.gate_nms_iou for previous in kept):
+                kept.append(entity)
+        return tuple(kept)
+
     def execute(
         self,
         node: GraphNode,
@@ -1217,7 +1247,7 @@ class CountExecutor:
                 "cardinality",
             )
         scope = inputs.get("image")
-        if not isinstance(scope, (ImageRef, Region)):
+        if not isinstance(scope, ImageRef | Region):
             raise TypeError("COUNT requires image/Region or EntitySet")
         params = CountParams.model_validate(node.params)
         counted = self.counting.count(

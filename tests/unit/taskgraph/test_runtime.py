@@ -1,16 +1,23 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from sat_rs_vlm.taskgraph import RuntimeRequest, fake_runtime, parse_taskgraph
+from sat_rs_vlm.taskgraph.providers import (
+    FakeSemanticVLMProvider,
+    ModelTaskGraphPlannerProvider,
+    PlannerRequest,
+)
 from sat_rs_vlm.taskgraph.routing import ExecutionMode
 from sat_rs_vlm.taskgraph.runtime_types import (
     Answer,
     ChoiceResult,
     ChoiceScoreResult,
+    ImageRef,
     RouteContext,
     ScalarInt,
 )
@@ -321,6 +328,9 @@ def test_case_c_relational_select_flows_into_entityset_count() -> None:
         count_trace = next(item for item in result.trace.nodes if item.node_id == "n5")
         assert count_trace.input_refs == {"entities": "$n4"}
         assert count_trace.provider == "cardinality"
+        assert result.trace.telemetry["executor"]["node_count"] == 5
+        assert result.trace.telemetry["executor"]["timing_ms"]["e2e"] >= 0
+        assert result.trace.telemetry["system"]["execution_mode"] == "TASKGRAPH_UHR"
     finally:
         runtime.close()
 
@@ -454,6 +464,9 @@ def test_case_f_vrs_vqa_bypasses_planner_and_dag() -> None:
         assert isinstance(result.output, Answer)
         assert result.output.text == "direct answer"
         assert result.trace.taskgraph is None
+        assert "executor" not in result.trace.telemetry
+        assert result.trace.telemetry["system"]["execution_mode"] == "DIRECT_VLM"
+        assert result.trace.telemetry["system"]["timing_ms"]["e2e"] >= 0
     finally:
         runtime.close()
 
@@ -509,3 +522,130 @@ def test_production_schema_parses_lab_v1_1_canonical_fixture() -> None:
     parsed = parse_taskgraph(graph)
     assert parsed.version == "taskgraph-v1.1"
     assert parsed.final.sources == ["$n1"]
+
+
+def test_semantic_planner_normalizes_image_input_names_and_validates_target() -> None:
+    response = {
+        "intent": "SIMPLE_COUNT",
+        "nodes": [
+            {
+                "id": "n1",
+                "op": "COUNT",
+                "inputs": {"image": "$image0"},
+                "params": {
+                    "target": {"category": "ship", "attributes": {}},
+                    "entire": True,
+                },
+            }
+        ],
+        "final": {
+            "sources": ["$n1"],
+            "question": "Which result should be reported?",
+            "answer_type": "TEXT",
+        },
+    }
+    provider = ModelTaskGraphPlannerProvider(
+        FakeSemanticVLMProvider(
+            {"taskgraph_planner_target": json.dumps(response)}
+        )
+    )
+
+    graph = provider.plan(
+        PlannerRequest(
+            question="How many ships are there?",
+            question_type="FREE_FORM",
+            choices=(),
+            inputs={"image0": ImageRef(IMAGE)},
+            sample_id="planner-test",
+        )
+    )
+
+    assert list(graph.inputs) == ["image0"]
+    assert graph.nodes[0].inputs["image"] == "$image0"
+
+
+def test_taskgraph_collects_planner_semantic_and_cached_choice_generation_events() -> None:
+    sample_id = "generation-events"
+    options = ["A harbor", "B airport"]
+    graph = _graph(
+        question="What does the image show?",
+        options=options,
+        nodes=[
+            {
+                "id": "n1",
+                "op": "VLM_REASON",
+                "inputs": {"image": "$image0"},
+                "params": {"question": "$question", "choices": None},
+            },
+            {
+                "id": "n2",
+                "op": "VLM_REASON",
+                "inputs": {"evidence": "$n1"},
+                "params": {"question": "$question", "choices": "$choices"},
+            },
+        ],
+        sources=["$n2"],
+        final_question="Choose the supported option.",
+        intent="COMPLEX_REASONING",
+    )
+
+    def generation(source: str) -> dict[str, object]:
+        return {
+            "source": source,
+            "timing_ms": {
+                "preprocess": 1.0,
+                "model_generate": 2.0,
+                "ttft": 1.0,
+                "decode_generation": 1.0,
+                "decode": 0.5,
+                "e2e": 3.5,
+            },
+            "tokens": {
+                "generated": 1,
+                "output": [1],
+                "decode_tokens_per_second": 1000.0,
+            },
+            "vision_input": {"visual_token_count": 1},
+        }
+
+    runtime = fake_runtime(
+        semantic_responses={"vlm_reason": "intermediate evidence"},
+        semantic_choice_scores={"final_vlm_reason_choice_fusion": {"A": 2.0, "B": 1.0}},
+        planner_fixtures={sample_id: graph},
+    )
+    provider = runtime.providers.semantic_2b
+    original_infer = provider.infer
+    original_reason_and_choose = provider.reason_and_choose
+
+    def infer_with_telemetry(request):
+        result = original_infer(request)
+        return replace(result, metadata={**result.metadata, "generation": generation("semantic")})
+
+    def choose_with_telemetry(request):
+        result = original_reason_and_choose(request)
+        return replace(result, metadata={**result.metadata, "generation": generation("choice")})
+
+    provider.infer = infer_with_telemetry
+    provider.reason_and_choose = choose_with_telemetry
+    runtime.providers.planner.last_metadata = {
+        "attempts": [{"attempt": 1, "generation": generation("planner")}]
+    }
+    try:
+        result = runtime.run(
+            RuntimeRequest(
+                sample_id,
+                "XLRS_Bench",
+                "complex_reasoning",
+                "What does the image show?",
+                (IMAGE,),
+                tuple(options),
+            )
+        )
+        events = result.trace.telemetry["generation_events"]
+        assert [event["source"] for event in events] == ["planner", "semantic", "choice"]
+        phases = result.trace.telemetry["phase_timing_ms"]
+        assert phases["planner"] >= 0.0
+        assert phases["executor"] >= 0.0
+        assert phases["postprocess"] >= 0.0
+    finally:
+        runtime.close()

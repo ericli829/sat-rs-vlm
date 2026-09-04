@@ -247,6 +247,29 @@ class SemanticEvaluationTests(unittest.TestCase):
 
 
 class EndToEndTests(unittest.TestCase):
+    def test_resource_telemetry_is_attached_to_summary_and_manifest(self) -> None:
+        resource_benchmark = {
+            "scope": "main_evaluation_prediction_loop",
+            "timing_ms": {"e2e": 123.0},
+            "resources": {"peak_cpu_rss_mb": 456.0},
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            paths = run_evaluation(
+                FIXTURE,
+                root / "results",
+                contract_path=CONTRACT,
+                protected_repository=root / "protected",
+                resource_benchmark=resource_benchmark,
+            )
+
+            summary = json.loads(paths["summary"].read_text(encoding="utf-8"))
+            attached = summary["p0_data_availability"]["resource_benchmark"]
+            self.assertEqual(attached["status"], "ok")
+            self.assertEqual(attached["value"], resource_benchmark)
+            manifest = json.loads(paths["manifest"].read_text(encoding="utf-8"))
+            self.assertEqual(manifest["resource_benchmark"], resource_benchmark)
+
     def test_complete_evaluation_and_denominators(self) -> None:
         input_hash = file_hash(FIXTURE)
         with tempfile.TemporaryDirectory() as temporary:
