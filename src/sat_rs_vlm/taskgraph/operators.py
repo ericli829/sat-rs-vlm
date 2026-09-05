@@ -1255,6 +1255,41 @@ class LocateExecutor:
                     "candidate_count_after_refinement": len(value.entities),
                 }
             )
+        if value.entities and len(value.entities) > self.max_candidates:
+            # Unconditional top-K cut: SELECT-consumer LOCATEs skip the locate
+            # policy, and the LAE pool can reach 800-2000 boxes which the
+            # downstream SELECT's semantic compose turns into a multi-GB KV
+            # (OOM).  Keep the highest-scored candidates; every downstream
+            # path tolerates fewer candidates, so no consumer is affected.
+            raw_count = len(value.entities)
+            ranked = sorted(
+                range(raw_count),
+                key=lambda index: (
+                    -(
+                        float(value.entities[index].score)
+                        if value.entities[index].score is not None
+                        and math.isfinite(float(value.entities[index].score))
+                        else float("-inf")
+                    ),
+                    index,
+                ),
+            )
+            kept = tuple(value.entities[index] for index in ranked[: self.max_candidates])
+            value = EntitySet(
+                kept,
+                {
+                    **value.provenance,
+                    "candidate_truncated": True,
+                    "raw_candidate_count": raw_count,
+                },
+            )
+            refinement_metadata.update(
+                {
+                    "candidate_truncated": True,
+                    "raw_candidate_count": raw_count,
+                    "candidate_count_after_truncation": len(kept),
+                }
+            )
         if value.entities and should_refine and self.refiner is not None:
             refined = self.refiner.refine(
                 value,
