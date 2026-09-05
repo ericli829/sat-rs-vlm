@@ -173,7 +173,10 @@ class HuggingFaceVLMEngine:
             # Bound the vision token budget: Qwen3-VL defaults to ~1MP per
             # image, so a two-image semantic call (RELATION) needs ~2.3GB KV.
             processor_kwargs["max_pixels"] = int(max_pixels)
-        model_kwargs = dict(processor_kwargs)
+        model_kwargs: dict[str, Any] = {
+            "trust_remote_code": trust_remote_code,
+            "local_files_only": local_files_only,
+        }
         torch_dtype = self._resolve_dtype(dtype)
         model_kwargs["dtype"] = torch_dtype if torch_dtype is not None else "auto"
         if device == "auto":
