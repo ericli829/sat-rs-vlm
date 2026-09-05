@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from sat_rs_vlm.infrastructure.config import ModelConfig
+from sat_rs_vlm.infrastructure.telemetry import SystemTelemetry, collect_provider_inventory
 
 from .answerability import AnswerabilityConfig, EvidenceSufficiencyExecutor
 from .capabilities import TargetCapabilityClassifier
@@ -41,6 +42,7 @@ from .providers import (
     FixturePlannerProvider,
     LazyQwenSemanticProvider,
     LocatorRegionRetrieverAdapter,
+    ModelTaskGraphPlannerProvider,
     PlannerProvider,
     PlannerRequest,
     ProposalDetectionAdapter,
@@ -343,9 +345,9 @@ class TaskGraphRuntime:
         runtime_memory: RuntimeMemory | None = None,
     ) -> None:
         self.providers = providers
-        self.composer = composer or InputComposer()
         self.runtime_memory = runtime_memory
         self._memory_variant_applied = False
+        self.composer = composer or InputComposer()
         self.choice_config = choice_config or ChoiceSystemConfig()
         self.semantic_decision_config = semantic_decision_config or SemanticDecisionConfig()
         self.final_choice_fusion_config = final_choice_fusion_config or FinalChoiceFusionConfig()
@@ -505,6 +507,12 @@ class TaskGraphRuntime:
             candidate_metadata = getattr(self.providers.planner, "last_metadata", None)
             if isinstance(candidate_metadata, Mapping):
                 planner_metadata = candidate_metadata
+            else:
+                generation = getattr(
+                    self.providers.planner, "last_generation_telemetry", None
+                )
+                if isinstance(generation, Mapping):
+                    planner_metadata = {"generation": dict(generation)}
         else:
             raise ValueError("TASKGRAPH_UHR requires graph input or a configured PlannerProvider")
         if graph.question != request.question:
@@ -657,6 +665,9 @@ class TaskGraphRuntime:
             trace.telemetry["semantic_metadata"] = dict(result.metadata)
             output = Answer(result.text, result.confidence, {"provider": result.provider})
             trace.result = runtime_summary(output)
+            generation = result.metadata.get("generation")
+            if isinstance(generation, dict):
+                trace.telemetry["generation_events"] = [dict(generation)]
         return RuntimeResult(ExecutionMode.DIRECT_VLM, output, trace)
 
     def _direct_detection(
@@ -729,13 +740,13 @@ class TaskGraphRuntime:
     @staticmethod
     def _latency_value(metadata: Mapping[str, Any]) -> float | None:
         raw = metadata.get("latency_ms")
-        if isinstance(raw, (int, float)):
+        if isinstance(raw, int | float):
             return max(0.0, float(raw))
         if not isinstance(raw, Mapping):
             return None
         for key in ("total_ms", "total", "choice_total_ms", "reasoning_total_ms"):
             value = raw.get(key)
-            if isinstance(value, (int, float)):
+            if isinstance(value, int | float):
                 return max(0.0, float(value))
         return None
 
@@ -775,7 +786,7 @@ class TaskGraphRuntime:
 
     @staticmethod
     def _add_unique(values: list[str], candidate: object) -> None:
-        if candidate is None or not isinstance(candidate, (str, int, float)):
+        if candidate is None or not isinstance(candidate, str | int | float):
             return
         text = str(candidate).strip()
         if text and text.casefold() not in {"unknown", "none"} and text not in values:
@@ -792,9 +803,30 @@ class TaskGraphRuntime:
                 if str(key) in keys:
                     cls._add_unique(output, item)
                 cls._collect_named_values(item, keys, output, depth=depth + 1)
-        elif isinstance(value, (list, tuple)):
+        elif isinstance(value, list | tuple):
             for item in value:
                 cls._collect_named_values(item, keys, output, depth=depth + 1)
+
+    @classmethod
+    def _generation_events_from(cls, value: object, *, depth: int = 0) -> list[dict[str, Any]]:
+        if depth > 8:
+            return []
+        events: list[dict[str, Any]] = []
+        if isinstance(value, Mapping):
+            generation = value.get("generation")
+            if (
+                isinstance(generation, Mapping)
+                and isinstance(generation.get("timing_ms"), Mapping)
+                and isinstance(generation.get("tokens"), Mapping)
+            ):
+                events.append(dict(generation))
+            for key, item in value.items():
+                if key != "generation":
+                    events.extend(cls._generation_events_from(item, depth=depth + 1))
+        elif isinstance(value, list | tuple):
+            for item in value:
+                events.extend(cls._generation_events_from(item, depth=depth + 1))
+        return events
 
     def _finalize_trace(
         self,
@@ -824,12 +856,12 @@ class TaskGraphRuntime:
             "counting",
         ):
             value = trace.telemetry.get(stage + "_ms")
-            if isinstance(value, (int, float)):
+            if isinstance(value, int | float):
                 stage_values[stage] = max(0.0, float(value))
                 stage_status[stage + "_ms"] = "executed"
 
         choice_value = trace.telemetry.get("choice_ms")
-        if isinstance(choice_value, (int, float)):
+        if isinstance(choice_value, int | float):
             trace.choice_ms = max(0.0, float(choice_value))
             choice_called = trace.telemetry.get("choice_model_called") is True
             stage_values["choice"] = trace.choice_ms
@@ -846,14 +878,14 @@ class TaskGraphRuntime:
 
         planner_value = trace.telemetry.get("planner_ms")
         trace.planner_ms = (
-            max(0.0, float(planner_value)) if isinstance(planner_value, (int, float)) else 0.0
+            max(0.0, float(planner_value)) if isinstance(planner_value, int | float) else 0.0
         )
         stage_status["planner_ms"] = str(trace.telemetry.get("planner_status", "not_used"))
 
         postprocess_value = trace.telemetry.get("postprocess_ms")
         trace.postprocess_ms = (
             max(0.0, float(postprocess_value))
-            if isinstance(postprocess_value, (int, float))
+            if isinstance(postprocess_value, int | float)
             else 0.0
         )
         stage_status["postprocess_ms"] = "executed" if postprocess_value is not None else "not_used"
@@ -941,45 +973,118 @@ class TaskGraphRuntime:
             self._memory_variant_applied = tight
 
     def run(self, request: RuntimeRequest) -> RuntimeResult:
-        if not request.image_paths:
-            raise ValueError("runtime request requires at least one image")
+        torch = _provider_torch(self.providers)
+        monitor = SystemTelemetry(
+            "taskgraph_runtime_request",
+            torch_module=torch,
+            reset_cuda_peaks=True,
+        )
         started = time.perf_counter()
         artifact_checkpoint = self.composer.artifact_checkpoint()
-        torch = _reset_runtime_resources(self.providers)
-        images = self._images(request)
-        routing_started = time.perf_counter()
-        mode = self.mode_router.route(request.dataset, request.task_category)
-        memory_entry = (
-            self.runtime_memory.lookup(request.sample_id) if self.runtime_memory else None
-        )
-        if memory_entry is not None:
-            mode = ExecutionMode(memory_entry.mode)
-            self._apply_memory_variant(memory_entry.variant)
-        routing_ms = (time.perf_counter() - routing_started) * 1000.0
         try:
-            if mode is ExecutionMode.DIRECT_VLM:
-                result = self._direct_vlm(request, images)
-            elif mode is ExecutionMode.DIRECT_DETECTION:
-                result = self._direct_detection(request, images)
-            else:
-                result = self._taskgraph(request, images)
-            result.trace.input_image_paths = list(request.image_paths)
-            result.trace.intermediate_output_paths = list(
-                self.composer.artifact_paths_since(artifact_checkpoint)
-            )
-            result.trace.telemetry.update(
+            with monitor:
+                if not request.image_paths:
+                    raise ValueError("runtime request requires at least one image")
+                torch = _reset_runtime_resources(self.providers)
+                images = self._images(request)
+                routing_started = time.perf_counter()
+                mode = self.mode_router.route(request.dataset, request.task_category)
+                memory_entry = (
+                    self.runtime_memory.lookup(request.sample_id)
+                    if self.runtime_memory
+                    else None
+                )
+                if memory_entry is not None:
+                    mode = ExecutionMode(memory_entry.mode)
+                    self._apply_memory_variant(memory_entry.variant)
+                routing_ms = (time.perf_counter() - routing_started) * 1000.0
+                if mode is ExecutionMode.DIRECT_VLM:
+                    result = self._direct_vlm(request, images)
+                elif mode is ExecutionMode.DIRECT_DETECTION:
+                    result = self._direct_detection(request, images)
+                else:
+                    result = self._taskgraph(request, images)
+                result.trace.input_image_paths = list(request.image_paths)
+                result.trace.intermediate_output_paths = list(
+                    self.composer.artifact_paths_since(artifact_checkpoint)
+                )
+                result.trace.telemetry.update(
+                    {
+                        "input_image_paths": list(result.trace.input_image_paths),
+                        "intermediate_output_paths": list(
+                            result.trace.intermediate_output_paths
+                        ),
+                    }
+                )
+                self._finalize_trace(
+                    result.trace,
+                    mode=mode,
+                    routing_ms=routing_ms,
+                    started=started,
+                    torch=torch,
+                )
+
+            system_telemetry = monitor.to_dict()
+            system_telemetry.update(
                 {
-                    "input_image_paths": list(result.trace.input_image_paths),
-                    "intermediate_output_paths": list(result.trace.intermediate_output_paths),
+                    "sample_id": request.sample_id,
+                    "dataset": request.dataset,
+                    "task_category": request.task_category,
+                    "execution_mode": result.execution_mode.value,
+                    "provider_inventory": collect_provider_inventory(
+                        [
+                            self.providers.detection,
+                            self.providers.counting,
+                            self.providers.semantic_2b,
+                            self.providers.route_4b,
+                            self.providers.retriever,
+                            self.providers.choice,
+                            self.providers.planner,
+                        ]
+                    ),
                 }
             )
-            self._finalize_trace(
-                result.trace,
-                mode=mode,
-                routing_ms=routing_ms,
-                started=started,
-                torch=torch,
+            result.trace.telemetry["system"] = system_telemetry
+            phase_timing = result.trace.telemetry.setdefault("phase_timing_ms", {})
+            if isinstance(phase_timing, dict):
+                phase_timing.setdefault("preprocess", 0.0)
+                phase_sources = {
+                    "routing": result.trace.routing_ms,
+                    "planner": result.trace.planner_ms,
+                    "executor": result.trace.telemetry.get("graph_execution_ms"),
+                    "choice": result.trace.choice_ms,
+                    "postprocess": result.trace.postprocess_ms,
+                }
+                for phase, value in phase_sources.items():
+                    if isinstance(value, int | float):
+                        phase_timing.setdefault(phase, max(0.0, float(value)))
+                phase_timing.setdefault("e2e", system_telemetry["timing_ms"]["e2e"])
+                phase_timing.setdefault("ttft", None)
+            existing_events = result.trace.telemetry.get("generation_events", [])
+            generation_events = [
+                dict(event)
+                for event in existing_events
+                if isinstance(event, Mapping)
+                and isinstance(event.get("timing_ms"), Mapping)
+                and isinstance(event.get("tokens"), Mapping)
+            ]
+            generation_events.extend(
+                self._generation_events_from(result.trace.telemetry.get("planner_metadata"))
             )
+            for node in result.trace.nodes:
+                node_events = self._generation_events_from(node.telemetry)
+                if not node_events:
+                    node_events = self._generation_events_from(node.output_summary)
+                generation_events.extend(node_events)
+            if result.trace.telemetry.get("choice_model_called") is True:
+                generation_events.extend(
+                    self._generation_events_from(result.trace.choice_result)
+                )
+            if not result.trace.nodes and not generation_events:
+                generation_events.extend(
+                    self._generation_events_from(result.trace.result)
+                )
+            result.trace.telemetry["generation_events"] = generation_events
             return result
         except Exception as exc:
             failed_trace = getattr(exc, "execution_trace", None)
@@ -991,7 +1096,9 @@ class TaskGraphRuntime:
                 failed_trace.telemetry.update(
                     {
                         "input_image_paths": list(failed_trace.input_image_paths),
-                        "intermediate_output_paths": list(failed_trace.intermediate_output_paths),
+                        "intermediate_output_paths": list(
+                            failed_trace.intermediate_output_paths
+                        ),
                     }
                 )
             raise
@@ -1226,6 +1333,19 @@ def runtime_from_config(
             planner = FixturePlannerProvider(payload)
         elif kind == "qwen3vl_lora":
             planner = Qwen3VLPlannerProvider(planner_cfg, role="planner_4b")
+        elif kind == "semantic":
+            provider_name = str(planner_cfg.get("provider", "route_4b"))
+            semantic_providers = {
+                "semantic_2b": semantic_2b,
+                "route_4b": route_4b,
+                "choice": choice,
+            }
+            try:
+                planner = ModelTaskGraphPlannerProvider(semantic_providers[provider_name])
+            except KeyError as exc:
+                raise ValueError(
+                    "semantic planner provider must be semantic_2b, route_4b, or choice"
+                ) from exc
         else:
             raise ValueError(f"unsupported planner provider kind: {kind}")
 
@@ -1253,12 +1373,12 @@ def runtime_from_config(
         repository_candidate = PROJECT_ROOT / ontology_path
         ontology_path = candidate if candidate.is_file() else repository_candidate
     legacy_categories = config.get("semantic_region_categories", [])
-    if not isinstance(legacy_categories, (list, tuple, set)):
+    if not isinstance(legacy_categories, list | tuple | set):
         raise TypeError("semantic_region_categories must be a sequence")
     detector_overrides = capability_cfg.get("detector_overrides", [])
     retriever_overrides = capability_cfg.get("retriever_overrides", [])
-    if not isinstance(detector_overrides, (list, tuple, set)) or not isinstance(
-        retriever_overrides, (list, tuple, set)
+    if not isinstance(detector_overrides, list | tuple | set) or not isinstance(
+        retriever_overrides, list | tuple | set
     ):
         raise TypeError("capability routing overrides must be sequences")
     capability_classifier = TargetCapabilityClassifier.from_ontology_path(

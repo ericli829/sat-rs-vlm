@@ -145,6 +145,13 @@ class VisRAGDirectRetrieverProvider:
         self._resolved_device = resolved_device
         self._model_load_ms = (time.perf_counter() - started) * 1000.0
 
+    def preload(self) -> None:
+        self._load()
+
+    @property
+    def telemetry_model_load_ms(self) -> float:
+        return self._model_load_ms
+
     def _query_embedding(self, query: str) -> tuple[Any, bool]:
         normalized = query.strip()
         if not normalized:

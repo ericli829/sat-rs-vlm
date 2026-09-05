@@ -19,6 +19,11 @@ from typing import Any, Protocol, cast
 from PIL import Image
 
 from sat_rs_vlm.infrastructure.config import ModelConfig
+from sat_rs_vlm.infrastructure.telemetry import (
+    GenerationTelemetry,
+    first_token_logits_processor,
+    visual_input_telemetry,
+)
 from sat_rs_vlm.integrations.detectors.protocol import ProposalProvider
 from sat_rs_vlm.integrations.locators.protocol import LocatorProvider
 from sat_rs_vlm.integrations.retrievers.protocol import RetrieverProvider
@@ -33,7 +38,7 @@ from .runtime_types import (
     Region,
     RuntimeObject,
 )
-from .schema import TargetSpec, TaskGraph
+from .schema import InputSpec, PlannerTarget, TargetSpec, TaskGraph
 
 
 def _bbox_contains(
@@ -321,6 +326,80 @@ class PlannerProvider(Protocol):
     def plan(self, request: PlannerRequest) -> TaskGraph: ...
 
 
+class ModelTaskGraphPlannerProvider:
+    """Generate a validated TaskGraph target with an existing offline VLM provider.
+
+    The semantic branch uses ``Qwen3VLPlannerProvider`` for production planner
+    loading, while this adapter remains the small provider-backed contract used
+    by fixtures and compatibility callers.
+    """
+
+    provider_name = "model_taskgraph_planner"
+
+    def __init__(self, provider: SemanticVLMProvider) -> None:
+        self.provider = provider
+        role = str(getattr(provider, "role", ""))
+        self.provider_name = (
+            f"{provider.provider_name}:{role}" if role else provider.provider_name
+        )
+        self.last_generation_telemetry: dict[str, Any] = {}
+        self.last_raw_response: str | None = None
+
+    @staticmethod
+    def _json_object(text: str) -> dict[str, Any]:
+        decoder = json.JSONDecoder()
+        for offset, character in enumerate(text):
+            if character != "{":
+                continue
+            try:
+                value, _ = decoder.raw_decode(text[offset:])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(value, dict):
+                return value
+        raise ValueError("planner model did not return a JSON object")
+
+    def plan(self, request: PlannerRequest) -> TaskGraph:
+        input_names = list(request.inputs)
+        prompt = (
+            "Create a TaskGraph v1.1 planner target for this remote-sensing question. "
+            "Return JSON only with keys intent, nodes, and final. Node ids must be n1, n2, ... "
+            "in dependency order. Inputs may reference only "
+            f"{[f'${name}' for name in input_names]} or earlier nodes. "
+            "The final object must contain sources, a static question, and answer_type.\n"
+            f"Question type: {request.question_type}\n"
+            f"Question: {request.question}\n"
+            f"Choices: {list(request.choices)}"
+        )
+        result = self.provider.infer(
+            VLMRequest(
+                ModelInput((), "", prompt),
+                output_contract="taskgraph_planner_target",
+            )
+        )
+        self.last_raw_response = result.text
+        generation = result.metadata.get("generation")
+        self.last_generation_telemetry = dict(generation) if isinstance(generation, dict) else {}
+        target = PlannerTarget.model_validate(self._json_object(result.text))
+        inputs = {
+            name: InputSpec(type="image", uri_or_key=value.uri_or_key)
+            for name, value in request.inputs.items()
+        }
+        return TaskGraph(
+            question=request.question,
+            question_type=request.question_type,
+            choices=list(request.choices) or None,
+            inputs=inputs,
+            intent=target.intent,
+            nodes=target.nodes,
+            final=target.final,
+        )
+
+    def close(self) -> None:
+        # The wrapped semantic provider is owned and closed by RuntimeProviders.
+        return None
+
+
 class PlannerFailedError(RuntimeError):
     """A Planner exhausted its bounded generation and validation attempts."""
 
@@ -375,7 +454,9 @@ class Qwen3VLPlannerProvider:
         self._tokenizer: Any | None = None
         self._torch: Any | None = None
         self._load_info: dict[str, Any] = {}
+        self._model_load_ms = 0.0
         self.last_metadata: dict[str, Any] = {}
+        self.last_generation_telemetry: dict[str, Any] = {}
         self._validate_config()
 
     @staticmethod
@@ -454,9 +535,24 @@ class Qwen3VLPlannerProvider:
     def load_info(self) -> dict[str, Any]:
         return dict(self._load_info)
 
+    def preload(self) -> None:
+        self._load()
+
+    @property
+    def telemetry_model_load_ms(self) -> float:
+        return self._model_load_ms
+
+    @property
+    def telemetry_model_loaded(self) -> bool:
+        return self._model is not None
+
+    def telemetry_model_paths(self) -> list[Path]:
+        return [self.base_path, self.adapter_dir, self.processor_path]
+
     def _load(self) -> tuple[Any, Any, Any, Any]:
         if self._model is not None and self._processor is not None:
             return self._model, self._processor, self._tokenizer, self._torch
+        load_started = time.perf_counter()
         try:
             import peft
             import torch
@@ -514,6 +610,8 @@ class Qwen3VLPlannerProvider:
             "device": str(model_device),
             "role": self.role,
         }
+        self._model_load_ms = (time.perf_counter() - load_started) * 1000.0
+        self._load_info["model_load_ms"] = self._model_load_ms
         return model, processor, tokenizer, torch
 
     @staticmethod
@@ -604,6 +702,9 @@ class Qwen3VLPlannerProvider:
         messages: list[dict[str, str]],
     ) -> tuple[str, dict[str, Any]]:
         model, processor, tokenizer, torch = self._load()
+        telemetry = GenerationTelemetry()
+        telemetry.start()
+        telemetry.start_preprocess()
         apply_chat_template = getattr(processor, "apply_chat_template", None)
         if not callable(apply_chat_template):
             raise RuntimeError("PLANNER_PROCESSOR_INVALID: processor lacks apply_chat_template")
@@ -634,6 +735,7 @@ class Qwen3VLPlannerProvider:
                 key: value.to(input_device) if hasattr(value, "to") else value
                 for key, value in dict(encoded).items()
             }
+        telemetry.finish_preprocess()
         input_ids = encoded["input_ids"]
         prompt_width = int(input_ids.shape[1])
         pad_token_id = getattr(tokenizer, "pad_token_id", None)
@@ -654,6 +756,9 @@ class Qwen3VLPlannerProvider:
             max_finish_node_tokens=self.max_finish_node_tokens,
         )
         started = time.perf_counter()
+        telemetry.start_generation()
+        telemetry_processors = list(first_token_logits_processor(telemetry) or ())
+        telemetry_processors.append(constraint)
         with torch.inference_mode():
             generated = model.generate(
                 **encoded,
@@ -662,9 +767,12 @@ class Qwen3VLPlannerProvider:
                 max_new_tokens=self.max_new_tokens,
                 pad_token_id=int(pad_token_id),
                 use_cache=True,
-                logits_processor=[constraint],
+                logits_processor=telemetry_processors,
             )
         continuation = generated[0, prompt_width:]
+        generated_tokens = int((continuation != int(pad_token_id)).sum().item())
+        telemetry.finish_generation(generated_tokens)
+        telemetry.start_decode()
         if hasattr(processor, "decode"):
             text = str(
                 processor.decode(
@@ -681,6 +789,13 @@ class Qwen3VLPlannerProvider:
                     clean_up_tokenization_spaces=False,
                 )
             ).strip()
+        telemetry.finish_decode()
+        telemetry.output_token_counts = [
+            HuggingFaceVLMEngine._decoded_token_count(tokenizer, text, generated_tokens)
+        ]
+        telemetry.vision_input = visual_input_telemetry([[]])
+        generation = telemetry.to_dict()
+        self.last_generation_telemetry = generation
         metadata = constraint.diagnostics(
             0,
             continuation,
@@ -691,9 +806,10 @@ class Qwen3VLPlannerProvider:
             {
                 "latency_ms": (time.perf_counter() - started) * 1000.0,
                 "prompt_tokens": int(encoded.get("attention_mask", input_ids).sum().item()),
-                "generated_tokens": int((continuation != int(pad_token_id)).sum().item()),
+                "generated_tokens": generated_tokens,
                 "constrained": True,
                 "vision_inputs": 0,
+                "generation": generation,
             }
         )
         return text, metadata
@@ -1369,6 +1485,11 @@ class ScoredGridRegionRetrieverAdapter:
         self.default_max_candidates = default_max_candidates
         self.candidate_window_ratio = candidate_window_ratio
 
+    def preload(self) -> None:
+        preload = getattr(self._provider, "preload", None)
+        if callable(preload):
+            preload()
+
     def retrieve(self, request: RegionRetrievalRequest) -> RegionCandidates:
         image = request.image if isinstance(request.image, ImageRef) else request.image.image
         with Image.open(image.path) as source:
@@ -1499,6 +1620,13 @@ class LazyQwenSemanticProvider:
         self.role = role
         self._engine: HuggingFaceVLMEngine | None = None
 
+    def preload(self) -> None:
+        self._load()
+
+    @property
+    def telemetry_model_load_ms(self) -> float | None:
+        return getattr(self._engine, "model_load_ms", None) if self._engine is not None else None
+
     def _load(self) -> HuggingFaceVLMEngine:
         if self._engine is None:
             self._engine = HuggingFaceVLMEngine(
@@ -1579,6 +1707,7 @@ class LazyQwenSemanticProvider:
                 "output_contract": request.output_contract,
                 "constrained_decoding": allowed_outputs is not None,
                 "allowed_output_count": len(allowed_outputs or ()),
+                "generation": dict(getattr(engine, "last_generation_telemetry", {})),
             },
         )
 
@@ -1634,7 +1763,11 @@ class LazyQwenSemanticProvider:
             method=result.method,
             cache_reused=result.cache_reused,
             latency_ms=result.latency_ms,
-            metadata={**result.metadata, "purpose": request.purpose},
+            metadata={
+                **result.metadata,
+                "purpose": request.purpose,
+                "generation": dict(getattr(engine, "last_generation_telemetry", {})),
+            },
         )
 
     def reason_and_choose(self, request: ChoiceScoringRequest) -> ChoiceScoreResult:
@@ -1942,6 +2075,9 @@ class FixturePlannerProvider:
         if tuple(graph.choices or ()) != request.choices:
             raise ValueError("fixture graph choices differ from original dataset options")
         return graph
+
+    def close(self) -> None:
+        return None
 
 
 class FakeEvidenceSufficiencyProvider:

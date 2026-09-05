@@ -83,6 +83,13 @@ class CLIPRetrieverProvider:
         self._resolved_device = resolved
         self._model_load_ms = (time.perf_counter() - started) * 1000.0
 
+    def preload(self) -> None:
+        self._load()
+
+    @property
+    def telemetry_model_load_ms(self) -> float:
+        return self._model_load_ms
+
     @staticmethod
     def _normalize(values: Any, torch: Any) -> Any:
         if not hasattr(values, "shape"):
@@ -232,6 +239,7 @@ class CLIPRetrieverProvider:
             {
                 "raw_scores": final,
                 "regions_xyxy": boxes,
+                "crop_count": len(boxes),
                 "batch_size": self.batch_size,
                 "crop_batch_count": batches,
                 "query_cache_hit": query_cache_hit,

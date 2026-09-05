@@ -28,6 +28,11 @@ from typing import Any
 from sat_rs_vlm.domain.entities import RemoteSensingInput
 from sat_rs_vlm.domain.result import InferenceResult
 from sat_rs_vlm.domain.tasks import TaskType
+from sat_rs_vlm.infrastructure.telemetry import (
+    GenerationTelemetry,
+    first_token_logits_processor,
+    visual_input_telemetry,
+)
 
 MODEL_EXTRA_MESSAGE = 'HuggingFace model dependencies are missing. Run: pip install -e ".[model]"'
 TORCH_LOAD_MESSAGE = (
@@ -143,6 +148,7 @@ class HuggingFaceVLMEngine:
                 "--model-id <id>."
             )
 
+        load_started = time.perf_counter()
         try:
             self._torch = importlib.import_module("torch")
         except ModuleNotFoundError as exc:
@@ -161,6 +167,7 @@ class HuggingFaceVLMEngine:
         self.device = self._resolve_device(device)
         self.dtype = dtype
         self.max_new_tokens = max_new_tokens
+        self.last_generation_telemetry: dict[str, Any] = {}
 
         processor_cls = transformers.AutoProcessor
         model_cls = self._resolve_model_class(transformers)
@@ -212,6 +219,7 @@ class HuggingFaceVLMEngine:
             f"{self.model_id}:{self._model_class_name}:{adapter_identity}:{id(self._model)}"
         )
         self._active_sessions: dict[str, CachedGenerationSession] = {}
+        self.model_load_ms = (time.perf_counter() - load_started) * 1000.0
 
     @property
     def model_identity(self) -> str:
@@ -351,6 +359,17 @@ class HuggingFaceVLMEngine:
         except (AttributeError, RuntimeError):
             return None
 
+    @staticmethod
+    def _decoded_token_count(processor: Any, text: str, fallback: int | None) -> int | None:
+        tokenizer = getattr(processor, "tokenizer", processor)
+        encode = getattr(tokenizer, "encode", None)
+        if not callable(encode):
+            return fallback
+        try:
+            return len(encode(text, add_special_tokens=False))
+        except Exception:  # noqa: BLE001 - telemetry must not fail inference.
+            return fallback
+
     def reason_with_cache(
         self,
         prompt: str,
@@ -360,6 +379,9 @@ class HuggingFaceVLMEngine:
     ) -> CachedReasoningResult:
         """Generate free reasoning once and retain its actual Transformers KV cache."""
 
+        telemetry = GenerationTelemetry()
+        telemetry.start()
+        telemetry.start_preprocess()
         images = [self._open_image(path) for path in image_paths]
         apply_chat_template = getattr(self._processor, "apply_chat_template", None)
         if apply_chat_template is None:
@@ -374,9 +396,15 @@ class HuggingFaceVLMEngine:
         if hasattr(encoded, "to"):
             model_device = getattr(self._model, "device", self.device)
             encoded = encoded.to(model_device)
+        telemetry.finish_preprocess()
         input_ids = encoded["input_ids"]
         initial_prefill_tokens = int(input_ids.shape[-1])
         started = time.perf_counter()
+        telemetry.start_generation()
+        logits_processor = first_token_logits_processor(telemetry)
+        generation_kwargs: dict[str, Any] = {}
+        if logits_processor is not None:
+            generation_kwargs["logits_processor"] = logits_processor
         with self._torch.inference_mode():
             generated = self._model.generate(
                 **encoded,
@@ -384,6 +412,7 @@ class HuggingFaceVLMEngine:
                 do_sample=False,
                 use_cache=True,
                 return_dict_in_generate=True,
+                **generation_kwargs,
             )
         reasoning_generate_ms = (time.perf_counter() - started) * 1000.0
         cache = getattr(generated, "past_key_values", None)
@@ -392,6 +421,8 @@ class HuggingFaceVLMEngine:
             raise RuntimeError(
                 "cached reasoning requires generate() to return sequences and past_key_values"
             )
+        generated_tokens = max(0, int(sequences.shape[-1]) - initial_prefill_tokens)
+        telemetry.finish_generation(generated_tokens)
         terminal_ids: set[int] = set()
         generation_config = getattr(self._model, "generation_config", None)
         eos_token_id = getattr(generation_config, "eos_token_id", None)
@@ -412,12 +443,25 @@ class HuggingFaceVLMEngine:
             sequences = sequences[:, :-1]
         reasoning_ids = sequences[:, initial_prefill_tokens:]
         reasoning_tokens = int(reasoning_ids.shape[-1])
+        telemetry.start_decode()
         decoded = self._processor.batch_decode(
             reasoning_ids,
             skip_special_tokens=True,
             clean_up_tokenization_spaces=False,
         )
+        telemetry.finish_decode()
         reasoning_text = str(decoded[0]).strip() if decoded else ""
+        telemetry.output_token_counts = [
+            self._decoded_token_count(self._processor, reasoning_text, reasoning_tokens)
+        ]
+        vision_config = getattr(getattr(self._model, "config", None), "vision_config", None)
+        telemetry.vision_input = visual_input_telemetry(
+            [images],
+            encoded.get("image_grid_thw"),
+            patch_size=int(getattr(vision_config, "patch_size", 16)),
+            merge_size=int(getattr(vision_config, "spatial_merge_size", 2)),
+        )
+        self.last_generation_telemetry = telemetry.to_dict()
         attention_mask = encoded.get("attention_mask")
         if attention_mask is None:
             attention_mask = self._torch.ones_like(input_ids)
@@ -874,7 +918,7 @@ class HuggingFaceVLMEngine:
             FileNotFoundError：图像不存在时抛出。
         """
 
-        if not isinstance(image_path, (str, Path)):
+        if not isinstance(image_path, str | Path):
             convert = getattr(image_path, "convert", None)
             if not callable(convert):
                 raise TypeError("image input must be a path or PIL-compatible image")
@@ -994,6 +1038,9 @@ class HuggingFaceVLMEngine:
                 "The selected processor does not support multimodal chat templates. "
                 "Use a Qwen3-VL compatible processor or add a model-specific input adapter."
             )
+        telemetry = GenerationTelemetry()
+        telemetry.start()
+        telemetry.start_preprocess()
         messages = self._build_messages(prompt, images)
         encoded = apply_chat_template(
             messages,
@@ -1002,10 +1049,12 @@ class HuggingFaceVLMEngine:
             return_dict=True,
             return_tensors="pt",
         )
+        telemetry.finish_preprocess()
         input_ids = encoded["input_ids"]
         if hasattr(encoded, "to"):
             model_device = getattr(self._model, "device", self.device)
             encoded = encoded.to(model_device)
+        telemetry.start_generation()
         generation_kwargs: dict[str, Any] = {"max_new_tokens": self.max_new_tokens}
         if allowed_outputs:
             generation_kwargs["prefix_allowed_tokens_fn"] = self._selection_prefix_constraint(
@@ -1016,8 +1065,18 @@ class HuggingFaceVLMEngine:
                 self.max_new_tokens,
                 max(len(value) for value in allowed_outputs) + 2,
             )
+        logits_processor = first_token_logits_processor(telemetry)
+        if logits_processor is not None:
+            generation_kwargs["logits_processor"] = logits_processor
         with self._torch.inference_mode():
             output_ids = self._model.generate(**encoded, **generation_kwargs)
+        output_shape = getattr(output_ids, "shape", None)
+        generated_tokens = None
+        input_shape = getattr(input_ids, "shape", None)
+        if output_shape is not None and input_shape is not None and len(output_shape) >= 2:
+            generated_tokens = max(0, int(output_shape[-1]) - int(input_shape[-1]))
+        telemetry.finish_generation(generated_tokens)
+        telemetry.start_decode()
         if hasattr(self._processor, "batch_decode"):
             generated_ids = [
                 output[len(input_row) :]
@@ -1028,5 +1087,23 @@ class HuggingFaceVLMEngine:
                 skip_special_tokens=True,
                 clean_up_tokenization_spaces=False,
             )
+            telemetry.finish_decode()
+            telemetry.output_token_counts = [
+                self._decoded_token_count(
+                    self._processor,
+                    str(decoded[0]) if decoded else "",
+                    generated_tokens,
+                )
+            ]
+            vision_config = getattr(getattr(self._model, "config", None), "vision_config", None)
+            telemetry.vision_input = visual_input_telemetry(
+                [images],
+                encoded.get("image_grid_thw"),
+                patch_size=int(getattr(vision_config, "patch_size", 16)),
+                merge_size=int(getattr(vision_config, "spatial_merge_size", 2)),
+            )
+            self.last_generation_telemetry = telemetry.to_dict()
             return str(decoded[0]).strip() if decoded else ""
+        telemetry.finish_decode()
+        self.last_generation_telemetry = telemetry.to_dict()
         return str(output_ids)
