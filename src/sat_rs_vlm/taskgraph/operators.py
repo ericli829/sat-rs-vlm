@@ -1433,28 +1433,59 @@ class CountExecutor:
                 "cardinality",
             )
         scope = inputs.get("image")
+        region_set_union = False
+        if isinstance(scope, RegionSet):
+            if not scope.regions:
+                return OperatorOutcome(
+                    ScalarInt(
+                        0,
+                        {"provider": "cardinality", "source": "RegionSet", "region_set": "empty"},
+                    ),
+                    "cardinality",
+                    {"stage": "counting", "activated_provider": "cardinality"},
+                )
+            union_box = (
+                min(region.bbox_xyxy_global[0] for region in scope.regions),
+                min(region.bbox_xyxy_global[1] for region in scope.regions),
+                max(region.bbox_xyxy_global[2] for region in scope.regions),
+                max(region.bbox_xyxy_global[3] for region in scope.regions),
+            )
+            scope = Region(
+                scope.regions[0].image,
+                union_box,
+                {"region_set_union": True, "component_count": len(scope.regions)},
+            )
+            region_set_union = True
         if not isinstance(scope, (ImageRef, Region)):
             raise TypeError("COUNT requires image/Region or EntitySet")
         params = CountParams.model_validate(node.params)
         counted = self.counting.count(
             CountingRequest(scope=scope, target=params.target, entire=params.entire)
         )
+        provenance: dict[str, Any] = {
+            "provider": counted.provider,
+            "detection": counted.detections.provenance,
+            "entire": counted.metadata.get("entire", params.entire),
+            "requested_entire": params.entire,
+        }
+        if region_set_union:
+            provenance["region_set"] = "union"
+            provenance["region_set_component_count"] = int(scope.provenance["component_count"])
         return OperatorOutcome(
-            ScalarInt(
-                counted.count,
-                {
-                    "provider": counted.provider,
-                    "detection": counted.detections.provenance,
-                    "entire": counted.metadata.get("entire", params.entire),
-                    "requested_entire": params.entire,
-                },
-            ),
+            ScalarInt(counted.count, provenance),
             counted.provider,
             {
                 "latency_ms": counted.latency_ms,
                 "activated_provider": counted.provider,
                 "stage": "counting",
                 "provider_metadata": dict(counted.metadata),
+                **(
+                    {"region_set": "union", "region_set_component_count": int(
+                        scope.provenance["component_count"]
+                    )}
+                    if region_set_union
+                    else {}
+                ),
             },
         )
 

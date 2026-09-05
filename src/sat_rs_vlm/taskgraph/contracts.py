@@ -98,18 +98,21 @@ OPERATOR_INPUT_CONTRACTS: dict[str, OperatorInputContract] = {
         {"entities": _role("EntitySet", "SelectResult")}, frozenset({"entities"})
     ),
     "COUNT": OperatorInputContract(
-        {"image": _role(*VISUAL_SCOPE), "entities": _role("EntitySet", "SelectResult")},
+        {
+            "image": _role(*VISUAL_SCOPE, "RegionSet"),
+            "entities": _role("EntitySet", "SelectResult"),
+        },
         exactly_one=(frozenset({"image", "entities"}),),
     ),
     "ATTRIBUTE": OperatorInputContract(
         {"entity": _role(*ENTITY_OR_REGION, "SelectResult")}, frozenset({"entity"})
     ),
     "CLASSIFY": OperatorInputContract(
-        {"source": _role("ImageRef", "Region", "Entity", "SelectResult")},
+        {"source": _role("ImageRef", "Region", "RegionSet", "Entity", "SelectResult")},
         frozenset({"source"}),
     ),
     "MULTILABEL_CLASSIFY": OperatorInputContract(
-        {"source": _role("ImageRef", "Region", "Entity", "SelectResult")},
+        {"source": _role("ImageRef", "Region", "RegionSet", "Entity", "SelectResult")},
         frozenset({"source"}),
     ),
     "MOTION": OperatorInputContract(
