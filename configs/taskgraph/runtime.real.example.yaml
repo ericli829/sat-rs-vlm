@@ -182,7 +182,10 @@ input_composer:
   # 1536 -> 1024: RELATION composes TWO candidate visuals; at 1536 the vision
   # prefill needs 2.3GB and OOMs against the resident planner+2B+sidecars.
   entity_set_max_side: 1024
-  entity_set_max_crops: 16
+  # 16 -> 4: SELECT/RELATION semantic steps pool up to 16 candidate crops;
+  # at 1024px each the vision KV OOMs (2-5GB).  Four candidates keeps the
+  # whole-scope evidence while staying inside the 31GB budget.
+  entity_set_max_crops: 4
   route_max_side: 1536
 
 # Auxiliary service only. It reuses semantic_2b and never controls COUNT or graph traversal.

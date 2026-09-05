@@ -78,8 +78,11 @@ class CapabilityRouter:
             "after": (False, True),
         },
         OperatorName.RELATION: {
-            "subject": (False, True),
-            "reference": (False, True),
+            # Tolerate AMBIGUOUS/EMPTY selections: the semantic RELATION step
+            # pins each side to its top-scoring entity instead of hard-failing
+            # on a multi-candidate SELECT result.
+            "subject": (True, False),
+            "reference": (True, False),
         },
         OperatorName.VLM_REASON: {
             "image": (False, True),
