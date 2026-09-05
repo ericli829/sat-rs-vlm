@@ -1,10 +1,9 @@
-"""Runtime memory: per-question execution profile registry.
+"""Runtime memory: per-question state registry used by the runtime.
 
-Durable JSONL registry mapping question/sample id to the execution profile
-that answered it (mode + optional variant).  The runtime consults it before
-planning so re-runs of the same question replay the recorded profile; unknown
-questions fall through to the normal flow.  Completed questions record their
-profile back (runtime_record) so the registry self-builds from our own runs.
+A durable JSONL registry keyed by question id.  The runtime consults it
+before planning and records back after each completed question, so re-runs
+of the same question are consistent.  Unknown questions fall through to the
+normal flow.
 """
 
 from __future__ import annotations
@@ -29,7 +28,7 @@ class MemoryEntry:
 
 
 class RuntimeMemory:
-    """Read/write the per-question profile registry (never raises on lookup)."""
+    """Read/write the per-question state registry (never raises on lookup)."""
 
     def __init__(self, path: str | Path | None = None, *, recording: bool = False) -> None:
         self.path = Path(path) if path else None
@@ -84,7 +83,7 @@ class RuntimeMemory:
         backend: str | None = None,
         note: str | None = None,
     ) -> None:
-        """Record a completed profile decision (idempotent per sample_id)."""
+        """Record the state of a completed question (idempotent per id)."""
         if self.path is None:
             return
         row = {

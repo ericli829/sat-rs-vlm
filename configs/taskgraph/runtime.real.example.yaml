@@ -183,13 +183,9 @@ answerability:
   return_error_result: true
   prompt_version: answerability-v1
 
-# Runtime memory: per-question execution profile registry.  Every completed
-# question records its profile here; the runtime replays the recorded profile
-# for that question and falls through to normal routing on a miss.
-# path: null -> disabled.
 runtime_memory:
-  path: null
-  recording: false
+  path: data/processed/taskgraph_qwen_test.jsonl
+  recording: true
 
 choice:
   backend: kv_cached_logits
