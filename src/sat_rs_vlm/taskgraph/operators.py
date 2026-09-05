@@ -466,10 +466,38 @@ class GeometryExecutor:
     def _resolve_route_endpoint(
         value: RuntimeObject, role: str
     ) -> tuple[Entity | Region, dict[str, object]]:
+        if isinstance(value, SelectResult):
+            # SELECT results are valid endpoint evidence.  OK resolves its
+            # selected payload; rank-tied / empty selections fall back to the
+            # highest-scoring candidate so routes still have one endpoint.
+            status = value.status.value
+            if value.status is SelectStatus.EMPTY:
+                raise ValueError(
+                    f"BUILD_ROUTE_CONTEXT.{role} SELECT is EMPTY"
+                    f"{getattr(value, 'reason', '')}"
+                )
+            value = value.selected
+            if isinstance(value, SelectResult):  # pragma: no cover - defensive
+                raise TypeError(f"BUILD_ROUTE_CONTEXT.{role} nested SelectResult")
+            if isinstance(value, EntitySet) and len(value.entities) > 1:
+                # Ambiguous/rank-tied set: pin the highest-scoring entity.
+                ordered = sorted(
+                    enumerate(value.entities),
+                    key=lambda pair: (
+                        -(float(pair[1].score) if pair[1].score is not None else float("-inf")),
+                        str(pair[1].provenance.get("candidate_id", "")),
+                    ),
+                )
+                selected_index, selected = ordered[0]
+                return selected, {
+                    "policy": f"highest_score_from_{status}",
+                    "selected_index": selected_index,
+                    "candidate_count": len(value.entities),
+                }
         if isinstance(value, Entity | Region):
             return value, {"policy": "single", "selected_index": 0}
         if not isinstance(value, EntitySet):
-            raise TypeError(f"BUILD_ROUTE_CONTEXT.{role} must be Entity, EntitySet, or Region")
+            raise TypeError(f"BUILD_ROUTE_CONTEXT.{role} must be Entity, EntitySet, Region, or SelectResult")
         if not value.entities:
             raise ValueError(f"BUILD_ROUTE_CONTEXT.{role} EntitySet is empty")
         if len(value.entities) == 1:
@@ -479,12 +507,21 @@ class GeometryExecutor:
                 f"BUILD_ROUTE_CONTEXT.{role} is ambiguous: every candidate needs a score"
             )
         scored = list(enumerate(value.entities))
-        ordered = sorted(scored, key=lambda item: cast(float, item[1].score), reverse=True)
+        ordered = sorted(
+            scored,
+            key=lambda item: (
+                -cast(float, item[1].score),
+                str(item[1].provenance.get("candidate_id", "")),
+            ),
+        )
+        policy = "unique_highest_complete_scores"
         if abs(cast(float, ordered[0][1].score) - cast(float, ordered[1][1].score)) <= 1e-9:
-            raise ValueError(f"BUILD_ROUTE_CONTEXT.{role} is ambiguous: highest score is tied")
+            # Rank-tied (e.g. SELECT_RANK bbox_area tie): still need one
+            # endpoint, pin the first of the tied set deterministically.
+            policy = "highest_tied_pinned"
         selected_index, selected = ordered[0]
         return selected, {
-            "policy": "unique_highest_complete_scores",
+            "policy": policy,
             "selected_index": selected_index,
             "selected_score": selected.score,
             "candidate_scores": [entity.score for entity in value.entities],

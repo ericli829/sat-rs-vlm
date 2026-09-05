@@ -145,8 +145,11 @@ OPERATOR_INPUT_CONTRACTS: dict[str, OperatorInputContract] = {
     "BUILD_ROUTE_CONTEXT": OperatorInputContract(
         {
             "image": _role(*VISUAL_SCOPE),
-            "start": _role(*ENTITY_OR_REGION),
-            "goal": _role(*ENTITY_OR_REGION),
+            # SELECT results are valid route endpoint evidence: the endpoint
+            # resolver pins OK and rank-tied selections to their highest-score
+            # entity instead of hard-failing on a multi-candidate SELECT.
+            "start": _role(*ENTITY_OR_REGION, "SelectResult"),
+            "goal": _role(*ENTITY_OR_REGION, "SelectResult"),
         },
         frozenset({"image", "start", "goal"}),
     ),

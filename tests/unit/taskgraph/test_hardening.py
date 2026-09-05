@@ -718,8 +718,10 @@ def test_route_entityset_uses_highest_score_and_rejects_unscored_ambiguity(
             _entity(image, (40, 40, 50, 50), 0.9),
         )
     )
-    with pytest.raises(ValueError, match="highest score is tied"):
-        GeometryExecutor._route_context(image, tied, goal)
+    # Rank-tied endpoints are pinned deterministically (routes always need one).
+    tied_context = GeometryExecutor._route_context(image, tied, goal)
+    assert tied_context.provenance["start_selection"]["policy"] == "highest_tied_pinned"
+    assert tied_context.provenance["start_selection"]["selected_index"] == 0
 
     assert context.provenance["context_size"] == [256.0, 200.0]
 

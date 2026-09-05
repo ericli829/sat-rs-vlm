@@ -94,7 +94,13 @@ class CapabilityRouter:
         OperatorName.REGION_FROM_BBOX: {"image": (False, True, False)},
         OperatorName.FIND_MARKER: {"image": (False, True, False)},
         OperatorName.LOCATE: {"image": (False, True, False)},
-        OperatorName.BUILD_ROUTE_CONTEXT: {"image": (False, True, False)},
+        OperatorName.BUILD_ROUTE_CONTEXT: {
+            "image": (False, True, False),
+            # START/GOAL are endpoint evidence: materialize AMBIGUOUS selections
+            # to their selected set; GeometryExecutor pins the highest score.
+            "start": (False, False, True),
+            "goal": (False, False, True),
+        },
     }
 
     def __init__(self, bindings: dict[OperatorName, ExecutorBinding]) -> None:
