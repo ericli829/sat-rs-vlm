@@ -513,8 +513,23 @@ def _trace_performance_summary(trace: ExecutionTrace) -> dict[str, Any]:
         for item in events if isinstance(events, list) else []:
             if isinstance(item, Mapping):
                 tokens = item.get("tokens")
-                if isinstance(tokens, Mapping) and isinstance(tokens.get(key), int):
-                    total += int(tokens[key])
+                value = tokens.get(key) if isinstance(tokens, Mapping) else None
+                if isinstance(value, list):
+                    value = sum(v for v in value if isinstance(v, int))
+                if isinstance(value, int):
+                    total += int(value)
+                    found = True
+        return total if found else None
+
+    def _sum_vision_tokens() -> int | None:
+        total = 0
+        found = False
+        for item in events if isinstance(events, list) else []:
+            if isinstance(item, Mapping):
+                vision = item.get("vision_input")
+                value = vision.get("visual_token_count") if isinstance(vision, Mapping) else None
+                if isinstance(value, int):
+                    total += int(value)
                     found = True
         return total if found else None
 
@@ -533,7 +548,7 @@ def _trace_performance_summary(trace: ExecutionTrace) -> dict[str, Any]:
         "ttft_ms": _first_token_ms(),
         "output_tokens": _sum_tokens("output"),
         "generated_tokens": _sum_tokens("generated"),
-        "visual_tokens": _sum_tokens("vision"),
+        "visual_tokens": _sum_vision_tokens(),
         "decode_tokens_per_second": _best_decode_tps(),
         "phase_timing_ms": dict(timings) if isinstance(timings, Mapping) else {},
         "generation_event_count": len(events) if isinstance(events, list) else 0,
