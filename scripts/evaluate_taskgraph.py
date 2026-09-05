@@ -491,11 +491,16 @@ def _execution_visual_metadata(
 
     def walk(value: Any) -> None:
         if isinstance(value, dict):
-            if isinstance(value.get("tile_count"), int | float):
+            tile_value = value.get("tile_count")
+            if tile_value is None:
+                # counting_system records tile work as tiles_run
+                tile_value = value.get("tiles_run")
+            if isinstance(tile_value, int | float):
                 tile_records.append(
                     {
-                        key: value.get(key)
-                        for key in ("tile_count", "tile_size", "overlap_ratio")
+                        "tile_count": tile_value,
+                        "tile_size": value.get("tile_size"),
+                        "overlap_ratio": value.get("overlap_ratio"),
                     }
                 )
             if isinstance(value.get("crop_count"), int | float):
@@ -703,6 +708,7 @@ def main() -> int:
             else:
                 telemetry["vision_input"].update(
                     {
+                        "original_size": provider_visual["original_size"],
                         "tile_count": provider_visual["tile_count"],
                         "crop_count": provider_visual["crop_count"],
                         "provider_tile_records": provider_visual["provider_tile_records"],

@@ -1637,7 +1637,7 @@ class LazyQwenSemanticProvider:
                 max_new_tokens=self.model_config.max_new_tokens,
                 trust_remote_code=self.model_config.trust_remote_code,
                 local_files_only=self.model_config.local_files_only,
-                max_pixels=self.model_config.max_pixels,
+                max_pixels=getattr(self.model_config, "max_pixels", None),
             )
         return self._engine
 
