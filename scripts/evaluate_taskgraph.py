@@ -583,9 +583,21 @@ def main() -> int:
     warmup_attempts = 0
     warmup_failures: list[dict[str, str]] = []
     try:
-        cold_start = preload_provider_models(
-            [provider for provider in configured_providers if provider is not None]
-        )
+        try:
+            cold_start = preload_provider_models(
+                [provider for provider in configured_providers if provider is not None]
+            )
+        except Exception as preload_error:
+            # Sidecar/detector providers may not support standalone preload
+            # (e.g. LAE-DINO needs a real image request).  The warmup run
+            # below loads them instead; cold-start metrics degrade to None.
+            cold_start = {
+                "scope": "all_configured_model_providers",
+                "latency_ms": None,
+                "providers": [],
+                "all_supported": False,
+                "preload_error": f"{type(preload_error).__name__}: {preload_error}",
+            }
         warmup_rows = rows[:1]
         for _ in range(args.warmup_runs):
             for row in warmup_rows:
