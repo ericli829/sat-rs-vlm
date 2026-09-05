@@ -80,10 +80,10 @@ providers:
       overlap_ratio: 0.15
       global_nms_iou: 0.4
       parallel_workers: auto
-      # 3 workers (full LAE parallelism): base 13.4GB(bf16 models) + 3*2.9GB
-      # workers = 22.0GB; sample peak ~28GB leaves ~3.5GB headroom (top-16
-      # candidate cut + 640px vision budget + per-call session purge).
-      parallel_max_workers: 3
+      # 5 workers (max LAE parallelism): base 13.4GB(bf16) + 5*2.87GB = 27.75GB
+      # + ~4GB sample peak ~= 31.7GB — right at the edge; occasional OOM on the
+      # heaviest multi-step samples is accepted.
+      parallel_max_workers: 5
       parallel_worker_vram_gb: 4.0
       parallel_vram_reserve_gb: 6.0
       proposal_cache_size: 8
