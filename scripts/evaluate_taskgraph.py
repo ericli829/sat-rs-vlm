@@ -87,6 +87,12 @@ def _message_fields(row: dict[str, Any]) -> tuple[list[str], str, str]:
     return images, question, reference
 
 
+def _sample_id(row: dict[str, Any]) -> str:
+    """Return the row sample id, tolerating both ``sample_id`` and ``id`` keys."""
+    value = row.get("sample_id", row.get("id", ""))
+    return str(value)
+
+
 def _row_request(row: dict[str, Any], image_root: Path) -> RuntimeRequest:
     message_images, message_question, message_reference = _message_fields(row)
     raw_images = row.get("image_paths", row.get("images", message_images))
@@ -109,7 +115,7 @@ def _row_request(row: dict[str, Any], image_root: Path) -> RuntimeRequest:
     except ValueError:
         question_type = QuestionType.FREE_FORM
     return RuntimeRequest(
-        sample_id=str(row.get("id", "")),
+        sample_id=_sample_id(row),
         dataset=str(row.get("dataset", metadata.get("dataset", "unknown"))),
         task_category=str(row.get("task_category", row.get("task_type", "default"))),
         question=str(row.get("question", message_question)),
@@ -589,13 +595,13 @@ def main() -> int:
                 except Exception as exc:
                     warmup_failures.append(
                         {
-                            "sample_id": str(row.get("id", "")),
+                            "sample_id": _sample_id(row),
                             "error_type": type(exc).__name__,
                             "error_message": str(exc),
                         }
                     )
         for row in rows:
-            sample_id = str(row.get("id", ""))
+            sample_id = _sample_id(row)
             _, _, reference = _message_fields(row)
             if not reference:
                 reference = str(row.get("reference", row.get("answer", "")))
