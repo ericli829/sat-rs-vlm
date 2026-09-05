@@ -80,9 +80,10 @@ providers:
       overlap_ratio: 0.15
       global_nms_iou: 0.4
       parallel_workers: auto
-      # 5 workers (max LAE parallelism): base 13.4GB(bf16) + 5*2.87GB = 27.75GB
-      # + ~4GB sample peak ~= 31.7GB — right at the edge; occasional OOM on the
-      # heaviest multi-step samples is accepted.
+      # explicit 5 (max LAE parallelism).  auto budgeting resolved only 4
+      # (25.3GB base); explicit 5 -> base 28.2GB, peak ~32GB right at the
+      # edge — occasional OOM on the heaviest samples is accepted.
+      parallel_workers: 5
       parallel_max_workers: 5
       parallel_worker_vram_gb: 4.0
       parallel_vram_reserve_gb: 6.0
