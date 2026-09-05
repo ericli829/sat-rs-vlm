@@ -498,13 +498,44 @@ def _trace_performance_summary(trace: ExecutionTrace) -> dict[str, Any]:
     telemetry = dict(trace.telemetry or {})
     events = telemetry.get("generation_events") or []
     timings = telemetry.get("phase_timing_ms") or {}
+
+    def _first_token_ms() -> float | None:
+        for item in events if isinstance(events, list) else []:
+            if isinstance(item, Mapping):
+                timing = item.get("timing_ms")
+                if isinstance(timing, Mapping) and isinstance(timing.get("ttft"), int | float):
+                    return float(timing["ttft"])
+        return timings.get("ttft") if isinstance(timings, Mapping) else None
+
+    def _sum_tokens(key: str) -> int | None:
+        total = 0
+        found = False
+        for item in events if isinstance(events, list) else []:
+            if isinstance(item, Mapping):
+                tokens = item.get("tokens")
+                if isinstance(tokens, Mapping) and isinstance(tokens.get(key), int):
+                    total += int(tokens[key])
+                    found = True
+        return total if found else None
+
+    def _best_decode_tps() -> float | None:
+        best = None
+        for item in events if isinstance(events, list) else []:
+            if isinstance(item, Mapping):
+                tokens = item.get("tokens")
+                value = tokens.get("decode_tokens_per_second") if isinstance(tokens, Mapping) else None
+                if isinstance(value, int | float):
+                    best = max(best or float("-inf"), float(value))
+        return best
+
     return {
         "schema_version": "1.0",
-        "ttft_ms": trace.ttft_ms,
-        "output_tokens": trace.output_tokens,
-        "visual_tokens": trace.visual_tokens,
-        "decode_tokens_per_second": trace.decode_tokens_per_s,
-        "phase_timing_ms": dict(timings),
+        "ttft_ms": _first_token_ms(),
+        "output_tokens": _sum_tokens("output"),
+        "generated_tokens": _sum_tokens("generated"),
+        "visual_tokens": _sum_tokens("vision"),
+        "decode_tokens_per_second": _best_decode_tps(),
+        "phase_timing_ms": dict(timings) if isinstance(timings, Mapping) else {},
         "generation_event_count": len(events) if isinstance(events, list) else 0,
         "activated_providers": list(trace.activated_providers),
         "activated_parameter_counts": dict(trace.activated_parameter_counts),
