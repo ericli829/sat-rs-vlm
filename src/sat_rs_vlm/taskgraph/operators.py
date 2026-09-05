@@ -2790,6 +2790,35 @@ class SemanticExecutor:
         else:
             return self._free_text(node, inputs, context)
 
+        if node.op is OperatorName.RELATION:
+            # The relation VLM reasons over BOTH referents; feeding full
+            # multi-candidate EntitySets (16 per set x 2 images) overflows the
+            # 31GB budget.  Constrain each side to its top-scoring entity.
+            inputs = dict(inputs)
+            for role in ("subject", "reference"):
+                value = inputs.get(role)
+                if isinstance(value, EntitySet) and len(value.entities) > 1:
+                    top = max(
+                        value.entities,
+                        key=lambda entity: (
+                            float(entity.score)
+                            if entity.score is not None
+                            and math.isfinite(float(entity.score))
+                            else float("-inf")
+                        ),
+                    )
+                    candidate = Entity(
+                        top.region,
+                        top.label,
+                        top.score,
+                        dict(top.provenance),
+                    )
+                    candidate.provenance["relation_singleton"] = True
+                    inputs[role] = EntitySet(
+                        (candidate,),
+                        {**dict(value.provenance), "relation_singleton": True},
+                    )
+
         model_input = context.composer.compose_named(
             inputs,
             question=question,
