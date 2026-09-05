@@ -315,8 +315,15 @@ class ReferentRefiner:
             float(entity.score) if entity.score is not None and math.isfinite(entity.score) else 0.0
             for entity in entities
         ]
-        geometry_scores = [self._geometry_prior(entity, question) for entity in entities]
         detector_norm = self._normalize(detector_scores)
+        if self.config.semantic_weight <= 0.0:
+            # No-VLM mode: rank strictly by detector score (highest first).
+            ranking = [
+                (-detector_norm[index], index) for index in range(len(entities))
+            ]
+            ranking.sort(key=lambda item: (item[0], item[1]))
+            return tuple(index for _, index in ranking[: self.config.max_candidates])
+        geometry_scores = [self._geometry_prior(entity, question) for entity in entities]
         weight_total = self.config.semantic_weight + self.config.geometry_weight
         ranking = [
             (
@@ -370,6 +377,39 @@ class ReferentRefiner:
         selected_indices = self._rank_for_budget(entities, question)
         selected_entities = tuple(entities[index] for index in selected_indices)
         selected_ids = [candidate_ids[index] for index in selected_indices]
+
+        if self.config.semantic_weight <= 0.0:
+            # Singleton-requiring downstream: no semantic verification — pin
+            # the highest-scoring candidate (detector score descending).
+            # NOTE: refine() is only invoked for single-target consumers
+            # (should_refine), so SELECT/GROUP/COUNT/RELATION paths are
+            # untouched and keep their full candidate lists.
+            top_index = selected_indices[0]
+            top_entity = entities[top_index]
+            top_id = candidate_ids[top_index]
+            resolution = "PRIMARY_RESOLVED"
+            common.update(
+                {
+                    "applied": True,
+                    "method": "singleton_highest_score",
+                    "semantic_scores": {},
+                    "selected_candidate_ids": [top_id],
+                    "resolution_status": resolution,
+                    "vlm_verification": "skipped_by_weight",
+                    "latency_ms": (time.perf_counter() - started) * 1000.0,
+                }
+            )
+            output = EntitySet(
+                (top_entity,),
+                {
+                    **candidates.provenance,
+                    "referent_refinement": common,
+                    "resolution_status": resolution,
+                    "selected_candidate_ids": [top_id],
+                },
+            )
+            return ReferentRefinementResult(output, common)
+
         semantic_candidates = EntitySet(
             selected_entities,
             {

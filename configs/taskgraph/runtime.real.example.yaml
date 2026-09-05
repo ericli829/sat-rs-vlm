@@ -167,12 +167,13 @@ capability_routing:
   unresolved_policy: detector_fallback
 
 locate_refinement:
-  # LAE-DINO recall on XLRS is sufficient on its own; skip the semantic-2B
-  # referent verification (multi-candidate vision call) — LAE candidates +
-  # geometry flow straight into the downstream SELECT.
-  enabled: false
+  # Only affects singleton-requiring LOCATE (attributes / direct final /
+  # singular consumer triggers; SELECT/GROUP/COUNT/RELATION paths are
+  # untouched).  semantic_weight 0.0 -> no VLM verification; the single
+  # highest-scoring (LAE/clip-rerank fused) candidate is pinned.
+  enabled: true
   max_candidates: 8
-  semantic_weight: 0.75
+  semantic_weight: 0.0
   geometry_weight: 0.25
   minimum_margin: 0.02
 
