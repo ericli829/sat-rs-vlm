@@ -1130,26 +1130,59 @@ class LocateExecutor:
                 and self.refiner is not None
                 and self.refiner.config.enabled
             ):
-                fallback = self.refiner.visual_fallback(
-                    scope,
-                    question=context.final_question or context.question,
-                    target=target,
-                    reason="EMPTY_RETRIEVER_RESULTS",
-                )
-                value = fallback.entities
-                refinement_metadata.update(
-                    {
-                        **fallback.metadata,
-                        "fallback_triggered": True,
-                        "fallback_reason": "EMPTY_RETRIEVER_RESULTS",
-                        "fallback_provider": "semantic_2b",
-                        "fallback_scope": fallback.metadata.get("fallback_scope"),
-                        "final_resolution_status": "SEMANTIC_FALLBACK_RESOLVED",
-                        "resolution_status": "SEMANTIC_FALLBACK_RESOLVED",
-                        "refinement_status": "SEMANTIC_FALLBACK_RESOLVED",
-                        "candidate_count_after_refinement": len(value.entities),
-                    }
-                )
+                # Retriever recall failure (3x3+CLIP missed the target):
+                # fall back to the open-set detector, then to the semantic VLM.
+                detector_fallback = None
+                try:
+                    detector_result = self.detection.detect(
+                        DetectionRequest(
+                            scope,
+                            target,
+                            "LOCATE",
+                            apply_locate_policy=True,
+                            use_clip_rerank=True,
+                        )
+                    )
+                    detector_fallback = detector_result.detections
+                except Exception as exc:
+                    refinement_metadata["detector_fallback_error"] = (
+                        f"{type(exc).__name__}: {exc}"
+                    )
+                if detector_fallback is not None and detector_fallback.entities:
+                    value = detector_fallback
+                    refinement_metadata.update(
+                        {
+                            "fallback_triggered": True,
+                            "fallback_reason": "EMPTY_RETRIEVER_RESULTS",
+                            "fallback_provider": "lae_dino_detector",
+                            "fallback_scope": None,
+                            "final_resolution_status": "DETECTOR_FALLBACK_RESOLVED",
+                            "resolution_status": "DETECTOR_FALLBACK_RESOLVED",
+                            "refinement_status": "DETECTOR_FALLBACK_RESOLVED",
+                            "candidate_count_after_refinement": len(value.entities),
+                        }
+                    )
+                else:
+                    fallback = self.refiner.visual_fallback(
+                        scope,
+                        question=context.final_question or context.question,
+                        target=target,
+                        reason="EMPTY_RETRIEVER_RESULTS",
+                    )
+                    value = fallback.entities
+                    refinement_metadata.update(
+                        {
+                            **fallback.metadata,
+                            "fallback_triggered": True,
+                            "fallback_reason": "EMPTY_RETRIEVER_RESULTS",
+                            "fallback_provider": "semantic_2b",
+                            "fallback_scope": fallback.metadata.get("fallback_scope"),
+                            "final_resolution_status": "SEMANTIC_FALLBACK_RESOLVED",
+                            "resolution_status": "SEMANTIC_FALLBACK_RESOLVED",
+                            "refinement_status": "SEMANTIC_FALLBACK_RESOLVED",
+                            "candidate_count_after_refinement": len(value.entities),
+                        }
+                    )
             refinement_metadata.setdefault(
                 "final_resolution_status", refinement_metadata["resolution_status"]
             )

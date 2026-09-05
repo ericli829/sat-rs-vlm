@@ -168,7 +168,11 @@ providers:
 
 capability_routing:
   ontology_path: configs/eval/semantic/remote_sensing_ontology.json
-  unresolved_policy: detector_fallback
+  # Open-vocabulary targets (XLRS trees, mines, roundabouts...) run the 3x3
+  # grid + GeoRSCLIP cross-scoring retriever (~10s) instead of the LAE
+  # 81-tile scan (~72s).  LAE remains the detector fallback when the
+  # retriever returns no candidates.
+  unresolved_policy: retriever_fallback
 
 locate_refinement:
   # Only affects singleton-requiring LOCATE (attributes / direct final /

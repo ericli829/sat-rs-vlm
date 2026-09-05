@@ -56,7 +56,9 @@ class CapabilityRouter:
     _SELECT_INPUT_POLICIES: dict[OperatorName, dict[str, tuple[bool, bool, bool]]] = {
         OperatorName.SELECT: {
             "candidates": (True, False, False),
-            "reference": (False, False, False),
+            # A rank-tied reference is valid geometry evidence: the executor's
+            # _single_reference picks the highest-scoring region.
+            "reference": (False, False, True),
             "scope": (False, True, False),
         },
         OperatorName.GROUP: {"entities": (True, False, False)},
