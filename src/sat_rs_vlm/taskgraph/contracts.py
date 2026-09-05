@@ -125,8 +125,10 @@ OPERATOR_INPUT_CONTRACTS: dict[str, OperatorInputContract] = {
     ),
     "RELATION": OperatorInputContract(
         {
-            "subject": _role(*ENTITY_OR_REGION, "SelectResult"),
-            "reference": _role(*ENTITY_OR_REGION, "SelectResult"),
+            # RegionSet (FIND_MARKER output) is valid relational evidence:
+            # the semantic RELATION step renders every region crop and decides.
+            "subject": _role(*ENTITY_OR_REGION, "RegionSet", "SelectResult"),
+            "reference": _role(*ENTITY_OR_REGION, "RegionSet", "SelectResult"),
         },
         frozenset({"subject", "reference"}),
     ),

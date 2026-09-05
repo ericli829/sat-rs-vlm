@@ -241,13 +241,17 @@ def unwrap_select_result(
     *,
     allow_empty: bool,
     require_single: bool = False,
+    allow_ambiguous: bool = False,
     consumer: str = "downstream",
 ) -> RuntimeObject:
     """Materialize a SELECT result according to one explicit downstream policy.
 
     ``OK`` always exposes ``selected``. ``EMPTY`` is exposed only to set-aware
-    consumers that opt in. Unresolved, ambiguous, and error states never flow
-    into another operator or VLM implicitly.
+    consumers that opt in. ``AMBIGUOUS`` is exposed only to consumers that opt
+    in (its selected predicate-banned payload carries no unsafe status-flagged
+    candidates but a tied multi-candidate set the semantic layer must resolve).
+    Unresolved and error states never flow into another operator or VLM
+    implicitly.
     """
 
     if not isinstance(value, SelectResult):
@@ -264,6 +268,11 @@ def unwrap_select_result(
         # choice layer, instead of hard-failing the sample.
         if require_single:
             return value.selected
+    elif value.status is SelectStatus.AMBIGUOUS and allow_ambiguous:
+        # A tied selection (e.g. SELECT_RANK rank ties) is still safe visual
+        # evidence: expose the tied candidate set for the downstream semantic
+        # layer instead of hard-failing.
+        pass
     elif value.status is not SelectStatus.OK:
         raise SelectResultConsumptionError(
             f"{consumer} refuses SELECT status {value.status.value}"

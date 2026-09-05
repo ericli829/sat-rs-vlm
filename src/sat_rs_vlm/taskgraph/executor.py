@@ -53,48 +53,48 @@ class ExecutorBinding:
 class CapabilityRouter:
     """Explicit operator-to-capability registry; graphs never contain model names."""
 
-    _SELECT_INPUT_POLICIES: dict[OperatorName, dict[str, tuple[bool, bool]]] = {
+    _SELECT_INPUT_POLICIES: dict[OperatorName, dict[str, tuple[bool, bool, bool]]] = {
         OperatorName.SELECT: {
-            "candidates": (True, False),
-            "reference": (False, False),
-            "scope": (False, True),
+            "candidates": (True, False, False),
+            "reference": (False, False, False),
+            "scope": (False, True, False),
         },
-        OperatorName.GROUP: {"entities": (True, False)},
+        OperatorName.GROUP: {"entities": (True, False, False)},
         OperatorName.COUNT: {
             # COUNT.image accepts a SUBREGION SelectResult (always one Region).
-            "image": (False, True),
-            "entities": (True, False),
+            "image": (False, True, False),
+            "entities": (True, False, False),
         },
         # Semantic consumers tolerate an empty selection: the empty EntitySet
         # reaches the operator, which falls back to question-grounded VLM
         # answering instead of hard-failing.  require_single keeps multi-select
         # rejection intact.
-        OperatorName.ATTRIBUTE: {"entity": (True, True)},
-        OperatorName.CLASSIFY: {"source": (True, True)},
-        OperatorName.MULTILABEL_CLASSIFY: {"source": (True, True)},
+        OperatorName.ATTRIBUTE: {"entity": (True, True, False)},
+        OperatorName.CLASSIFY: {"source": (True, True, False)},
+        OperatorName.MULTILABEL_CLASSIFY: {"source": (True, True, False)},
         OperatorName.MOTION: {
-            "source": (False, True),
-            "before": (False, True),
-            "after": (False, True),
+            "source": (False, True, False),
+            "before": (False, True, False),
+            "after": (False, True, False),
         },
         OperatorName.RELATION: {
             # Tolerate AMBIGUOUS/EMPTY selections: the semantic RELATION step
             # pins each side to its top-scoring entity instead of hard-failing
-            # on a multi-candidate SELECT result.
-            "subject": (True, False),
-            "reference": (True, False),
+            # on a multi-candidate or rank-tied SELECT result.
+            "subject": (True, False, True),
+            "reference": (True, False, True),
         },
         OperatorName.VLM_REASON: {
-            "image": (False, True),
-            "evidence": (False, False),
+            "image": (False, True, False),
+            "evidence": (False, False, False),
         },
         # SUBREGION SELECT results (always exactly one Region) are valid visual
         # scopes; materialize them before the runtime contract check.
-        OperatorName.REGION: {"image": (False, True)},
-        OperatorName.REGION_FROM_BBOX: {"image": (False, True)},
-        OperatorName.FIND_MARKER: {"image": (False, True)},
-        OperatorName.LOCATE: {"image": (False, True)},
-        OperatorName.BUILD_ROUTE_CONTEXT: {"image": (False, True)},
+        OperatorName.REGION: {"image": (False, True, False)},
+        OperatorName.REGION_FROM_BBOX: {"image": (False, True, False)},
+        OperatorName.FIND_MARKER: {"image": (False, True, False)},
+        OperatorName.LOCATE: {"image": (False, True, False)},
+        OperatorName.BUILD_ROUTE_CONTEXT: {"image": (False, True, False)},
     }
 
     def __init__(self, bindings: dict[OperatorName, ExecutorBinding]) -> None:
@@ -113,19 +113,21 @@ class CapabilityRouter:
             if policy is None:
                 materialized[role] = value
                 continue
-            allow_empty, require_single = policy
+            allow_empty, require_single, allow_ambiguous = policy
 
             def unwrap(
                 item: RuntimeObject,
                 *,
                 _allow_empty: bool = allow_empty,
                 _require_single: bool = require_single,
+                _allow_ambiguous: bool = allow_ambiguous,
                 _role: str = role,
             ) -> RuntimeObject:
                 return unwrap_select_result(
                     item,
                     allow_empty=_allow_empty,
                     require_single=_require_single,
+                    allow_ambiguous=_allow_ambiguous,
                     consumer=f"{node.op.value}.{_role}",
                 )
 
