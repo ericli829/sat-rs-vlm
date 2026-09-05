@@ -2752,6 +2752,27 @@ class SemanticExecutor:
         question = semantic_question(node, context.question, final_choice_fusion=False)
         instruction = semantic_reasoning_instruction(node)
 
+        # Purge cached KV sessions + reclaim the pool BEFORE this semantic call:
+        # within one sample the previous semantic nodes accumulate several GB
+        # of session KV; multi-visual calls (SELECT/RELATION) then OOM.
+        releaser = getattr(self.provider, "release_idle_sessions", None)
+        if callable(releaser):
+            try:
+                releaser()
+            except Exception:
+                pass
+        try:
+            import gc
+
+            gc.collect()
+            import torch
+
+            cuda = getattr(torch, "cuda", None)
+            if cuda is not None and bool(getattr(cuda, "is_available", lambda: False)()):
+                cuda.empty_cache()
+        except Exception:
+            pass
+
         def _is_empty_visual(value: RuntimeObject) -> bool:
             if isinstance(value, EntitySet):
                 return len(value.entities) == 0
