@@ -141,6 +141,9 @@ providers:
     dtype: auto
     local_files_only: true
     max_new_tokens: 128
+    # 768x768 vision budget: two-image semantic calls (RELATION) fit the 31GB
+    # budget (default 1MP/img needs ~2.3GB KV and OOMs).
+    max_pixels: 589824
     # Compatibility fallback only: normal SELECT uses free reasoning followed
     # by KV-cached candidate scoring; Caption/VQA remain unconstrained.
     selection_constrained_decoding: true

@@ -58,6 +58,8 @@ class ModelConfig(BaseModel):
     max_new_tokens: int = 256
     trust_remote_code: bool = True
     local_files_only: bool = False
+    # Optional processor vision budget (px^2); bounds the KV per-image tokens.
+    max_pixels: int | None = None
     # Applies only to TaskGraph SELECT.  Other VLM tasks remain open-ended.
     selection_constrained_decoding: bool = True
 

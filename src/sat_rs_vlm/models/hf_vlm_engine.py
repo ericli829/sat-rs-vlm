@@ -127,6 +127,7 @@ class HuggingFaceVLMEngine:
         max_new_tokens: int = 256,
         trust_remote_code: bool = True,
         local_files_only: bool = False,
+        max_pixels: int | None = None,
     ) -> None:
         """初始化 HuggingFace 模型和处理器。
 
@@ -168,6 +169,10 @@ class HuggingFaceVLMEngine:
             "trust_remote_code": trust_remote_code,
             "local_files_only": local_files_only,
         }
+        if max_pixels is not None and max_pixels > 0:
+            # Bound the vision token budget: Qwen3-VL defaults to ~1MP per
+            # image, so a two-image semantic call (RELATION) needs ~2.3GB KV.
+            processor_kwargs["max_pixels"] = int(max_pixels)
         model_kwargs = dict(processor_kwargs)
         torch_dtype = self._resolve_dtype(dtype)
         model_kwargs["dtype"] = torch_dtype if torch_dtype is not None else "auto"
