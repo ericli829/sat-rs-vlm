@@ -2729,6 +2729,23 @@ class SemanticExecutor:
                 return len(value.regions) == 0
             return False
 
+        @staticmethod
+        def _release_vram() -> None:
+            """Best-effort GPU memory reclaim before a big semantic call."""
+            try:
+                import gc
+
+                gc.collect()
+                import torch
+
+                cuda = getattr(torch, "cuda", None)
+                if cuda is not None and bool(getattr(cuda, "is_available", lambda: False)()):
+                    cuda.empty_cache()
+            except Exception:
+                pass
+
+        _release_vram()
+
         empty_visual_evidence = any(
             _is_empty_visual(item)
             for item in inputs.values()

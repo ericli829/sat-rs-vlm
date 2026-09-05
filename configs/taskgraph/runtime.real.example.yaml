@@ -80,7 +80,10 @@ providers:
       overlap_ratio: 0.15
       global_nms_iou: 0.4
       parallel_workers: auto
-      parallel_max_workers: 3
+      # 3 -> 1: each LAE sidecar worker holds ~2.8GB permanently; with
+      # planner-4B + semantic-2B resident, more than one worker leaves
+      # insufficient headroom for the RELATION semantic step (2.3GB KV).
+      parallel_max_workers: 1
       parallel_worker_vram_gb: 4.0
       parallel_vram_reserve_gb: 6.0
       proposal_cache_size: 8
@@ -173,7 +176,9 @@ input_composer:
   compact_trace: true
   candidate_halo_ratio: 0.2
   entity_set_union_area_threshold: 0.55
-  entity_set_max_side: 1536
+  # 1536 -> 1024: RELATION composes TWO candidate visuals; at 1536 the vision
+  # prefill needs 2.3GB and OOMs against the resident planner+2B+sidecars.
+  entity_set_max_side: 1024
   entity_set_max_crops: 16
   route_max_side: 1536
 
