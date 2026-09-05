@@ -140,8 +140,8 @@ providers:
     dtype: auto
     local_files_only: true
     max_new_tokens: 128
-    # 640x640 vision budget: multi-image semantic calls (SELECT/RELATION)
-    # stay inside the 31GB budget (768^2 was 0.1GB short at 26.5GB resident).
+    # 640x640 vision budget: two workers keep ~27.6GB resident, so multi-image
+    # semantic steps (SELECT/RELATION) need the KV increment cut to fit 31.5GB.
     max_pixels: 409600
     # Compatibility fallback only: normal SELECT uses free reasoning followed
     # by KV-cached candidate scoring; Caption/VQA remain unconstrained.
@@ -167,7 +167,10 @@ capability_routing:
   unresolved_policy: detector_fallback
 
 locate_refinement:
-  enabled: true
+  # LAE-DINO recall on XLRS is sufficient on its own; skip the semantic-2B
+  # referent verification (multi-candidate vision call) — LAE candidates +
+  # geometry flow straight into the downstream SELECT.
+  enabled: false
   max_candidates: 8
   semantic_weight: 0.75
   geometry_weight: 0.25
