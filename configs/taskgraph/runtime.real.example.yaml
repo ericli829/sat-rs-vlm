@@ -80,9 +80,10 @@ providers:
       overlap_ratio: 0.15
       global_nms_iou: 0.4
       parallel_workers: auto
-      # 2 workers: ~1.8x LOCATE throughput; base 18.0GB + peak ~29GB fits the
-      # 31.5GB budget (KV sessions are purged per sample).
-      parallel_max_workers: 2
+      # 3 workers (full LAE parallelism): base 13.4GB(bf16 models) + 3*2.9GB
+      # workers = 22.0GB; sample peak ~28GB leaves ~3.5GB headroom (top-16
+      # candidate cut + 640px vision budget + per-call session purge).
+      parallel_max_workers: 3
       parallel_worker_vram_gb: 4.0
       parallel_vram_reserve_gb: 6.0
       proposal_cache_size: 8
@@ -137,7 +138,9 @@ providers:
     model_id: ${QWEN3VL_2B_MODEL_DIR}
     adapter_path: ${QWEN3VL_2B_SEMANTIC_LORA}
     device: auto
-    dtype: auto
+    # auto loads the model as fp32 (8.6GB); bfloat16 halves it with negligible
+    # accuracy loss — frees 4.3GB resident + peak headroom.
+    dtype: bfloat16
     local_files_only: true
     max_new_tokens: 128
     # 640x640 vision budget: two workers keep ~27.6GB resident, so multi-image
