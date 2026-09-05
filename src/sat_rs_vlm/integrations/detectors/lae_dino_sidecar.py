@@ -106,6 +106,10 @@ class _LAESidecarClient:
         if nms not in (None, "", "null"):
             self.command.extend(("--nms-threshold", str(nms)))
         self.environment = os.environ.copy()
+        # The pinned LAE runtime runs Python 3.8 + torch 1.x: new allocator
+        # options (e.g. expandable_segments) are unrecognized there and break
+        # model_init.  Drop any CUDA alloc conf inherited from the parent.
+        self.environment.pop("PYTORCH_CUDA_ALLOC_CONF", None)
         if self.bert_root is not None:
             self.environment["LAE_DINO_BERT_ROOT"] = str(self.bert_root)
         self.process: subprocess.Popen[str] | None = None
