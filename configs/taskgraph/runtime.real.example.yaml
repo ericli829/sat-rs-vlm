@@ -183,11 +183,11 @@ answerability:
   return_error_result: true
   prompt_version: answerability-v1
 
-# Optional sample-id -> pipeline-path routing table (adaptive model selection).
-# Every completed sample records its path here; the runtime then replays the
-# recorded path for that question and falls through to normal routing on a
-# lookup miss.  path: null -> disabled.
-route_table:
+# Runtime memory: per-question execution profile registry.  Every completed
+# question records its profile here; the runtime replays the recorded profile
+# for that question and falls through to normal routing on a miss.
+# path: null -> disabled.
+runtime_memory:
   path: null
   recording: false
 

@@ -51,7 +51,7 @@ from .providers import (
     VLMRequest,
 )
 from .referent_refinement import ReferentRefinementConfig, ReferentRefiner
-from .route_table import RouteTable
+from .runtime_memory import RuntimeMemory
 from .routing import DatasetExecutionPolicy, ExecutionMode, ExecutionModeRouter
 from .runtime_types import (
     Answer,
@@ -340,12 +340,12 @@ class TaskGraphRuntime:
         answerability_config: AnswerabilityConfig | None = None,
         locate_refinement_config: ReferentRefinementConfig | None = None,
         locate_max_candidates: int = 16,
-        route_table: RouteTable | None = None,
+        runtime_memory: RuntimeMemory | None = None,
     ) -> None:
         self.providers = providers
         self.composer = composer or InputComposer()
-        self.route_table = route_table
-        self._route_table_preset_applied = False
+        self.runtime_memory = runtime_memory
+        self._memory_variant_applied = False
         self.choice_config = choice_config or ChoiceSystemConfig()
         self.semantic_decision_config = semantic_decision_config or SemanticDecisionConfig()
         self.final_choice_fusion_config = final_choice_fusion_config or FinalChoiceFusionConfig()
@@ -933,12 +933,12 @@ class TaskGraphRuntime:
             }
         )
 
-    def _apply_route_preset(self, preset: str | None) -> None:
-        """Apply the table's preset for the current request (sequential runs)."""
-        tight = preset == "tight"
-        if tight != self._route_table_preset_applied:
+    def _apply_memory_variant(self, variant: str | None) -> None:
+        """Apply the recorded variant for the current request (sequential runs)."""
+        tight = variant == "tight"
+        if tight != self._memory_variant_applied:
             self.composer.entity_tight_crops = tight
-            self._route_table_preset_applied = tight
+            self._memory_variant_applied = tight
 
     def run(self, request: RuntimeRequest) -> RuntimeResult:
         if not request.image_paths:
@@ -949,10 +949,12 @@ class TaskGraphRuntime:
         images = self._images(request)
         routing_started = time.perf_counter()
         mode = self.mode_router.route(request.dataset, request.task_category)
-        table_decision = self.route_table.lookup(request.sample_id) if self.route_table else None
-        if table_decision is not None:
-            mode = ExecutionMode(table_decision.mode)
-            self._apply_route_preset(table_decision.preset)
+        memory_entry = (
+            self.runtime_memory.lookup(request.sample_id) if self.runtime_memory else None
+        )
+        if memory_entry is not None:
+            mode = ExecutionMode(memory_entry.mode)
+            self._apply_memory_variant(memory_entry.variant)
         routing_ms = (time.perf_counter() - routing_started) * 1000.0
         try:
             if mode is ExecutionMode.DIRECT_VLM:
@@ -1234,7 +1236,7 @@ def runtime_from_config(
         config.get("final_vlm_choice_fusion")
     )
     answerability_config = AnswerabilityConfig.from_mapping(config.get("answerability"))
-    route_table = RouteTable.from_mapping(config.get("route_table"))
+    runtime_memory = RuntimeMemory.from_mapping(config.get("runtime_memory"))
     locate_refinement_value = config.get("locate_refinement", {})
     if not isinstance(locate_refinement_value, Mapping):
         raise TypeError("locate_refinement config must be a mapping")
@@ -1298,5 +1300,5 @@ def runtime_from_config(
         answerability_config=answerability_config,
         locate_refinement_config=locate_refinement_config,
         locate_max_candidates=locate_max_candidates,
-        route_table=route_table,
+        runtime_memory=runtime_memory,
     )

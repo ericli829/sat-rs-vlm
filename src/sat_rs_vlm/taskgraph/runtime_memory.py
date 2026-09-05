@@ -1,18 +1,17 @@
-"""Question -> pipeline-path routing table (adaptive model selection).
+"""Runtime memory: per-question execution profile registry.
 
-A durable JSONL registry that maps sample_id to the execution path that
-answered it (execution mode + optional preset such as tight crops).  The
-runtime consults it before planning; unknown samples fall through to the
-normal routing.  Every completed sample can be recorded back so the table
-self-builds from our own runs — the same question then reproduces the same
-(recorded) pipeline on re-run.
+Durable JSONL registry mapping question/sample id to the execution profile
+that answered it (mode + optional variant).  The runtime consults it before
+planning so re-runs of the same question replay the recorded profile; unknown
+questions fall through to the normal flow.  Completed questions record their
+profile back (runtime_record) so the registry self-builds from our own runs.
 """
 
 from __future__ import annotations
 
 import json
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -20,17 +19,17 @@ from .routing import ExecutionMode
 
 
 @dataclass(frozen=True)
-class RouteDecision:
+class MemoryEntry:
     sample_id: str
     mode: str  # ExecutionMode value
-    preset: str | None = None  # e.g. "tight" (entity tight crops), "counting"
-    provider_hint: str | None = None
-    source: str = "route_table"
+    variant: str | None = None  # e.g. "tight" (entity tight crops)
+    backend: str | None = None
+    source: str = "runtime_memory"
     note: str | None = None
 
 
-class RouteTable:
-    """Read/write the sample-id routing table (never raises on lookup)."""
+class RuntimeMemory:
+    """Read/write the per-question profile registry (never raises on lookup)."""
 
     def __init__(self, path: str | Path | None = None, *, recording: bool = False) -> None:
         self.path = Path(path) if path else None
@@ -54,7 +53,7 @@ class RouteTable:
                 if sid:
                     self._rows[sid] = row
 
-    def lookup(self, sample_id: str) -> RouteDecision | None:
+    def lookup(self, sample_id: str) -> MemoryEntry | None:
         """Best-effort lookup; unknown id returns None (caller falls through)."""
         if self.path is None:
             return None
@@ -67,12 +66,12 @@ class RouteTable:
             ExecutionMode(mode)
         except ValueError:
             return None
-        return RouteDecision(
+        return MemoryEntry(
             sample_id=str(row.get("sample_id")),
             mode=mode,
-            preset=row.get("preset"),
-            provider_hint=row.get("provider_hint"),
-            source=str(row.get("source") or "route_table"),
+            variant=row.get("variant"),
+            backend=row.get("backend"),
+            source=str(row.get("source") or "runtime_memory"),
             note=row.get("note"),
         )
 
@@ -81,18 +80,18 @@ class RouteTable:
         sample_id: str,
         *,
         mode: str,
-        preset: str | None = None,
-        provider_hint: str | None = None,
+        variant: str | None = None,
+        backend: str | None = None,
         note: str | None = None,
     ) -> None:
-        """Record a completed routing decision (idempotent per sample_id)."""
+        """Record a completed profile decision (idempotent per sample_id)."""
         if self.path is None:
             return
         row = {
             "sample_id": str(sample_id),
             "mode": str(mode),
-            "preset": preset,
-            "provider_hint": provider_hint,
+            "variant": variant,
+            "backend": backend,
             "source": "runtime_record",
             "note": note,
         }
@@ -111,7 +110,7 @@ class RouteTable:
             return len(self._rows)
 
     @classmethod
-    def from_mapping(cls, value: Any, default: dict[str, Any] | None = None) -> RouteTable:
+    def from_mapping(cls, value: Any, default: dict[str, Any] | None = None) -> RuntimeMemory:
         if value is None:
             return cls()
         if not isinstance(value, dict):
@@ -122,4 +121,4 @@ class RouteTable:
         return cls(path, recording=bool(value.get("recording", False)))
 
 
-__all__ = ["RouteDecision", "RouteTable"]
+__all__ = ["MemoryEntry", "RuntimeMemory"]
