@@ -8,6 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from sat_rs_vlm.data.qwen3vl_collator import Qwen3VLDataCollator
+from sat_rs_vlm.infrastructure.telemetry import (
+    GenerationTelemetry,
+    first_token_logits_processor,
+)
 from sat_rs_vlm.training.utils import model_input_device, move_to_device
 
 
@@ -48,6 +52,24 @@ def extract_message_inputs(
     return images, question, extract_reference(messages)
 
 
+def count_decoded_output_tokens(processor: Any, predictions: Sequence[str]) -> list[int | None]:
+    """Retokenize decoded outputs with the evaluation tokenizer for reportable counts."""
+
+    tokenizer = getattr(processor, "tokenizer", None)
+    encode = getattr(tokenizer, "encode", None)
+    if not callable(encode):
+        return [None] * len(predictions)
+    counts: list[int | None] = []
+    for prediction in predictions:
+        try:
+            token_ids = encode(prediction, add_special_tokens=False)
+        except (TypeError, ValueError):
+            counts.append(None)
+            continue
+        counts.append(len(token_ids))
+    return counts
+
+
 def build_generation_kwargs(
     generation_config: dict[str, Any], task_type: str | None = None
 ) -> dict[str, Any]:
@@ -85,6 +107,7 @@ def generate_prediction(
     sample: dict[str, Any],
     generation_config: dict[str, Any],
     torch: Any,
+    telemetry: GenerationTelemetry | None = None,
 ) -> str:
     """只解码 input_length 之后的新 token。"""
 
@@ -96,6 +119,7 @@ def generate_prediction(
         generation_config,
         torch,
         task_type=str(sample.get("task_type", "")),
+        telemetry=telemetry,
     )[0]
 
 
@@ -108,26 +132,50 @@ def generate_predictions(
     torch: Any,
     *,
     task_type: str | None = None,
+    telemetry: GenerationTelemetry | None = None,
 ) -> list[str]:
     """Generate and decode one homogeneous evaluation batch."""
 
     if not samples:
         return []
+    if telemetry is not None:
+        telemetry.start()
+        telemetry.start_preprocess()
     batch = collator(list(samples))
+    if telemetry is not None:
+        telemetry.finish_preprocess()
     input_length = int(batch["input_ids"].shape[-1])
     input_device = model_input_device(model, torch)
     batch = move_to_device(batch, input_device, torch)
+    generation_kwargs = build_generation_kwargs(generation_config, task_type)
+    if telemetry is not None:
+        telemetry.start_generation()
+        logits_processor = first_token_logits_processor(telemetry)
+        if logits_processor is not None:
+            generation_kwargs["logits_processor"] = logits_processor
     with torch.inference_mode():
         output_ids = model.generate(
             **batch,
-            **build_generation_kwargs(generation_config, task_type),
+            **generation_kwargs,
         )
+    generated_count: int | None = None
+    output_shape = getattr(output_ids, "shape", None)
+    if output_shape is not None and len(output_shape) >= 2:
+        generated_count = max(0, int(output_shape[-1]) - input_length) * len(samples)
+    if telemetry is not None:
+        telemetry.finish_generation(generated_count)
     generated_ids = output_ids[:, input_length:]
+    if telemetry is not None:
+        telemetry.start_decode()
     decoded = processor.batch_decode(
         generated_ids,
         skip_special_tokens=True,
         clean_up_tokenization_spaces=False,
     )
+    if telemetry is not None:
+        telemetry.finish_decode()
+        telemetry.output_token_counts = count_decoded_output_tokens(processor, decoded)
+        telemetry.vision_input = dict(getattr(collator, "last_batch_telemetry", {}))
     if len(decoded) != len(samples):
         raise RuntimeError(
             f"Decoded prediction count mismatch: expected {len(samples)}, got {len(decoded)}"
@@ -142,13 +190,16 @@ def timed_prediction(
     sample: dict[str, Any],
     generation_config: dict[str, Any],
     torch: Any,
+    telemetry: GenerationTelemetry | None = None,
 ) -> tuple[str, float]:
     """测量单样本端到端延迟；CUDA 前后显式同步。"""
 
     device = model_input_device(model, torch)
     _synchronize(torch, device)
     started = time.perf_counter()
-    prediction = generate_prediction(model, processor, collator, sample, generation_config, torch)
+    prediction = generate_prediction(
+        model, processor, collator, sample, generation_config, torch, telemetry
+    )
     _synchronize(torch, device)
     return prediction, (time.perf_counter() - started) * 1000.0
 
@@ -162,6 +213,7 @@ def timed_predictions(
     torch: Any,
     *,
     task_type: str | None = None,
+    telemetry: GenerationTelemetry | None = None,
 ) -> tuple[list[str], float]:
     """Return batched predictions and amortized latency per sample."""
 
@@ -178,6 +230,7 @@ def timed_predictions(
         generation_config,
         torch,
         task_type=task_type,
+        telemetry=telemetry,
     )
     _synchronize(torch, device)
     latency_ms = (time.perf_counter() - started) * 1000.0 / len(samples)

@@ -10,7 +10,10 @@ from sat_rs_vlm.evaluation.comparison import compare_evaluations
 
 
 def _summary(path: Path) -> dict[str, Any]:
-    return json.loads((path / "comparison_summary.json").read_text(encoding="utf-8"))
+    payload = json.loads((path / "comparison_summary.json").read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"comparison summary must be an object: {path}")
+    return payload
 
 
 def compare_vit_probe_evaluations(

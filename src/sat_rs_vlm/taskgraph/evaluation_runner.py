@@ -493,6 +493,26 @@ def _module_chain(trace: ExecutionTrace, *, compact: bool = False) -> list[dict[
     return modules
 
 
+def _trace_performance_summary(trace: ExecutionTrace) -> dict[str, Any]:
+    """Frozen performance summary derived from the ExecutionTrace telemetry."""
+    telemetry = dict(trace.telemetry or {})
+    events = telemetry.get("generation_events") or []
+    timings = telemetry.get("phase_timing_ms") or {}
+    return {
+        "schema_version": "1.0",
+        "ttft_ms": trace.ttft_ms,
+        "output_tokens": trace.output_tokens,
+        "visual_tokens": trace.visual_tokens,
+        "decode_tokens_per_second": trace.decode_tokens_per_s,
+        "phase_timing_ms": dict(timings),
+        "generation_event_count": len(events) if isinstance(events, list) else 0,
+        "activated_providers": list(trace.activated_providers),
+        "activated_parameter_counts": dict(trace.activated_parameter_counts),
+        "resource_metrics": dict(trace.resource_metrics or {}),
+        "system": telemetry.get("system"),
+    }
+
+
 def _reasoning_chain(
     trace: ExecutionTrace,
     *,
@@ -509,6 +529,7 @@ def _reasoning_chain(
         "intermediate_output_paths": list(trace.intermediate_output_paths),
         "planner": _planner_chain(trace, compact=compact),
         "modules": _module_chain(trace, compact=compact),
+        "performance": _trace_performance_summary(trace),
         "final": {
             "answer": answer,
             "output": output,
