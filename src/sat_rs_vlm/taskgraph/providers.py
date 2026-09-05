@@ -1641,6 +1641,10 @@ class LazyQwenSemanticProvider:
             )
         return self._engine
 
+    def release_idle_sessions(self) -> None:
+        if self._engine is not None:
+            self._engine.release_idle_sessions()
+
     @property
     def engine_identity(self) -> str | None:
         return self._engine.model_identity if self._engine is not None else None

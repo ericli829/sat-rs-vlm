@@ -304,6 +304,20 @@ class HuggingFaceVLMEngine:
     def _release_session(self, session_id: str) -> None:
         self._active_sessions.pop(session_id, None)
 
+    def release_idle_sessions(self) -> None:
+        """Close every cached generation session (recovers their KV memory).
+
+        Called between evaluation samples: the KV-cache reuse keeps the last
+        sessions alive for speed, but across a whole sample the planner and
+        semantic sessions accumulate several GB that otherwise stay reserved.
+        """
+        for session in list(self._active_sessions.values()):
+            try:
+                session.close()
+            except Exception:
+                pass
+        self._active_sessions.clear()
+
     def _rope_state_holder(self) -> Any | None:
         pending = [self._model]
         visited: set[int] = set()

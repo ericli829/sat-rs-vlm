@@ -1104,7 +1104,28 @@ class TaskGraphRuntime:
             raise
         finally:
             self.composer.release_runtime_cache()
+            self._purge_cached_sessions(self.providers)
             _release_runtime_resources(torch)
+
+    @staticmethod
+    def _purge_cached_sessions(providers: RuntimeProviders) -> None:
+        """Close cached KV sessions between samples, then reclaim the pool.
+
+        The engine keeps the last sessions for KV-cache reuse (speed); across a
+        sample the accumulated sessions hold several GB that otherwise stay
+        reserved, pushing the next multi-image semantic call into OOM.
+        """
+        for candidate in (
+            getattr(providers, "semantic_2b", None),
+            getattr(providers, "route_4b", None),
+            getattr(providers, "choice", None),
+        ):
+            releaser = getattr(candidate, "release_idle_sessions", None)
+            if callable(releaser):
+                try:
+                    releaser()
+                except Exception:
+                    pass
 
     def close(self) -> None:
         self.providers.close()
