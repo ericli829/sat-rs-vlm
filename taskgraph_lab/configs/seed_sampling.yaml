@@ -1,0 +1,25 @@
+max_total: 250
+seed: 20260829
+per_dataset:
+  XLRS_Bench: 150
+  MME_RealWorld_RS: 150
+per_category:
+  entire_image_count: 15
+  absolute_region_count: 20
+  nested_relational_count: 20
+  ordinal: 15
+  rank_superlative: 15
+  extreme: 15
+  group_row_column_cluster: 15
+  bbox_attribute: 15
+  bbox_classify: 10
+  bbox_motion: 10
+  marker_region: 15
+  two_image_abs_diff: 15
+  relation_query: 15
+  single_label_classification: 10
+  multi_label_classification: 10
+  route_planning: 20
+  multi_region_complex_reasoning: 15
+  other: 5
+

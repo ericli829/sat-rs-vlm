@@ -1,0 +1,23 @@
+max_total: 6818
+seed: 20260901
+include_categories:
+  - extreme
+  - group_row_column_cluster
+  - multi_region_complex_reasoning
+  - nested_relational_count
+  - ordinal
+  - rank_superlative
+  - relation_query
+  - route_planning
+per_dataset:
+  XLRS_Bench: 6818
+  MME_RealWorld_RS: 6818
+per_category:
+  extreme: 6818
+  group_row_column_cluster: 6818
+  multi_region_complex_reasoning: 6818
+  nested_relational_count: 6818
+  ordinal: 6818
+  rank_superlative: 6818
+  relation_query: 6818
+  route_planning: 6818

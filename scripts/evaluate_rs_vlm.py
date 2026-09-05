@@ -1,5 +1,7 @@
 """Qwen3-VL + LoRA 遥感任务评测脚本。"""
 
+# ruff: noqa: E402
+
 from __future__ import annotations
 
 import argparse
@@ -30,6 +32,7 @@ from sat_rs_vlm.evaluation.inference import (
     build_generation_kwargs as _build_generation_kwargs,
 )
 from sat_rs_vlm.evaluation.inference import (
+    extract_message_inputs,
     extract_reference,
     timed_predictions,
 )
@@ -37,6 +40,11 @@ from sat_rs_vlm.evaluation.inference import (
     generate_prediction as _generate_prediction,
 )
 from sat_rs_vlm.evaluation.metrics import summarize_predictions
+from sat_rs_vlm.evaluation.performance import (
+    PerformanceMonitor,
+    environment_metadata,
+    model_resource_metadata,
+)
 from sat_rs_vlm.evaluation.runner import run_evaluation, validate_output_directory
 from sat_rs_vlm.evaluation.tiers import resolve_tier_identity, validate_tier_asset
 from sat_rs_vlm.models.qwen3vl_loader import (
@@ -247,6 +255,7 @@ def evaluate(
 ) -> dict[str, Any]:
     """执行评测。"""
 
+    startup_started = time.perf_counter()
     config = config_override if config_override is not None else load_yaml(config_path)
     evaluation_cfg = dict(config.get("evaluation", {}))
     tier_identity: dict[str, Any] | None = None
@@ -275,6 +284,7 @@ def evaluate(
         raise ValueError(
             "loaded_model, loaded_processor, and loaded_modules must be supplied together"
         )
+    model_load_started = time.perf_counter()
     if loaded_modules is None:
         require_bitsandbytes = False
         if checkpoint is not None:
@@ -298,6 +308,8 @@ def evaluate(
         modules = loaded_modules
         model = loaded_model
         processor = loaded_processor
+    model_load_ms = (time.perf_counter() - model_load_started) * 1000.0
+    startup_and_model_load_ms = (time.perf_counter() - startup_started) * 1000.0
     model.eval()
     torch = modules["torch"]
     if torch.cuda.is_available():
@@ -310,6 +322,10 @@ def evaluate(
     log_every = max(1, int(data_cfg.get("log_every_samples", 100)))
     if batch_size < 1:
         raise ValueError(f"Evaluation batch size must be positive, got {batch_size}")
+    performance_cfg = dict(config.get("performance", {}))
+    performance_enabled = bool(performance_cfg.get("enabled", False))
+    if performance_enabled and batch_size != 1:
+        raise ValueError("formal performance monitoring requires eval_batch_size=1")
     tokenizer = getattr(processor, "tokenizer", None)
     if batch_size > 1 and tokenizer is not None:
         tokenizer.padding_side = "left"
@@ -319,6 +335,9 @@ def evaluate(
         image_root=resolve_project_path(str(data_cfg["image_root"])),
         for_generation=True,
     )
+    performance_monitor = PerformanceMonitor(torch) if performance_enabled else None
+    if performance_monitor is not None:
+        performance_monitor.start()
 
     predictions_by_index: list[dict[str, Any] | None] = [None] * len(dataset)
     evaluated = 0
@@ -353,6 +372,18 @@ def evaluate(
                 "metadata": sample.get("metadata", {}),
                 "inference_latency_ms": latency_ms,
             }
+            if performance_monitor is not None:
+                performance_monitor.record(
+                    str(sample["task_type"]),
+                    {},
+                    system_latency_ms=latency_ms,
+                    input_profile={
+                        "image_count": len(
+                            extract_message_inputs(sample, collator.image_root)[0]
+                        ),
+                        "visual_token_count_status": "not_available_from_batched_backend",
+                    },
+                )
         evaluated += len(samples)
         if evaluated >= next_log or evaluated == len(dataset):
             print(f"Evaluated {evaluated}/{len(dataset)} samples")
@@ -439,6 +470,34 @@ def evaluate(
         + "\n",
         encoding="utf-8",
     )
+    performance_path: Path | None = None
+    if performance_monitor is not None:
+        performance_path = summary_file.parent / "performance_report.json"
+        performance_path.parent.mkdir(parents=True, exist_ok=True)
+        performance_report = performance_monitor.finish(
+            requested_samples=len(dataset),
+            completed_samples=len(predictions),
+            failed_samples=0,
+            warmup_samples=0,
+            startup_and_model_load_ms=startup_and_model_load_ms,
+            model_load_ms=model_load_ms,
+            config={
+                "generation": generation_cfg,
+                "max_seq_length": int(data_cfg.get("max_seq_length", 4096)),
+                "batch_size": batch_size,
+                "group_by_task": group_by_task,
+            },
+            environment=environment_metadata(torch, model_config=dict(config.get("model", {}))),
+            model_resources=model_resource_metadata(
+                model, model_config=dict(config.get("model", {}))
+            ),
+            batch_size=batch_size,
+            repeats=1,
+        )
+        performance_path.write_text(
+            json.dumps(performance_report, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
     summary_file.parent.mkdir(parents=True, exist_ok=True)
     summary_file.write_bytes(evaluation_outputs["metrics"].read_bytes())
     print(f"Saved Evaluation v1.5 metrics to {evaluation_outputs['metrics']}")
@@ -453,6 +512,7 @@ def evaluate(
         },
         "sample_count": len(predictions),
         "batch_size": batch_size,
+        "performance_report": str(performance_path) if performance_path is not None else None,
     }
 
 

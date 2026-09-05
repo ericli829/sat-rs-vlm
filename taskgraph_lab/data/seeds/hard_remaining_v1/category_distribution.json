@@ -1,0 +1,13 @@
+{
+  "dataset_distribution": {
+    "MME_RealWorld_RS": 23,
+    "XLRS_Bench": 96
+  },
+  "category_distribution": {
+    "group_row_column_cluster": 4,
+    "multi_region_complex_reasoning": 64,
+    "nested_relational_count": 15,
+    "relation_query": 32,
+    "route_planning": 4
+  }
+}

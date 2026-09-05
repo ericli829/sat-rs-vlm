@@ -1,0 +1,48 @@
+experiment: C2_LM_4E
+model:
+  base_model: ${MODEL_ROOT}/Qwen3-VL-4B-Instruct
+  r1_checkpoint: ${R1_CHECKPOINT}
+  visual_sidecar: ${R1_VISUAL_SIDECAR}
+  r1_integration: merge
+data:
+  train_file: data/processed/rs_count_merger_v1/train.jsonl
+  manifest: data/processed/rs_count_merger_v1/manifest.json
+  image_root: ${DATA_ROOT}
+  fixed_eval: ${E_COUNT_V2_FILE}
+  fixed_eval_manifest: ${E_COUNT_V2_MANIFEST}
+  eval_image_root: ${EVAL_DATA_ROOT}
+expert:
+  variant: c2_rs_detail
+  expert_variant: rs_detail
+  detail_hidden_size: 512
+  local_depth: 1
+  interface_lora:
+    enabled: false
+    layers: [0, 1, 2, 3]
+    targets: [q_proj, k_proj, v_proj, o_proj]
+    r: 16
+    alpha: 32
+    dropout: 0.05
+training:
+  bf16: true
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 4
+  target_effective_epochs: 4.0
+  gradient_checkpointing: true
+  dataloader_num_workers: 8
+  dataloader_pin_memory: true
+  dataloader_persistent_workers: true
+  max_grad_norm: 1.0
+  seed: 42
+  max_seq_length: 2048
+  merger_lr: 0.0001
+  interface_lora_lr: 0.00002
+  merger_weight_decay: 0.01
+  warmup_ratio: 0.05
+  scheduler: cosine
+  count_loss:
+    enabled: false
+output:
+  root: ${OUTPUT_ROOT}/rs_merger_expert
+provenance:
+  architecture_audit: ${SOURCE_ARCHITECTURE_AUDIT}

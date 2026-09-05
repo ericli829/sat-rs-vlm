@@ -1,0 +1,14 @@
+The previously generated TaskGraph is invalid.
+
+Original sample:
+{{SAMPLE}}
+
+Invalid TaskGraph:
+{{INVALID_GRAPH}}
+
+Validator errors:
+{{VALIDATOR_ERRORS}}
+
+Repair the graph. Preserve the original semantic plan whenever correct, fix
+only what is needed for TaskGraph v1.1, do not answer the question, and do not add
+physical execution details. Return the complete repaired JSON object only.

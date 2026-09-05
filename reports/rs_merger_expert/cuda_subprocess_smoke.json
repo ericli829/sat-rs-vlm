@@ -1,0 +1,56 @@
+{
+  "schema_version": "1.0",
+  "independent_subprocesses": true,
+  "cycles": [
+    {
+      "device": "NVIDIA GeForce RTX 4060 Laptop GPU",
+      "steps": 2,
+      "loss": 3.9354734420776367,
+      "before_train": {
+        "allocated_bytes": 0,
+        "reserved_bytes": 0
+      },
+      "peak": {
+        "allocated_bytes": 18959360,
+        "reserved_bytes": 25165824
+      },
+      "before_cleanup": {
+        "allocated_bytes": 17843200,
+        "reserved_bytes": 25165824
+      },
+      "after_cleanup": {
+        "allocated_bytes": 17039360,
+        "reserved_bytes": 20971520
+      },
+      "reserved_memory_note": "reserved_bytes is cache, not a live allocation leak",
+      "cycle": 1,
+      "process_exit_confirmed": true
+    },
+    {
+      "device": "NVIDIA GeForce RTX 4060 Laptop GPU",
+      "steps": 2,
+      "loss": 3.9789528846740723,
+      "before_train": {
+        "allocated_bytes": 0,
+        "reserved_bytes": 0
+      },
+      "peak": {
+        "allocated_bytes": 18959360,
+        "reserved_bytes": 25165824
+      },
+      "before_cleanup": {
+        "allocated_bytes": 17843200,
+        "reserved_bytes": 25165824
+      },
+      "after_cleanup": {
+        "allocated_bytes": 17039360,
+        "reserved_bytes": 20971520
+      },
+      "reserved_memory_note": "reserved_bytes is cache, not a live allocation leak",
+      "cycle": 2,
+      "process_exit_confirmed": true
+    }
+  ],
+  "allocated_vram_not_cumulative": true,
+  "baseline_tolerance_bytes": 1048576
+}

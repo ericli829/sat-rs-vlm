@@ -1,0 +1,16 @@
+provider:
+  type: dry_run
+  endpoint_env: TASKGRAPH_TEACHER_ENDPOINT
+  model_env: TASKGRAPH_TEACHER_MODEL
+  api_key_env: TASKGRAPH_TEACHER_API_KEY
+runtime:
+  concurrency: 2
+  requests_per_minute: 30
+  timeout_seconds: 60
+  max_retries: 3
+  backoff_base_seconds: 1.0
+  temperature: 0.1
+  max_output_tokens: 4096
+  repair_enabled: true
+  semantic_review: false
+

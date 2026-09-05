@@ -1,0 +1,32 @@
+schema_version: "1.0"
+evaluation:
+  scope: full_vrsbench_quantity
+  input: data/processed/multisource/vrsbench_levircc_eval_full.jsonl
+  output_dir: reports/evaluation/vlm_fo1/full_vrsbench_quantity
+  expected_population: 6131
+  max_samples: null
+data:
+  image_root: "${VLM_FO1_IMAGE_ROOT}"
+worker:
+  python: "${VLM_FO1_PYTHON}"
+  script: scripts/integrations/vlm_fo1_worker.py
+  backend: official
+  runtime_mode: shared_rs_vlm
+  proposal_backend: upn
+  attention_backend: sdpa
+model:
+  path: "${VLM_FO1_MODEL}"
+  device: cuda
+proposal:
+  checkpoint: "${VLM_FO1_UPN_CHECKPOINT}"
+  score_threshold: 0.3
+  nms_threshold: 0.8
+  top_k: 100
+generation:
+  max_new_tokens: 4096
+  temperature: 0.0
+  top_p: 0.05
+  prompt_profile: official_fo1
+  count_source: region
+provenance:
+  audit: reports/integrations/vlm_fo1_source_audit.json

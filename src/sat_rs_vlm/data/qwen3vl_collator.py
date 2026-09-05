@@ -12,6 +12,14 @@ import importlib
 from pathlib import Path
 from typing import Any, cast
 
+from sat_rs_vlm.data.object_adapter_v0 import (
+    _cardinality_prompt_target,
+    extract_answer,
+    extract_prompt,
+)
+from sat_rs_vlm.data.task_protocol import parse_count
+from sat_rs_vlm.infrastructure.telemetry import visual_input_telemetry
+
 QWEN_UTILS_ERROR = 'qwen-vl-utils is required. Install with: pip install -e ".[model]"'
 
 
@@ -39,6 +47,7 @@ class Qwen3VLDataCollator:
         # 正式语言模型训练保持默认截断；仅视觉特征提取可显式关闭它，避免把
         # 图像占位 token 截断后再与完整 pixel_values 配对。
         self.truncation = truncation
+        self.last_batch_telemetry: dict[str, Any] = {}
 
     def __call__(self, batch: list[dict[str, Any]]) -> dict[str, Any]:
         """编码一个 batch 并生成 labels。"""
@@ -113,12 +122,35 @@ class Qwen3VLDataCollator:
                     str(sample.get("task_type", "unknown")).strip().lower() or "unknown"
                     for sample in batch
                 ]
+                encoded["sample_ids"] = [str(sample.get("id", "<unknown>")) for sample in batch]
+                encoded["auxiliary_counts"] = [
+                    self._auxiliary_count_target(sample) for sample in batch
+                ]
+        image_groups = [
+            list(images) if isinstance(images, list | tuple) else []
+            for images in (image_inputs if image_inputs is not None else [None] * len(batch))
+        ]
+        self.last_batch_telemetry = visual_input_telemetry(
+            image_groups,
+            encoded.get("image_grid_thw"),
+        )
         if self.debug_shapes:
             shapes = {
                 key: tuple(value.shape) for key, value in encoded.items() if hasattr(value, "shape")
             }
             print(f"Batch tensor shapes: {shapes}")
         return dict(encoded)
+
+    @staticmethod
+    def _auxiliary_count_target(sample: dict[str, Any]) -> int:
+        """Return a strict exact-cardinality target, or -100 for aux masking."""
+
+        if str(sample.get("task_type", "")).strip().lower() != "counting":
+            return -100
+        if _cardinality_prompt_target(extract_prompt(sample)) is None:
+            return -100
+        parsed = parse_count(extract_answer(sample))
+        return int(parsed.value) if parsed.value is not None else -100
 
     def _encode(
         self,

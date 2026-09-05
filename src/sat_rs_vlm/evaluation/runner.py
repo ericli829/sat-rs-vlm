@@ -25,7 +25,20 @@ from sat_rs_vlm.evaluation.extended_metrics import (
     text_task_scores,
 )
 from sat_rs_vlm.evaluation.metrics import score_sample
-from sat_rs_vlm.evaluation.parsers import parse_change_prediction, parse_count, parse_grounding
+from sat_rs_vlm.evaluation.official_mcq import (
+    parse_mme_realworld_choice,
+    parse_reference_choices,
+    parse_xlrs_choices,
+)
+from sat_rs_vlm.evaluation.parsers import (
+    CONTEXTUAL_CHANGE_PARSER_VERSION,
+    LEGACY_CHANGE_PARSER_VERSION,
+    parse_change_prediction,
+    parse_change_prediction_contextual_v3,
+    parse_count,
+    parse_explicit_change_prediction,
+    parse_grounding,
+)
 from sat_rs_vlm.evaluation.protocols import (
     ProtocolResolution,
     coordinate_format_for_record,
@@ -40,6 +53,11 @@ from sat_rs_vlm.evaluation.records import (
     read_prediction_jsonl,
 )
 from sat_rs_vlm.evaluation.semantic.runner import SemanticEvaluator
+from sat_rs_vlm.evaluation.visual_semantic_runner import (
+    VisualSemanticEvaluationResult,
+    evaluate_visual_semantics,
+    write_visual_semantic_evaluation,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_SEMANTIC_CONTRACT = (
@@ -47,6 +65,41 @@ DEFAULT_SEMANTIC_CONTRACT = (
 )
 DEFAULT_SEMANTIC_ONTOLOGY = (
     PROJECT_ROOT / "configs" / "eval" / "semantic" / "remote_sensing_ontology.json"
+)
+
+LOCAL_TEXT_JUDGE_DECISION_VERSION = "local_text_judge_priority_v1"
+SERVER_RULE_ONLY_DECISION_VERSION = "server_rule_only_v1"
+SERVER_RULE_THEN_LOCAL_DECISION_VERSION = "server_rule_then_local_judge_v1"
+# These are evaluation-level decision profiles.  The local judge module's
+# LOCAL_JUDGE_DECISION_PROFILE is a separate routing/implementation profile;
+# both string values are retained for provenance compatibility.
+SUPPORTED_CHANGE_DECISION_PROFILES = {
+    LOCAL_TEXT_JUDGE_DECISION_VERSION,
+    SERVER_RULE_ONLY_DECISION_VERSION,
+    SERVER_RULE_THEN_LOCAL_DECISION_VERSION,
+}
+LOCAL_TEXT_JUDGE_RESOLVED_SOURCES = frozenset(
+    {
+        "local_semantic_rule",
+        "local_semantic_positive_rule",
+        "local_semantic_non_target_rule",
+        "local_llm_judge",
+    }
+)
+SERVER_RULE_RESOLVED_SOURCES = frozenset(
+    {
+        "server_semantic_rule",
+        "server_semantic_positive_rule",
+        "server_semantic_non_target_rule",
+    }
+)
+SERVER_PENDING_SOURCES = frozenset({"server_rule_unresolved"})
+TERMINAL_AUDIT_SOURCES = frozenset(
+    {
+        "server_input_guard",
+        "local_llm_judge_uncertain",
+        "local_input_guard",
+    }
 )
 
 
@@ -136,7 +189,7 @@ def _sha256(path: Path) -> str:
 def _image_size(metadata: dict[str, Any]) -> tuple[int, int] | None:
     width = metadata.get("image_width", metadata.get("width"))
     height = metadata.get("image_height", metadata.get("height"))
-    if isinstance(width, (int, float)) and isinstance(height, (int, float)):
+    if isinstance(width, int | float) and isinstance(height, int | float):
         return int(width), int(height)
     return None
 
@@ -147,9 +200,72 @@ def _base_output(record: PredictionRecord, resolution: ProtocolResolution) -> di
         {
             "eval_protocol": resolution.name,
             "metric_profile": resolution.metric_profile,
+            "metric_label": resolution.metric_label,
+            "protocol_status": resolution.status,
+            "protocol_provenance": resolution.provenance,
         }
     )
     return output
+
+
+def _metadata_choices(metadata: dict[str, Any]) -> tuple[str, ...]:
+    for key in ("answer_choices", "choices", "multi-choice options", "options"):
+        value = metadata.get(key)
+        if isinstance(value, list | tuple):
+            return tuple(str(item) for item in value)
+    return ()
+
+
+def _evaluate_official_mcq(
+    record: PredictionRecord,
+    resolution: ProtocolResolution,
+    *,
+    strict: bool,
+    multi_select: bool,
+) -> EvaluatedRow:
+    allowed = frozenset("ABCD" if resolution.name.startswith("xlrs_") else "ABCDE")
+    reference = parse_reference_choices(record.reference, allowed=allowed, single=not multi_select)
+    if not reference.parse_ok:
+        message = f"sample {record.id}: invalid official MCQ reference: {reference.reason}"
+        if strict:
+            raise InputValidationError(message)
+        output = _base_output(record, resolution)
+        output.update(
+            {
+                "parsed_prediction": None,
+                "parse_ok": False,
+                "parse_error": f"invalid_reference:{reference.reason}",
+                "sample_metrics": {},
+            }
+        )
+        return EvaluatedRow(output, resolution.name, resolution.kind, "data_error")
+
+    choices = _metadata_choices(record.metadata)
+    if resolution.name == "mme_realworld_rs_mcq":
+        prediction = parse_mme_realworld_choice(record.prediction, choices)
+    else:
+        prediction = parse_xlrs_choices(record.prediction)
+    predicted = set(prediction.choices)
+    expected = set(reference.choices)
+    exact = prediction.parse_ok and predicted == expected
+    output = _base_output(record, resolution)
+    output.update(
+        {
+            "parsed_prediction": list(prediction.choices) if prediction.parse_ok else None,
+            "parse_ok": prediction.parse_ok,
+            "parse_error": prediction.reason,
+            "sample_metrics": {
+                "choice_parse_success": prediction.parse_ok,
+                "exact_choice_match": exact,
+                "predicted_choices": list(prediction.choices),
+                "reference_choices": list(reference.choices),
+                "choice_count": len(prediction.choices),
+                "reference_choice_count": len(reference.choices),
+                "official_parser_profile": prediction.parser_profile,
+            },
+        }
+    )
+    return EvaluatedRow(output, resolution.name, resolution.kind, resolution.status)
 
 
 def _evaluate_grounding(
@@ -331,7 +447,11 @@ def _evaluate_change_caption(
     resolution: ProtocolResolution,
     *,
     strict: bool,
-) -> EvaluatedRow:
+    change_decision_profile: str,
+    local_judge_required: bool,
+    server_rule_required: bool,
+    allow_local_judge_unresolved: bool,
+) -> tuple[EvaluatedRow, list[str]]:
     if not record.reference.strip() and strict:
         raise InputValidationError(f"sample {record.id}: change caption reference is empty")
     raw_changeflag = record.metadata.get("changeflag")
@@ -341,33 +461,183 @@ def _evaluate_change_caption(
             f"sample {record.id}: metadata.changeflag must be integer 0 or 1"
         )
     reference_changeflag = cast(int, raw_changeflag) if changeflag_valid else None
-    parsed = parse_change_prediction(record.prediction)
+    decision_priority = change_decision_profile in SUPPORTED_CHANGE_DECISION_PROFILES
+    predicted_changeflag: int | None
+    binary_parse_reason: str
+    binary_mode: str
+    binary_source = "caption_fallback"
+    explicit_raw = record.raw.get("binary_prediction")
+    requested_source = record.raw.get("binary_prediction_source")
+    local_judge_valid = (
+        type(record.raw.get("prediction_changeflag")) is int
+        and record.raw.get("prediction_changeflag") in {0, 1}
+        and str(requested_source) in LOCAL_TEXT_JUDGE_RESOLVED_SOURCES
+    )
+    server_rule_valid = (
+        type(record.raw.get("prediction_changeflag")) is int
+        and record.raw.get("prediction_changeflag") in {0, 1}
+        and str(requested_source) in SERVER_RULE_RESOLVED_SOURCES
+    )
+    combined_judge_valid = local_judge_valid or server_rule_valid
+    if decision_priority and isinstance(requested_source, str):
+        binary_source = requested_source
+    decision_warnings: list[str] = []
+    required_decision_valid = (
+        combined_judge_valid
+        if change_decision_profile == SERVER_RULE_THEN_LOCAL_DECISION_VERSION
+        else local_judge_valid
+    )
+    requested_source_name = str(requested_source)
+    is_server_pending = requested_source_name in SERVER_PENDING_SOURCES
+    is_terminal_audit = requested_source_name in TERMINAL_AUDIT_SOURCES
+    terminal_audit_allowed = is_terminal_audit and (
+        requested_source_name == "server_input_guard" or allow_local_judge_unresolved
+    )
+    if decision_priority and is_server_pending and (
+        change_decision_profile == SERVER_RULE_THEN_LOCAL_DECISION_VERSION
+        or change_decision_profile == LOCAL_TEXT_JUDGE_DECISION_VERSION
+    ):
+        message = (
+            f"sample {record.id}: server_rule_unresolved is still pending local judging; "
+            "run judge_change_captions.py --only-unresolved before post-judge evaluation."
+        )
+        if strict:
+            raise InputValidationError(message)
+        decision_warnings.append(message)
+        predicted_changeflag = None
+        binary_parse_reason = "pending_required_local_judge"
+        binary_mode = "unresolved"
+    elif decision_priority and is_server_pending:
+        # server_rule_only intentionally preserves this as an unresolved
+        # partial-coverage row; it is not a completed local-judge decision.
+        predicted_changeflag = None
+        binary_parse_reason = "server_rule_unresolved"
+        binary_mode = "unresolved"
+    elif decision_priority and terminal_audit_allowed:
+        predicted_changeflag = None
+        binary_parse_reason = (
+            "server_input_guard"
+            if requested_source_name == "server_input_guard"
+            else "local_judge_unresolved"
+        )
+        binary_mode = "unresolved"
+    elif local_judge_required and not required_decision_valid:
+        message = (
+            f"sample {record.id}: local text judge decision is required; run "
+            "judge_change_captions.py first."
+        )
+        if strict:
+            raise InputValidationError(message)
+        decision_warnings.append(message)
+        predicted_changeflag = None
+        binary_parse_reason = "missing_required_local_judge_decision"
+        binary_mode = "unresolved"
+        binary_source = "missing_required_local_judge_decision"
+    elif server_rule_required and not (
+        server_rule_valid
+        or requested_source_name in SERVER_PENDING_SOURCES
+        or requested_source_name == "server_input_guard"
+    ):
+        message = (
+            f"sample {record.id}: server-rule evaluation requires routed output from "
+            "route_change_captions_rules.py."
+        )
+        if strict:
+            raise InputValidationError(message)
+        decision_warnings.append(message)
+        predicted_changeflag = None
+        binary_parse_reason = "missing_required_server_rule_decision"
+        binary_mode = "unresolved"
+        binary_source = "missing_required_server_rule_decision"
+    elif decision_priority and "prediction_changeflag" in record.raw:
+        explicit_flag = record.raw.get("prediction_changeflag")
+        if type(explicit_flag) is int and explicit_flag in {0, 1}:
+            predicted_changeflag = explicit_flag
+            binary_parse_reason = ""
+            binary_mode = "explicit_changeflag"
+            if change_decision_profile not in SUPPORTED_CHANGE_DECISION_PROFILES:
+                binary_source = "explicit_changeflag"
+        elif explicit_flag is None and isinstance(explicit_raw, str):
+            explicit = parse_explicit_change_prediction(explicit_raw)
+            predicted_changeflag = explicit.value
+            binary_parse_reason = explicit.reason or ""
+            binary_mode = explicit.match_type or "unresolved"
+            if change_decision_profile not in SUPPORTED_CHANGE_DECISION_PROFILES:
+                binary_source = "binary_prediction_text"
+        else:
+            predicted_changeflag = None
+            binary_parse_reason = "invalid_prediction_changeflag"
+            binary_mode = "unresolved"
+            if change_decision_profile not in SUPPORTED_CHANGE_DECISION_PROFILES:
+                binary_source = "invalid_explicit_changeflag"
+    elif decision_priority and "binary_prediction" in record.raw:
+        if isinstance(explicit_raw, str):
+            explicit = parse_explicit_change_prediction(explicit_raw)
+            predicted_changeflag = explicit.value
+            binary_parse_reason = explicit.reason or ""
+            binary_mode = explicit.match_type or "unresolved"
+            if change_decision_profile not in SUPPORTED_CHANGE_DECISION_PROFILES:
+                binary_source = "binary_prediction_text"
+        else:
+            predicted_changeflag = None
+            binary_parse_reason = "binary_prediction_must_be_string"
+            binary_mode = "unresolved"
+            if change_decision_profile not in SUPPORTED_CHANGE_DECISION_PROFILES:
+                binary_source = "invalid_binary_prediction"
+    else:
+        if decision_priority:
+            parsed = parse_change_prediction_contextual_v3(record.prediction)
+        else:
+            parsed = parse_change_prediction(record.prediction)
+        predicted_changeflag = parsed.value
+        binary_parse_reason = parsed.reason or ""
+        binary_mode = parsed.match_type or "unresolved"
     binary_correct = (
-        parsed.value == reference_changeflag
-        if parsed.value is not None and reference_changeflag is not None
+        predicted_changeflag == reference_changeflag
+        if predicted_changeflag is not None and reference_changeflag is not None
         else None
     )
     scores = caption_scores(record.prediction, record.reference)
     scores.update(
         {
             "changeflag_valid": changeflag_valid,
-            "binary_parse_success": parsed.value is not None,
+            "binary_parse_success": predicted_changeflag is not None,
             "binary_correct": binary_correct,
+            "local_judge_decision_valid": local_judge_valid,
+            "local_judge_required": local_judge_required,
+            "server_rule_decision_valid": server_rule_valid,
+            "server_rule_required": server_rule_required,
         }
     )
     output = _base_output(record, resolution)
     output.update(
         {
-            "parsed_prediction": parsed.normalized_text or None,
-            "parse_ok": parsed.value is not None,
-            "parse_error": parsed.reason,
+            "parsed_prediction": (
+                record.prediction.strip() if decision_priority else parsed.normalized_text or None
+            ),
+            "parse_ok": predicted_changeflag is not None,
+            "parse_error": binary_parse_reason or None,
             "reference_changeflag": reference_changeflag,
-            "predicted_changeflag": parsed.value,
+            "predicted_changeflag": predicted_changeflag,
             "binary_correct": binary_correct,
             "sample_metrics": scores,
         }
     )
-    return EvaluatedRow(output, resolution.name, resolution.kind, resolution.status)
+    if decision_priority:
+        output.update(
+            {
+                "change_parser_version": CONTEXTUAL_CHANGE_PARSER_VERSION,
+                "change_parse_mode": binary_mode,
+                "change_decision_version": change_decision_profile,
+                "binary_prediction_source": binary_source,
+            }
+        )
+    if decision_warnings:
+        output["decision_warnings"] = decision_warnings
+    return (
+        EvaluatedRow(output, resolution.name, resolution.kind, resolution.status),
+        decision_warnings,
+    )
 
 
 def _evaluate_unimplemented(
@@ -409,10 +679,34 @@ def evaluate_record(
         return _evaluate_counting(record, resolution, strict=strict), []
     if resolution.kind == "text":
         return _evaluate_text(record, resolution, strict=strict), []
+    if resolution.kind == "official_mcq_single":
+        return _evaluate_official_mcq(
+            record,
+            resolution,
+            strict=strict,
+            multi_select=False,
+        ), []
+    if resolution.kind == "official_mcq_multiselect":
+        return _evaluate_official_mcq(
+            record,
+            resolution,
+            strict=strict,
+            multi_select=True,
+        ), []
     if resolution.kind == "caption":
         return _evaluate_caption(record, resolution, strict=strict), []
     if resolution.kind == "change_caption":
-        return _evaluate_change_caption(record, resolution, strict=strict), []
+        return _evaluate_change_caption(
+            record,
+            resolution,
+            strict=strict,
+            change_decision_profile=str(contract.get("change_decision_profile", "")),
+            local_judge_required=bool(contract.get("local_text_judge_required", False)),
+            server_rule_required=bool(contract.get("server_rule_required", False)),
+            allow_local_judge_unresolved=bool(
+                contract.get("allow_local_judge_unresolved", False)
+            ),
+        )
     return _evaluate_unimplemented(record, resolution), []
 
 
@@ -440,6 +734,21 @@ def _common_metrics(rows: list[EvaluatedRow]) -> dict[str, dict[str, Any]]:
         note="Unimplemented protocols are excluded from this denominator.",
     )
     return metrics
+
+
+def _official_metric(
+    value: Any,
+    *,
+    num_samples: int,
+    note: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "value": value,
+        "label": "official",
+        "status": "ok",
+        "num_samples": num_samples,
+        "note": note,
+    }
 
 
 def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
@@ -521,6 +830,32 @@ def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
                 ),
             }
         )
+        unique_rows = [
+            (row, sample)
+            for row, sample in zip(rows, samples, strict=True)
+            if isinstance(row.output.get("metadata", {}).get("is_unique"), bool)
+        ]
+        if len(unique_rows) == total:
+            for group_name, group_value in (
+                ("unique", True),
+                ("non_unique", False),
+                ("all", None),
+            ):
+                selected = [
+                    sample
+                    for row, sample in unique_rows
+                    if group_value is None
+                    or row.output["metadata"].get("is_unique") is group_value
+                ]
+                for _threshold, metric_suffix in ((0.5, "0_5"), (0.7, "0_7")):
+                    metrics[f"official_acc_at_{metric_suffix}_{group_name}"] = _official_metric(
+                        mean(sample[f"correct_at_{metric_suffix}"] for sample in selected),
+                        num_samples=len(selected),
+                        note=(
+                            "VRSBench official deterministic Grounding evaluator profile; "
+                            "invalid predictions remain in the denominator."
+                        ),
+                    )
     elif kinds == {"counting"}:
         samples = [row.output["sample_metrics"] for row in rows]
         total = len(samples)
@@ -623,6 +958,67 @@ def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
             metrics["macro_qa_type_accuracy"] = metric_value(
                 mean(type_scores), num_samples=len(type_scores)
             )
+    elif kinds in ({"official_mcq_single"}, {"official_mcq_multiselect"}):
+        samples = [row.output["sample_metrics"] for row in rows]
+        total = len(samples)
+        exact = [bool(sample["exact_choice_match"]) for sample in samples]
+        mcq_parse_values = [bool(sample["choice_parse_success"]) for sample in samples]
+        category_groups: dict[str, list[bool]] = defaultdict(list)
+        subtask_groups: dict[str, list[bool]] = defaultdict(list)
+        task_groups: dict[str, list[bool]] = defaultdict(list)
+        for row, sample in zip(rows, samples, strict=True):
+            metadata = row.output.get("metadata", {})
+            category = str(
+                metadata.get("official_category", metadata.get("category", "unknown"))
+            ).strip() or "unknown"
+            if "attribute" in category.lower():
+                category = category.split("/")[0] + "/attribute"
+            subtask = str(
+                metadata.get("official_subtask", metadata.get("subtask", "unknown"))
+            ).strip() or "unknown"
+            task = (
+                str(metadata.get("official_task", metadata.get("task", "unknown"))).strip()
+                or "unknown"
+            )
+            category_groups[category].append(bool(sample["exact_choice_match"]))
+            subtask_groups[subtask].append(bool(sample["exact_choice_match"]))
+            task_groups[task].append(bool(sample["exact_choice_match"]))
+
+        def grouped_accuracy(groups: dict[str, list[bool]]) -> dict[str, float]:
+            return {
+                name: float(mean(values) or 0.0)
+                for name, values in sorted(groups.items())
+            }
+
+        metrics.update(
+            {
+                "official_exact_accuracy": _official_metric(mean(exact), num_samples=total),
+                "official_parse_success_rate": _official_metric(
+                    mean(mcq_parse_values), num_samples=total
+                ),
+                "official_micro_accuracy": _official_metric(mean(exact), num_samples=total),
+                "official_category_accuracy": _official_metric(
+                    grouped_accuracy(category_groups),
+                    num_samples=total,
+                ),
+                "official_subtask_accuracy": _official_metric(
+                    grouped_accuracy(subtask_groups),
+                    num_samples=total,
+                ),
+                "official_task_accuracy": _official_metric(
+                    grouped_accuracy(task_groups),
+                    num_samples=total,
+                ),
+                "official_macro_subtask_accuracy": _official_metric(
+                    mean(float(mean(values) or 0.0) for values in subtask_groups.values()),
+                    num_samples=len(subtask_groups),
+                    note=(
+                        "Matches the XLRS-lite lmms-eval macro only when the complete "
+                        "official task population is present; otherwise this is observed-only."
+                    ),
+                ),
+            }
+        )
     elif kinds == {"caption"}:
         samples = [row.output["sample_metrics"] for row in rows]
         total = len(samples)
@@ -667,6 +1063,16 @@ def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
         total = len(samples)
         valid_flags = sum(bool(sample.get("changeflag_valid")) for sample in samples)
         parsed = sum(bool(sample.get("binary_parse_success")) for sample in samples)
+        local_judge_valid = sum(
+            bool(sample.get("local_judge_decision_valid")) for sample in samples
+        )
+        server_rule_valid = sum(
+            bool(sample.get("server_rule_decision_valid")) for sample in samples
+        )
+        server_rule_only_profile = any(
+            row.output.get("change_decision_version") == SERVER_RULE_ONLY_DECISION_VERSION
+            for row in rows
+        )
         tp = tn = fp = fn = 0
         comparable = 0
         positive_samples: list[dict[str, Any]] = []
@@ -716,54 +1122,110 @@ def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
             if accuracy is not None and expected_accuracy is not None and expected_accuracy != 1
             else None
         )
+        local_complete_with_gaps = (
+            any(
+                row.output.get("change_decision_version")
+                == SERVER_RULE_THEN_LOCAL_DECISION_VERSION
+                for row in rows
+            )
+            and parsed < total
+        )
+        partial_status = (
+            "partial_coverage" if server_rule_only_profile or local_complete_with_gaps else "ok"
+        )
+        binary_status = (
+            partial_status
+            if partial_status == "partial_coverage"
+            else ("ok" if comparable else "not_available")
+        )
+        partial_note = (
+            "Unresolved captions are excluded from this partial binary diagnostic; "
+            "do not treat it as a full LEVIR-CC score."
+            if server_rule_only_profile
+            else (
+                "Unresolved local-judge outputs remain in audit and are excluded from the "
+                "binary denominator."
+                if local_complete_with_gaps
+                else None
+            )
+        )
         metrics.update(
             {
                 "changeflag_valid_rate": metric_value(ratio(valid_flags, total), num_samples=total),
                 "binary_parse_success_rate": metric_value(ratio(parsed, total), num_samples=total),
+                "binary_decision_coverage": metric_value(
+                    ratio(parsed, total),
+                    num_samples=total,
+                    status=partial_status,
+                    note=partial_note,
+                ),
+                "binary_unresolved_rate": metric_value(
+                    ratio(total - parsed, total),
+                    num_samples=total,
+                    status=partial_status,
+                    note=partial_note,
+                ),
                 "binary_accuracy": metric_value(
                     accuracy,
                     num_samples=comparable,
-                    status="ok" if comparable else "not_available",
+                    status=binary_status,
+                    note=partial_note,
+                ),
+                "resolved_only_binary_accuracy": metric_value(
+                    accuracy,
+                    num_samples=comparable,
+                    status=binary_status,
+                    note=partial_note,
                 ),
                 "balanced_accuracy": metric_value(
                     balanced_accuracy,
                     num_samples=comparable,
-                    status="ok" if balanced_accuracy is not None else "not_available",
+                    status=partial_status if balanced_accuracy is not None else "not_available",
+                    note=partial_note,
                 ),
                 "change_precision": metric_value(
                     change_precision,
                     num_samples=tp + fp,
-                    status="ok" if change_precision is not None else "not_available",
+                    status=partial_status if change_precision is not None else "not_available",
+                    note=partial_note,
                 ),
                 "change_recall": metric_value(
                     change_recall,
                     num_samples=tp + fn,
-                    status="ok" if change_recall is not None else "not_available",
+                    status=partial_status if change_recall is not None else "not_available",
+                    note=partial_note,
                 ),
                 "change_f1": metric_value(
                     change_f1,
                     num_samples=comparable,
-                    status="ok" if change_f1 is not None else "not_available",
+                    status=partial_status if change_f1 is not None else "not_available",
+                    note=partial_note,
                 ),
                 "no_change_recall_specificity": metric_value(
                     specificity,
                     num_samples=tn + fp,
-                    status="ok" if specificity is not None else "not_available",
+                    status=partial_status if specificity is not None else "not_available",
+                    note=partial_note,
                 ),
                 "negative_predictive_value": metric_value(
                     negative_predictive_value,
                     num_samples=tn + fn,
-                    status="ok" if negative_predictive_value is not None else "not_available",
+                    status=partial_status
+                    if negative_predictive_value is not None
+                    else "not_available",
+                    note=partial_note,
                 ),
                 "matthews_correlation_coefficient": metric_value(
                     matthews_correlation,
                     num_samples=comparable,
-                    status="ok" if matthews_correlation is not None else "not_available",
+                    status=partial_status if matthews_correlation is not None else "not_available",
+                    note=partial_note,
                 ),
                 "cohen_kappa": metric_value(
                     cohen_kappa,
                     num_samples=comparable,
-                    status="ok" if cohen_kappa is not None else "not_available",
+                    status=partial_status if cohen_kappa is not None else "not_available",
+                    note=partial_note,
                 ),
                 "change_prevalence": metric_value(
                     ratio(tp + fn, comparable), num_samples=comparable
@@ -774,12 +1236,14 @@ def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
                 "false_positive_rate": metric_value(
                     ratio(fp, fp + tn),
                     num_samples=fp + tn,
-                    status="ok" if fp + tn else "not_available",
+                    status=partial_status if fp + tn else "not_available",
+                    note=partial_note,
                 ),
                 "false_negative_rate": metric_value(
                     ratio(fn, fn + tp),
                     num_samples=fn + tp,
-                    status="ok" if fn + tp else "not_available",
+                    status=partial_status if fn + tp else "not_available",
+                    note=partial_note,
                 ),
                 "true_positives": metric_value(tp, num_samples=comparable),
                 "true_negatives": metric_value(tn, num_samples=comparable),
@@ -831,6 +1295,82 @@ def _group_summary(rows: list[EvaluatedRow]) -> dict[str, Any]:
                 status="ok" if positive_rows else "not_available",
                 note="Computed only where metadata.changeflag=1.",
             )
+        binary_sources = Counter(
+            str(row.output.get("binary_prediction_source"))
+            for row in rows
+            if row.output.get("binary_prediction_source") is not None
+        )
+        if any(bool(sample.get("local_judge_required")) for sample in samples):
+            metrics["local_judge_decision_coverage"] = metric_value(
+                ratio(local_judge_valid, total),
+                num_samples=total,
+                note="Resolved local text-judge decisions with a local_* source.",
+            )
+        if binary_sources:
+            metrics.update(
+                {
+                    "server_semantic_rule_decision_rate": metric_value(
+                        ratio(binary_sources["server_semantic_rule"], total), num_samples=total
+                    ),
+                    "server_semantic_positive_rule_decision_rate": metric_value(
+                        ratio(binary_sources["server_semantic_positive_rule"], total),
+                        num_samples=total,
+                    ),
+                    "server_semantic_non_target_rule_decision_rate": metric_value(
+                        ratio(binary_sources["server_semantic_non_target_rule"], total),
+                        num_samples=total,
+                    ),
+                    "server_rule_unresolved_rate": metric_value(
+                        ratio(binary_sources["server_rule_unresolved"], total),
+                        num_samples=total,
+                        status="partial_coverage" if server_rule_only_profile else "ok",
+                        note=(
+                            "Queued for the local text judge."
+                            if server_rule_only_profile
+                            else "Resolved by the subsequent local stage."
+                        ),
+                    ),
+                    "server_rule_decision_coverage": metric_value(
+                        ratio(server_rule_valid, total),
+                        num_samples=total,
+                        status="partial_coverage" if server_rule_only_profile else "ok",
+                    ),
+                }
+            )
+            local_sources = (
+                "local_semantic_rule",
+                "local_semantic_positive_rule",
+                "local_semantic_non_target_rule",
+                "local_llm_judge",
+                "local_llm_judge_uncertain",
+                "local_input_guard",
+            )
+            if any(binary_sources[source] for source in local_sources):
+                metrics.update(
+                    {
+                        "local_semantic_rule_decision_rate": metric_value(
+                            ratio(binary_sources["local_semantic_rule"], total), num_samples=total
+                        ),
+                        "local_semantic_positive_rule_decision_rate": metric_value(
+                            ratio(binary_sources["local_semantic_positive_rule"], total),
+                            num_samples=total,
+                        ),
+                        "local_semantic_non_target_rule_decision_rate": metric_value(
+                            ratio(binary_sources["local_semantic_non_target_rule"], total),
+                            num_samples=total,
+                        ),
+                        "local_llm_judge_decision_rate": metric_value(
+                            ratio(binary_sources["local_llm_judge"], total), num_samples=total
+                        ),
+                        "local_llm_judge_uncertain_rate": metric_value(
+                            ratio(binary_sources["local_llm_judge_uncertain"], total),
+                            num_samples=total,
+                        ),
+                        "local_input_guard_rate": metric_value(
+                            ratio(binary_sources["local_input_guard"], total), num_samples=total
+                        ),
+                    }
+                )
     return {"status": status, "metrics": metrics}
 
 
@@ -903,7 +1443,7 @@ def _repository_native_summary(
             numeric = [
                 value
                 for value in (score.get(key) for score in scores)
-                if isinstance(value, (int, float, bool))
+                if isinstance(value, int | float | bool)
             ]
             task_metrics[metric_names.get(key, key)] = mean(numeric)
         by_task[task] = task_metrics
@@ -934,7 +1474,9 @@ def _build_summary(
     input_errors: list[dict[str, Any]],
     warnings: list[str],
     semantic_summary: dict[str, Any] | None,
+    visual_semantic_summary: dict[str, Any] | None,
     latency_context: LatencyContext,
+    resource_benchmark: dict[str, Any] | None,
 ) -> dict[str, Any]:
     by_task_rows: dict[str, list[EvaluatedRow]] = defaultdict(list)
     by_protocol_rows: dict[str, list[EvaluatedRow]] = defaultdict(list)
@@ -949,6 +1491,17 @@ def _build_summary(
     ]
     latency = latency_statistics(latencies)
     overall_metrics = _common_metrics(rows)
+    failed_samples = sum(
+        not bool(row.output.get("telemetry", {}).get("success", True))
+        for row in rows
+        if isinstance(row.output.get("telemetry", {}), dict)
+    )
+    overall_metrics["failed_samples"] = metric_value(
+        failed_samples, num_samples=len(rows), status="ok"
+    )
+    overall_metrics["successful_samples"] = metric_value(
+        len(rows) - failed_samples, num_samples=len(rows), status="ok"
+    )
     latency_samples = len(latencies)
     for name in ("mean", "p50", "p95", "min", "max"):
         overall_metrics[f"latency_ms_{name}"] = metric_value(
@@ -967,13 +1520,22 @@ def _build_summary(
         if qa_type:
             by_qa_type_rows[qa_type].append(row)
 
+    change_decision_profile = str(contract.get("change_decision_profile", ""))
     summary = {
         "schema_version": "1.5",
         "implementation_version": str(contract["implementation_version"]),
         "contract_version": str(contract["contract_version"]),
         "contract_status": str(contract.get("contract_status", "unknown")),
+        "change_parser_version": (
+            CONTEXTUAL_CHANGE_PARSER_VERSION
+            if change_decision_profile in SUPPORTED_CHANGE_DECISION_PROFILES
+            else LEGACY_CHANGE_PARSER_VERSION
+        ),
         "overall": {
             "metrics": overall_metrics,
+            "input_samples": len(rows),
+            "failed_samples": failed_samples,
+            "successful_samples": len(rows) - failed_samples,
             "latency_context": latency_context.to_dict(),
             "task_distribution": dict(
                 sorted(Counter(str(row.output.get("task_type", "unknown")) for row in rows).items())
@@ -985,6 +1547,14 @@ def _build_summary(
         },
         "by_protocol": {
             name: _group_summary(protocol_rows)
+            for name, protocol_rows in sorted(by_protocol_rows.items())
+        },
+        "protocol_provenance": {
+            name: {
+                "status": protocol_rows[0].protocol_status,
+                "metric_label": protocol_rows[0].output.get("metric_label", "internal"),
+                "source": protocol_rows[0].output.get("protocol_provenance", {}),
+            }
             for name, protocol_rows in sorted(by_protocol_rows.items())
         },
         "by_qa_type": {
@@ -1005,8 +1575,69 @@ def _build_summary(
             latency_context,
         ),
     }
+    official_required_metadata = (
+        "dataset_version",
+        "split",
+        "language",
+        "prompt_profile",
+        "evaluation_scope",
+        "official_task",
+        "official_subtask",
+        "official_category",
+    )
+    official_comparability: dict[str, Any] = {}
+    for name, protocol_rows in sorted(by_protocol_rows.items()):
+        if protocol_rows[0].output.get("metric_label") != "official":
+            continue
+        metadata_coverage: dict[str, float] = {}
+        values: dict[str, list[str]] = {}
+        for field in official_required_metadata:
+            present = [
+                str(row.output.get("metadata", {}).get(field, "")).strip()
+                for row in protocol_rows
+            ]
+            metadata_coverage[field] = sum(bool(value) for value in present) / len(
+                protocol_rows
+            )
+            values[field] = sorted({value for value in present if value})
+        expected_prompt = str(
+            protocol_rows[0].output.get("protocol_provenance", {}).get("prompt_profile", "")
+        )
+        prompt_matches = (
+            bool(expected_prompt)
+            and values["prompt_profile"] == [expected_prompt]
+            and metadata_coverage["prompt_profile"] == 1.0
+        )
+        complete_scope = (
+            values["evaluation_scope"] == ["official_full_split"]
+            and metadata_coverage["evaluation_scope"] == 1.0
+        )
+        complete_metadata = all(value == 1.0 for value in metadata_coverage.values())
+        stable_metadata = all(
+            len(values[field]) == 1
+            for field in ("dataset_version", "split", "language", "prompt_profile")
+        )
+        official_comparability[name] = {
+            "status": (
+                "eligible_for_official_comparison"
+                if complete_metadata and stable_metadata and prompt_matches and complete_scope
+                else "protocol_only"
+            ),
+            "required_metadata_coverage": metadata_coverage,
+            "observed_values": values,
+            "expected_prompt_profile": expected_prompt or None,
+            "note": (
+                "Official parser/scoring is active. Official comparison additionally requires "
+                "the unmodified prompt and complete official split metadata."
+            ),
+        }
+    summary["official_comparability"] = official_comparability
+    if change_decision_profile in SUPPORTED_CHANGE_DECISION_PROFILES:
+        summary["change_decision_version"] = change_decision_profile
     if semantic_summary is not None:
         summary["semantic"] = semantic_summary
+    if visual_semantic_summary is not None:
+        summary["visual_semantic_auxiliary"] = visual_semantic_summary
     grounding_rows = [row for row in rows if row.kind == "visual_grounding"]
     text_rows = [row for row in rows if row.kind == "text"]
     caption_rows = [row for row in rows if row.kind in {"caption", "change_caption"}]
@@ -1038,16 +1669,26 @@ def _build_summary(
             ),
             "Required for paper-comparable multi-reference caption metrics, especially LEVIR-CC.",
         ),
-        "resource_benchmark": {
-            "value": None,
-            "label": "internal",
-            "status": "not_available_from_predictions",
-            "num_samples": 0,
-            "note": (
-                "Parameters, file size, peak VRAM and throughput require benchmark_report.json; "
-                "they are not inferred from predictions.jsonl."
-            ),
-        },
+        "resource_benchmark": (
+            {
+                "value": resource_benchmark,
+                "label": "internal",
+                "status": "ok",
+                "num_samples": len(rows),
+                "note": "Measured by the main evaluation execution path.",
+            }
+            if resource_benchmark is not None
+            else {
+                "value": None,
+                "label": "internal",
+                "status": "not_available_from_predictions",
+                "num_samples": 0,
+                "note": (
+                    "Parameters, file size, peak VRAM and throughput require an execution "
+                    "telemetry report; they are not inferred from predictions.jsonl."
+                ),
+            }
+        ),
     }
     return summary
 
@@ -1094,12 +1735,19 @@ def run_evaluation(
     semantic_enabled: bool = True,
     semantic_contract_path: str | Path | None = None,
     semantic_ontology_path: str | Path | None = None,
+    visual_semantic_enabled: bool = False,
+    visual_semantic_gold_path: str | Path | None = None,
+    visual_semantic_generation_manifest_path: str | Path | None = None,
+    visual_semantic_prompt_profile: str | None = None,
+    visual_semantic_allow_incomplete_historical_manifest: bool = False,
+    visual_semantic_verify_image_paths: bool = True,
     latency_semantics: str = "unresolved",
     eval_batch_size: int | None = None,
     group_by_task: bool | None = None,
     evaluation_tier: str | None = None,
     evaluation_tier_version: str | None = None,
     evaluation_tier_sha256: str | None = None,
+    resource_benchmark: dict[str, Any] | None = None,
 ) -> dict[str, Path]:
     """只读 Prediction JSONL，并将全部产物写到受保护仓库之外。"""
 
@@ -1184,13 +1832,34 @@ def run_evaluation(
         if semantic_evaluator is not None
         else None
     )
+    if visual_semantic_enabled and visual_semantic_gold_path is None:
+        raise EvaluationError(
+            "visual semantic evaluation requires visual_semantic_gold_path"
+        )
+    visual_semantic_result: VisualSemanticEvaluationResult | None = None
+    if visual_semantic_enabled:
+        visual_semantic_result = evaluate_visual_semantics(
+            evaluated_outputs,
+            gold_csv=visual_semantic_gold_path,
+            predictions_path=predictions,
+            generation_manifest_path=visual_semantic_generation_manifest_path,
+            prompt_profile=visual_semantic_prompt_profile,
+            allow_incomplete_historical_manifest=(
+                visual_semantic_allow_incomplete_historical_manifest
+            ),
+            verify_image_paths=visual_semantic_verify_image_paths,
+        )
     summary = _build_summary(
         evaluated,
         contract=contract,
         input_errors=input_errors,
         warnings=warnings,
         semantic_summary=semantic_summary,
+        visual_semantic_summary=(
+            visual_semantic_result.summary if visual_semantic_result is not None else None
+        ),
         latency_context=latency_context,
+        resource_benchmark=resource_benchmark,
     )
     outputs = {
         "evaluated_predictions": destination / "evaluated_predictions.jsonl",
@@ -1225,20 +1894,48 @@ def run_evaluation(
         "semantic_ontology_sha256": (
             _sha256(semantic_ontology_file) if semantic_evaluator is not None else None
         ),
+        "visual_semantic_evaluation_enabled": visual_semantic_result is not None,
+        "visual_semantic_gold_file": (
+            str(Path(visual_semantic_gold_path).expanduser().resolve())
+            if visual_semantic_result is not None
+            else None
+        ),
         "strict": strict,
+        "failed_samples": sum(
+            not bool(row.output.get("telemetry", {}).get("success", True))
+            for row in evaluated
+            if isinstance(row.output.get("telemetry", {}), dict)
+        ),
         "latency_context": latency_context.to_dict(),
         "evaluation_tier": evaluation_tier,
         "evaluation_tier_version": evaluation_tier_version,
         "evaluation_tier_sha256": evaluation_tier_sha256,
+        "resource_benchmark": resource_benchmark,
+        "change_parser_version": (
+            CONTEXTUAL_CHANGE_PARSER_VERSION
+            if str(contract.get("change_decision_profile", ""))
+            in SUPPORTED_CHANGE_DECISION_PROFILES
+            else LEGACY_CHANGE_PARSER_VERSION
+        ),
         "repository_compatibility_profile": "repository_native_v2",
         "output_files": {name: str(path) for name, path in outputs.items()},
         "remote_write_performed": False,
         "protected_repository": str(protected) if protected is not None else None,
     }
+    if str(contract.get("change_decision_profile", "")) in SUPPORTED_CHANGE_DECISION_PROFILES:
+        manifest["change_decision_version"] = str(contract["change_decision_profile"])
 
     destination.mkdir(parents=True, exist_ok=True)
     _write_jsonl(outputs["evaluated_predictions"], evaluated_outputs)
     _write_json(outputs["metrics"], summary)
     _write_json(outputs["summary"], summary)
+    if visual_semantic_result is not None:
+        outputs.update(write_visual_semantic_evaluation(visual_semantic_result, destination))
+        manifest["visual_semantic_output_files"] = {
+            name: str(path)
+            for name, path in outputs.items()
+            if name.startswith("visual_semantic_")
+        }
+        manifest["output_files"] = {name: str(path) for name, path in outputs.items()}
     _write_json(outputs["manifest"], manifest)
     return outputs

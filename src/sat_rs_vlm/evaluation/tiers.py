@@ -30,6 +30,9 @@ DEFAULT_TIER_FILES = UNIFIED_TIER_FILES
 LEGACY_TIERS_MANIFEST = "data/evaluation/tiers/evaluation_tiers_manifest.json"
 UNIFIED_TIERS_MANIFEST = "data/evaluation/tiers_v2/evaluation_tiers_manifest.json"
 DEFAULT_TIERS_MANIFEST = UNIFIED_TIERS_MANIFEST
+COUNTING_FOCUSED_TIER = "E_COUNT_V1"
+COUNTING_FOCUSED_TIER_FILE = "data/evaluation/tiers/e_count_v1.jsonl"
+COUNTING_FOCUSED_TIER_MANIFEST = "data/evaluation/tiers/e_count_v1_manifest.json"
 
 
 def normalize_tier(value: str | None) -> str:
@@ -143,15 +146,56 @@ def validate_tier_asset(
             f"Evaluation tier {normalized} is not recorded in manifest: {manifest_path}"
         )
     actual_hash = file_sha256(eval_file)
-    expected_hash = record.get("sha256")
-    canonical_hash = actual_hash
-    if expected_hash and str(expected_hash) != actual_hash and eval_file.suffix.lower() == ".jsonl":
+    manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    warnings: list[str] = []
+    canonical_hash: str | None = None
+    expected_canonical = record.get("canonical_jsonl_sha256")
+    expected_raw = record.get("raw_sha256")
+    if expected_canonical:
         canonical_hash = canonical_jsonl_sha256(eval_file)
-    if expected_hash and str(expected_hash) != canonical_hash:
-        raise ValueError(
-            f"Evaluation tier {normalized} SHA256 mismatch: expected {expected_hash}, "
-            f"got raw={actual_hash}, canonical_jsonl={canonical_hash} for {eval_file}"
-        )
+        if str(expected_canonical) != canonical_hash:
+            formal_r1_hash = record.get("formal_r1_sha256")
+            if formal_r1_hash and actual_hash == str(formal_r1_hash):
+                raise ValueError(
+                    "formal R1 reference tier was supplied where generated unified-v2 "
+                    f"tier is required for {normalized}: actual raw SHA matches "
+                    f"formal_r1_sha256={formal_r1_hash}, while canonical expected="
+                    f"{expected_canonical}"
+                )
+            raise ValueError(
+                f"Evaluation tier {normalized} canonical JSONL SHA256 mismatch: "
+                f"expected {expected_canonical}, got {canonical_hash} for {eval_file}"
+            )
+        if expected_raw and str(expected_raw) != actual_hash:
+            warnings.append(
+                f"raw SHA drift for {normalized}: expected {expected_raw}, got {actual_hash}; "
+                "canonical JSONL SHA matches, so semantic benchmark identity is unchanged"
+            )
+    else:
+        # Legacy manifests only carry a raw SHA.  Keep their fail-closed behavior,
+        # while retaining the historical CRLF-normalized compatibility path.
+        expected_hash = record.get("sha256") or record.get("final_tier_sha256")
+        normalized_lf_hash = None
+        if eval_file.suffix.lower() == ".jsonl":
+            normalized_lf_hash = hashlib.sha256(
+                eval_file.read_bytes().replace(b"\r\n", b"\n")
+            ).hexdigest()
+        if expected_hash and str(expected_hash) not in {
+            actual_hash,
+            str(normalized_lf_hash),
+        }:
+            formal_r1_hash = record.get("formal_r1_sha256")
+            if formal_r1_hash and actual_hash == str(formal_r1_hash):
+                raise ValueError(
+                    "formal R1 reference tier was supplied where generated unified-v2 "
+                    f"tier is required for {normalized}: actual SHA matches "
+                    f"formal_r1_sha256={formal_r1_hash}, expected={expected_hash}"
+                )
+            raise ValueError(
+                f"Evaluation tier {normalized} SHA256 mismatch: expected {expected_hash}, "
+                f"got raw={actual_hash} for {eval_file}"
+            )
+        canonical_hash = str(expected_hash or actual_hash)
     expected_count = record.get("sample_count")
     if expected_count is not None:
         actual_count = sum(
@@ -166,14 +210,12 @@ def validate_tier_asset(
             )
     return {
         "tier": normalized,
-        "tier_version": str(
-            json.loads(manifest_path.read_text(encoding="utf-8")).get(
-                "tier_version", LEGACY_TIER_VERSION
-            )
-        ),
+        "tier_version": str(manifest_payload.get("tier_version", LEGACY_TIER_VERSION)),
         "sha256": canonical_hash,
         "raw_sha256": actual_hash,
+        "canonical_jsonl_sha256": canonical_hash if expected_canonical else None,
         "sample_count": expected_count,
+        "provenance_warnings": warnings,
     }
 
 
@@ -188,7 +230,33 @@ def file_sha256(path: Path) -> str:
 
 
 def canonical_jsonl_sha256(path: Path) -> str:
-    """计算以 LF 为 canonical 换行的 JSONL hash，兼容 Windows CRLF checkout。"""
+    """Hash JSONL semantics while preserving row order.
 
-    payload = path.read_bytes().replace(b"\r\n", b"\n")
+    Raw JSONL bytes are not a benchmark identity: whitespace, key order and the
+    final newline may differ between serializers or checkouts.  Each non-empty
+    line is therefore parsed and emitted in one deterministic representation.
+    The order of those canonical rows is deliberately retained because it is
+    part of the benchmark protocol.
+    """
+
+    canonical_rows: list[str] = []
+    with path.open("r", encoding="utf-8", newline=None) as handle:
+        for line_number, line in enumerate(handle, 1):
+            if not line.strip():
+                continue
+            try:
+                value = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"Invalid JSONL at {path}:{line_number}; cannot compute canonical hash"
+                ) from exc
+            canonical_rows.append(
+                json.dumps(
+                    value,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            )
+    payload = "\n".join(canonical_rows).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()

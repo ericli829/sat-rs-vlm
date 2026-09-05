@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "torch": "2.6.0+cu126",
+  "torch_cuda": "12.6",
+  "driver": "610.47",
+  "cuda_available": true,
+  "device_name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+  "compute_capability": [
+    8,
+    9
+  ],
+  "compiled_arch_list": [
+    "sm_50",
+    "sm_60",
+    "sm_61",
+    "sm_70",
+    "sm_75",
+    "sm_80",
+    "sm_86",
+    "sm_90"
+  ],
+  "bf16_supported": true,
+  "sdpa_available": true,
+  "transformers": "5.13.0",
+  "peft": "0.19.1",
+  "flash_attn": null,
+  "flash_attention_smoke": {
+    "importable": false,
+    "finite_forward_backward": false,
+    "error": "ModuleNotFoundError: No module named 'flash_attn'"
+  },
+  "requested_attention_backend": "auto",
+  "selected_attention_backend": "sdpa",
+  "target_environment": "torch 2.12 + CUDA 13, or torch >=2.7 + CUDA >=12.8 with sm_120",
+  "strict_5090": false,
+  "status": "pass",
+  "blockers": []
+}

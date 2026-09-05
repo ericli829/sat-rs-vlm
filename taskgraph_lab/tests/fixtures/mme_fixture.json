@@ -1,0 +1,25 @@
+[
+  {
+    "Question_id": "perception/remote_sensing/count/0001",
+    "Question Type": "Multiple Choice",
+    "Image": "remote_sensing/example.png",
+    "Text": "How many airplanes are in the lower left area?",
+    "Answer choices": ["(A) 1", "(B) 2"],
+    "Ground truth": "B",
+    "Task": "Perception",
+    "Subtask": "Remote Sensing",
+    "Category": "count"
+  },
+  {
+    "Question_id": "perception/autonomous/count/0002",
+    "Question Type": "Multiple Choice",
+    "Image": "AutonomousDriving/example.png",
+    "Text": "How many cars?",
+    "Answer choices": ["(A) 1", "(B) 2"],
+    "Ground truth": "A",
+    "Task": "Perception",
+    "Subtask": "Autonomous_Driving",
+    "Category": "count"
+  }
+]
+

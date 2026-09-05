@@ -39,6 +39,7 @@ class ModelConfig(BaseModel):
     参数：
         backend：模型后端，支持 mock 或 huggingface。
         model_id：HuggingFace 模型 ID；mock 后端可为空。
+        adapter_path：可选的本地 PEFT/LoRA adapter 目录。
         device：运行设备，auto/cpu/cuda 等。
         dtype：模型权重 dtype，auto/float16/bfloat16/float32 等。
         max_new_tokens：生成式推理最大新 token 数。
@@ -51,11 +52,16 @@ class ModelConfig(BaseModel):
 
     backend: str = "mock"
     model_id: str = ""
+    adapter_path: str | None = None
     device: str = "auto"
     dtype: str = "auto"
     max_new_tokens: int = 256
     trust_remote_code: bool = True
     local_files_only: bool = False
+    # Optional processor vision budget (px^2); bounds the KV per-image tokens.
+    max_pixels: int | None = None
+    # Applies only to TaskGraph SELECT.  Other VLM tasks remain open-ended.
+    selection_constrained_decoding: bool = True
 
     @model_validator(mode="before")
     @classmethod

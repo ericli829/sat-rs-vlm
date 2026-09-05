@@ -1,7 +1,7 @@
 schema_version: "2.0"
 tier_version: "unified-v2"
 seed: 42
-output_dir: "data/evaluation/tiers_v2"
+output_dir: "${EVAL_TIER_ROOT}"
 
 evaluation_scope:
   datasets:
@@ -19,7 +19,7 @@ evaluation_scope:
     LEVIR-CC: "one_deterministic_reference_per_image_pair"
 
 data:
-  common_image_root: "${DATA_ROOT}"
+  common_image_root: "${EVAL_DATA_ROOT}"
   source_files:
     - "data/processed/multisource/vrsbench_levircc_eval_full.jsonl"
   train_files:

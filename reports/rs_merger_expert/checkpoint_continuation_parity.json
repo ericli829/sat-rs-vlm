@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0",
+  "checkpoints": [
+    {
+      "checkpoint": "D:\\Desktop\\tzb-2026\\results\\rs_merger_expert\\rs_count_merger_c2_detail_4090_20260822_145103\\checkpoint",
+      "validation": {
+        "source": "D:/Desktop/tzb-2026/results/rs_merger_expert/rs_count_merger_c2_detail_4090_20260822_145103/checkpoint",
+        "expert_weights": "D:/Desktop/tzb-2026/results/rs_merger_expert/rs_count_merger_c2_detail_4090_20260822_145103/checkpoint/expert_model.safetensors",
+        "expert_weights_sha256": "270f82606e4bb8ed82309465b4f7f6bbd691fcde3671549b7f5683274f830421",
+        "expert_manifest": "D:/Desktop/tzb-2026/results/rs_merger_expert/rs_count_merger_c2_detail_4090_20260822_145103/checkpoint/expert_manifest.json",
+        "expert_manifest_sha256": "738f5b378bc7326b01d484c1ad1f002e23f1ed9083947743904c7feabd3471db",
+        "training_state": null,
+        "continuation_mode": "weight continuation with fresh optimizer",
+        "parent_completed_effective_epochs": 1.0,
+        "expert_weights_restored": true,
+        "optimizer_state_restored": false,
+        "scheduler_state_restored": false,
+        "validated_variant": "c2_rs_detail",
+        "validated_expert_variant": "rs_detail",
+        "validated_detail_hidden_size": 512,
+        "validated_local_depth": 1,
+        "legacy_inferred_manifest_fields": [
+          "expert_variant",
+          "detail_hidden_size",
+          "local_depth"
+        ]
+      },
+      "tensor_key_count": 40,
+      "tensor_exact_parity": true,
+      "trainable_parameter_count": 24160256
+    },
+    {
+      "checkpoint": "D:\\Desktop\\tzb-2026\\results\\rs_merger_expert\\rs_count_merger_c3_detail_lora_4090_20260822_151142\\checkpoint",
+      "validation": {
+        "source": "D:/Desktop/tzb-2026/results/rs_merger_expert/rs_count_merger_c3_detail_lora_4090_20260822_151142/checkpoint",
+        "expert_weights": "D:/Desktop/tzb-2026/results/rs_merger_expert/rs_count_merger_c3_detail_lora_4090_20260822_151142/checkpoint/expert_model.safetensors",
+        "expert_weights_sha256": "e911c5ba5639f0e71284fe3507095a92861894c7d62789a813498be12941e1e5",
+        "expert_manifest": "D:/Desktop/tzb-2026/results/rs_merger_expert/rs_count_merger_c3_detail_lora_4090_20260822_151142/checkpoint/expert_manifest.json",
+        "expert_manifest_sha256": "8dcc37fad1f98f26eeaa98c89570e19223656fc89c8103eec5d31b3e9ddb071a",
+        "training_state": null,
+        "continuation_mode": "weight continuation with fresh optimizer",
+        "parent_completed_effective_epochs": 1.0,
+        "expert_weights_restored": true,
+        "optimizer_state_restored": false,
+        "scheduler_state_restored": false,
+        "validated_variant": "c3_rs_detail_lora",
+        "validated_expert_variant": "rs_detail",
+        "validated_detail_hidden_size": 512,
+        "validated_local_depth": 1,
+        "legacy_inferred_manifest_fields": [
+          "expert_variant",
+          "detail_hidden_size",
+          "local_depth"
+        ]
+      },
+      "tensor_key_count": 72,
+      "tensor_exact_parity": true,
+      "trainable_parameter_count": 25470976
+    }
+  ]
+}

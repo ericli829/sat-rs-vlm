@@ -1,0 +1,1286 @@
+E501 Line too long (103 > 100)
+  --> scripts\build_mixed_precision_quant_config.py:24:101
+   |
+22 |         type=int,
+23 |         default=0,
+24 |         help="Also preserve this many highest-scoring groups; useful when no group crosses threshold.",
+   |                                                                                                     ^^^
+25 |     )
+26 |     return parser.parse_args()
+   |
+
+E402 Module level import not at top of file
+  --> scripts\data\prepare_dataset.py:16:1
+   |
+14 |     sys.path.insert(0, str(SRC_ROOT))
+15 |
+16 | from sat_rs_vlm.utils.jsonl import read_jsonl, write_jsonl
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+
+B007 Loop control variable `entry` not used within loop body
+   --> scripts\evaluate_base_multidataset.py:123:9
+    |
+122 |     first_model_config = loaded[0][2].get("model", {})
+123 |     for entry, child_path, child_config in loaded[1:]:
+    |         ^^^^^
+124 |         if child_config.get("model", {}) != first_model_config:
+125 |             raise ValueError(
+    |
+help: Rename unused `entry` to `_entry`
+
+E402 Module level import not at top of file
+  --> scripts\evaluate_rs_vlm.py:22:1
+   |
+20 |     sys.path.insert(0, str(SRC_ROOT))
+21 |
+22 | from sat_rs_vlm.configuration.environment import expand_environment
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+23 | from sat_rs_vlm.data.qwen3vl_collator import Qwen3VLDataCollator
+24 | from sat_rs_vlm.data.qwen3vl_dataset import Qwen3VLDataset
+   |
+
+E402 Module level import not at top of file
+  --> scripts\evaluate_rs_vlm.py:23:1
+   |
+22 | from sat_rs_vlm.configuration.environment import expand_environment
+23 | from sat_rs_vlm.data.qwen3vl_collator import Qwen3VLDataCollator
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+24 | from sat_rs_vlm.data.qwen3vl_dataset import Qwen3VLDataset
+25 | from sat_rs_vlm.evaluation.checkpoint_loader import (
+   |
+
+E402 Module level import not at top of file
+  --> scripts\evaluate_rs_vlm.py:24:1
+   |
+22 | from sat_rs_vlm.configuration.environment import expand_environment
+23 | from sat_rs_vlm.data.qwen3vl_collator import Qwen3VLDataCollator
+24 | from sat_rs_vlm.data.qwen3vl_dataset import Qwen3VLDataset
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+25 | from sat_rs_vlm.evaluation.checkpoint_loader import (
+26 |     load_finetuned_checkpoint,
+   |
+
+E402 Module level import not at top of file
+  --> scripts\evaluate_rs_vlm.py:25:1
+   |
+23 |   from sat_rs_vlm.data.qwen3vl_collator import Qwen3VLDataCollator
+24 |   from sat_rs_vlm.data.qwen3vl_dataset import Qwen3VLDataset
+25 | / from sat_rs_vlm.evaluation.checkpoint_loader import (
+26 | |     load_finetuned_checkpoint,
+27 | |     read_strategy_manifest,
+28 | | )
+   | |_^
+29 |   from sat_rs_vlm.evaluation.inference import (
+30 |       build_generation_kwargs as _build_generation_kwargs,
+   |
+
+E402 Module level import not at top of file
+  --> scripts\evaluate_rs_vlm.py:29:1
+   |
+27 |       read_strategy_manifest,
+28 |   )
+29 | / from sat_rs_vlm.evaluation.inference import (
+30 | |     build_generation_kwargs as _build_generation_kwargs,
+31 | | )
+   | |_^
+32 |   from sat_rs_vlm.evaluation.inference import (
+33 |       extract_reference,
+   |
+
+E402 Module level import not at top of file
+  --> scripts\evaluate_rs_vlm.py:32:1
+   |
+30 |       build_generation_kwargs as _build_generation_kwargs,
+31 |   )
+32 | / from sat_rs_vlm.evaluation.inference import (
+33 | |     extract_reference,
+34 | |     timed_predictions,
+35 | | )
+   | |_^
+36 |   from sat_rs_vlm.evaluation.inference import (
+37 |       generate_prediction as _generate_prediction,
+   |
+
+E402 Module level import not at top of file
+  --> scripts\evaluate_rs_vlm.py:36:1
+   |
+34 |       timed_predictions,
+35 |   )
+36 | / from sat_rs_vlm.evaluation.inference import (
+37 | |     generate_prediction as _generate_prediction,
+38 | | )
+   | |_^
+39 |   from sat_rs_vlm.evaluation.metrics import summarize_predictions
+40 |   from sat_rs_vlm.evaluation.runner import run_evaluation, validate_output_directory
+   |
+
+E402 Module level import not at top of file
+  --> scripts\evaluate_rs_vlm.py:39:1
+   |
+37 |     generate_prediction as _generate_prediction,
+38 | )
+39 | from sat_rs_vlm.evaluation.metrics import summarize_predictions
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+40 | from sat_rs_vlm.evaluation.runner import run_evaluation, validate_output_directory
+41 | from sat_rs_vlm.evaluation.tiers import resolve_tier_identity, validate_tier_asset
+   |
+
+E402 Module level import not at top of file
+  --> scripts\evaluate_rs_vlm.py:40:1
+   |
+38 | )
+39 | from sat_rs_vlm.evaluation.metrics import summarize_predictions
+40 | from sat_rs_vlm.evaluation.runner import run_evaluation, validate_output_directory
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+41 | from sat_rs_vlm.evaluation.tiers import resolve_tier_identity, validate_tier_asset
+42 | from sat_rs_vlm.models.qwen3vl_loader import (
+   |
+
+E402 Module level import not at top of file
+  --> scripts\evaluate_rs_vlm.py:41:1
+   |
+39 | from sat_rs_vlm.evaluation.metrics import summarize_predictions
+40 | from sat_rs_vlm.evaluation.runner import run_evaluation, validate_output_directory
+41 | from sat_rs_vlm.evaluation.tiers import resolve_tier_identity, validate_tier_asset
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+42 | from sat_rs_vlm.models.qwen3vl_loader import (
+43 |     load_qwen3vl,
+   |
+
+E402 Module level import not at top of file
+  --> scripts\evaluate_rs_vlm.py:42:1
+   |
+40 |   from sat_rs_vlm.evaluation.runner import run_evaluation, validate_output_directory
+41 |   from sat_rs_vlm.evaluation.tiers import resolve_tier_identity, validate_tier_asset
+42 | / from sat_rs_vlm.models.qwen3vl_loader import (
+43 | |     load_qwen3vl,
+44 | | )
+   | |_^
+45 |   from sat_rs_vlm.models.qwen3vl_loader import (
+46 |       validate_local_adapter as _validate_local_adapter,
+   |
+
+E402 Module level import not at top of file
+  --> scripts\evaluate_rs_vlm.py:45:1
+   |
+43 |       load_qwen3vl,
+44 |   )
+45 | / from sat_rs_vlm.models.qwen3vl_loader import (
+46 | |     validate_local_adapter as _validate_local_adapter,
+47 | | )
+   | |_^
+48 |   from sat_rs_vlm.training.utils import (
+49 |       MODEL_DEPS_ERROR,
+   |
+
+E402 Module level import not at top of file
+  --> scripts\evaluate_rs_vlm.py:48:1
+   |
+46 |       validate_local_adapter as _validate_local_adapter,
+47 |   )
+48 | / from sat_rs_vlm.training.utils import (
+49 | |     MODEL_DEPS_ERROR,
+50 | |     resolve_torch_dtype,
+51 | |     safe_import_model_dependencies,
+52 | | )
+   | |_^
+53 |   from sat_rs_vlm.utils.jsonl import write_jsonl
+   |
+
+E402 Module level import not at top of file
+  --> scripts\evaluate_rs_vlm.py:53:1
+   |
+51 |     safe_import_model_dependencies,
+52 | )
+53 | from sat_rs_vlm.utils.jsonl import write_jsonl
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+54 |
+55 | DEFAULT_EVALUATION_CONTRACT = (
+   |
+
+UP035 [*] Import from `collections.abc` instead: `Iterable`
+  --> scripts\evaluation\build_evaluation_tiers.py:20:1
+   |
+18 | from datetime import datetime, timezone
+19 | from pathlib import Path
+20 | from typing import Any, Iterable
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+21 |
+22 | import yaml
+   |
+help: Import from `collections.abc`
+
+E402 Module level import not at top of file
+  --> scripts\evaluation\build_evaluation_tiers.py:28:1
+   |
+26 |     sys.path.insert(0, str(SRC_ROOT))
+27 |
+28 | from sat_rs_vlm.evaluation.tier_builder import build_unified_evaluation_tiers
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+29 |
+30 | PROJECT_ROOT = Path(__file__).resolve().parents[2]
+   |
+
+E501 Line too long (115 > 100)
+   --> scripts\evaluation\build_evaluation_tiers.py:282:101
+    |
+280 |     print(
+281 |         json.dumps(
+282 |             {"output_dir": str(_project_path(manifest["tiers"]["E2"]["path"]).parent), "tiers": manifest["tiers"]},
+    |                                                                                                     ^^^^^^^^^^^^^^^
+283 |             ensure_ascii=False,
+284 |             indent=2,
+    |
+
+E501 Line too long (102 > 100)
+  --> scripts\evaluation\evaluate_object_adapter_v0.py:83:101
+   |
+81 |     actual_sha = file_sha256(tier_path)
+82 |     if expected_sha and str(expected_sha) != actual_sha:
+83 |         raise ValueError(f"{tier} tier SHA256 mismatch: expected={expected_sha}, actual={actual_sha}")
+   |                                                                                                     ^^
+84 |     return list(read_jsonl(tier_path)), tier_path, actual_sha
+   |
+
+E501 Line too long (108 > 100)
+   --> scripts\evaluation\evaluate_object_adapter_v0.py:117:101
+    |
+115 |     for row in rows:
+116 |         metadata = row.get("metadata", {})
+117 |         dataset = str(metadata.get("dataset", row.get("dataset", ""))) if isinstance(metadata, dict) else ""
+    |                                                                                                     ^^^^^^^^
+118 |         if dataset != "VRSBench":
+119 |             skipped["non_vrsbench"] += 1
+    |
+
+E501 Line too long (103 > 100)
+   --> scripts\evaluation\evaluate_object_adapter_v0.py:129:101
+    |
+127 |                 counting_statistics["counting_population_count"] or 0
+128 |             ) + 1
+129 |             cardinality_resolution = resolve_cardinality_prompt_class(extract_prompt(row), class_vocab)
+    |                                                                                                     ^^^
+130 |             if cardinality_resolution.status == "unsupported_form":
+131 |                 skipped["counting_non_cardinality"] += 1
+    |
+
+E501 Line too long (141 > 100)
+   --> scripts\evaluation\evaluate_object_adapter_v0.py:176:101
+    |
+174 | …
+175 | …
+176 | …target_format", "normalized_0_1")) if isinstance(metadata, dict) else "normalized_0_1"
+    |                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+177 | …_format=coordinate_format)
+178 | …inate_range:
+    |
+
+E501 Line too long (113 > 100)
+   --> scripts\evaluation\evaluate_object_adapter_v0.py:195:101
+    |
+193 |     supported = int(counting_statistics["counting_supported_count"] or 0)
+194 |     counting_statistics["counting_target_coverage"] = supported / eligible if eligible else None
+195 |     counting_statistics["counting_supported_ratio_of_eligible"] = counting_statistics["counting_target_coverage"]
+    |                                                                                                     ^^^^^^^^^^^^^
+196 |     supported_ids = sorted(str(row["id"]) for row in prepared if row["task_type"] == "counting")
+197 |     counting_statistics["counting_supported_prediction_count"] = len(supported_ids)
+    |
+
+E501 Line too long (102 > 100)
+   --> scripts\evaluation\evaluate_object_adapter_v0.py:291:101
+    |
+289 |     )
+290 |     try:
+291 |         modules = __import__("sat_rs_vlm.training.utils", fromlist=["safe_import_model_dependencies"])
+    |                                                                                                     ^^
+292 |         imported = modules.safe_import_model_dependencies()
+293 |         torch = imported["torch"]
+    |
+
+E501 Line too long (107 > 100)
+   --> scripts\evaluation\evaluate_object_adapter_v0.py:311:101
+    |
+309 |         checkpoint_vocab_path = checkpoint / "class_vocab.json"
+310 |         if not checkpoint_vocab_path.is_file():
+311 |             raise FileNotFoundError(f"Object Adapter checkpoint is missing class_vocab.json: {checkpoint}")
+    |                                                                                                     ^^^^^^^
+312 |         class_vocab = json.loads(checkpoint_vocab_path.read_text(encoding="utf-8"))
+313 |         eval_rows, skipped, counting_statistics = _prepare_rows(rows, class_vocab)
+    |
+
+E501 Line too long (115 > 100)
+   --> scripts\evaluation\evaluate_object_adapter_v0.py:360:101
+    |
+358 |             raise FileNotFoundError(f"R1 strategy_manifest.json is missing: {source_manifest_path}")
+359 |         expected_source_manifest_sha = adapter_manifest.get("source_r1_manifest_sha256")
+360 |         if expected_source_manifest_sha and file_sha256(source_manifest_path) != str(expected_source_manifest_sha):
+    |                                                                                                     ^^^^^^^^^^^^^^^
+361 |             raise ValueError(
+362 |                 "Object Adapter source R1 manifest checksum mismatch; use the exact R1 checkpoint "
+    |
+
+E501 Line too long (103 > 100)
+   --> scripts\evaluation\evaluate_object_adapter_v0.py:372:101
+    |
+370 |         sidecar_name = source_manifest.get("visual_sidecar")
+371 |         if not sidecar_name:
+372 |             for candidate in ("visual_trainable_weights.safetensors", "h1_visual_weights.safetensors"):
+    |                                                                                                     ^^^
+373 |                 if (source_r1_checkpoint / candidate).is_file():
+374 |                     sidecar_name = candidate
+    |
+
+E501 Line too long (108 > 100)
+   --> scripts\evaluation\evaluate_object_adapter_v0.py:400:101
+    |
+398 |             nhead=int(architecture.get("nhead", dict(config.get("adapter", {})).get("nhead", 8))),
+399 |             decoder_layers=int(
+400 |                 architecture.get("decoder_layers", dict(config.get("adapter", {})).get("decoder_layers", 2))
+    |                                                                                                     ^^^^^^^^
+401 |             ),
+402 |             dim_feedforward=int(
+    |
+
+E501 Line too long (113 > 100)
+   --> scripts\evaluation\evaluate_object_adapter_v0.py:403:101
+    |
+401 |             ),
+402 |             dim_feedforward=int(
+403 |                 architecture.get("dim_feedforward", dict(config.get("adapter", {})).get("dim_feedforward", 1024))
+    |                                                                                                     ^^^^^^^^^^^^^
+404 |             ),
+405 |             dropout=float(architecture.get("dropout", dict(config.get("adapter", {})).get("dropout", 0.1))),
+    |
+
+E501 Line too long (108 > 100)
+   --> scripts\evaluation\evaluate_object_adapter_v0.py:405:101
+    |
+403 |                 architecture.get("dim_feedforward", dict(config.get("adapter", {})).get("dim_feedforward", 1024))
+404 |             ),
+405 |             dropout=float(architecture.get("dropout", dict(config.get("adapter", {})).get("dropout", 0.1))),
+    |                                                                                                     ^^^^^^^^
+406 |         )
+407 |         device = next(visual.parameters()).device
+    |
+
+E501 Line too long (107 > 100)
+   --> scripts\evaluation\evaluate_object_adapter_v0.py:465:101
+    |
+463 |                         "predicted_count": predicted_count,
+464 |                         "predicted_count_rounded": min(64, max(0, int(predicted_count + 0.5))),
+465 |                         "objectness_probability": [float(value) for value in probabilities.cpu().tolist()],
+    |                                                                                                     ^^^^^^^
+466 |                         "boxes_cxcywh": outputs["boxes_cxcywh"][index].detach().cpu().tolist(),
+467 |                         "reference_count": row["count"],
+    |
+
+B905 `zip()` without an explicit `strict=` parameter
+   --> scripts\evaluation\evaluate_object_adapter_v0.py:474:43
+    |
+472 |         count_metrics = _metrics_from_count_pairs(predicted_counts, true_counts)
+473 |         detection_predictions = [
+474 |             proposal for proposal, row in zip(proposal_tensors, eval_rows) if row["task_type"] == "detection"
+    |                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+475 |         ]
+476 |         detection_metrics = _box_metrics(detection_predictions, detection_rows)
+    |
+help: Add explicit value for parameter `strict=`
+
+E501 Line too long (109 > 100)
+   --> scripts\evaluation\evaluate_object_adapter_v0.py:474:101
+    |
+472 |         count_metrics = _metrics_from_count_pairs(predicted_counts, true_counts)
+473 |         detection_predictions = [
+474 |             proposal for proposal, row in zip(proposal_tensors, eval_rows) if row["task_type"] == "detection"
+    |                                                                                                     ^^^^^^^^^
+475 |         ]
+476 |         detection_metrics = _box_metrics(detection_predictions, detection_rows)
+    |
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> scripts\reliability\run_fault_evaluation.py:40:5
+   |
+39 |   def main() -> int:
+40 | /     from sat_rs_vlm.models.reliability.activation_guard import ActivationGuard
+41 | |     from sat_rs_vlm.models.reliability.fault_injector import (
+42 | |         inject_model_parameter_bitflips,
+43 | |         model_fault_inventory,
+44 | |         selector_for_fault_target,
+45 | |     )
+46 | |     from sat_rs_vlm.training.experiment import write_json
+47 | |     from sat_rs_vlm.training.utils import safe_import_model_dependencies
+48 | |     from scripts.evaluate_rs_vlm import evaluate, load_model, load_yaml
+   | |_______________________________________________________________________^
+49 |
+50 |       args = parse_args()
+   |
+help: Organize imports
+
+B010 [*] Do not call `setattr` with a constant attribute value. It is not any safer than normal property access.
+   --> scripts\train_qwen3vl_lora.py:234:9
+    |
+232 |             "LoRA target audit: " + json.dumps(target_audit["target_match_counts"], sort_keys=True)
+233 |         )
+234 |         setattr(model, "_sat_rs_lora_target_audit", target_audit)
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+235 |     if paths.initial_adapter_dir is not None:
+236 |         if not (paths.initial_adapter_dir / "adapter_config.json").is_file():
+    |
+help: Replace `setattr` with assignment
+
+B010 [*] Do not call `setattr` with a constant attribute value. It is not any safer than normal property access.
+   --> scripts\train_qwen3vl_lora.py:261:13
+    |
+259 |                 expected_target_modules=config.lora.target_modules,
+260 |             )
+261 |             setattr(model, "_sat_rs_stage_a_v2_parent_audit", adapter_audit)
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+262 |         print("Adapter architecture audit: " + json.dumps(adapter_audit, sort_keys=True))
+263 |         prepared = peft.PeftModel.from_pretrained(
+    |
+help: Replace `setattr` with assignment
+
+B010 [*] Do not call `setattr` with a constant attribute value. It is not any safer than normal property access.
+   --> scripts\train_qwen3vl_lora.py:269:13
+    |
+267 |         )
+268 |         if getattr(config, "training_stage", None) == "qwen3vl_4b_stage_a_v2_r1":
+269 |             setattr(prepared, "_sat_rs_stage_a_v2_parent_audit", adapter_audit)
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+270 |     else:
+271 |         lora_config = peft.LoraConfig(
+    |
+help: Replace `setattr` with assignment
+
+B010 [*] Do not call `setattr` with a constant attribute value. It is not any safer than normal property access.
+   --> scripts\train_qwen3vl_lora.py:282:5
+    |
+280 |         return prepared
+281 |     final_audit = finalize_lora_trainable_audit(prepared, target_audit)
+282 |     setattr(prepared, "_sat_rs_lora_target_audit", final_audit)
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+283 |     print(
+284 |         "LoRA trainable audit: "
+    |
+help: Replace `setattr` with assignment
+
+UP035 [*] Import from `collections.abc` instead: `Mapping`
+  --> scripts\training\run_autodl_qwen3vl_4b_lr_merger_sweep.py:12:1
+   |
+10 | import time
+11 | from pathlib import Path
+12 | from typing import Any, Mapping
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+13 |
+14 | import yaml
+   |
+help: Import from `collections.abc`
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> scripts\training\run_autodl_qwen3vl_4b_lr_merger_sweep.py:21:1
+   |
+19 |       sys.path.insert(0, str(SRC_ROOT))
+20 |
+21 | / from sat_rs_vlm.training.lr_merger_sweep import (  # noqa: E402
+22 | |     DEFAULT_SWEEP_CONFIG,
+23 | |     EvaluationOOMError,
+24 | |     ExperimentSpec,
+25 | |     InfrastructureError,
+26 | |     checkpoint_fingerprint,
+27 | |     checkpoint_is_complete,
+28 | |     build_evaluation_command,
+29 | |     clear_cuda_cache,
+30 | |     enrich_strategy_manifest,
+31 | |     evaluation_identity,
+32 | |     extract_e1_metrics,
+33 | |     is_oom_log,
+34 | |     load_sweep_config,
+35 | |     materialize_training_config,
+36 | |     maybe_plot_sweep,
+37 | |     parse_experiment_specs,
+38 | |     select_phase_a_lr,
+39 | |     shutdown_if_requested,
+40 | |     validate_probe_contract,
+41 | |     weak_score,
+42 | |     write_audit_for_lora_only,
+43 | |     write_sweep_report,
+44 | |     write_status,
+45 | |     run_logged_command,
+46 | | )
+47 | | from sat_rs_vlm.training.weight_analysis import (  # noqa: E402
+48 | |     analyze_lora_adapters,
+49 | |     analyze_merger_sidecar,
+50 | | )
+   | |_^
+   |
+help: Organize imports
+
+E501 Line too long (112 > 100)
+  --> scripts\training\run_autodl_qwen3vl_4b_vit_probe.py:43:101
+   |
+41 |     parser.add_argument("--output-dir", type=Path, default=None)
+42 |     parser.add_argument("--source-train-file", action="append", default=None)
+43 |     parser.add_argument("--eval-config", type=Path, default=Path("configs/eval/qwen3vl_4b_baseline_e1_v2.yaml"))
+   |                                                                                                     ^^^^^^^^^^^^
+44 |     parser.add_argument("--report-dir", type=Path, default=Path("reports/experiments/qwen3vl_4b_vit_probe_last2"))
+45 |     parser.add_argument("--skip-baseline-eval", action="store_true")
+   |
+
+E501 Line too long (114 > 100)
+  --> scripts\training\run_autodl_qwen3vl_4b_vit_probe.py:44:101
+   |
+42 |     parser.add_argument("--source-train-file", action="append", default=None)
+43 |     parser.add_argument("--eval-config", type=Path, default=Path("configs/eval/qwen3vl_4b_baseline_e1_v2.yaml"))
+44 |     parser.add_argument("--report-dir", type=Path, default=Path("reports/experiments/qwen3vl_4b_vit_probe_last2"))
+   |                                                                                                     ^^^^^^^^^^^^^^
+45 |     parser.add_argument("--skip-baseline-eval", action="store_true")
+46 |     parser.add_argument("--skip-eval", action="store_true")
+   |
+
+B023 Function definition does not bind loop variable `round_plan`
+   --> scripts\training\run_qwen3vl_4b_stage_a.py:452:28
+    |
+450 |                 initial_adapter=bound_initial_adapter,
+451 |                 learning_rate=bound_learning_rate,
+452 |                 save_steps=round_plan["mid_round_save_step"],
+    |                            ^^^^^^^^^^
+453 |                 mode=mode,
+454 |                 resume_checkpoint=resume_path,
+    |
+
+B010 [*] Do not call `setattr` with a constant attribute value. It is not any safer than normal property access.
+   --> scripts\training\run_qwen3vl_4b_stage_a_v2.py:380:5
+    |
+378 |         args.run_root or Path(os.environ["OUTPUT_ROOT"]) / f"qwen3vl_4b_stage_a_v2_{timestamp}"
+379 |     )
+380 |     setattr(args, "resolved_run_root", str(run_root))
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+381 |     run_root.mkdir(parents=True, exist_ok=True)
+382 |     state_path = run_root / "run_manifest.json"
+    |
+help: Replace `setattr` with assignment
+
+E501 Line too long (102 > 100)
+  --> src\sat_rs_vlm\data\object_adapter_v0.py:55:101
+   |
+53 |         self.blockers = tuple(str(item) for item in blockers)
+54 |         suffix = f"; manifest={manifest_path}" if manifest_path is not None else ""
+55 |         super().__init__("Object Adapter v0 data audit blocked: " + "; ".join(self.blockers) + suffix)
+   |                                                                                                     ^^
+   |
+
+E501 Line too long (102 > 100)
+  --> src\sat_rs_vlm\data\object_adapter_v0.py:78:101
+   |
+78 | def canonical_image_identity(row_or_messages: Mapping[str, Any] | Sequence[Mapping[str, Any]]) -> str:
+   |                                                                                                     ^^
+79 |     """从 messages/image 字段提取完整、可移植的图片身份。
+   |
+
+E501 Line too long (110 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:217:101
+    |
+215 |             if canonical not in classes:
+216 |                 continue
+217 |             values_iter = values if isinstance(values, Sequence) and not isinstance(values, str) else [values]
+    |                                                                                                     ^^^^^^^^^^
+218 |             for alias in values_iter:
+219 |                 normalized = normalize_class(alias)
+    |
+
+E501 Line too long (106 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:234:101
+    |
+232 |     index: dict[str, set[str]] = defaultdict(set)
+233 |     for class_name in classes:
+234 |         aliases = [*_class_aliases(class_name), *VRSBENCH_COUNTING_EQUIVALENT_ALIASES.get(class_name, [])]
+    |                                                                                                     ^^^^^^
+235 |         for alias in aliases:
+236 |             normalized = normalize_class(alias)
+    |
+
+E501 Line too long (108 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:284:101
+    |
+282 |     """提取 exact-cardinality 问题开头的 target remainder；其他形式返回 ``None``。"""
+283 |
+284 |     normalized = normalize_text(_strip_counting_output_protocol(prompt)).replace("_", " ").replace("-", " ")
+    |                                                                                                     ^^^^^^^^
+285 |     normalized = normalized.strip()
+286 |     match = re.match(r"^how\s+many\s+(?P<target>.+)$", normalized, flags=re.IGNORECASE)
+    |
+
+E501 Line too long (110 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:297:101
+    |
+295 |     target = match.group("target").strip()
+296 |     while target:
+297 |         modifier = re.match(r"^(unique|distinct|individual|separate|total)\b\s*", target, flags=re.IGNORECASE)
+    |                                                                                                     ^^^^^^^^^^
+298 |         if modifier is None or modifier.group(1).lower() not in NEUTRAL_QUANTITY_MODIFIERS:
+299 |             break
+    |
+
+E501 Line too long (108 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:310:101
+    |
+308 |     if target is None:
+309 |         return None
+310 |     boundary = re.search(r"\b(?:are|is|can|could|were|was|have|has|does|do)\b", target, flags=re.IGNORECASE)
+    |                                                                                                     ^^^^^^^^
+311 |     return target[: boundary.start()].strip() if boundary else target.strip()
+    |
+
+E501 Line too long (101 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:314:101
+    |
+314 | def resolve_cardinality_prompt_class(prompt: str, class_vocab: Mapping[str, Any]) -> ClassResolution:
+    |                                                                                                     ^
+315 |     """只从 exact-cardinality 问题的 target 开头解析 counting 类别。"""
+    |
+
+E501 Line too long (102 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:343:101
+    |
+343 | def resolve_counting_class(row: Mapping[str, Any], class_vocab: Mapping[str, Any]) -> ClassResolution:
+    |                                                                                                     ^^
+344 |     """按 metadata 优先、cardinality target-prefix 其次解析 counting 目标类别。
+    |
+
+E501 Line too long (102 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:373:101
+    |
+371 |     bottom = min(float(first[3]), float(second[3]))
+372 |     intersection = max(0.0, right - left) * max(0.0, bottom - top)
+373 |     area_a = max(0.0, float(first[2]) - float(first[0])) * max(0.0, float(first[3]) - float(first[1]))
+    |                                                                                                     ^^
+374 |     area_b = max(0.0, float(second[2]) - float(second[0])) * max(0.0, float(second[3]) - float(second[1]))
+375 |     union = area_a + area_b - intersection
+    |
+
+E501 Line too long (106 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:374:101
+    |
+372 |     intersection = max(0.0, right - left) * max(0.0, bottom - top)
+373 |     area_a = max(0.0, float(first[2]) - float(first[0])) * max(0.0, float(first[3]) - float(first[1]))
+374 |     area_b = max(0.0, float(second[2]) - float(second[0])) * max(0.0, float(second[3]) - float(second[1]))
+    |                                                                                                     ^^^^^^
+375 |     union = area_a + area_b - intersection
+376 |     return intersection / union if union > 0 else 0.0
+    |
+
+UP012 [*] Unnecessary UTF-8 `encoding` argument to `encode`
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:409:29
+    |
+408 | def _pair_id(image: str, class_name: str) -> str:
+409 |     digest = hashlib.sha256(f"{image}\x1f{class_name}".encode("utf-8")).hexdigest()[:16]
+    |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+410 |     return f"rs_object_v0_{digest}"
+    |
+help: Remove unnecessary `encoding` argument
+
+E501 Line too long (109 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:443:101
+    |
+441 |         task = str(row.get("task_type", "")).strip().lower()
+442 |         if task not in SUPPORTED_TASKS:
+443 |             audit["unsupported_task_rows_excluded"] = int(audit.get("unsupported_task_rows_excluded", 0)) + 1
+    |                                                                                                     ^^^^^^^^^
+444 |             continue
+445 |         sample_id = str(row.get("id", "")).strip()
+    |
+
+E501 Line too long (107 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:485:101
+    |
+483 |                 resolution = resolve_counting_class(row, class_vocab)
+484 |             status_distribution = audit["counting_resolution_status_distribution"]
+485 |             status_distribution[resolution.status] = int(status_distribution.get(resolution.status, 0)) + 1
+    |                                                                                                     ^^^^^^^
+486 |             if resolution.status == "unsupported_form":
+487 |                 audit["counting_non_cardinality_excluded"] += 1
+    |
+
+E501 Line too long (105 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:489:101
+    |
+487 |                 audit["counting_non_cardinality_excluded"] += 1
+488 |                 if len(unresolved_examples["non_cardinality"]) < 30:
+489 |                     unresolved_examples["non_cardinality"].append(str(row.get("id", "")) + ": " + prompt)
+    |                                                                                                     ^^^^^
+490 |             else:
+491 |                 audit["counting_cardinality_eligible"] += 1
+    |
+
+E501 Line too long (112 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:499:101
+    |
+497 |                 audit["counting_class_ambiguous"] += 1
+498 |                 if len(unresolved_examples["ambiguous"]) < 30:
+499 |                     unresolved_examples["ambiguous"].append(str(row.get("id", "")) + ": " + extract_prompt(row))
+    |                                                                                                     ^^^^^^^^^^^^
+500 |             elif resolution.status == "unsupported_target":
+501 |                 audit["counting_target_unsupported"] += 1
+    |
+
+E501 Line too long (104 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:527:101
+    |
+525 |     audit["counting_target_coverage"] = audit["counting_class_resolution_rate"]
+526 |     audit["counting_supported_ratio_of_total"] = (
+527 |         audit["counting_supported_target"] / audit["counting_total"] if audit["counting_total"] else 0.0
+    |                                                                                                     ^^^^
+528 |     )
+529 |     audit["train_images_before_exclusion"] = len(before_images)
+    |
+
+E501 Line too long (107 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:545:101
+    |
+544 |     target_audit = audit if audit is not None else _empty_audit()
+545 |     grouped: dict[tuple[str, str], dict[str, Any]] = defaultdict(lambda: {"detection": [], "counting": []})
+    |                                                                                                     ^^^^^^^
+546 |     for record in records:
+547 |         key = (str(record["image"]), str(record["class_name"]))
+    |
+
+E501 Line too long (101 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:549:101
+    |
+547 |         key = (str(record["image"]), str(record["class_name"]))
+548 |         grouped[key][str(record["kind"])].append(record)
+549 |     class_to_id = {str(key): int(value) for key, value in class_vocab.get("class_to_id", {}).items()}
+    |                                                                                                     ^
+550 |     pairs: list[dict[str, Any]] = []
+551 |     conflict_count = 0
+    |
+
+UP012 [*] Unnecessary UTF-8 `encoding` argument to `encode`
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:629:42
+    |
+627 |     ranked = sorted(
+628 |         images,
+629 |         key=lambda image: hashlib.sha256(f"{seed}\x1f{image}".encode("utf-8")).hexdigest(),
+    |                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+630 |     )
+631 |     if len(ranked) <= 1:
+    |
+help: Remove unnecessary `encoding` argument
+
+E501 Line too long (118 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:681:101
+    |
+680 | def _count_distribution(rows: Sequence[Mapping[str, Any]]) -> dict[str, int]:
+681 |     return dict(sorted(Counter(count_bin(int(row["count"])) for row in rows if row.get("count") is not None).items()))
+    |                                                                                                     ^^^^^^^^^^^^^^^^^^
+    |
+
+E501 Line too long (103 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:764:101
+    |
+762 |             resolution = resolve_counting_class(row, class_vocab)
+763 |         status_distribution = audit["counting_resolution_status_distribution"]
+764 |         status_distribution[resolution.status] = int(status_distribution.get(resolution.status, 0)) + 1
+    |                                                                                                     ^^^
+765 |         if resolution.status == "resolved":
+766 |             audit["counting_class_resolved"] += 1
+    |
+
+E501 Line too long (101 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:782:101
+    |
+780 |             audit["counting_non_cardinality_excluded"] += 1
+781 |             if len(unresolved_examples["non_cardinality"]) < 30:
+782 |                 unresolved_examples["non_cardinality"].append(str(row.get("id", "")) + ": " + prompt)
+    |                                                                                                     ^
+783 |         elif resolution.status == "ambiguous":
+784 |             audit["counting_class_ambiguous"] += 1
+    |
+
+E501 Line too long (104 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:791:101
+    |
+789 |             audit["counting_class_unresolved"] += 1
+790 |             if len(unresolved_examples["unsupported_target"]) < 30:
+791 |                 unresolved_examples["unsupported_target"].append(str(row.get("id", "")) + ": " + prompt)
+    |                                                                                                     ^^^^
+792 |             target_phrase = _diagnostic_target_phrase(prompt)
+793 |             if target_phrase:
+    |
+
+E501 Line too long (104 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:802:101
+    |
+800 |     audit["counting_target_coverage"] = audit["counting_class_resolution_rate"]
+801 |     audit["counting_supported_ratio_of_total"] = (
+802 |         audit["counting_supported_target"] / audit["counting_total"] if audit["counting_total"] else 0.0
+    |                                                                                                     ^^^^
+803 |     )
+804 |     if audit["counting_total"] != (
+    |
+
+E501 Line too long (109 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:821:101
+    |
+819 |     audit["train_images_removed_for_eval_overlap"] = len(removed_images)
+820 |     audit["train_images_after_exclusion"] = len(before_images - removed_images)
+821 |     audit["final_image_overlap_count"] = len((before_images - removed_images).intersection(protected_images))
+    |                                                                                                     ^^^^^^^^^
+822 |     audit["train_val_image_overlap"] = split_proof["train_val_image_overlap"]
+823 |     audit["train_images"] = split_proof["train_images"]
+    |
+
+E501 Line too long (115 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:843:101
+    |
+841 |     audit["unsupported_target_prefix_top50"] = [
+842 |         {"target_prefix": target, "count": count}
+843 |         for target, count in sorted(unsupported_target_prefixes.items(), key=lambda item: (-item[1], item[0]))[:50]
+    |                                                                                                     ^^^^^^^^^^^^^^^
+844 |     ]
+845 |     audit["class_vocab_size"] = len(class_vocab["classes"])
+    |
+
+E501 Line too long (102 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:859:101
+    |
+857 |         blockers.append(f"max_count={max_count} > num_queries=64")
+858 |     full_positive = sum(
+859 |         1 for row in pairs if row["supervision_type"] == "full_set" and int(row.get("count") or 0) > 0
+    |                                                                                                     ^^
+860 |     )
+861 |     audit["full_set_positive_pair_count"] = full_positive
+    |
+
+E501 Line too long (105 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:878:101
+    |
+876 |     write_jsonl(train_path, train_pairs)
+877 |     write_jsonl(val_path, val_pairs)
+878 |     vocab_path.write_text(json.dumps(class_vocab, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    |                                                                                                     ^^^^^
+879 |     audit_payload = {"schema_version": SCHEMA_VERSION, "builder_version": BUILDER_VERSION, **audit}
+880 |     audit_path.write_text(json.dumps(audit_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    |
+
+E501 Line too long (107 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:880:101
+    |
+878 |     vocab_path.write_text(json.dumps(class_vocab, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+879 |     audit_payload = {"schema_version": SCHEMA_VERSION, "builder_version": BUILDER_VERSION, **audit}
+880 |     audit_path.write_text(json.dumps(audit_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    |                                                                                                     ^^^^^^^
+881 |     manifest: dict[str, Any] = {
+882 |         "schema_version": SCHEMA_VERSION,
+    |
+
+E501 Line too long (105 > 100)
+   --> src\sat_rs_vlm\data\object_adapter_v0.py:916:101
+    |
+914 |     for path in (train_path, val_path, vocab_path, audit_path):
+915 |         manifest["output_files"][path.name] = {"path": path.name, "sha256": file_sha256(path)}
+916 |     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    |                                                                                                     ^^^^^
+917 |     manifest["manifest_sha256"] = file_sha256(manifest_path)
+918 |     if blockers and enforce_blockers:
+    |
+
+E501 Line too long (110 > 100)
+  --> src\sat_rs_vlm\evaluation\vit_probe_comparison.py:84:101
+   |
+82 |         "# Qwen3-VL-4B ViT Last-2 Probe E1 Comparison",
+83 |         "",
+84 |         f"- Evaluation tier: `{payload.get('evaluation_tier')}` / `{payload.get('evaluation_tier_version')}`",
+   |                                                                                                     ^^^^^^^^^^
+85 |         f"- Evaluation tier SHA256: `{payload.get('evaluation_tier_sha256')}`",
+86 |         "- E1 用于快速方向判断，不用于最终统计结论；明显正向结果必须在 E2 上复核。",
+   |
+
+E501 Line too long (106 > 100)
+  --> src\sat_rs_vlm\evaluation\vit_probe_comparison.py:90:101
+   |
+88 |         "## Paired Results",
+89 |         "",
+90 |         "| Comparison | Task | Primary metric | Baseline | Candidate | Delta | CI95 | Wins/Ties/Losses |",
+   |                                                                                                     ^^^^^^
+91 |         "|---|---|---:|---:|---:|---:|---|---:|",
+92 |     ]
+   |
+
+E501 Line too long (165 > 100)
+   --> src\sat_rs_vlm\evaluation\vit_probe_comparison.py:123:88
+    |
+121 | …
+122 | …
+123 | …ce；LoRA rank、target modules、loss、prompt、E1 数据和 generation config 均保持不变。",
+    |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+124 | …
+125 | …退化，可考虑 last-4、main merger 或 E2 复核；否则不要自动扩大解冻范围。",
+    |
+
+E501 Line too long (155 > 100)
+   --> src\sat_rs_vlm\evaluation\vit_probe_comparison.py:125:80
+    |
+123 | …surface；LoRA rank、target modules、loss、prompt、E1 数据和 generation config 均保持不变。",
+124 | …
+125 | … 无系统性退化，可考虑 last-4、main merger 或 E2 复核；否则不要自动扩大解冻范围。",
+    |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+126 | …
+127 | …
+    |
+
+F401 [*] `pydantic.Field` imported but unused
+  --> src\sat_rs_vlm\models\reliability\activation_guard.py:13:33
+   |
+11 | from typing import Any, Literal
+12 |
+13 | from pydantic import BaseModel, Field
+   |                                 ^^^^^
+   |
+help: Remove unused import: `pydantic.Field`
+
+F401 [*] `sat_rs_vlm.models.reliability.checksum.build_checksum_manifest` imported but unused
+  --> src\sat_rs_vlm\models\reliability\adapter_redundancy.py:16:5
+   |
+14 | from sat_rs_vlm.models.reliability.checksum import (
+15 |     ChecksumManifest,
+16 |     build_checksum_manifest,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+17 |     file_sha256,
+18 |     verify_checksum_manifest,
+   |
+help: Remove unused import
+
+F401 [*] `sat_rs_vlm.models.reliability.checksum.file_sha256` imported but unused
+  --> src\sat_rs_vlm\models\reliability\adapter_redundancy.py:17:5
+   |
+15 |     ChecksumManifest,
+16 |     build_checksum_manifest,
+17 |     file_sha256,
+   |     ^^^^^^^^^^^
+18 |     verify_checksum_manifest,
+19 |     write_checksum_manifest,
+   |
+help: Remove unused import
+
+F401 [*] `importlib` imported but unused
+ --> src\sat_rs_vlm\quantization\benchmark.py:6:8
+  |
+5 | import gc
+6 | import importlib
+  |        ^^^^^^^^^
+7 | import json
+8 | import random
+  |
+help: Remove unused import: `importlib`
+
+UP035 [*] Import from `collections.abc` instead: `Iterable`, `Mapping`
+  --> src\sat_rs_vlm\training\lr_merger_sweep.py:17:1
+   |
+15 | from dataclasses import dataclass
+16 | from pathlib import Path
+17 | from typing import Any, Iterable, Mapping
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+18 |
+19 | import yaml
+   |
+help: Import from `collections.abc`
+
+E501 Line too long (122 > 100)
+   --> src\sat_rs_vlm\training\lr_merger_sweep.py:689:71
+    |
+687 | …     "# Qwen3-VL-4B LR + Visual Merger Sweep",
+688 | …     "",
+689 | …     "本报告用于快速方向诊断，不是论文式严格 ablation。所有实验从同一 Round1 adapter、同一 probe 数据和同一 E1 开始。",
+    |                                                                                                   ^^^^^^^^^^^^^^^^^^^^^^
+690 | …     "",
+691 | …     f"Phase B selected LR: `{selection.get('selected_lr')}`",
+    |
+
+E501 Line too long (109 > 100)
+   --> src\sat_rs_vlm\training\lr_merger_sweep.py:693:101
+    |
+691 |         f"Phase B selected LR: `{selection.get('selected_lr')}`",
+692 |         f"Selection mode: `{selection.get('selection_mode')}`",
+693 |         f"Effective E1 eval batch size: `{dict(evaluation_context or {}).get('effective_eval_batch_size')}`",
+    |                                                                                                     ^^^^^^^^^
+694 |         "",
+695 |     ]
+    |
+
+E501 Line too long (116 > 100)
+   --> src\sat_rs_vlm\training\lr_merger_sweep.py:742:83
+    |
+740 | …     "## 自动回答",
+741 | …     "",
+742 | …     "- Q1/Q2：查看 LR、LoRA/Base ratio 与 Scene/Counting/VQA 的联动；没有完成 E1 的实验不会进入 selector。",
+    |                                                                                                ^^^^^^^^^^^^^^^
+743 | …     "- Q3：A3 是否不稳定由 `experiment_status.json`、训练日志中的 NaN/OOM 和 E1 指标共同判断。",
+744 | …     "- Q4-Q7：比较 B1/B2/B3 的弱任务分数和 Detection/LEVIR/Caption guard。",
+    |
+
+E501 Line too long (104 > 100)
+   --> src\sat_rs_vlm\training\lr_merger_sweep.py:743:80
+    |
+741 | …     "",
+742 | …     "- Q1/Q2：查看 LR、LoRA/Base ratio 与 Scene/Counting/VQA 的联动；没有完成 E1 的实验不会进入 selector。",
+743 | …     "- Q3：A3 是否不稳定由 `experiment_status.json`、训练日志中的 NaN/OOM 和 E1 指标共同判断。",
+    |                                                                                               ^^^^
+744 | …     "- Q4-Q7：比较 B1/B2/B3 的弱任务分数和 Detection/LEVIR/Caption guard。",
+745 | …     "- Q8：优先选择满足 guard 且 weak score 最高的 Phase A LR；若全部违反 guard，明确使用 5e-5 fallback。",
+    |
+
+E501 Line too long (115 > 100)
+   --> src\sat_rs_vlm\training\lr_merger_sweep.py:745:79
+    |
+743 | …     "- Q3：A3 是否不稳定由 `experiment_status.json`、训练日志中的 NaN/OOM 和 E1 指标共同判断。",
+744 | …     "- Q4-Q7：比较 B1/B2/B3 的弱任务分数和 Detection/LEVIR/Caption guard。",
+745 | …     "- Q8：优先选择满足 guard 且 weak score 最高的 Phase A LR；若全部违反 guard，明确使用 5e-5 fallback。",
+    |                                                                                               ^^^^^^^^^^^^^^^
+746 | …     "",
+747 | …     "2B 的 3.45% 只作为历史量级参考，不是本轮优化目标。",
+    |
+
+UP035 [*] Import from `collections.abc` instead: `Mapping`, `Sequence`
+ --> src\sat_rs_vlm\training\model_audit.py:8:1
+  |
+6 | import json
+7 | from pathlib import Path
+8 | from typing import Any, Mapping, Sequence
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+help: Import from `collections.abc`
+
+UP035 [*] Import from `collections.abc` instead: `Callable`
+  --> src\sat_rs_vlm\training\object_adapter_v0.py:17:1
+   |
+15 | from collections.abc import Mapping, Sequence
+16 | from pathlib import Path
+17 | from typing import Any, Callable
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+18 |
+19 | import torch
+   |
+help: Import from `collections.abc`
+
+E501 Line too long (103 > 100)
+   --> src\sat_rs_vlm\training\object_adapter_v0.py:710:101
+    |
+708 |         raise ValueError(f"Not an RS Object Adapter v0 checkpoint: {directory}")
+709 |     if dict(manifest.get("architecture", {})) != dict(expected_architecture):
+710 |         raise ValueError("Object Adapter resume architecture does not match the current configuration")
+    |                                                                                                     ^^^
+711 |     saved_vocab = json.loads(vocab_path.read_text(encoding="utf-8"))
+712 |     if saved_vocab != dict(expected_class_vocab):
+    |
+
+E501 Line too long (103 > 100)
+   --> src\sat_rs_vlm\training\object_adapter_v0.py:713:101
+    |
+711 |     saved_vocab = json.loads(vocab_path.read_text(encoding="utf-8"))
+712 |     if saved_vocab != dict(expected_class_vocab):
+713 |         raise ValueError("Object Adapter resume class vocabulary does not match current training data")
+    |                                                                                                     ^^^
+714 |     if list(manifest.get("selected_vit_blocks", [])) != [int(index) for index in selected_blocks]:
+715 |         raise ValueError("Object Adapter resume selected ViT blocks do not match current configuration")
+    |
+
+E501 Line too long (104 > 100)
+   --> src\sat_rs_vlm\training\object_adapter_v0.py:715:101
+    |
+713 |         raise ValueError("Object Adapter resume class vocabulary does not match current training data")
+714 |     if list(manifest.get("selected_vit_blocks", [])) != [int(index) for index in selected_blocks]:
+715 |         raise ValueError("Object Adapter resume selected ViT blocks do not match current configuration")
+    |                                                                                                     ^^^^
+716 |     expected_source_sha = manifest.get("source_r1_manifest_sha256")
+717 |     actual_source_sha = file_sha256(source_r1_manifest)
+    |
+
+E501 Line too long (102 > 100)
+   --> src\sat_rs_vlm\training\object_adapter_v0.py:837:101
+    |
+835 |             from safetensors.torch import load_file
+836 |         except ImportError as exc:  # pragma: no cover - model dependency environment
+837 |             raise ImportError("safetensors is required for Object Adapter checkpoint resume") from exc
+    |                                                                                                     ^^
+838 |         adapter.load_state_dict(load_file(str(resume_weights_path), device="cpu"), strict=True)
+839 |         resume_checkpoint_path = Path(resume_object_adapter_checkpoint).expanduser()
+    |
+
+B023 Function definition does not bind loop variable `epoch`
+    --> src\sat_rs_vlm\training\object_adapter_v0.py:1108:50
+     |
+1106 |                 adapter,
+1107 |                 class_vocab,
+1108 |                 output_dir / f"checkpoint_epoch_{epoch}",
+     |                                                  ^^^^^
+1109 |                 epoch=epoch,
+1110 |                 source_checkpoint=checkpoint,
+     |
+
+B023 Function definition does not bind loop variable `epoch`
+    --> src\sat_rs_vlm\training\object_adapter_v0.py:1109:23
+     |
+1107 |                 class_vocab,
+1108 |                 output_dir / f"checkpoint_epoch_{epoch}",
+1109 |                 epoch=epoch,
+     |                       ^^^^^
+1110 |                 source_checkpoint=checkpoint,
+1111 |                 source_manifest=checkpoint / "strategy_manifest.json",
+     |
+
+F401 [*] `hashlib` imported but unused
+ --> src\sat_rs_vlm\training\refinement_dataset.py:5:8
+  |
+3 | from __future__ import annotations
+4 |
+5 | import hashlib
+  |        ^^^^^^^
+6 | import json
+7 | import math
+  |
+help: Remove unused import: `hashlib`
+
+UP035 [*] Import from `collections.abc` instead: `Iterable`, `Mapping`, `Sequence`
+  --> src\sat_rs_vlm\training\stage_a_v2.py:10:1
+   |
+ 8 | from dataclasses import asdict, dataclass
+ 9 | from pathlib import Path
+10 | from typing import Any, Iterable, Mapping, Sequence
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+11 |
+12 | from sat_rs_vlm.data.task_sampler import build_alternating_source_sampler
+   |
+help: Import from `collections.abc`
+
+E501 Line too long (104 > 100)
+   --> src\sat_rs_vlm\training\vit_probe.py:315:101
+    |
+313 |     if checkpoint_step is not None:
+314 |         payload["probe_checkpoint_step"] = checkpoint_step
+315 |     manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    |                                                                                                     ^^^^
+316 |     return destination
+    |
+
+UP035 [*] Import from `collections.abc` instead: `Iterable`, `Mapping`
+  --> src\sat_rs_vlm\training\weight_analysis.py:16:1
+   |
+14 | from collections import defaultdict
+15 | from pathlib import Path
+16 | from typing import Any, Iterable, Mapping
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+17 |
+18 | from sat_rs_vlm.models.reliability.checksum import file_sha256
+   |
+help: Import from `collections.abc`
+
+B905 `zip()` without an explicit `strict=` parameter
+   --> src\sat_rs_vlm\training\weight_analysis.py:154:61
+    |
+152 |     mean_x = sum(values_x) / len(values_x)
+153 |     mean_y = sum(values_y) / len(values_y)
+154 |     numerator = sum((x - mean_x) * (y - mean_y) for x, y in zip(values_x, values_y))
+    |                                                             ^^^^^^^^^^^^^^^^^^^^^^^
+155 |     denominator_x = math.sqrt(sum((x - mean_x) ** 2 for x in values_x))
+156 |     denominator_y = math.sqrt(sum((y - mean_y) ** 2 for y in values_y))
+    |
+help: Add explicit value for parameter `strict=`
+
+F401 [*] `json` imported but unused
+ --> tests\unit\evaluation\test_unified_evaluation_tiers_v2.py:4:8
+  |
+3 | import hashlib
+4 | import json
+  |        ^^^^
+5 | from pathlib import Path
+  |
+help: Remove unused import: `json`
+
+UP037 [*] Remove quotes from type annotation
+   --> tests\unit\test_object_adapter_v0.py:923:41
+    |
+921 |             self.devices: list[object] = []
+922 |
+923 |         def to(self, device: object) -> "FakeTensor":
+    |                                         ^^^^^^^^^^^^
+924 |             self.devices.append(device)
+925 |             return self
+    |
+help: Remove quotes
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> tests\unit\training\test_h2_refinement_dataset.py:1:1
+   |
+ 1 | / from __future__ import annotations
+ 2 | |
+ 3 | | import json
+ 4 | | from collections import Counter, defaultdict
+ 5 | | from pathlib import Path
+ 6 | |
+ 7 | | import pytest
+ 8 | |
+ 9 | | from sat_rs_vlm.training import refinement_dataset as refinement_dataset_module
+10 | | from sat_rs_vlm.training.config import H2DifficultyMixConfig, H2RefinementConfig
+11 | | from sat_rs_vlm.training.config import HardAdaptationConfig
+12 | | from sat_rs_vlm.training.refinement_dataset import (
+13 | |     build_h2_mining_candidates,
+14 | |     build_h2_refinement_dataset,
+15 | |     load_protected_e3,
+16 | | )
+17 | | from sat_rs_vlm.utils.jsonl import read_jsonl, write_jsonl
+   | |__________________________________________________________^
+   |
+help: Organize imports
+
+I001 [*] Import block is un-sorted or un-formatted
+ --> tests\unit\training\test_lr_merger_sweep_launcher.py:1:1
+  |
+1 | from pathlib import Path
+  | ^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+help: Organize imports
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> tests\unit\training\test_stage_a_v2.py:1:1
+   |
+ 1 | / from __future__ import annotations
+ 2 | |
+ 3 | | import importlib.util
+ 4 | | import json
+ 5 | | from pathlib import Path
+ 6 | |
+ 7 | | import pytest
+ 8 | |
+ 9 | | from sat_rs_vlm.training.config import load_training_config
+10 | | from sat_rs_vlm.training.stage_a_v2 import (
+11 | |     resolve_stage_epoch_plan,
+12 | |     training_command,
+13 | |     validate_stage2_sampler_coverage,
+14 | | )
+   | |_^
+   |
+help: Organize imports
+
+I001 [*] Import block is un-sorted or un-formatted
+ --> tests\unit\training\test_training_entry_wiring.py:1:1
+  |
+1 | / from __future__ import annotations
+2 | |
+3 | | import ast
+4 | | from pathlib import Path
+  | |________________________^
+  |
+help: Organize imports
+
+E501 Line too long (108 > 100)
+  --> tests\unit\training\test_vit_probe.py:24:101
+   |
+23 | def _write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:
+24 |     path.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n", encoding="utf-8")
+   |                                                                                                     ^^^^^^^^
+   |
+
+Found 111 errors.
+[*] 27 fixable with the `--fix` option (2 hidden fixes can be enabled with the `--unsafe-fixes` option).

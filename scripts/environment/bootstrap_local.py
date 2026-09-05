@@ -19,6 +19,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--clean", action="store_true")
     parser.add_argument("--with-dev", action="store_true")
     parser.add_argument("--with-model", action="store_true")
+    parser.add_argument(
+        "--with-retriever",
+        action="store_true",
+        help="Install the pyproject retriever extra (open_clip_torch and timm).",
+    )
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
 
@@ -35,6 +40,8 @@ def main() -> int:
     extras = ["dev"] if args.with_dev else []
     if args.with_model:
         extras.append("model")
+    if args.with_retriever:
+        extras.append("retriever")
     requirement = f".[{','.join(extras)}]" if extras else "."
     commands: list[list[str]] = []
     if args.clean and venv.exists():

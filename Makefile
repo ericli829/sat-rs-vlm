@@ -1,4 +1,4 @@
-.PHONY: install bootstrap bootstrap-model check-env test lint format run-api infer-demo infer-real-local prepare-data convert-qwen3vl prepare-e1 train-smoke train-qwen3vl train-autodl-4090 train-e1 train-e1b train-e1d-data train-e1d-sampler train-e1d-combined eval-e0 eval-e1 eval-e2 eval-e3 eval-offline compare-eval plot-eval train-local-real-smoke eval-qwen3vl merge-lora validate-training-assets train-local-smoke train-local train-local-dry-run train-local-forward train-unified smoke-unified validate-fixture export-environment plugin-list plugin-validate plugin-check plugin-dry-run quant-dry-cpu quant-cpu quant-bnb quant-eval quant-sensitivity-dry quant-sensitivity reliability-smoke reliability-real reliability-plot
+.PHONY: install bootstrap bootstrap-model bootstrap-taskgraph check-env check-env-retriever autodl-taskgraph-dry-run test lint format run-api infer-demo infer-real-local prepare-data convert-qwen3vl prepare-e1 train-smoke train-qwen3vl train-autodl-4090 train-e1 train-e1b train-e1d-data train-e1d-sampler train-e1d-combined eval-e0 eval-e1 eval-e2 eval-e3 eval-offline compare-eval plot-eval train-local-real-smoke eval-qwen3vl merge-lora validate-training-assets train-local-smoke train-local train-local-dry-run train-local-forward train-unified smoke-unified validate-fixture export-environment plugin-list plugin-validate plugin-check plugin-dry-run quant-dry-cpu quant-cpu quant-bnb quant-eval quant-sensitivity-dry quant-sensitivity reliability-smoke reliability-real reliability-plot
 
 PLUGIN_ROOT ?= .local_plugins/sat-rs-vlm-local-plugins
 PLUGIN_STRATEGY ?= qlora
@@ -12,8 +12,17 @@ bootstrap:
 bootstrap-model:
 	python scripts/environment/bootstrap_local.py --with-dev --with-model
 
+bootstrap-taskgraph:
+	python scripts/environment/bootstrap_local.py --with-dev --with-model --with-retriever
+
 check-env:
 	python scripts/environment/check_environment.py
+
+check-env-retriever:
+	python scripts/environment/check_environment.py --require-model --require-retriever
+
+autodl-taskgraph-dry-run:
+	bash scripts/environment/setup_autodl.sh --install-model --install-retriever --install-lae --dry-run
 
 test:
 	pytest -q

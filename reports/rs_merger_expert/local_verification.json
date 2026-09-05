@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0",
+  "runtime": {
+    "python": "3.11.9",
+    "torch": "2.6.0+cu126",
+    "transformers": "5.13.0",
+    "peft": "0.19.1",
+    "device": "NVIDIA GeForce RTX 4060 Laptop GPU"
+  },
+  "checks": {
+    "new_unit_tests": {
+      "passed": 19,
+      "skipped_by_default_gpu_marker": 1
+    },
+    "explicit_gpu_component_smoke": {
+      "passed": 1,
+      "steps": 2,
+      "loss": 0.5903159976005554,
+      "grad_norm": 1.1874496936798096,
+      "step_time_seconds": 0.24729075000504963,
+      "peak_allocated_vram_gb": 0.01702404022216797,
+      "scope": "toy component graph; not a 64-sample Qwen3-VL-4B smoke"
+    },
+    "existing_object_adapter_and_assistant_mask_regressions": {
+      "passed": 63
+    },
+    "ruff_changed_scope": {
+      "passed": true,
+      "error_count": 0,
+      "scope": "git diff --name-only master...HEAD -- '*.py'",
+      "files": [
+        "scripts/evaluation/evaluate_rs_merger_expert.py",
+        "scripts/training/audit_rs_merger_architecture.py",
+        "scripts/training/build_rs_count_merger_data.py",
+        "scripts/training/train_rs_merger_expert.py",
+        "src/sat_rs_vlm/data/rs_merger_expert.py",
+        "src/sat_rs_vlm/evaluation/rs_merger_expert.py",
+        "src/sat_rs_vlm/models/rs_merger_expert.py",
+        "src/sat_rs_vlm/training/rs_merger_expert.py",
+        "tests/unit/test_rs_merger_expert.py",
+        "tests/unit/test_rs_merger_expert_data.py",
+        "tests/unit/test_rs_merger_expert_evaluation.py",
+        "tests/unit/test_rs_merger_expert_routing.py",
+        "tests/unit/test_rs_merger_expert_training.py"
+      ]
+    },
+    "ruff_full_repo": {
+      "passed": false,
+      "error_count": 111,
+      "error_file_count": 31,
+      "status": "preexisting_repo_lint_debt",
+      "report": "reports/rs_merger_expert/full_repo_ruff_errors_20260822.txt",
+      "changed_scope_intersection_count": 0
+    },
+    "compileall": "passed",
+    "git_diff_check": "passed"
+  },
+  "data_audit": "data/processed/rs_count_merger_v1/audit.json",
+  "architecture_audit": "blocked_missing_local_model_assets",
+  "formal_training_authorized": false
+}

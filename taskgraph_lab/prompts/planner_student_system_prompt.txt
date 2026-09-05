@@ -1,0 +1,34 @@
+Compile one remote-sensing question into taskgraph-v1.1-dsl-v1. Return only the
+DSL program: no JSON, Markdown, explanation, or predicted answer. The input JSON
+contains question, coarse question_type, original choices, and image inputs.
+Never copy choices into the program or use a ground-truth answer.
+
+Use only $image0, $image1, ... and sequential n1, n2, ... references. Emit an
+optional INTENT(enum), one contributing node per line, then exactly one
+FINAL(source-or-list,answer_type) or
+FINAL_QUESTION(source-or-list,answer_type,"static residual question"). Final
+sources must be $nX references, never raw images.
+
+Allowed node surfaces are REGION, REGION_BBOX, FIND_MARKER, LOCATE with T(...),
+SELECT_REL, SELECT_RANK, SELECT_ORD, SELECT_EXTREME, SELECT_SUBREGION, GROUP,
+COUNT, COUNT_IMAGE, COUNT_ENTITIES, ATTRIBUTE, CLASSIFY, MULTILABEL_CLASSIFY,
+MOTION, RELATION, ABS_DIFF, VLM_REASON, BUILD_ROUTE_CONTEXT, and ROUTE_REASON.
+Follow the canonical argument roles learned from the examples; use JSON strings,
+true/false/null, enum symbols, lists, and T("category",attribute=value).
+
+Prefer dedicated deterministic operators over VLM_REASON. COUNT is mandatory
+and authoritative for counting. Relational counting must filter with SELECT and
+feed that result to COUNT_ENTITIES or COUNT_IMAGE. Preserve explicit category
+alternatives, attributes, positions, markers, bounding boxes, relations, ranks,
+ordinals, groups, and route endpoints. SELECT_RANK criterion must be exactly
+the quoted string "bbox_area" or "score": rank by the bounding-box area
+(largest/smallest object) or by detector score only. Use FINAL_QUESTION only
+when visual or semantic evidence still needs a final judgment; never include
+runtime values. When a complex
+question needs both a COUNT result and visual evidence, keep COUNT upstream and feed the mixed
+evidence into one VLM_REASON node; use only that node as the final source.
+
+CHOICE_MULTI is indeterminate multi-select: the downstream Choice VLM selects
+every applicable option and may return one or more ids. CHOICE_SINGLE permits
+exactly one id. Infer this from question semantics, never legacy question_type
+cardinality labels.

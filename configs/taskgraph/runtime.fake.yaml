@@ -1,0 +1,108 @@
+dataset_policy:
+  VRSBench:
+    caption: DIRECT_VLM
+    captioning: DIRECT_VLM
+    vqa: DIRECT_VLM
+    visual_question_answering: DIRECT_VLM
+    attribute: DIRECT_VLM
+    classification: DIRECT_VLM
+    count: DIRECT_DETECTION
+    counting: DIRECT_DETECTION
+    grounding: DIRECT_DETECTION
+    visual_grounding: DIRECT_DETECTION
+    referring_grounding: DIRECT_DETECTION
+    detection: DIRECT_DETECTION
+    default: DIRECT_VLM
+  LEVIR_CC:
+    default: DIRECT_VLM
+  MME_RealWorld_RS:
+    default: TASKGRAPH_UHR
+  XLRS_Bench:
+    default: TASKGRAPH_UHR
+
+providers:
+  planner:
+    kind: fixture
+    fixture_file: tests/fixtures/taskgraph/planner_fixtures.json
+  detection:
+    kind: fake
+    boxes:
+      - [0.0, 0.0, 1.0, 1.0]
+      - [1.0, 0.0, 2.0, 1.0]
+      - [2.0, 0.0, 3.0, 1.0]
+      - [3.0, 0.0, 4.0, 1.0]
+      - [4.0, 0.0, 5.0, 1.0]
+      - [5.0, 0.0, 6.0, 1.0]
+      - [6.0, 0.0, 7.0, 1.0]
+  counting:
+    kind: fake
+    boxes:
+      - [0.0, 0.0, 1.0, 1.0]
+      - [1.0, 0.0, 2.0, 1.0]
+      - [2.0, 0.0, 3.0, 1.0]
+      - [3.0, 0.0, 4.0, 1.0]
+      - [4.0, 0.0, 5.0, 1.0]
+      - [5.0, 0.0, 6.0, 1.0]
+      - [6.0, 0.0, 7.0, 1.0]
+  semantic_2b:
+    kind: fake
+    default: A
+  route_4b:
+    kind: fake
+    default: A
+  choice:
+    reuse: semantic_2b
+  region_retriever:
+    kind: fake
+    candidates: []
+
+capability_routing:
+  ontology_path: configs/eval/semantic/remote_sensing_ontology.json
+  unresolved_policy: detector_fallback
+
+input_composer:
+  candidate_halo_ratio: 0.2
+  entity_set_union_area_threshold: 0.55
+  entity_set_max_side: 1536
+  entity_set_max_crops: 16
+  route_max_side: 1536
+
+answerability:
+  enabled: true
+  return_error_result: true
+  prompt_version: answerability-v1
+
+choice:
+  backend: kv_cached_logits
+  single_choice_suffix: "\n\nFinal choice:"
+  multi_verify_template: |-
+    Verify the following option independently.
+
+    Candidate option {choice_id}: {option_text}
+    Is this option a correct answer to the original question?
+    Answer YES or NO:
+  legacy_regex_fallback: false
+  multi_select_threshold: 0.0
+  multi_empty_policy: EMPTY
+  preserve_reasoning_text: true
+
+semantic_decision:
+  enabled: true
+  legacy_text_fallback: false
+  preserve_reasoning_text: true
+  single_decision_suffix: "\n\nCanonical value:"
+  multi_select_threshold: 0.0
+  uncertainty_epsilon: 0.0
+  attributes: {}
+
+final_vlm_choice_fusion:
+  mode: auto
+  operators:
+    - VLM_REASON
+    - MATCH_CHOICE
+    - ROUTE_REASON
+    - ATTRIBUTE
+    - CLASSIFY
+    - MULTILABEL_CLASSIFY
+    - MOTION
+    - RELATION

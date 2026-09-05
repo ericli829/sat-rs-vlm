@@ -1,0 +1,28 @@
+{
+  "dataset": "XLRS-Bench-lite",
+  "records": [
+    {
+      "sample_id": "xlrs_bbox_001",
+      "path": "images/a.png",
+      "question": "Determine the color of the object within the given bounding box [1, 2, 3, 4].",
+      "multi_choice_options": ["(A) red", "(B) blue"],
+      "answer": "A",
+      "category": "Object attribute/BBox color",
+      "l2_category": "bbox",
+      "source_shard": "data-00000.arrow",
+      "source_row": 1
+    },
+    {
+      "sample_id": "xlrs_change_002",
+      "path": ["images/before.png", "images/after.png"],
+      "question": "How many differences are there in the number of farms in the two images?",
+      "multi_choice_options": ["(A) 1", "(B) 2"],
+      "answer": "B",
+      "category": "Counting/Counting with changing detection",
+      "l2_category": "change",
+      "source_shard": "data-00001.arrow",
+      "source_row": 2
+    }
+  ]
+}
+

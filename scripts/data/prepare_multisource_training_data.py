@@ -176,6 +176,25 @@ def _portable_image_path(image_path: Path, common_image_root: Path) -> str:
         ) from exc
 
 
+def _portable_source_image_path(
+    image_path: Path,
+    *,
+    source_root: Path,
+    common_image_root: Path,
+) -> str:
+    """Preserve a source's logical path when its root is a Windows junction."""
+
+    try:
+        return _portable_image_path(image_path, common_image_root)
+    except ValueError as direct_error:
+        try:
+            source_prefix = source_root.relative_to(common_image_root)
+            within_source = image_path.relative_to(source_root.resolve())
+        except ValueError:
+            raise direct_error from None
+        return (source_prefix / within_source).as_posix()
+
+
 def _rewrite_images(
     row: dict[str, Any],
     *,
@@ -198,7 +217,11 @@ def _rewrite_images(
                 raw_path = str(item_copy.get("image", ""))
                 if raw_path not in path_cache:
                     resolved = _resolve_source_image(raw_path, source_root)
-                    path_cache[raw_path] = _portable_image_path(resolved, common_image_root)
+                    path_cache[raw_path] = _portable_source_image_path(
+                        resolved,
+                        source_root=source_root,
+                        common_image_root=common_image_root,
+                    )
                 item_copy["image"] = path_cache[raw_path]
                 image_count += 1
             rewritten_content.append(item_copy)
@@ -223,7 +246,8 @@ def _load_source_split(
     common_image_root: Path,
 ) -> list[dict[str, Any]]:
     source_name = str(source["name"])
-    source_root = Path(str(source["image_root"])).expanduser().resolve()
+    # Keep the lexical root so a junction below common_image_root remains portable.
+    source_root = Path(str(source["image_root"])).expanduser().absolute()
     jsonl_path = Path(str(source[split_key])).expanduser()
     if not source_root.is_dir():
         raise FileNotFoundError(f"Source image_root does not exist: {source_root}")

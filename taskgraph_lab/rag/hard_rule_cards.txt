@@ -1,0 +1,20 @@
+RULE: When the question asks where A is relative to B, LOCATE A, LOCATE B,
+then use RELATION(A,B). RELATION returns the unknown relation. Do not replace it
+with SELECT_REL.
+
+RULE: For relational counting, LOCATE the candidates and reference, filter with
+SELECT_REL(candidates,reference,known_relation), then make COUNT consume that
+filtered result. Never count the original unfiltered candidates.
+
+RULE: SELECT_REL filters candidates when the relation is stated in the question.
+RELATION is used when the relation itself is the requested answer. Preserve
+subject/reference direction.
+
+RULE: Resolve nested referring expressions in dependency order. Attach each
+inside, near, next-to, ordinal, rank, or region constraint to the entity phrase
+it modifies. Every relation required by the question must reach the final
+dependency chain.
+
+RULE: ROUTE_PLANNING normally locates the start and goal, calls
+BUILD_ROUTE_CONTEXT(image,start,goal), and uses FINAL_QUESTION. The Planner does
+not solve the road path.

@@ -1,0 +1,41 @@
+manifest_version: uhr-locator-diagnostic-samples-v1
+dataset: MME-RealWorld-RS
+split: benchmark-test diagnostic subset
+usage: DIAGNOSTIC ONLY; NOT FOR FINAL HYPERPARAMETER TUNING
+notes: >-
+  Five representative 2K-4.4K remote-sensing images are reused only for
+  qualitative search-mechanics diagnostics. MME-RealWorld-RS exposes benchmark
+  answers rather than a development split, so these samples must not be used to
+  claim final benchmark tuning or an unbiased test score. No GT boxes are
+  supplied; evidence coverage remains an explicit human-review field.
+
+samples:
+  - id: mme_rs_position_0427_airport
+    image: ${MME_REALWORLD_RS_ROOT}/remote_sensing/dota_v2_dota_v2_dota_v2_P11095.png
+    question: Where is the airport in the picture?
+    reference_answer: (C) On the upper right side of the picture.
+    notes: 4096x4096; single obvious target and spatial localization control.
+
+  - id: mme_rs_count_3422_airplanes
+    image: ${MME_REALWORLD_RS_ROOT}/remote_sensing/dota_v2_dota_v2_dota_v2_P9449.png
+    question: How many airplanes are there in the lower left area of this picture?
+    reference_answer: (C) 25
+    notes: 4416x2701; dense tiny-object counting and tile-boundary diagnostic.
+
+  - id: mme_rs_count_2173_distributed_ships
+    image: ${MME_REALWORLD_RS_ROOT}/remote_sensing/dota_v2_dota_v2_dota_v2_P6159.png
+    question: How many ships are there in this picture?
+    reference_answer: (D) 3
+    notes: 2098x2098; distributed multi-region coverage diagnostic.
+
+  - id: mme_rs_color_0722_pier_relation
+    image: ${MME_REALWORLD_RS_ROOT}/remote_sensing/dota_v2_dota_v2_dota_v2_P11205.png
+    question: What color is the pier on the bank at the top right of the picture?
+    reference_answer: (D) Gray
+    notes: 4096x4096; relation and context-retention diagnostic.
+
+  - id: mme_rs_color_0375_harbor_building
+    image: ${MME_REALWORLD_RS_ROOT}/remote_sensing/dota_v2_dota_v2_dota_v2_P10949.png
+    question: What color is the roof of the L-shaped building in the harbor area above the picture?
+    reference_answer: (C) White
+    notes: 4096x4096; semantic retrieval and fine attribute evidence diagnostic.

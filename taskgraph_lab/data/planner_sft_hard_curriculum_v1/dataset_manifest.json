@@ -1,0 +1,93 @@
+{
+  "version": "taskgraph-planner-hard-topology-curriculum-v1",
+  "source_manifest": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\taskgraph_lab\\data\\planner_sft_hard_augmented_v1_20260901_173936\\dataset_manifest.json",
+  "source_manifest_sha256": "b381c2a8252cd2808b2f5d04e323d29b802db28ff3c2c122b981fe64e49f29f5",
+  "source_train_file": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\taskgraph_lab\\data\\planner_sft_hard_augmented_v1_20260901_173936\\train.jsonl",
+  "source_train_sha256": "0984aca01a88a18500c78b78402ebefe94e8372383d9ca7bd2de3fce8f760ca5",
+  "source_train_unique_count": 2815,
+  "heldout_file": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\taskgraph_lab\\data\\planner_sft_hard_augmented_v1_20260901_173936\\test.jsonl",
+  "heldout_sha256": "2b56f29a1dce715d20ba8b4a3776bc0089aeda139fdd4f0a104b9e5c40bfc4e2",
+  "heldout_count": 217,
+  "train_test_source_overlap_count": 0,
+  "curriculum_policy": {
+    "easy_factor": 1,
+    "hard_base_factor": 2,
+    "route_bonus": 1,
+    "complex_bonus": 2,
+    "node_7_9_bonus": 1,
+    "node_10_plus_bonus": 2,
+    "hard_intents": [
+      "COMPLEX_REASONING",
+      "OBJECT_RELATION",
+      "RELATIONAL_COUNT",
+      "ROUTE_PLANNING"
+    ]
+  },
+  "factor_distribution": {
+    "1": 1977,
+    "2": 620,
+    "3": 167,
+    "4": 39,
+    "5": 12
+  },
+  "base_intent_distribution": {
+    "ATTRIBUTE_QUERY": 694,
+    "CHANGE_COUNT": 25,
+    "COMPLEX_REASONING": 20,
+    "MOTION_QUERY": 46,
+    "MULTILABEL_CLASSIFICATION": 80,
+    "OBJECT_CLASSIFICATION": 256,
+    "OBJECT_RELATION": 250,
+    "OTHER": 183,
+    "REGIONAL_CLASSIFICATION": 214,
+    "RELATIONAL_COUNT": 487,
+    "ROUTE_PLANNING": 81,
+    "SIMPLE_COUNT": 479
+  },
+  "exposure_intent_distribution": {
+    "ATTRIBUTE_QUERY": 694,
+    "CHANGE_COUNT": 25,
+    "COMPLEX_REASONING": 81,
+    "MOTION_QUERY": 46,
+    "MULTILABEL_CLASSIFICATION": 80,
+    "OBJECT_CLASSIFICATION": 256,
+    "OBJECT_RELATION": 531,
+    "OTHER": 183,
+    "REGIONAL_CLASSIFICATION": 214,
+    "RELATIONAL_COUNT": 1062,
+    "ROUTE_PLANNING": 283,
+    "SIMPLE_COUNT": 479
+  },
+  "base_node_bucket_distribution": {
+    "10_plus": 13,
+    "4_6": 827,
+    "7_9": 163,
+    "short": 1812
+  },
+  "exposure_node_bucket_distribution": {
+    "10_plus": 63,
+    "4_6": 1530,
+    "7_9": 451,
+    "short": 1890
+  },
+  "population_count": 4151,
+  "training_population_count": 3934,
+  "training_unique_source_count": 2815,
+  "held_out_test_count": 217,
+  "target_format": "dsl",
+  "planner_dsl_version": "taskgraph-v1.1-dsl-v1",
+  "prompt_version": "taskgraph-v1.1-strict-batch-contract-v3",
+  "splits": {
+    "train": {
+      "path": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\taskgraph_lab\\data\\planner_sft_hard_curriculum_v1\\train.jsonl",
+      "sha256": "7e3f096150637277afefeadfaa62bceaa9ed816c665587997c9bf95b9d725285",
+      "count": 3934,
+      "unique_source_count": 2815
+    },
+    "test": {
+      "path": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\taskgraph_lab\\data\\planner_sft_hard_curriculum_v1\\test.jsonl",
+      "sha256": "2b56f29a1dce715d20ba8b4a3776bc0089aeda139fdd4f0a104b9e5c40bfc4e2",
+      "count": 217
+    }
+  }
+}

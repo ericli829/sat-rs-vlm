@@ -1,0 +1,163 @@
+from __future__ import annotations
+
+from enum import Enum
+
+
+class StringEnum(str, Enum):
+    pass
+
+
+class QuestionType(StringEnum):
+    MULTIPLE_CHOICE = "MULTIPLE_CHOICE"
+    # Retained for backward compatibility with already-normalized datasets.
+    MULTIPLE_CHOICE_SINGLE = "MULTIPLE_CHOICE_SINGLE"
+    MULTIPLE_CHOICE_MULTI = "MULTIPLE_CHOICE_MULTI"
+    FREE_FORM = "FREE_FORM"
+    BOOLEAN = "BOOLEAN"
+    INTEGER = "INTEGER"
+
+
+class IntentLabel(StringEnum):
+    SIMPLE_COUNT = "SIMPLE_COUNT"
+    RELATIONAL_COUNT = "RELATIONAL_COUNT"
+    ATTRIBUTE_QUERY = "ATTRIBUTE_QUERY"
+    OBJECT_RELATION = "OBJECT_RELATION"
+    OBJECT_CLASSIFICATION = "OBJECT_CLASSIFICATION"
+    REGIONAL_CLASSIFICATION = "REGIONAL_CLASSIFICATION"
+    MULTILABEL_CLASSIFICATION = "MULTILABEL_CLASSIFICATION"
+    MOTION_QUERY = "MOTION_QUERY"
+    CHANGE_COUNT = "CHANGE_COUNT"
+    ROUTE_PLANNING = "ROUTE_PLANNING"
+    COMPLEX_REASONING = "COMPLEX_REASONING"
+    OTHER = "OTHER"
+
+
+class AnswerType(StringEnum):
+    CHOICE_SINGLE = "CHOICE_SINGLE"
+    CHOICE_MULTI = "CHOICE_MULTI"
+    INTEGER = "INTEGER"
+    BOOLEAN = "BOOLEAN"
+    LABEL = "LABEL"
+    LABEL_SET = "LABEL_SET"
+    TEXT = "TEXT"
+
+
+class OperatorName(StringEnum):
+    REGION = "REGION"
+    REGION_FROM_BBOX = "REGION_FROM_BBOX"
+    FIND_MARKER = "FIND_MARKER"
+    LOCATE = "LOCATE"
+    SELECT = "SELECT"
+    GROUP = "GROUP"
+    COUNT = "COUNT"
+    ATTRIBUTE = "ATTRIBUTE"
+    CLASSIFY = "CLASSIFY"
+    MULTILABEL_CLASSIFY = "MULTILABEL_CLASSIFY"
+    MOTION = "MOTION"
+    RELATION = "RELATION"
+    ABS_DIFF = "ABS_DIFF"
+    VLM_REASON = "VLM_REASON"
+    BUILD_ROUTE_CONTEXT = "BUILD_ROUTE_CONTEXT"
+    ROUTE_REASON = "ROUTE_REASON"
+    MATCH_CHOICE = "MATCH_CHOICE"
+
+
+class RegionPosition(StringEnum):
+    TOP = "TOP"
+    BOTTOM = "BOTTOM"
+    LEFT = "LEFT"
+    RIGHT = "RIGHT"
+    CENTER = "CENTER"
+    TOP_LEFT = "TOP_LEFT"
+    TOP_RIGHT = "TOP_RIGHT"
+    BOTTOM_LEFT = "BOTTOM_LEFT"
+    BOTTOM_RIGHT = "BOTTOM_RIGHT"
+    TOP_CENTER = "TOP_CENTER"
+    BOTTOM_CENTER = "BOTTOM_CENTER"
+    CENTER_LEFT = "CENTER_LEFT"
+    CENTER_RIGHT = "CENTER_RIGHT"
+
+
+class SelectMode(StringEnum):
+    RELATION = "RELATION"
+    RANK = "RANK"
+    ORDINAL = "ORDINAL"
+    EXTREME = "EXTREME"
+    SUBREGION = "SUBREGION"
+
+
+class SpatialRelation(StringEnum):
+    LEFT_OF = "LEFT_OF"
+    RIGHT_OF = "RIGHT_OF"
+    ABOVE = "ABOVE"
+    BELOW = "BELOW"
+    UPPER_LEFT_OF = "UPPER_LEFT_OF"
+    UPPER_RIGHT_OF = "UPPER_RIGHT_OF"
+    LOWER_LEFT_OF = "LOWER_LEFT_OF"
+    LOWER_RIGHT_OF = "LOWER_RIGHT_OF"
+    NEAR = "NEAR"
+    NEXT_TO = "NEXT_TO"
+    INSIDE = "INSIDE"
+    OUTSIDE = "OUTSIDE"
+    BETWEEN = "BETWEEN"
+    AROUND = "AROUND"
+    IN_FRONT_OF = "IN_FRONT_OF"
+    BEHIND = "BEHIND"
+
+
+class SortOrder(StringEnum):
+    ASCENDING = "ASCENDING"
+    DESCENDING = "DESCENDING"
+    TOP_TO_BOTTOM = "TOP_TO_BOTTOM"
+    BOTTOM_TO_TOP = "BOTTOM_TO_TOP"
+    LEFT_TO_RIGHT = "LEFT_TO_RIGHT"
+    RIGHT_TO_LEFT = "RIGHT_TO_LEFT"
+
+
+class ExtremeDirection(StringEnum):
+    LEFTMOST = "LEFTMOST"
+    RIGHTMOST = "RIGHTMOST"
+    TOPMOST = "TOPMOST"
+    BOTTOMMOST = "BOTTOMMOST"
+
+
+class SubregionType(StringEnum):
+    LEFT_SIDE = "LEFT_SIDE"
+    RIGHT_SIDE = "RIGHT_SIDE"
+    ABOVE = "ABOVE"
+    BELOW = "BELOW"
+    INSIDE = "INSIDE"
+    OUTSIDE = "OUTSIDE"
+    BOTH_SIDES = "BOTH_SIDES"
+    AROUND = "AROUND"
+
+
+class GroupMode(StringEnum):
+    ROW = "ROW"
+    COLUMN = "COLUMN"
+    CLUSTER = "CLUSTER"
+
+
+class RuntimeType(StringEnum):
+    IMAGE_REF = "ImageRef"
+    REGION = "Region"
+    REGION_SET = "RegionSet"
+    ENTITY = "Entity"
+    ENTITY_SET = "EntitySet"
+    SCALAR_INT = "ScalarInt"
+    SCALAR_FLOAT = "ScalarFloat"
+    BOOLEAN = "Boolean"
+    LABEL = "Label"
+    LABEL_SET = "LabelSet"
+    ROUTE_CONTEXT = "RouteContext"
+    EVIDENCE_SET = "EvidenceSet"
+    ANSWER = "Answer"
+    TEXT = "Text"
+
+
+class GraphQuality(StringEnum):
+    VALID = "VALID"
+    VALID_BUT_NON_MINIMAL = "VALID_BUT_NON_MINIMAL"
+    SEMANTICALLY_AMBIGUOUS = "SEMANTICALLY_AMBIGUOUS"
+    TYPE_ERROR = "TYPE_ERROR"
+    LOGIC_ERROR = "LOGIC_ERROR"

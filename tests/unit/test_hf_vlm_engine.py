@@ -29,6 +29,10 @@ class FakeProcessor:
         self.decoded_ids: Any = None
         self.decode_kwargs: dict[str, Any] = {}
         self.batch = FakeBatch(input_ids=[[1, 2, 3]], pixel_values="pixels")
+        self.tokenizer = SimpleNamespace(
+            eos_token_id=99,
+            encode=lambda value, add_special_tokens=False: [ord(token) for token in value],
+        )
 
     def apply_chat_template(
         self,
@@ -204,6 +208,23 @@ def test_generate_uses_multimodal_chat_template_and_decodes_only_new_tokens(
         "skip_special_tokens": True,
         "clean_up_tokenization_spaces": False,
     }
+
+
+def test_selection_generation_passes_a_finite_token_mask(monkeypatch: pytest.MonkeyPatch) -> None:
+    transformers = SimpleNamespace(
+        AutoProcessor=FakeProcessorLoader,
+        Qwen3VLForConditionalGeneration=FakeQwenModelLoader,
+    )
+    install_fake_modules(monkeypatch, transformers)
+    engine = HuggingFaceVLMEngine("local/qwen3-vl")
+
+    engine._generate("select", [], allowed_outputs=("NONE", "A", "A,C"))
+
+    mask = FakeQwenModelLoader.model.generate_kwargs["prefix_allowed_tokens_fn"]
+    assert FakeQwenModelLoader.model.generate_kwargs["max_new_tokens"] == 6
+    assert mask(0, [1, 2, 3]) == [ord("A"), ord("N")]
+    assert mask(0, [1, 2, 3, ord("A")]) == [ord(","), 99]
+    assert mask(0, [1, 2, 3, ord("A"), ord(",")]) == [ord("C")]
 
 
 def test_engine_reports_pytorch_dll_load_failure(monkeypatch: pytest.MonkeyPatch) -> None:

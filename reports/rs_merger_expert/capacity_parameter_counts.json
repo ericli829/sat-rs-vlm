@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "architecture": {
+    "visual_hidden_size": 1024,
+    "llm_hidden_size": 2560,
+    "spatial_merge_size": 2,
+    "tap_count": 4
+  },
+  "count_head_parameter_count": 1324560,
+  "capacity_grid": {
+    "W512_D1": {"per_tap": 6040064, "merger_total": 24160256},
+    "W512_D2": {"per_tap": 6307840, "merger_total": 25231360},
+    "W768_D1": {"per_tap": 9254400, "merger_total": 37017600},
+    "W768_D2": {"per_tap": 9852672, "merger_total": 39410688},
+    "W1024_D1": {"per_tap": 12599808, "merger_total": 50399232},
+    "W1024_D2": {"per_tap": 13659648, "merger_total": 54638592}
+  },
+  "formal_variants": {
+    "C2_LM_4E": 24160256,
+    "C2_COUNT_4E": 25484816,
+    "C3_LM_4E": 25470976,
+    "C3_COUNT_4E": 26795536,
+    "C4_WIDE_LM": 50399232,
+    "C4_WIDE_COUNT": 51723792
+  },
+  "interface_lora_parameter_count": 1310720
+}

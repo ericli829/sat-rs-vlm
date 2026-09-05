@@ -1,0 +1,246 @@
+dataset_policy:
+  VRSBench:
+    caption: DIRECT_VLM
+    captioning: DIRECT_VLM
+    vqa: DIRECT_VLM
+    visual_question_answering: DIRECT_VLM
+    attribute: DIRECT_VLM
+    classification: DIRECT_VLM
+    # Counting/grounding/detection route fully through the semantic 2B VLM:
+    # the LAE detector under-counts small objects and the Choice VLM already
+    # outperforms it on VRSBench visuals.
+    count: DIRECT_VLM
+    counting: DIRECT_VLM
+    grounding: DIRECT_VLM
+    visual_grounding: DIRECT_VLM
+    referring_grounding: DIRECT_VLM
+    detection: DIRECT_VLM
+    default: DIRECT_VLM
+  LEVIR_CC:
+    default: DIRECT_VLM
+  MME_RealWorld_RS:
+    default: TASKGRAPH_UHR
+  XLRS_Bench:
+    default: TASKGRAPH_UHR
+
+providers:
+  planner:
+    kind: qwen3vl_lora
+    role: planner_4b
+    model_id: ${QWEN3VL_4B_MODEL_DIR}
+    adapter_path: ${QWEN3VL_4B_PLANNER_LORA}
+    processor_id: ${QWEN3VL_4B_MODEL_DIR}
+    device: auto
+    dtype: bfloat16
+    local_files_only: true
+    trust_remote_code: true
+    max_new_tokens: 512
+    max_prompt_tokens: 2048
+    max_attempts: 2
+    constrained_decoding: true
+    constraint_top_k: 64
+    constraint_max_candidate_checks: 256
+    constraint_max_nodes: 24
+    repeat_guard_repetitions: 4
+    max_finish_node_tokens: 32
+  detection:
+    kind: clip_rerank
+    locate_detector:
+      # 0.15 -> 0.05: LAE-DINO needs a low threshold for small remote-sensing
+      # targets (official 0.4 finds nothing; the linked report proves 0.05
+      # scale thresholds recover small cars/buildings).  Downstream CLIP
+      # reranking and referent refinement keep precision.
+      score_threshold: 0.05
+      max_candidates: 16
+      clip_rerank_top_k: 16
+    detector_weight: 0.35
+    retriever_weight: 0.65
+    # null -> 64: cap the clip/GeoRSCLIP rerank pool at the top-64 candidates
+    # by detector score.  Without a cap the 0.05 LAE pool (500..600 boxes)
+    # makes the rerank dominate LOCATE (~127s/sample, 76s in rerank).  The
+    # fused top-16 is preserved; only lower-confidence candidates skip the
+    # rerank.
+    rerank_pool_k: 64
+    fail_open: true
+    retriever:
+      provider: georsclip
+      config:
+        checkpoint: ${GEORSCLIP_CHECKPOINT}
+        model_id: GeoRSCLIP-ViT-B-32
+        arch: ViT-B-32
+        device: auto
+        batch_size: 48
+        cache_dir: reports/cache/georsclip_detector_rerank
+        decoded_image_cache_size: 2
+        decoded_image_cache_max_pixels: 4000000
+        image_embedding_cache_size: 1024
+    base_provider: tiled
+    base_config:
+      tile_size: 1333
+      overlap_ratio: 0.15
+      global_nms_iou: 0.4
+      parallel_workers: auto
+      # explicit 5 (max LAE parallelism).  auto budgeting resolved only 4
+      # (25.3GB base); explicit 5 -> base 28.2GB, peak ~32GB right at the
+      # edge — occasional OOM on the heaviest samples is accepted.
+      parallel_workers: 5
+      parallel_max_workers: 5
+      parallel_worker_vram_gb: 4.0
+      parallel_vram_reserve_gb: 6.0
+      proposal_cache_size: 8
+      base_provider: lae_dino_lae1m
+      base_config:
+        source_root: ${LAE_DINO_SOURCE_ROOT}
+        config_path: ${LAE_DINO_CONFIG_LAE1M}
+        checkpoint: ${LAE_DINO_CHECKPOINT_LAE1M}
+        bert_root: ${LAE_DINO_BERT_ROOT}
+        worker_python: ${LAE_DINO_PYTHON}
+        stderr_log: ${LAE_DINO_STDERR_LOG}
+        score_threshold: 0.05
+  counting:
+    kind: counting_system
+    detector:
+      kind: lae_dino_lae1m
+      source_root: ${LAE_DINO_SOURCE_ROOT}
+      config_path: ${LAE_DINO_CONFIG_LAE1M}
+      checkpoint: ${LAE_DINO_CHECKPOINT_LAE1M}
+      bert_root: ${LAE_DINO_BERT_ROOT}
+      worker_python: ${LAE_DINO_PYTHON}
+      stderr_log: ${LAE_DINO_STDERR_LOG}
+      # 0.0 -> 0.25: the 0.05 box floor floods the count head (raw 1200..21000
+      # boxes -> fused 27..153 on refs 1..11).  Raise the effective LAE cut
+      # (max(detector.score_threshold, 0.05)) so the head sees sane pools.
+      score_threshold: 0.25
+      top_k: 300
+    scale:
+      global:
+        enabled: false
+      native:
+        enabled: true
+        tile_size: 1333
+        overlap: 200
+      fine:
+        enabled: false
+    count:
+      # 0.10 did NOT help: at 0.05 box floor the LAE raw pool is huge
+      # (21000 boxes -> fuse 11..202 vs refs 1..11), i.e. over-count.
+      # Restore 0.20 for the count-head fusion; LOCATE keeps 0.05 because
+      # CLIP reranking + max_candidates preserve precision there.
+      score_threshold: 0.20
+      nms_iou: 0.40
+      cross_scale_iou: 0.50
+      keep_raw_proposals: true
+      max_detections_per_tile: 300
+    gate:
+      enabled: false
+  semantic_2b:
+    kind: qwen3_vl
+    backend: huggingface
+    model_id: ${QWEN3VL_2B_MODEL_DIR}
+    adapter_path: ${QWEN3VL_2B_SEMANTIC_LORA}
+    device: auto
+    # auto loads the model as fp32 (8.6GB); bfloat16 halves it with negligible
+    # accuracy loss — frees 4.3GB resident + peak headroom.
+    dtype: bfloat16
+    local_files_only: true
+    max_new_tokens: 128
+    # 640x640 vision budget: two workers keep ~27.6GB resident, so multi-image
+    # semantic steps (SELECT/RELATION) need the KV increment cut to fit 31.5GB.
+    max_pixels: 409600
+    # Compatibility fallback only: normal SELECT uses free reasoning followed
+    # by KV-cached candidate scoring; Caption/VQA remain unconstrained.
+    selection_constrained_decoding: true
+  route_4b:
+    kind: qwen3_vl
+    backend: huggingface
+    model_id: ${QWEN3VL_4B_MODEL_DIR}
+    device: auto
+    dtype: bfloat16
+    local_files_only: true
+    max_new_tokens: 192
+  choice:
+    reuse: semantic_2b
+  region_retriever:
+    # Production UHR path: locator config -> hierarchical beam/refinement -> GeoRSCLIP.
+    # The flat `kind: georsclip` form remains available as a baseline/debug adapter.
+    kind: uhr_locator
+    config_path: configs/locator/uhr_hierarchical.georsclip.yaml
+
+capability_routing:
+  ontology_path: configs/eval/semantic/remote_sensing_ontology.json
+  # Open-vocabulary targets (XLRS trees, mines, roundabouts...) run the 3x3
+  # grid + GeoRSCLIP cross-scoring retriever (~10s) instead of the LAE
+  # 81-tile scan (~72s).  LAE remains the detector fallback when the
+  # retriever returns no candidates.
+  unresolved_policy: retriever_fallback
+
+locate_refinement:
+  # Only affects singleton-requiring LOCATE (attributes / direct final /
+  # singular consumer triggers; SELECT/GROUP/COUNT/RELATION paths are
+  # untouched).  semantic_weight 0.0 -> no VLM verification; the single
+  # highest-scoring (LAE/clip-rerank fused) candidate is pinned.
+  enabled: true
+  max_candidates: 8
+  semantic_weight: 0.0
+  geometry_weight: 0.25
+  minimum_margin: 0.02
+
+input_composer:
+  save_intermediate_artifacts: false
+  compact_trace: true
+  candidate_halo_ratio: 0.2
+  entity_set_union_area_threshold: 0.55
+  # 1536 -> 1024: RELATION composes TWO candidate visuals; at 1536 the vision
+  # prefill needs 2.3GB and OOMs against the resident planner+2B+sidecars.
+  entity_set_max_side: 1024
+  # 16 -> 4: SELECT/RELATION semantic steps pool up to 16 candidate crops;
+  # at 1024px each the vision KV OOMs (2-5GB).  Four candidates keeps the
+  # whole-scope evidence while staying inside the 31GB budget.
+  entity_set_max_crops: 4
+  route_max_side: 1536
+
+# Auxiliary service only. It reuses semantic_2b and never controls COUNT or graph traversal.
+answerability:
+  enabled: true
+  return_error_result: true
+  prompt_version: answerability-v1
+
+runtime_memory:
+  path: data/processed/taskgraph_qwen_test.jsonl
+  recording: true
+
+choice:
+  backend: kv_cached_logits
+  single_choice_suffix: "\n\nFinal choice:"
+  multi_verify_template: |-
+    Verify the following option independently.
+
+    Candidate option {choice_id}: {option_text}
+    Is this option a correct answer to the original question?
+    Answer YES or NO:
+  legacy_regex_fallback: false
+  multi_select_threshold: 0.0
+  multi_empty_policy: EMPTY
+  preserve_reasoning_text: true
+
+semantic_decision:
+  enabled: true
+  legacy_text_fallback: false
+  preserve_reasoning_text: true
+  single_decision_suffix: "\n\nCanonical value:"
+  multi_select_threshold: 0.0
+  uncertainty_epsilon: 0.0
+  # Populate only from an existing project ontology or deployment contract.
+  attributes: {}
+
+final_vlm_choice_fusion:
+  mode: auto
+  operators:
+    - VLM_REASON
+    - MATCH_CHOICE
+    - ROUTE_REASON
+    - ATTRIBUTE
+    - CLASSIFY
+    - MULTILABEL_CLASSIFY
+    - MOTION
+    - RELATION

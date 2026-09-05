@@ -23,6 +23,8 @@ datasets/
 data/raw/
 data/processed/
 data/processed/e1/
+!data/processed/taskgraph_qwen_test.jsonl
+!data/processed/qwen3vl_test.jsonl
 *.tar
 *.tar.gz
 *.tar.zst
@@ -43,6 +45,7 @@ sat-rs-vlm-local-plugins/
 plugin_checkpoints/
 plugin_reports/
 reports/debug/multitask_loss_bias/
+artifacts/uhr_locator_sweeps/
 
 # Locally generated evaluation tier JSONL files. Historical files already
 # tracked under data/evaluation/tiers/ remain versioned and are not removed.

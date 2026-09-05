@@ -1,0 +1,43 @@
+schema_version: "1.0"
+evaluation:
+  scope: e_count_v2
+  input: data/evaluation/tiers_v2/e_count_v2.jsonl
+  output_dir: reports/evaluation/vlm_fo1/lae_dino_lae1m
+  expected_population: 377
+  max_samples: null
+data:
+  image_root: "${VLM_FO1_IMAGE_ROOT}"
+worker:
+  python: "${VLM_FO1_PYTHON}"
+  script: scripts/integrations/vlm_fo1_worker.py
+  backend: official
+  runtime_mode: shared_rs_vlm
+  proposal_backend: precomputed
+  upn_checkpoint: ""
+  attention_backend: sdpa
+model:
+  path: "${VLM_FO1_MODEL}"
+  device: cuda
+proposal:
+  provider: lae_dino_lae1m
+  source_root: "${LAE_DINO_SOURCE_ROOT}"
+  config_path: "${LAE_DINO_CONFIG_LAE1M}"
+  checkpoint: "${LAE_DINO_CHECKPOINT_LAE1M}"
+  checkpoint_training_regime: lae1m_pretrained
+  source_revision: 6b1519626e39d1f39f8ed1f38761c20f7e0e8c35
+  inference_query_mode: target_conditioned_text_prompt
+  bert_root: "${LAE_DINO_BERT_ROOT}"
+  worker_python: "${LAE_DINO_PYTHON}"
+  precomputed_file: data/evaluation/proposals/lae_dino_lae1m_e_count_v2.jsonl
+  cache_dir: "${VLM_FO1_PROPOSAL_CACHE_DIR}"
+  score_threshold: 0.3
+  nms_threshold: null
+  top_k: 100
+generation:
+  max_new_tokens: 4096
+  temperature: 0.0
+  top_p: 0.05
+  prompt_profile: official_fo1
+  count_source: region
+provenance:
+  audit: reports/integrations/vlm_fo1_source_audit.json

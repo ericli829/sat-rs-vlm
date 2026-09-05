@@ -38,6 +38,7 @@ class ChangePredictionResult:
     value: int | None
     normalized_text: str
     reason: str | None = None
+    match_type: str | None = None
 
 
 _INTEGER_PATTERN = re.compile(r"(?<![\w.])-?\d+(?![\w.])")
@@ -92,6 +93,123 @@ _NO_CHANGE_EXPRESSIONS = {
     "nothing has changed",
     "unchanged",
 }
+_CONTEXTUAL_NO_CHANGE_EXPRESSIONS = {"no change", *_NO_CHANGE_EXPRESSIONS}
+
+# Parser versions are deliberately independent: legacy evaluation keeps its
+# historical exact-expression behavior, while the contextual parser is used
+# only by the v1.8 server/local semantic workflow.
+LEGACY_CHANGE_PARSER_VERSION = "legacy_exact_no_change_v1"
+CONTEXTUAL_CHANGE_PARSER_VERSION = "levir_contextual_no_change_v3"
+CHANGE_PARSER_VERSION = CONTEXTUAL_CHANGE_PARSER_VERSION
+CHANGE_DECISION_VERSION = "explicit_binary_priority_v1"
+
+_ANSWER_PREFIX_PATTERN = re.compile(r"^(?:(?:the )?answer|prediction|result)(?: is)? ")
+_NO_CHANGE_QUALIFIER = (
+    r"(?:(?:significant|visible|discernible|detectable|observable|noticeable|"
+    r"obvious|major|meaningful|notable|substantial|apparent) )?"
+)
+_GLOBAL_SCOPE = (
+    r"(?: (?:between|across|in) (?:the )?"
+    r"(?:(?:two|both|first and second|second and first) )?"
+    r"(?:images?|scenes?|pictures?|views?|area|region))?"
+)
+_NO_CHANGE_PREDICATE = (
+    r"(?:"
+    r" (?:has|have) occurred"
+    r"| occurred"
+    r"| (?:observed|detected|seen|found|noticed)"
+    r"| (?:has|have) been (?:observed|detected|seen|found|noticed)"
+    r"| (?:is|are|was|were|can be|could be) "
+    r"(?:observed|detected|seen|found|noticed|visible|apparent)"
+    r")?"
+)
+_GLOBAL_IMAGE_SUBJECT = (
+    r"(?:the )?(?:(?:two|both|first and second|second and first) )?"
+    r"(?:images?|scenes?|pictures?|views?)"
+)
+_NO_CHANGE_PATTERNS = tuple(
+    re.compile(pattern)
+    for pattern in (
+        (
+            rf"(?:there (?:is|are|was|were|has been|have been) )?no "
+            rf"{_NO_CHANGE_QUALIFIER}(?:changes?|differences?)"
+            rf"{_NO_CHANGE_PREDICATE}{_GLOBAL_SCOPE}"
+        ),
+        (
+            rf"{_GLOBAL_IMAGE_SUBJECT} "
+            rf"(?:is|are|was|were|remain|remains|remained|appear|appears|appeared|"
+            r"seem|seems|seemed|look|looks|looked) "
+            r"(?:identical|unchanged|the same(?: as before)?)"
+        ),
+        (
+            r"the (?:first|second) (?:image|scene|picture|view) "
+            r"(?:is|was|appears|appeared|seems|seemed|looks|looked) "
+            r"(?:identical to|the same as) the "
+            r"(?:first|second) (?:image|scene|picture|view)"
+        ),
+        (
+            r"(?:the )?(?:scene|area|region|landscape) "
+            r"(?:is|was|remains|remained|appears|appeared|seems|seemed) "
+            r"(?:unchanged|the same(?: as before)?)"
+        ),
+        rf"{_GLOBAL_IMAGE_SUBJECT} (?:has|have|had) not changed",
+        r"(?:the )?(?:scene|area|region|landscape) (?:has|had) not changed",
+        r"(?:almost )?nothing (?:has |had )?changed",
+        (
+            rf"{_GLOBAL_IMAGE_SUBJECT} "
+            rf"(?:show|shows|showed|indicate|indicates|indicated) no "
+            rf"{_NO_CHANGE_QUALIFIER}(?:changes?|differences?)"
+        ),
+    )
+)
+_CLAUSE_SEPARATOR_PATTERN = re.compile(r"[.!?;\n]+")
+_CONTEXTUAL_NO_CHANGE_PATTERNS = tuple(
+    re.compile(pattern)
+    for pattern in (
+        rf"\bno {_NO_CHANGE_QUALIFIER}(?:changes?|differences?)\b",
+        (
+            r"\b(?:the )?(?:(?:two|both|first and second|second and first) )?"
+            r"(?:images|scenes|pictures|views) "
+            r"(?:are|were|remain|remained|appear|appeared|seem|seemed|look|looked) "
+            r"(?:identical|unchanged|the same)\b"
+        ),
+        (
+            r"\bthe (?:first|second) (?:image|scene|picture|view) "
+            r"(?:is|was|appears|appeared|seems|seemed|looks|looked) "
+            r"(?:identical to|the same as) the "
+            r"(?:first|second) (?:image|scene|picture|view)\b"
+        ),
+        r"\b(?:the )?(?:overall )?(?:scene|landscape|area) remains? (?:unchanged|the same)\b",
+        r"\b(?:almost )?nothing (?:has |had )?changed\b",
+    )
+)
+_POSITIVE_CHANGE_EVIDENCE_PATTERNS = tuple(
+    re.compile(pattern)
+    for pattern in (
+        (
+            r"\b(?:shows?|showed|indicates?|indicated|describes?|described) "
+            r"(?:a |an |the )?(?:(?:significant|noticeable|visible|clear|major) )?"
+            r"change\b"
+        ),
+        r"\b(?:main|primary|most noticeable|significant|noticeable|major) change\b",
+        (
+            r"\b(?:appeared|disappeared|removed|added|replaced|demolished|constructed|"
+            r"built|altered|destroyed|expanded|reduced)\b"
+        ),
+        (
+            r"\b(?:is|are|was|were|has been|have been|had been) "
+            r"(?:changed|altered|removed|added|replaced|demolished|constructed|built)\b"
+        ),
+        (
+            r"\b(?:new|additional) (?:building|house|road|street|vehicle|car|truck|"
+            r"structure|path|pond|pool|field|facility|construction|development)\b"
+        ),
+        r"\b(?:not present|no longer present|no longer visible|now absent)\b",
+        r"\bdifferent (?:bend|color|layout|position|appearance|shape|roof|surface|texture)\b",
+        r"\bnot (?:directly )?related\b",
+    )
+)
+_STRUCTURED_CHANGE_KEYS = ("changeflag", "change_flag", "changed", "has_change")
 
 
 def extract_json_object(text: str) -> JsonObjectResult:
@@ -322,6 +440,111 @@ def normalize_text(text: str) -> str:
     value = re.sub(r"[\"'`]", "", text.strip().lower())
     value = re.sub(r"[^\w\u4e00-\u9fff]+", " ", value, flags=re.UNICODE)
     return re.sub(r"\s+", " ", value).strip()
+
+
+def _binary_change_value(value: Any) -> int | None:
+    """Parse an explicitly binary change value without caption-level inference."""
+
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float)) and value in {0, 1}:
+        return int(value)
+    if isinstance(value, str):
+        normalized = normalize_text(value).replace("_", " ")
+        if normalized in {"0", "no", "false", "no change", "unchanged"}:
+            return 0
+        if normalized in {"1", "yes", "true", "change", "changed", "has change"}:
+            return 1
+    return None
+
+
+def parse_explicit_change_prediction(text: str) -> ChangePredictionResult:
+    """Parse only an explicit binary answer, without caption-level inference."""
+
+    normalized = normalize_text(text)
+    if not normalized:
+        return ChangePredictionResult(None, normalized, "empty_prediction", "unresolved")
+
+    binary = _binary_change_value(normalized)
+    if binary is not None:
+        return ChangePredictionResult(binary, normalized, None, "explicit_binary_text")
+
+    candidate = _ANSWER_PREFIX_PATTERN.sub("", normalized, count=1)
+    binary = _binary_change_value(candidate)
+    if binary is not None:
+        return ChangePredictionResult(binary, normalized, None, "explicit_binary_text")
+
+    payload = extract_json_object(text).payload
+    if payload is not None:
+        for key in _STRUCTURED_CHANGE_KEYS:
+            if key not in payload:
+                continue
+            binary = _binary_change_value(payload[key])
+            if binary is not None:
+                return ChangePredictionResult(
+                    binary,
+                    normalized,
+                    None,
+                    "explicit_structured_binary",
+                )
+    return ChangePredictionResult(None, normalized, "explicit_binary_unresolved", "unresolved")
+
+
+def _is_complete_no_change_clause(text: str) -> bool:
+    candidate = _ANSWER_PREFIX_PATTERN.sub("", normalize_text(text), count=1)
+    return bool(candidate) and (
+        candidate in _CONTEXTUAL_NO_CHANGE_EXPRESSIONS
+        or any(pattern.fullmatch(candidate) for pattern in _NO_CHANGE_PATTERNS)
+    )
+
+
+def _has_contextual_no_change_decision(text: str) -> bool:
+    normalized = normalize_text(text)
+    has_no_change_cue = any(
+        pattern.search(normalized) for pattern in _CONTEXTUAL_NO_CHANGE_PATTERNS
+    )
+    has_positive_evidence = any(
+        pattern.search(normalized) for pattern in _POSITIVE_CHANGE_EVIDENCE_PATTERNS
+    )
+    return has_no_change_cue and not has_positive_evidence
+
+
+def parse_change_prediction_contextual_v3(text: str) -> ChangePredictionResult:
+    """Parse LEVIR captions with the versioned contextual semantic rules."""
+
+    normalized = normalize_text(text)
+    if not normalized:
+        return ChangePredictionResult(None, normalized, "empty_prediction", "unresolved")
+
+    binary = _binary_change_value(normalized)
+    if binary is not None:
+        return ChangePredictionResult(binary, normalized, None, "binary_literal")
+
+    payload = extract_json_object(text).payload
+    if payload is not None:
+        for key in _STRUCTURED_CHANGE_KEYS:
+            if key not in payload:
+                continue
+            binary = _binary_change_value(payload[key])
+            if binary is not None:
+                return ChangePredictionResult(binary, normalized, None, "structured_binary")
+
+    candidate = _ANSWER_PREFIX_PATTERN.sub("", normalized, count=1)
+    if candidate in _CONTEXTUAL_NO_CHANGE_EXPRESSIONS:
+        return ChangePredictionResult(0, normalized, None, "exact_no_change")
+    if any(pattern.fullmatch(candidate) for pattern in _NO_CHANGE_PATTERNS):
+        return ChangePredictionResult(0, normalized, None, "pattern_no_change")
+
+    clauses = [
+        clause
+        for clause in _CLAUSE_SEPARATOR_PATTERN.split(text)
+        if normalize_text(clause)
+    ]
+    if len(clauses) > 1 and all(_is_complete_no_change_clause(clause) for clause in clauses):
+        return ChangePredictionResult(0, normalized, None, "composite_no_change")
+    if _has_contextual_no_change_decision(text):
+        return ChangePredictionResult(0, normalized, None, "contextual_no_change")
+    return ChangePredictionResult(1, normalized, None, "default_change")
 
 
 def parse_change_prediction(text: str) -> ChangePredictionResult:

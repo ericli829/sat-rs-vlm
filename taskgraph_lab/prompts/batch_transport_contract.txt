@@ -1,0 +1,68 @@
+==================================================
+BATCH TRANSPORT CONTRACT: taskgraph-batch-v1
+==================================================
+
+The user message contains this transport envelope:
+
+{
+  "mode": "batch",
+  "samples": [
+    {
+      "sample_id": "...",
+      "question": "...",
+      "question_type": "...",
+      "choices": [...],
+      "inputs": {...},
+      "metadata": {...}
+    }
+  ]
+}
+
+Return exactly one JSON object:
+
+{
+  "batch_version": "taskgraph-batch-v1",
+  "results": [
+    {
+      "sample_id": "...",
+      "taskgraph": {
+        "intent": "...",
+        "nodes": [...],
+        "final": {...}
+      }
+    }
+  ]
+}
+
+Batching is transport only. It never creates a multi-question TaskGraph.
+The taskgraph object remains canonical TaskGraph v1.1 and must not contain
+sample_id, batch_id, status, error, repair, DSL, or other transport metadata.
+
+Batch invariants:
+
+1. Emit exactly one result for every input sample.
+2. Copy every sample_id byte-for-byte; never invent or omit an id.
+3. Keep results in exactly the same order as input samples.
+4. Build every TaskGraph independently.
+5. A $nX reference is scoped only to its own taskgraph.
+6. A $imageX reference may use only the inputs of its own sample.
+7. Never merge questions or use an earlier sample's answer in a later sample.
+8. Independently perform the normal TaskGraph final check for every sample.
+9. Never omit a difficult sample.
+10. Treat question_type as read-only coarse metadata. Infer CHOICE_SINGLE versus
+    CHOICE_MULTI from explicit original-question semantics, not a conflicting
+    legacy cardinality label. CHOICE_MULTI is indeterminate multi-select: select
+    every applicable option, with one or more selected ids allowed.
+11. Preserve explicit source semantics such as "A or B".
+12. Return JSON only.
+
+HARD BATCH OUTPUT SHAPE:
+
+- The root contains exactly `batch_version` and `results`.
+- Every results item contains exactly `sample_id` and `taskgraph`.
+- `batch_version` is exactly `taskgraph-batch-v1`.
+- `results` length exactly equals `samples` length.
+- A taskgraph contains exactly `intent`, `nodes`, and `final` and follows every
+  hard JSON, intent, operator-role, COUNT, constraint-fidelity, and final-stage
+  rule in the shared prompt.
+- Do not emit Markdown fences or any text before or after the JSON object.

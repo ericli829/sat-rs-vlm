@@ -1,0 +1,3951 @@
+{
+  "schema_version": "taskgraph-target-capability-coverage-v1",
+  "ontology_path": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\configs\\eval\\semantic\\remote_sensing_ontology.json",
+  "ontology_version": "0.2",
+  "unresolved_policy": "detector_fallback",
+  "source_rows": {
+    "D:\\Desktop\\tzb-2026\\MME_RealWorld.json": 23609,
+    "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\taskgraph_lab\\data\\planner_sft_hard_augmented_v1_20260901_173936\\test.jsonl": 217,
+    "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\taskgraph_lab\\data\\planner_sft_hard_augmented_v1_20260901_173936\\train.jsonl": 2815,
+    "D:\\Desktop\\tzb-2026\\xlrs_questions_answers.json": 3080
+  },
+  "source_target_mentions": {
+    "D:\\Desktop\\tzb-2026\\MME_RealWorld.json": 17080,
+    "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\taskgraph_lab\\data\\planner_sft_hard_augmented_v1_20260901_173936\\test.jsonl": 503,
+    "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\taskgraph_lab\\data\\planner_sft_hard_augmented_v1_20260901_173936\\train.jsonl": 5022,
+    "D:\\Desktop\\tzb-2026\\xlrs_questions_answers.json": 1820
+  },
+  "target_category_count": 428,
+  "target_mention_count": 24425,
+  "capability_frequency": {
+    "DETECTOR": 17337,
+    "RETRIEVER": 6221,
+    "UNRESOLVED": 867
+  },
+  "categories": [
+    {
+      "target_category": "car",
+      "canonical_category": "vehicle",
+      "capability": "DETECTOR",
+      "frequency": 7969,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "road",
+      "canonical_category": "road",
+      "capability": "RETRIEVER",
+      "frequency": 2058,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "building",
+      "canonical_category": "building",
+      "capability": "DETECTOR",
+      "frequency": 1914,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "cars",
+      "canonical_category": "vehicle",
+      "capability": "DETECTOR",
+      "frequency": 1191,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "vehicle",
+      "canonical_category": "vehicle",
+      "capability": "DETECTOR",
+      "frequency": 1029,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "buildings",
+      "canonical_category": "building",
+      "capability": "DETECTOR",
+      "frequency": 684,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "ship",
+      "canonical_category": "ship",
+      "capability": "DETECTOR",
+      "frequency": 604,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "house",
+      "canonical_category": "building",
+      "capability": "DETECTOR",
+      "frequency": 596,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "parking lot",
+      "canonical_category": "parking_lot",
+      "capability": "RETRIEVER",
+      "frequency": 527,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "trucks",
+      "canonical_category": "vehicle",
+      "capability": "DETECTOR",
+      "frequency": 476,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "boat",
+      "canonical_category": "ship",
+      "capability": "DETECTOR",
+      "frequency": 447,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "truck",
+      "canonical_category": "vehicle",
+      "capability": "DETECTOR",
+      "frequency": 438,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "ships",
+      "canonical_category": "ship",
+      "capability": "DETECTOR",
+      "frequency": 274,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "water",
+      "canonical_category": "water",
+      "capability": "RETRIEVER",
+      "frequency": 264,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "river",
+      "canonical_category": "river",
+      "capability": "RETRIEVER",
+      "frequency": 230,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "square",
+      "canonical_category": "park",
+      "capability": "RETRIEVER",
+      "frequency": 210,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "buses",
+      "canonical_category": "vehicle",
+      "capability": "DETECTOR",
+      "frequency": 198,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "bus",
+      "canonical_category": "vehicle",
+      "capability": "DETECTOR",
+      "frequency": 195,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "lake",
+      "canonical_category": "water",
+      "capability": "RETRIEVER",
+      "frequency": 190,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "farmland",
+      "canonical_category": "farmland",
+      "capability": "RETRIEVER",
+      "frequency": 189,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "street",
+      "canonical_category": "road",
+      "capability": "RETRIEVER",
+      "frequency": 189,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "bridge",
+      "canonical_category": "bridge",
+      "capability": "DETECTOR",
+      "frequency": 171,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "houses",
+      "canonical_category": "building",
+      "capability": "DETECTOR",
+      "frequency": 159,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "lane",
+      "canonical_category": "road",
+      "capability": "RETRIEVER",
+      "frequency": 157,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "grassland",
+      "canonical_category": "park",
+      "capability": "RETRIEVER",
+      "frequency": 155,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "van",
+      "canonical_category": "vehicle",
+      "capability": "DETECTOR",
+      "frequency": 145,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "boats",
+      "canonical_category": "ship",
+      "capability": "DETECTOR",
+      "frequency": 138,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "park",
+      "canonical_category": "park",
+      "capability": "RETRIEVER",
+      "frequency": 127,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "football field",
+      "canonical_category": "sports_field",
+      "capability": "RETRIEVER",
+      "frequency": 119,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "vans",
+      "canonical_category": "vehicle",
+      "capability": "DETECTOR",
+      "frequency": 119,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "residential area",
+      "canonical_category": "residential_area",
+      "capability": "RETRIEVER",
+      "frequency": 100,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "vehicles",
+      "canonical_category": "vehicle",
+      "capability": "DETECTOR",
+      "frequency": 96,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "pond",
+      "canonical_category": "water",
+      "capability": "RETRIEVER",
+      "frequency": 92,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "sports field",
+      "canonical_category": "sports_field",
+      "capability": "RETRIEVER",
+      "frequency": 87,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "roundabout",
+      "canonical_category": "road",
+      "capability": "RETRIEVER",
+      "frequency": 83,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "water area",
+      "canonical_category": "water",
+      "capability": "RETRIEVER",
+      "frequency": 81,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "forest",
+      "canonical_category": "forest",
+      "capability": "RETRIEVER",
+      "frequency": 80,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "intersection",
+      "canonical_category": "road",
+      "capability": "RETRIEVER",
+      "frequency": 80,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "basketball court",
+      "canonical_category": "sports_field",
+      "capability": "RETRIEVER",
+      "frequency": 79,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "structure",
+      "canonical_category": "building",
+      "capability": "DETECTOR",
+      "frequency": 79,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "stadium",
+      "canonical_category": "sports_field",
+      "capability": "RETRIEVER",
+      "frequency": 75,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "highway",
+      "canonical_category": "road",
+      "capability": "RETRIEVER",
+      "frequency": 71,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "train",
+      "canonical_category": "vehicle",
+      "capability": "DETECTOR",
+      "frequency": 71,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "open space",
+      "canonical_category": "park",
+      "capability": "RETRIEVER",
+      "frequency": 68,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "residential areas",
+      "canonical_category": "residential_area",
+      "capability": "RETRIEVER",
+      "frequency": 68,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "tennis court",
+      "canonical_category": "sports_field",
+      "capability": "RETRIEVER",
+      "frequency": 65,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "cargo ship",
+      "canonical_category": "ship",
+      "capability": "DETECTOR",
+      "frequency": 59,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "forests",
+      "canonical_category": "forest",
+      "capability": "RETRIEVER",
+      "frequency": 59,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "port",
+      "canonical_category": "harbor",
+      "capability": "RETRIEVER",
+      "frequency": 59,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "excavator",
+      "canonical_category": "vehicle",
+      "capability": "DETECTOR",
+      "frequency": 52,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "sea",
+      "canonical_category": "water",
+      "capability": "RETRIEVER",
+      "frequency": 52,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "structures",
+      "canonical_category": "building",
+      "capability": "DETECTOR",
+      "frequency": 46,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "forest area",
+      "canonical_category": "forest",
+      "capability": "RETRIEVER",
+      "frequency": 44,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "roads",
+      "canonical_category": "road",
+      "capability": "RETRIEVER",
+      "frequency": 44,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "building complex",
+      "canonical_category": "urban_area",
+      "capability": "RETRIEVER",
+      "frequency": 42,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "lawn",
+      "canonical_category": "park",
+      "capability": "RETRIEVER",
+      "frequency": 42,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "town",
+      "canonical_category": "urban_area",
+      "capability": "RETRIEVER",
+      "frequency": 41,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "water surface",
+      "canonical_category": "water",
+      "capability": "RETRIEVER",
+      "frequency": 41,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "airport",
+      "canonical_category": "airport",
+      "capability": "RETRIEVER",
+      "frequency": 40,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "roof",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 38,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "soccer field",
+      "canonical_category": "sports_field",
+      "capability": "RETRIEVER",
+      "frequency": 34,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "aircraft",
+      "canonical_category": "aircraft",
+      "capability": "DETECTOR",
+      "frequency": 31,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "track",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 31,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "traffic roundabout",
+      "canonical_category": "road",
+      "capability": "RETRIEVER",
+      "frequency": 28,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "parking area",
+      "canonical_category": "parking_lot",
+      "capability": "RETRIEVER",
+      "frequency": 27,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "storage tank",
+      "canonical_category": "storage_tank",
+      "capability": "DETECTOR",
+      "frequency": 23,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "plane",
+      "canonical_category": "aircraft",
+      "capability": "DETECTOR",
+      "frequency": 22,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "playground",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 21,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "runway",
+      "canonical_category": "runway",
+      "capability": "RETRIEVER",
+      "frequency": 21,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "swimming pool",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 21,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "airplane",
+      "canonical_category": "aircraft",
+      "capability": "DETECTOR",
+      "frequency": 20,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "bay",
+      "canonical_category": "water",
+      "capability": "RETRIEVER",
+      "frequency": 20,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "parking space",
+      "canonical_category": "parking_lot",
+      "capability": "RETRIEVER",
+      "frequency": 19,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "bridges",
+      "canonical_category": "bridge",
+      "capability": "DETECTOR",
+      "frequency": 18,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "harbor",
+      "canonical_category": "harbor",
+      "capability": "RETRIEVER",
+      "frequency": 17,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "court",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 16,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "dock",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 16,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "parking lots",
+      "canonical_category": "parking_lot",
+      "capability": "RETRIEVER",
+      "frequency": 16,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "person",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 16,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "pier",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 16,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "island",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 15,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "meadow",
+      "canonical_category": "park",
+      "capability": "RETRIEVER",
+      "frequency": 15,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "shore",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 15,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "container",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 13,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "flag",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 13,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "area",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 12,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "light-rail vehicle",
+      "canonical_category": "vehicle",
+      "capability": "DETECTOR",
+      "frequency": 12,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "planes",
+      "canonical_category": "aircraft",
+      "capability": "DETECTOR",
+      "frequency": 12,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "track and field venue",
+      "canonical_category": "sports_field",
+      "capability": "RETRIEVER",
+      "frequency": 12,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "green area",
+      "canonical_category": "park",
+      "capability": "RETRIEVER",
+      "frequency": 11,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "heavy vehicle",
+      "canonical_category": "vehicle",
+      "capability": "DETECTOR",
+      "frequency": 11,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "railway",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 11,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "housing area",
+      "canonical_category": "urban_area",
+      "capability": "RETRIEVER",
+      "frequency": 10,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "industrial area",
+      "canonical_category": "industrial_area",
+      "capability": "RETRIEVER",
+      "frequency": 10,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "object",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 10,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "rectangle",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 10,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "trains",
+      "canonical_category": "vehicle",
+      "capability": "DETECTOR",
+      "frequency": 10,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "circle",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 9,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "cluster of houses",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 8,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "factory",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 8,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "farmlands",
+      "canonical_category": "farmland",
+      "capability": "RETRIEVER",
+      "frequency": 8,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "grass",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 8,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "sunshade",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 8,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "zebra crossing",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 8,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "buoy",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 7,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "cylindrical structure",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 7,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "grassy area",
+      "canonical_category": "park",
+      "capability": "RETRIEVER",
+      "frequency": 7,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "greenhouse",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 7,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "hoisting equipment",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 7,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "lake or pond",
+      "canonical_category": "water",
+      "capability": "RETRIEVER",
+      "frequency": 7,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "parasol",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 7,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "pool",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 7,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "tower crane",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 7,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "tree",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 7,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "cylinder",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 6,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "fountain",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 6,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "line",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 6,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "path",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 6,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "row",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 6,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "storage tanks",
+      "canonical_category": "storage_tank",
+      "capability": "DETECTOR",
+      "frequency": 6,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "airports",
+      "canonical_category": "airport",
+      "capability": "RETRIEVER",
+      "frequency": 5,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "board",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 5,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "boat or yacht",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 5,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "changed building",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 5,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "concrete mixing tower facility",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 5,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "field",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 5,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "ground",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 5,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "pavilion",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 5,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "railway line",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 5,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "rivers",
+      "canonical_category": "river",
+      "capability": "RETRIEVER",
+      "frequency": 5,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "tank",
+      "canonical_category": "storage_tank",
+      "capability": "DETECTOR",
+      "frequency": 5,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "water body",
+      "canonical_category": "water",
+      "capability": "RETRIEVER",
+      "frequency": 5,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "airplanes",
+      "canonical_category": "aircraft",
+      "capability": "DETECTOR",
+      "frequency": 4,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "athletics field",
+      "canonical_category": "sports_field",
+      "capability": "RETRIEVER",
+      "frequency": 4,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "bench",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 4,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "box",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 4,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "carriage",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 4,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "farm",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 4,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "highways",
+      "canonical_category": "road",
+      "capability": "RETRIEVER",
+      "frequency": 4,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "industrial areas",
+      "canonical_category": "industrial_area",
+      "capability": "RETRIEVER",
+      "frequency": 4,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "oil tanks",
+      "canonical_category": "storage_tank",
+      "capability": "DETECTOR",
+      "frequency": 4,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "pattern",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 4,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "pillar",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 4,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "ports",
+      "canonical_category": "harbor",
+      "capability": "RETRIEVER",
+      "frequency": 4,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "red circle",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 4,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "shopping mall",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 4,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "sports ground",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 4,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "tower",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 4,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "urban area",
+      "canonical_category": "urban_area",
+      "capability": "RETRIEVER",
+      "frequency": 4,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "waterway",
+      "canonical_category": "river",
+      "capability": "RETRIEVER",
+      "frequency": 4,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "wind turbine",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 4,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "Light-rail vehicle",
+      "canonical_category": "vehicle",
+      "capability": "DETECTOR",
+      "frequency": 3,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "car parking lot",
+      "canonical_category": "parking_lot",
+      "capability": "RETRIEVER",
+      "frequency": 3,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "container truck",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 3,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "crane",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 3,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "facility",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 3,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "green space",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 3,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "high-rise building",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 3,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "mall",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 3,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "open-pit mine",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 3,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "overpass",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 3,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "ping-pong table",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 3,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "roundabout road",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 3,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "shed",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 3,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "ship crane",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 3,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "sports stadium",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 3,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "tanks",
+      "canonical_category": "storage_tank",
+      "capability": "DETECTOR",
+      "frequency": 3,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "traffic wheel",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 3,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "turntable",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 3,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "umbrella",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 3,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "vessel",
+      "canonical_category": "ship",
+      "capability": "DETECTOR",
+      "frequency": 3,
+      "source_kinds": [
+        "dsl_target",
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "wall",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 3,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "warehouse",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 3,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "abandoned field",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "amusement park",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "bank",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "blue board",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "blue deck cargo ship",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "blue swing",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "building area",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "building top",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "canal",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "children",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "circular road",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "circular track",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "city",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "coast",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "courtyard",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "cruise",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "cruise ship",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "cylindrical object",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "disk",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "dome",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "fan-shaped area",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "fence",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "grass pattern",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "ground area",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "helipad",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "hoisting structure",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "hollow square",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "horizontal road",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "house cluster",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "house on water",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "installation",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "land",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "main road",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "metal structure",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "mine",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "mound",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "multi-unit residential area",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "multi-unit residential building",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "oval track",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "parking_lot",
+      "canonical_category": "parking_lot",
+      "capability": "RETRIEVER",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "peninsula",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "people",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "plaza",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "racetrack",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "railway crane",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "rectangular gray space",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "red car",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "river channel",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "rooftop parking lot",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "roundabout intersection",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "school bus",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "ship or yacht",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "shipyard",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "sign",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "slide",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "soccer stadium",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "statue",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "stool",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "streetlight",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "streets",
+      "canonical_category": "road",
+      "capability": "RETRIEVER",
+      "frequency": 2,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "strip",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "stripe",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "sun umbrella",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "swimming ring",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "swing",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "track and field",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "train car",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "tributary",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "urban rail train",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "vacant lot",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "waterfront",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "white stripe",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "yacht",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "yachts and cargo ships",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 2,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "DUBAI logo",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "Light-rail carriage",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "Ping-Pong table",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "T-junction",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "Y-junction",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "Y-shaped intersection",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "airport runway",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "architectural complex",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "awning",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "badminton court",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "baseball field",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "basketball city",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "beach",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "beach umbrella",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "big smokestack",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "billboard",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "black car",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "black circular pit",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "block",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "box truck",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "bridge across the water",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "bridge deck",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "bridge heading the sea",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "bridge mast",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "building named akd",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "building with text ",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "cabin",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "canopy",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "carriage truck",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "cement floor",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "cement pit",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "center circle",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "central park",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "chimney",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "chinese architecture",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "church",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "circle icon",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "circular building",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "circular disk",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "circular ground",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "circular intersection",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "circular pattern",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "circular shape",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "coach",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "coastline",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "colored cargo ship",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "complex",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "concrete mixing tower facilities",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "construction site",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "cross river highway",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "crossroad",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "crossroads",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "cruise terminal",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "device",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "dirt road",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "docking point for small boats",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "dot",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "elevated road",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "empty space",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "engineering tank",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "engineering tower",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "exit",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "fabric",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "factory building",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "flags",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "flower style",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "football court",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "forest patch",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "forest path",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "forklift",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "four quadrant parking lot",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "freighter",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "gantry crane",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "garden",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "gray building",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "gray sports field with a track on the far left",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "green belt",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "green grass",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "green tree area",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "greenery",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "greenhouse complex",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "grey border",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "gym",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "harbors",
+      "canonical_category": "harbor",
+      "capability": "RETRIEVER",
+      "frequency": 1,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "harbour",
+      "canonical_category": "harbor",
+      "capability": "RETRIEVER",
+      "frequency": 1,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "heavy truck",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "hexagon",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "hotel complex",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "house set",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "housing group",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "icon",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "industrial building",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "industrial zone",
+      "canonical_category": "industrial_area",
+      "capability": "RETRIEVER",
+      "frequency": 1,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "industrial zones",
+      "canonical_category": "industrial_area",
+      "capability": "RETRIEVER",
+      "frequency": 1,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "inner stadium",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "inspection intersection",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "kiddie ride",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "lake among trees",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "lighthouse",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "longitudinal road",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "main road intersection",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "main street",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "maple leaf pattern",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "mine pit",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "minibus",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "movie theatre",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "north-south road",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "ocean",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "open-air restaurant",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "park with open space",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "patch of lawn",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "pedestrian crossing",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "petal ground",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "pick-up truck",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "pickup truck",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "pit",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "pitch",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "platform",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "prototype object",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "public square",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "railway tracks",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "rectangular area",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "rectangular object",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "rectangular open space",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "residential building",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "ring",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "river course",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "river crossing bridge",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "riverbank",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "riverside road",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "road intersection",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "roadside",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "rotunda",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "roundabout with two cars",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "row of pointed-roof buildings",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "running track",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "sailboat dock",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "sand pool amusement park",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "sculpture",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "sea area",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "sea surface",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "shelf",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "ship on the water",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "ship yard",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "signal tower",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "single-family unit",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "six adjacent buildings",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "slanted road",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "soil patch",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "sports groud",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "square frame",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "steamer",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "super cargo ship",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "surrounding wall",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "symbol",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "table",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "text H 19",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "three adjacent buildings",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "township",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "track and field sports ground",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "track field",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "traditional Chinese building",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "traffic sign",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "traffic turntable",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "train freight yard",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "train tracks",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "tramcar",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "transportation hub",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "truck yard",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "turntable centered around flower style",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "two adjacent football fields",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "vegetable greenhouses",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "vertical gray road",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "vertical highway",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "vertical road",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "village",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "warship",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "water bodies",
+      "canonical_category": "water",
+      "capability": "RETRIEVER",
+      "frequency": 1,
+      "source_kinds": [
+        "ontology_alias"
+      ]
+    },
+    {
+      "target_category": "wider longitudinal road",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "yellow container",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    },
+    {
+      "target_category": "yellow field",
+      "canonical_category": null,
+      "capability": "UNRESOLVED",
+      "frequency": 1,
+      "source_kinds": [
+        "dsl_target"
+      ]
+    }
+  ]
+}

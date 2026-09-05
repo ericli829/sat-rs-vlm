@@ -35,6 +35,12 @@ class EvaluationProtocolConfig(BaseModel):
     semantic: bool = True
     semantic_contract: str = "configs/eval/semantic/semantic_contract.json"
     semantic_ontology: str = "configs/eval/semantic/remote_sensing_ontology.json"
+    visual_semantic: bool = False
+    visual_semantic_gold: str | None = None
+    visual_semantic_generation_manifest: str | None = None
+    visual_semantic_prompt_profile: str | None = None
+    visual_semantic_allow_incomplete_historical_manifest: bool = False
+    visual_semantic_verify_image_paths: bool = True
     latency_semantics: Literal["unresolved", "single_sample", "batch_amortized_per_sample"] = (
         "unresolved"
     )

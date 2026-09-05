@@ -1,0 +1,17 @@
+# Official VLM-FO1 main requirements at commit
+# 348c1e8163a8fca5ed621cdfab0c94e3432336bd
+torch==2.6.0
+torchvision==0.21.0
+transformers==4.50.1
+timm==1.0.9
+accelerate==1.4.0
+mmengine==0.8.2
+gradio
+einops
+ninja
+scikit-image
+decord
+scikit-learn
+matplotlib
+# Then, from the official checkout:
+# pip install -v -e detect_tools/upn/ops

@@ -162,9 +162,18 @@ def base_metadata(split: str, annotation_path: Path, image_name: str) -> dict[st
 
     return {
         "dataset": "VRSBench",
+        "dataset_version": "repository_commit_56e1ed1baabaaafef19b07fa937cfbdc1924e922",
         "split": split,
+        "language": "en",
         "source_annotation": annotation_path.name,
         "source_image": image_name,
+        "protocol_provenance": {
+            "benchmark": "VRSBench",
+            "source_repository": "https://github.com/lx709/VRSBench",
+            "source_commit": "56e1ed1baabaaafef19b07fa937cfbdc1924e922",
+            "grounding_evaluator": "eval_fianl/compute_metrics.ipynb",
+            "grounding_coordinate_source_format": "scaled_0_100",
+        },
     }
 
 
@@ -231,6 +240,8 @@ def annotation_to_samples(
                     "coordinate_clipped": was_clipped,
                     "bbox_source_format": BBoxFormat(bbox_source_format).value,
                     "bbox_target_format": BBoxFormat(bbox_target_format).value,
+                    "is_unique": obj.get("is_unique"),
+                    "size_group": obj.get("size_group", ""),
                 },
             }
 

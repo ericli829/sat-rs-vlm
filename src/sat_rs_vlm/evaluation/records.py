@@ -19,6 +19,9 @@ class InputValidationError(EvaluationError):
 
 RESERVED_EVALUATION_FIELDS = {
     "metric_profile",
+    "metric_label",
+    "protocol_status",
+    "protocol_provenance",
     "parsed_prediction",
     "parse_ok",
     "parse_error",
@@ -76,7 +79,7 @@ class PredictionRecord:
         latency = row.get("inference_latency_ms")
         normalized_latency: float | None = None
         if latency is not None:
-            if isinstance(latency, bool) or not isinstance(latency, (int, float)):
+            if isinstance(latency, bool) or not isinstance(latency, int | float):
                 raise InputValidationError(
                     f"line {line_number}: inference_latency_ms must be numeric or null"
                 )
@@ -109,7 +112,9 @@ def read_prediction_jsonl(
     records: list[PredictionRecord] = []
     errors: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
-    with path.open("r", encoding="utf-8") as file:
+    # Accept both ordinary UTF-8 and BOM-prefixed JSONL produced by common
+    # Windows tooling without changing the bytes used for provenance hashes.
+    with path.open("r", encoding="utf-8-sig") as file:
         for line_number, line in enumerate(file, start=1):
             if not line.strip():
                 continue
