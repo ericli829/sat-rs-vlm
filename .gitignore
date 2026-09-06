@@ -23,7 +23,6 @@ datasets/
 data/raw/
 data/processed/
 data/processed/e1/
-!data/processed/taskgraph_qwen_test.jsonl
 !data/processed/qwen3vl_test.jsonl
 *.tar
 *.tar.gz

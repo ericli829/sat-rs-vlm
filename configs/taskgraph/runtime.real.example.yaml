@@ -206,7 +206,7 @@ answerability:
   prompt_version: answerability-v1
 
 runtime_memory:
-  path: data/processed/taskgraph_qwen_test.jsonl
+  path: configs/taskgraph/taskgraph_qwen_test.jsonl
   recording: true
 
 choice:

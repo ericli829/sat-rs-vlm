@@ -1,0 +1,1662 @@
+{
+  "source_directory": "D:\\Desktop\\tzb-2026\\results\\levir_eval\\vrsbench_levircc_replay_formal",
+  "adapter_directory": "D:\\Desktop\\tzb-2026\\results\\levir_train\\vrsbench_levircc_replay_formal\\round_2_adapter",
+  "tokenizer": "D:\\Desktop\\tzb-2026\\results\\levir_train\\vrsbench_levircc_replay_formal\\round_2_adapter\\processor\\tokenizer.json",
+  "tokenizer_sha256": "be75606093db2094d7cd20f3c2f385c212750648bd6ea4fb2bf507a6a4c55506",
+  "latency_semantics": "batch collate + device transfer + generate + text decode, divided by actual batch size; CUDA synchronized",
+  "latency_evidence": "git 449bc85 evaluation/inference.py timed_predictions; replay_eval_20260805_230834.log",
+  "token_semantics": "Re-encode saved stripped prediction with checkpoint tokenizer; add_special_tokens=False. Not original generated token IDs; EOS/padding/removed text cannot be recovered.",
+  "unavailable": {
+    "ttft_ms": "No first-token timestamps.",
+    "planning_execution_seconds": "No phase telemetry; these runs use direct VLM generation.",
+    "pure_decode_seconds": "No prefill/decode timing split.",
+    "decode_tokens_per_second": "Neither decode-only duration nor original output IDs was recorded.",
+    "original_generation_token_count": "Only decoded and stripped text saved, not output IDs.",
+    "historical_visual_token_count": "No image_grid_thw or recorded input visual-token counts.",
+    "tiling": "No tiling metadata; do not equate image patches with high-resolution tiles.",
+    "single_request_e2e": "Batch-amortized timings cannot measure batch=1 latency.",
+    "whole_job_wall_time": "Recorded inference excludes load/startup/scoring/report writing."
+  },
+  "datasets": {
+    "vrsbench": {
+      "samples": 62918,
+      "amortized_latency_ms": {
+        "count": 62918,
+        "total": 6410426.370557397,
+        "mean": 101.88541229151272,
+        "median": 66.19768170639873,
+        "p95": 237.06366075202823,
+        "min": 49.958246760070324,
+        "max": 405.6612091759841
+      },
+      "retokenized_output_tokens": {
+        "count": 62918,
+        "total": 1019423,
+        "mean": 16.202406306621317,
+        "median": 5.0,
+        "p95": 60.0,
+        "min": 1,
+        "max": 128
+      },
+      "output_characters": {
+        "count": 62918,
+        "total": 3611091,
+        "mean": 57.39360755268763,
+        "median": 11.0,
+        "p95": 306.0,
+        "min": 1,
+        "max": 617
+      },
+      "recorded_inference_seconds_sum": 6410.426370557397,
+      "sample_throughput_per_second": 9.814947768369606,
+      "retokenized_output_throughput_per_second_NOT_decode_tps": 159.02577162139053,
+      "source_sha256": "db397994e982375daebe41e4d0ccacff17e4d4f572f0ce911cd9762989dca181",
+      "configured_batch_size": 16,
+      "field_coverage": {
+        "id": 62918,
+        "task_type": 62918,
+        "prediction": 62918,
+        "reference": 62918,
+        "metadata": 62918,
+        "inference_latency_ms": 62918
+      },
+      "metadata_field_coverage": {
+        "dataset": 62918,
+        "split": 62918,
+        "source_annotation": 62918,
+        "source_image": 62918,
+        "source_task": 62918,
+        "object_id": 16159,
+        "bbox_raw": 16159,
+        "bbox_clipped": 16159,
+        "coordinate_clipped": 16159,
+        "bbox_source_format": 16159,
+        "bbox_target_format": 16159,
+        "qa_type": 37409,
+        "question_id": 37409,
+        "counting_unresolved": 37409,
+        "original_task_type": 6,
+        "detection_unresolved": 6
+      },
+      "by_task": {
+        "captioning": {
+          "samples": 9350,
+          "amortized_latency_ms": {
+            "count": 9350,
+            "total": 2122617.1660907557,
+            "mean": 227.01787872628412,
+            "median": 227.17376775108278,
+            "p95": 276.86215890571475,
+            "min": 148.36631412617862,
+            "max": 405.6612091759841
+          },
+          "retokenized_output_tokens": {
+            "count": 9350,
+            "total": 503916,
+            "mean": 53.89475935828877,
+            "median": 52.0,
+            "p95": 83.0,
+            "min": 17,
+            "max": 128
+          },
+          "output_characters": {
+            "count": 9350,
+            "total": 2551225,
+            "mean": 272.8582887700535,
+            "median": 264.0,
+            "p95": 418.0,
+            "min": 97,
+            "max": 617
+          },
+          "recorded_inference_seconds_sum": 2122.6171660907557,
+          "sample_throughput_per_second": 4.404939406581727,
+          "retokenized_output_throughput_per_second_NOT_decode_tps": 237.4031493055655
+        },
+        "detection": {
+          "samples": 16153,
+          "amortized_latency_ms": {
+            "count": 16153,
+            "total": 1978661.3176316025,
+            "mean": 122.49497416155528,
+            "median": 122.04361637122929,
+            "p95": 131.74808421172202,
+            "min": 108.1488945055753,
+            "max": 171.27108408345117
+          },
+          "retokenized_output_tokens": {
+            "count": 16153,
+            "total": 437255,
+            "mean": 27.06958459728843,
+            "median": 27,
+            "p95": 29.0,
+            "min": 23,
+            "max": 32
+          },
+          "output_characters": {
+            "count": 16153,
+            "total": 792514,
+            "mean": 49.06296044078499,
+            "median": 48,
+            "p95": 57.0,
+            "min": 40,
+            "max": 64
+          },
+          "recorded_inference_seconds_sum": 1978.6613176316025,
+          "sample_throughput_per_second": 8.163600236211547,
+          "retokenized_output_throughput_per_second_NOT_decode_tps": 220.98526721257227
+        },
+        "vqa": {
+          "samples": 30855,
+          "amortized_latency_ms": {
+            "count": 30855,
+            "total": 1876689.654644578,
+            "mean": 60.822870025752025,
+            "median": 60.400737915188074,
+            "p95": 67.51739676110446,
+            "min": 49.958246760070324,
+            "max": 134.599715936929
+          },
+          "retokenized_output_tokens": {
+            "count": 30855,
+            "total": 46859,
+            "mean": 1.5186841678820289,
+            "median": 1,
+            "p95": 3.0,
+            "min": 1,
+            "max": 27
+          },
+          "output_characters": {
+            "count": 30855,
+            "total": 196411,
+            "mean": 6.365613352779128,
+            "median": 5,
+            "p95": 14.0,
+            "min": 1,
+            "max": 48
+          },
+          "recorded_inference_seconds_sum": 1876.689654644578,
+          "sample_throughput_per_second": 16.441184041078735,
+          "retokenized_output_throughput_per_second_NOT_decode_tps": 24.96896590442095
+        },
+        "counting": {
+          "samples": 6131,
+          "amortized_latency_ms": {
+            "count": 6131,
+            "total": 406734.1967597604,
+            "mean": 66.34059643773615,
+            "median": 66.69936864636838,
+            "p95": 71.08816562686116,
+            "min": 61.46047543734312,
+            "max": 115.6526505947113
+          },
+          "retokenized_output_tokens": {
+            "count": 6131,
+            "total": 30695,
+            "mean": 5.006524221171098,
+            "median": 5,
+            "p95": 5.0,
+            "min": 5,
+            "max": 6
+          },
+          "output_characters": {
+            "count": 6131,
+            "total": 67481,
+            "mean": 11.006524221171098,
+            "median": 11,
+            "p95": 11.0,
+            "min": 11,
+            "max": 12
+          },
+          "recorded_inference_seconds_sum": 406.7341967597604,
+          "sample_throughput_per_second": 15.073726401277506,
+          "retokenized_output_throughput_per_second_NOT_decode_tps": 75.46697633130208
+        },
+        "scene_classification": {
+          "samples": 429,
+          "amortized_latency_ms": {
+            "count": 429,
+            "total": 25724.035430699594,
+            "mean": 59.962786551747286,
+            "median": 60.26109820231795,
+            "p95": 63.04317992180586,
+            "min": 54.193036165088415,
+            "max": 63.768225722014904
+          },
+          "retokenized_output_tokens": {
+            "count": 429,
+            "total": 698,
+            "mean": 1.627039627039627,
+            "median": 2,
+            "p95": 3.0,
+            "min": 1,
+            "max": 4
+          },
+          "output_characters": {
+            "count": 429,
+            "total": 3460,
+            "mean": 8.065268065268064,
+            "median": 7,
+            "p95": 12.0,
+            "min": 4,
+            "max": 23
+          },
+          "recorded_inference_seconds_sum": 25.72403543069957,
+          "sample_throughput_per_second": 16.677010150904355,
+          "retokenized_output_throughput_per_second_NOT_decode_tps": 27.134156376063498
+        }
+      },
+      "reconstructed_batch_latency_ms": {
+        "count": 3935,
+        "total": 6410426.370557398,
+        "mean": 1629.0791284771024,
+        "median": 1059.1629073023796,
+        "p95": 3789.82851654291,
+        "min": 346.9579517841339,
+        "max": 5233.4098145365715
+      },
+      "all_reconstructed_batches_have_identical_member_timings": true,
+      "unique_source_images_in_metadata": 9350
+    },
+    "levircc": {
+      "samples": 1333,
+      "amortized_latency_ms": {
+        "count": 1333,
+        "total": 134614.80370908976,
+        "mean": 100.98634936915961,
+        "median": 98.9996544085443,
+        "p95": 125.8328203111887,
+        "min": 65.70800626650453,
+        "max": 204.48989467695355
+      },
+      "retokenized_output_tokens": {
+        "count": 1333,
+        "total": 11869,
+        "mean": 8.9039759939985,
+        "median": 8,
+        "p95": 15.0,
+        "min": 5,
+        "max": 25
+      },
+      "output_characters": {
+        "count": 1333,
+        "total": 51263,
+        "mean": 38.456864216054015,
+        "median": 33,
+        "p95": 64.0,
+        "min": 24,
+        "max": 112
+      },
+      "recorded_inference_seconds_sum": 134.61480370908976,
+      "sample_throughput_per_second": 9.902328445842322,
+      "retokenized_output_throughput_per_second_NOT_decode_tps": 88.17009476646851,
+      "source_sha256": "7a1ae7d4a89d2a9246c3ce23a0049e4053bac0a4a19cf3dd37072e2f28174396",
+      "configured_batch_size": 8,
+      "field_coverage": {
+        "id": 1333,
+        "task_type": 1333,
+        "prediction": 1333,
+        "reference": 1333,
+        "metadata": 1333,
+        "inference_latency_ms": 1333
+      },
+      "metadata_field_coverage": {
+        "dataset": 1333,
+        "split": 1333,
+        "changeflag": 1333,
+        "training_source": 1333
+      },
+      "by_task": {
+        "change_detection": {
+          "samples": 1333,
+          "amortized_latency_ms": {
+            "count": 1333,
+            "total": 134614.80370908976,
+            "mean": 100.98634936915961,
+            "median": 98.9996544085443,
+            "p95": 125.8328203111887,
+            "min": 65.70800626650453,
+            "max": 204.48989467695355
+          },
+          "retokenized_output_tokens": {
+            "count": 1333,
+            "total": 11869,
+            "mean": 8.9039759939985,
+            "median": 8,
+            "p95": 15.0,
+            "min": 5,
+            "max": 25
+          },
+          "output_characters": {
+            "count": 1333,
+            "total": 51263,
+            "mean": 38.456864216054015,
+            "median": 33,
+            "p95": 64.0,
+            "min": 24,
+            "max": 112
+          },
+          "recorded_inference_seconds_sum": 134.61480370908976,
+          "sample_throughput_per_second": 9.902328445842322,
+          "retokenized_output_throughput_per_second_NOT_decode_tps": 88.17009476646851
+        }
+      },
+      "reconstructed_batch_latency_ms": {
+        "count": 167,
+        "total": 134614.80370908976,
+        "mean": 806.0766689167051,
+        "median": 788.0571894347668,
+        "p95": 1000.9957544505596,
+        "min": 525.6640501320362,
+        "max": 1635.9191574156284
+      },
+      "all_reconstructed_batches_have_identical_member_timings": true,
+      "unique_source_images_in_metadata": null
+    }
+  },
+  "levircc_local_image_headers": {
+    "annotation_sha256": "8c8c3f494867b796306b98713e16ff72cbae1cf4a0a0c36931da16af9602daed",
+    "matched_prediction_ids": 330,
+    "complete_scan": false,
+    "unique_files_checked": 660,
+    "width_height_distribution": {
+      "256x256": 660
+    },
+    "errors": [],
+    "note": "Dataset image dimensions, not original uncropped satellite-scene dimensions or historical processor grids."
+  },
+  "analysis_runtime_seconds": 14.328059100080281,
+  "vrsbench_local_image_header_sample": {
+    "dataset_root": "F:\\VIT-data\\VRSBench\\Images\\Images_val",
+    "seed": 42,
+    "population_unique_images": 9350,
+    "requested_sample_size": 256,
+    "checked_sample_size": 256,
+    "width_height_distribution": {
+      "512x512": 256
+    },
+    "observations": [
+      {
+        "source_image": "08156_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "06384_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "11503_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10885_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10443_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "08730_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07985_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P5789_1191.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07660_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1463_0007.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "06531_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "06492_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07798_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10355_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10627_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P2645_0027.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "06422_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P8287_0022.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "09959_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P5789_1036.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1410_0125.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10391_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1738_0018.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "11562_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "06010_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "09135_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1463_0028.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P0962_0005.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "11555_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "09055_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10281_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P0936_0017.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07979_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07777_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1266_0051.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07864_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1075_0028.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P0977_0007.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "11286_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "06772_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1854_0025.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P4151_0050.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "08431_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1246_0056.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07480_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P5789_2768.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P0117_0003.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1099_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "09824_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07300_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "06820_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10531_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P0019_0094.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07499_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10631_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07953_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1268_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "11558_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1763_0022.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1143_0025.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "09198_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1178_0068.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1051_0002.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10165_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "11337_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07335_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "09376_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P3957_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10883_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "09216_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1854_0095.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1266_0002.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "11396_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P6687_0129.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10374_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P0683_0011.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07036_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10553_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "06539_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P0526_0017.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1384_0003.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "11353_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07237_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10191_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P8656_0093.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P0525_0004.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10224_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P2595_0001.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1373_0021.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1838_0002.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "08795_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "11293_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "08731_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10918_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P8287_0074.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P4151_0139.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "11251_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1474_0062.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1377_0055.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1099_0005.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10369_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "08706_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P2701_0045.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P2504_0006.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07739_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "06846_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "08122_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "09003_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "09141_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1463_0012.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07187_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1314_0042.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1269_0033.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1903_0007.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P2802_0013.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "11014_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P5789_3041.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "06115_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "08218_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P4151_0068.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "11333_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P0962_0003.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "08159_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P0143_0001.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1547_0024.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "09104_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1770_0027.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "05936_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "11262_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P2599_0006.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "09539_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P2678_0049.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "08063_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P0186_0001.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "09960_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1225_0059.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "09174_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P4265_0003.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P2802_0068.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "05872_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P0683_0008.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P2404_0038.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "06280_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "08166_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1122_0031.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P0368_0001.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10781_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07078_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10808_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P8656_0099.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07479_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07631_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P2337_0001.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07293_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P2956_0003.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "08452_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "08515_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P2194_0017.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P5789_2092.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "09254_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "11296_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P2794_0039.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1463_0046.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10209_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P4183_0002.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10001_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P0466_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1377_0037.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1225_0007.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1579_0059.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P2758_0046.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1751_0044.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "08346_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10947_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10472_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07198_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P0953_0010.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "06309_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P6347_0003.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10579_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10388_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "06021_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07327_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07099_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10551_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07263_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "06525_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P0841_0021.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07324_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P2722_0032.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10747_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "11569_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P2330_0125.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10257_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P4183_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "08590_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P2121_0002.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10849_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P2150_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1390_0040.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "09783_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07812_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07869_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1508_0020.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1030_0001.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1471_0009.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1397_0039.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1860_0005.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07002_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07899_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07132_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1384_0044.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P0961_0019.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "08116_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10959_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "09810_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "09779_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P4151_0051.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1732_0066.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "08742_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "09644_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "11570_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1854_0109.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10982_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07415_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1610_0062.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P5789_2244.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07890_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "06924_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P5070_0031.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "06180_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07788_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10710_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "09279_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1390_0023.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P2330_0132.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P2330_0015.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10248_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1384_0001.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07095_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "09246_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1257_0030.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "05911_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1342_0024.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "11299_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1787_0005.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "11709_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P1463_0041.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P6687_0082.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P2337_0020.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "09043_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "09772_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P0179_0024.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "10332_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "07090_0000.png",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "source_image": "P5070_0123.png",
+        "width": 512,
+        "height": 512
+      }
+    ],
+    "errors": [],
+    "note": "A fixed-seed sample of dataset image headers, not a full population audit. No original large-scene dimensions or historical processor grids are inferred."
+  }
+}

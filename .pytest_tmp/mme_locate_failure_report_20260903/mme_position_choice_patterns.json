@@ -1,0 +1,151 @@
+{
+  "source": "D:\\Downloads\\mme_remote_sensing_full_excluding_archive_200_results.jsonl",
+  "row_count": 2013,
+  "patterns": [
+    {
+      "has_absence_option": false,
+      "option_count": 0,
+      "position_option_ids": [],
+      "task_category": "color",
+      "count": 22,
+      "sample_ids": [
+        "perception/remote_sensing/color/0180",
+        "perception/remote_sensing/color/0183",
+        "perception/remote_sensing/color/0186",
+        "perception/remote_sensing/color/0234",
+        "perception/remote_sensing/color/0255",
+        "perception/remote_sensing/color/0258",
+        "perception/remote_sensing/color/0297",
+        "perception/remote_sensing/color/0315",
+        "perception/remote_sensing/color/0333",
+        "perception/remote_sensing/color/1183",
+        "perception/remote_sensing/color/1293",
+        "perception/remote_sensing/color/1356",
+        "perception/remote_sensing/color/1380",
+        "perception/remote_sensing/color/1538",
+        "perception/remote_sensing/color/1620",
+        "perception/remote_sensing/color/1629",
+        "perception/remote_sensing/color/1671",
+        "perception/remote_sensing/color/2454",
+        "perception/remote_sensing/color/2587",
+        "perception/remote_sensing/color/2590"
+      ]
+    },
+    {
+      "has_absence_option": false,
+      "option_count": 0,
+      "position_option_ids": [],
+      "task_category": "count",
+      "count": 13,
+      "sample_ids": [
+        "perception/remote_sensing/count/0175",
+        "perception/remote_sensing/count/0178",
+        "perception/remote_sensing/count/0181",
+        "perception/remote_sensing/count/0235",
+        "perception/remote_sensing/count/0241",
+        "perception/remote_sensing/count/0253",
+        "perception/remote_sensing/count/0256",
+        "perception/remote_sensing/count/0271",
+        "perception/remote_sensing/count/0334",
+        "perception/remote_sensing/count/0382",
+        "perception/remote_sensing/count/1063",
+        "perception/remote_sensing/count/2269",
+        "perception/remote_sensing/count/2567"
+      ]
+    },
+    {
+      "has_absence_option": true,
+      "option_count": 5,
+      "position_option_ids": [
+        "A"
+      ],
+      "task_category": "color",
+      "count": 1,
+      "sample_ids": [
+        "perception/remote_sensing/color/0384"
+      ]
+    },
+    {
+      "has_absence_option": true,
+      "option_count": 5,
+      "position_option_ids": [
+        "B"
+      ],
+      "task_category": "color",
+      "count": 1,
+      "sample_ids": [
+        "perception/remote_sensing/color/0210"
+      ]
+    },
+    {
+      "has_absence_option": true,
+      "option_count": 5,
+      "position_option_ids": [
+        "C"
+      ],
+      "task_category": "color",
+      "count": 1,
+      "sample_ids": [
+        "perception/remote_sensing/color/0213"
+      ]
+    },
+    {
+      "has_absence_option": true,
+      "option_count": 5,
+      "position_option_ids": [],
+      "task_category": "color",
+      "count": 1163,
+      "sample_ids": [
+        "perception/remote_sensing/color/0001",
+        "perception/remote_sensing/color/0004",
+        "perception/remote_sensing/color/0007",
+        "perception/remote_sensing/color/0010",
+        "perception/remote_sensing/color/0013",
+        "perception/remote_sensing/color/0016",
+        "perception/remote_sensing/color/0019",
+        "perception/remote_sensing/color/0022",
+        "perception/remote_sensing/color/0025",
+        "perception/remote_sensing/color/0028",
+        "perception/remote_sensing/color/0031",
+        "perception/remote_sensing/color/0034",
+        "perception/remote_sensing/color/0037",
+        "perception/remote_sensing/color/0040",
+        "perception/remote_sensing/color/0043",
+        "perception/remote_sensing/color/0046",
+        "perception/remote_sensing/color/0049",
+        "perception/remote_sensing/color/0052",
+        "perception/remote_sensing/color/0055",
+        "perception/remote_sensing/color/0058"
+      ]
+    },
+    {
+      "has_absence_option": true,
+      "option_count": 5,
+      "position_option_ids": [],
+      "task_category": "count",
+      "count": 812,
+      "sample_ids": [
+        "perception/remote_sensing/count/0002",
+        "perception/remote_sensing/count/0005",
+        "perception/remote_sensing/count/0008",
+        "perception/remote_sensing/count/0011",
+        "perception/remote_sensing/count/0014",
+        "perception/remote_sensing/count/0017",
+        "perception/remote_sensing/count/0020",
+        "perception/remote_sensing/count/0023",
+        "perception/remote_sensing/count/0026",
+        "perception/remote_sensing/count/0029",
+        "perception/remote_sensing/count/0032",
+        "perception/remote_sensing/count/0035",
+        "perception/remote_sensing/count/0038",
+        "perception/remote_sensing/count/0041",
+        "perception/remote_sensing/count/0044",
+        "perception/remote_sensing/count/0047",
+        "perception/remote_sensing/count/0050",
+        "perception/remote_sensing/count/0053",
+        "perception/remote_sensing/count/0056",
+        "perception/remote_sensing/count/0062"
+      ]
+    }
+  ]
+}

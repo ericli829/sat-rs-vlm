@@ -1,0 +1,22 @@
+{
+  "status": "pending_after_run",
+  "selection_rule": {
+    "status": "success",
+    "answer_judgment.status": "incorrect",
+    "reasoning_chain_contains": "LOCATE"
+  },
+  "baseline_selected_count": 521,
+  "baseline_resolution_stats": {
+    "final_resolution_status": {
+      "EMPTY": 58,
+      "MULTIPLE_VALID": 272,
+      "PRIMARY_RESOLVED": 71,
+      "REFINED_RESOLVED": 271,
+      "UNRESOLVED": 4
+    },
+    "fallback_reason": {
+      "EMPTY_PROPOSALS": 13,
+      "semantic_margin_below_threshold": 4
+    }
+  }
+}

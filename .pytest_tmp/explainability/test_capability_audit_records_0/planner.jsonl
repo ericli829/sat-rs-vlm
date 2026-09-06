@@ -1,0 +1,2 @@
+{"id": "one", "messages": [{"role": "assistant", "content": "n1=LOCATE($image0,T(\"bridge\"))"}]}
+{"id": "two", "messages": [{"role": "assistant", "content": "n1=LOCATE($image0,T(\"unknown lake\"))"}]}
