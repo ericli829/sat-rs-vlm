@@ -331,3 +331,35 @@ Timing includes source PNG/JPG decoding, RGB conversion, cropping, transport-fil
 writing, and transport-file reading. Optional `--inference-delay-ms` adds a
 simulated wait to each inference call to measure overlap; it is explicitly not a
 real-model benchmark. `--workers 1` evaluates overlap without parallel inference.
+
+BMP transport is compatible with the pinned LAE-DINO source revision
+`6b1519626e39d1f39f8ed1f38761c20f7e0e8c35`. Its three checkpoint configurations
+use `LoadImageFromFile` with MMCV's default OpenCV decoder, `FixScaleResize`,
+`PackDetInputs`, and `DetDataPreprocessor(bgr_to_rgb=True)`. The transport writes
+standard uncompressed 24-bit BMP. The decoder handles BMP's bottom-up rows and
+produces BGR, followed by the existing BGR-to-RGB conversion and normalization.
+No additional channel swap or vertical flip belongs in the transport code.
+[OpenCV documents BMP support](https://docs.opencv.org/4.9.0/d4/da8/group__imgcodecs.html);
+[MMCV documents its image decoder](https://mmcv.readthedocs.io/en/2.x/api/generated/mmcv.image.imfrombytes.html).
+Grounding DINO reads the same files through Pillow and converts them to RGB.
+
+Check actual model inputs without allocating another model or CUDA tensors:
+
+```powershell
+python scripts/integrations/check_detector_image_transport.py `
+  --image-root D:/Desktop/tzb-2026/results/uhr_locator `
+  --lae-source-root "$env:LAE_DINO_SOURCE_ROOT" `
+  --output .tmp/detector-image-transport/summary.json
+```
+
+The checker requires CPU Torch, Pillow, NumPy, OpenCV, MMCV (mmcv-lite suffices),
+and MMEngine. Optional `--dependency-root` loads an isolated dependency directory.
+It reads the selected LAE config settings and executes their image-processing
+definitions, omitting registry decorators and annotation-only box casting to
+avoid importing unrelated CUDA operators. It does not change runtime configs.
+On the three local UHR fixtures, 36 PNG/BMP comparisons across LAE-1M, DIOR, and
+DOTA passed: decoded BGR pixels and final float32 NCHW CPU tensors matched exactly
+(maximum absolute difference 0). Cases include first/middle/last tiles, width 7
+to test BMP row padding, asymmetric rows, grayscale, and RGBA conversion. This
+checks decoding and model input preprocessing; it does not run checkpoint forward
+inference or measure GPU output differences.
