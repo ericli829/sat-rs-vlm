@@ -46,9 +46,10 @@ class PixelDetector:
 
     model_id = "cpu-pixel-verifier"
 
-    def __init__(self) -> None:
+    def __init__(self, inference_delay_ms: float = 0) -> None:
         self.records: dict[str, str] = {}
         self.transferred_bytes: dict[str, int] = {}
+        self.inference_delay_seconds = inference_delay_ms / 1000
 
     def predict(self, path: Path, phrase: str) -> ProposalResult:
         with Image.open(path) as source, source.convert("RGB") as rgb:
@@ -56,6 +57,9 @@ class PixelDetector:
             self.records[key] = hashlib.sha256(rgb.tobytes()).hexdigest()
             self.transferred_bytes[key] = path.stat().st_size
             width, height = rgb.size
+        if self.inference_delay_seconds:
+            # Simulate synchronous GPU/sidecar waiting without allocating any CUDA memory.
+            time.sleep(self.inference_delay_seconds)
         return ProposalResult([[0, 0, width, height]], [0.9], 0, "pixel", self.model_id)
 
     def close(self) -> None:
@@ -113,13 +117,13 @@ def cache_hit_run(provider_class, cache_module, image_path, checkpoint, cache_di
         gc.collect()
 
 
-def tiled_run(provider_class, image_path, image_format=None):
-    base = PixelDetector()
+def tiled_run(provider_class, image_path, image_format=None, *, workers=5, inference_delay_ms=0):
+    base = PixelDetector(inference_delay_ms)
     config = {
         "tile_size": 1333,
         "overlap_ratio": 0.15,
-        "parallel_workers": 5,
-        "parallel_max_workers": 5,
+        "parallel_workers": workers,
+        "parallel_max_workers": workers,
         "proposal_cache_size": 0,
     }
     if image_format:
@@ -190,9 +194,13 @@ def main() -> None:
     parser.add_argument("--baseline-ref", default="c77e098")
     parser.add_argument("--repeats", type=int, default=2)
     parser.add_argument("--images", nargs="+", type=Path)
+    parser.add_argument("--workers", type=int, default=5)
+    parser.add_argument("--inference-delay-ms", type=float, default=0)
     args = parser.parse_args()
     if args.repeats < 1:
         parser.error("--repeats must be positive")
+    if args.workers < 1 or args.inference_delay_ms < 0:
+        parser.error("--workers must be positive and --inference-delay-ms non-negative")
     root = args.image_root.resolve()
     images = args.images or [
         next((root / "xlrs_bench_samples_20260827").glob("01_anomaly_*.jpg")),
@@ -216,6 +224,8 @@ def main() -> None:
         f"{package}.retrievers",
     )
     original_clip.retrieval_cache_key = original_cache.retrieval_cache_key
+    if hasattr(original_clip, "retrieval_image_identity"):
+        original_clip.retrieval_image_identity = original_cache.retrieval_image_identity
     original_tiled = committed_module(
         args.baseline_ref,
         "src/sat_rs_vlm/integrations/detectors/tiled.py",
@@ -230,9 +240,14 @@ def main() -> None:
         "baseline_commit": subprocess.check_output(
             ["git", "rev-parse", args.baseline_ref], cwd=PROJECT_ROOT, encoding="utf-8"
         ).strip(),
-        "scope": "CPU preprocessing only; deterministic pixel verifier, no model inference",
+        "scope": (
+            "CPU image handling plus simulated synchronous inference wait; no real model"
+            if args.inference_delay_ms
+            else "CPU preprocessing only; deterministic pixel verifier, no model inference"
+        ),
         "cache_conditions": "all score hits; file cache warmed by cache setup; alternating order",
-        "workers": 5,
+        "workers": args.workers,
+        "simulated_inference_delay_ms": args.inference_delay_ms,
         "repeats": args.repeats,
         "images": [],
     }
@@ -306,7 +321,12 @@ def main() -> None:
                         if version == "old"
                         else TiledProposalProvider
                     )
-                    measurement, pixels = tiled_run(cls, image_path)
+                    measurement, pixels = tiled_run(
+                        cls,
+                        image_path,
+                        workers=args.workers,
+                        inference_delay_ms=args.inference_delay_ms,
+                    )
                     expected_tiles = pixels if expected_tiles is None else expected_tiles
                     assert pixels == expected_tiles, (
                         "tile pixels, global boxes, scores/order changed"

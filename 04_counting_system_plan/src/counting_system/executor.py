@@ -263,19 +263,48 @@ class CountExecutor:
         detector = self._ensure_detector()
         raw: list[Detection] = []
         calls = 0
-        for tile in gated:
-            crop = crop_tile(pil, tile)
-            request = DetectionRequest(
-                image=crop,
-                target=spec,
-                tile=tile,
-                score_threshold=float((self.config.get("detector") or {}).get("score_threshold") or 0.0),
-                texts=spec.texts(),
+
+        def requests():
+            for tile in gated:
+                crop = crop_tile(pil, tile)
+                try:
+                    yield DetectionRequest(
+                        image=crop,
+                        target=spec,
+                        tile=tile,
+                        score_threshold=float(
+                            (self.config.get("detector") or {}).get("score_threshold") or 0.0
+                        ),
+                        texts=spec.texts(),
+                    )
+                finally:
+                    crop.close()
+
+        detect_many = getattr(detector, "detect_many", None)
+        pending_requests = requests()
+        try:
+            # The bridge owns CPU prefetch; this loop never increases inference concurrency.
+            responses = (
+                detect_many(pending_requests)
+                if callable(detect_many)
+                else (detector.detect(request) for request in pending_requests)
             )
-            response = detector.detect(request)
-            raw.extend(response.detections)
-            calls += 1
-        thr = float(score_threshold if score_threshold is not None else count_cfg.get("score_threshold", 0.2))
+            try:
+                for response in responses:
+                    raw.extend(response.detections)
+                    calls += 1
+            finally:
+                close_responses = getattr(responses, "close", None)
+                if callable(close_responses):
+                    close_responses()
+        finally:
+            pending_requests.close()
+            pil.close()
+        thr = float(
+            score_threshold
+            if score_threshold is not None
+            else count_cfg.get("score_threshold", 0.2)
+        )
         fused, stats = fuse_detections(
             raw,
             tiles,
@@ -298,13 +327,16 @@ class CountExecutor:
                 "prompt": spec.texts(),
                 "tiny": spec.tiny,
                 "scope": list(scope),
-                "source_scale": source_scale or (self.config.get("scale") or {}).get("default_source_scale"),
+                "source_scale": source_scale
+                or (self.config.get("scale") or {}).get("default_source_scale"),
                 "tiles_planned": len(tiles),
                 "tiles_run": len(gated),
                 "detector": getattr(detector, "impl_name", getattr(detector, "name", "unknown")),
                 "provider": getattr(detector, "impl_name", getattr(detector, "name", "unknown")),
                 "detector_calls": calls,
-                "raw_proposals": [asdict(d) for d in raw] if count_cfg.get("keep_raw_proposals", True) else len(raw),
+                "raw_proposals": [asdict(d) for d in raw]
+                if count_cfg.get("keep_raw_proposals", True)
+                else len(raw),
                 "raw_count": len(raw),
                 "fusion": stats,
                 "gate": gate_trace,
@@ -343,12 +375,21 @@ class CountExecutor:
                 keep_ids.add(tile.tile_id)
                 survivors.append(tile)
         if not survivors:
-            trace.update({"survivors": len(tiles), "dropped": 0, "scores": scores, "fallback": "all"})
+            trace.update(
+                {"survivors": len(tiles), "dropped": 0, "scores": scores, "fallback": "all"}
+            )
             return tiles, trace
         if others:
             survivors.extend(others)
         dropped = len(scan) - len(keep_ids)
-        trace.update({"survivors": len(survivors), "dropped": dropped, "scores": scores, "threshold": threshold})
+        trace.update(
+            {
+                "survivors": len(survivors),
+                "dropped": dropped,
+                "scores": scores,
+                "threshold": threshold,
+            }
+        )
         return survivors, trace
 
 

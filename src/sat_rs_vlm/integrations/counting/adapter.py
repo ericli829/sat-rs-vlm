@@ -59,9 +59,11 @@ class CountingSystemProvider:
             and "backend" not in detector_section
         ):
             detector_section["kind"] = cfg["backend"]
-        detector_kind = str(
-            detector_section.get("kind") or detector_section.get("backend") or "fake"
-        ).strip().lower()
+        detector_kind = (
+            str(detector_section.get("kind") or detector_section.get("backend") or "fake")
+            .strip()
+            .lower()
+        )
         executor_config = {
             key: value
             for key, value in cfg.items()
@@ -105,16 +107,17 @@ class CountingSystemProvider:
             }
             proposal_cfg.setdefault("score_threshold", 0.0)
             image_format = str(proposal_cfg.pop("tile_image_format", "bmp"))
+            prefetch = bool(proposal_cfg.pop("tile_prefetch", True))
             try:
                 proposal = create_proposal_provider(kind, proposal_cfg)
             except Exception as exc:
                 raise RuntimeError(
                     f"Counting provider unavailable: LAE sidecar failure: {exc}"
                 ) from exc
-            return CountingProposalDetectorBridge(proposal, image_format=image_format)
-        raise ValueError(
-            f"Counting provider unavailable: unsupported detector kind {kind!r}"
-        )
+            return CountingProposalDetectorBridge(
+                proposal, image_format=image_format, prefetch=prefetch
+            )
+        raise ValueError(f"Counting provider unavailable: unsupported detector kind {kind!r}")
 
     def count(self, request: CountingRequest) -> CountingResult:
         self.count_requests.append(request)

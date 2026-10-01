@@ -131,8 +131,9 @@ def test_openclip_crops_only_missing_embeddings(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("image_format", ["bmp", "png"])
+@pytest.mark.parametrize("prefetch", [False, True])
 def test_tile_preparation_is_bounded_and_preserves_pixels_and_global_order(
-    tmp_path: Path, image_format: str
+    tmp_path: Path, image_format: str, prefetch: bool
 ) -> None:
     image_path = tmp_path / "source.png"
     image = Image.new("RGB", (60, 10))
@@ -150,7 +151,7 @@ def test_tile_preparation_is_bounded_and_preserves_pixels_and_global_order(
             with lock:
                 paths.append(path)
                 # Six tiles must not have been materialized before the first inference.
-                assert len(list(path.parent.iterdir())) <= 2
+                assert len(list(path.parent.iterdir())) <= 2 * (1 + prefetch)
             index = int(path.stem.split("_")[-1])
             with Image.open(path) as tile:
                 expected = image.crop((index * 10, 0, index * 10 + 10, 10))
@@ -168,6 +169,7 @@ def test_tile_preparation_is_bounded_and_preserves_pixels_and_global_order(
             "overlap_ratio": 0,
             "parallel_workers": 2,
             "tile_image_format": image_format,
+            "tile_prefetch": prefetch,
         },
         base_provider_name="fixture",
     )

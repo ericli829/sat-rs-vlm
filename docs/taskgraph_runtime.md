@@ -298,13 +298,21 @@ only missing embeddings need crops, which are materialized per inference batch.
 Trace metadata includes `image_decode_skipped` and `actual_crop_count` alongside the
 existing candidate `crop_count`.
 
-Tiled detection prepares each crop in its active worker and removes the transport
-file after synchronous prediction, preserving tile order and global coordinates.
+Tiled detection prepares crops on CPU threads while the existing workers run
+synchronous inference, preserving tile order and global coordinates. Each worker
+prepares at most one tile ahead; COUNT keeps inference serial and also prepares
+one tile ahead. Model instances, inference worker counts, batch sizes, and CUDA
+inputs are unchanged. Set `tile_prefetch: false` on the tiled provider or COUNT
+detector configuration to disable this overlap.
 The default transport is lossless RGB BMP, which avoids PNG compression work.
 Set `tile_image_format: png` on the tiled provider or counting detector configuration
-when smaller transport files are needed. BMP uses more disk bandwidth; at most one
-transport file per active tiled worker is retained. The COUNT bridge exposes
-`call_count` and does not retain request images.
+when smaller transport files are needed. BMP uses more disk bandwidth; at most two
+transport files per active tiled worker (active plus lookahead) are retained,
+or one with prefetch disabled. Files are removed after prediction. A 1333×1333 RGB
+BMP is about 5.1 MiB: five workers retain at most about 51 MiB with prefetch.
+The decoded source is released after creating the full RGB image, before tiled
+inference starts. The COUNT bridge exposes `call_count` and does not retain request
+images. Temporary files use the system temporary directory.
 
 Compare a committed baseline with the working tree using local UHR fixtures:
 
@@ -319,3 +327,7 @@ The benchmark runs the committed code and current code on identical images in
 alternating order. It checks score-cache results, transported tile pixels, global
 boxes, and proposal order. A deterministic pixel reader replaces model inference;
 reported speedups apply to CPU image handling, not complete-system latency.
+Timing includes source PNG/JPG decoding, RGB conversion, cropping, transport-file
+writing, and transport-file reading. Optional `--inference-delay-ms` adds a
+simulated wait to each inference call to measure overlap; it is explicitly not a
+real-model benchmark. `--workers 1` evaluates overlap without parallel inference.

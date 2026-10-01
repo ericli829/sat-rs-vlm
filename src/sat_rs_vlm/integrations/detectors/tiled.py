@@ -22,7 +22,7 @@ from .protocol import (
     ProposalResult,
     canonicalize_proposals,
 )
-from .tile_transport import save_tile_image, tile_image_format
+from .tile_transport import cpu_prepared_items, save_tile_image, tile_image_format
 
 
 def tile_starts(length: int, tile_size: int, overlap_ratio: float) -> tuple[int, ...]:
@@ -122,6 +122,7 @@ class TiledProposalProvider:
         self.parallel_vram_reserve_gb = float(self.config.get("parallel_vram_reserve_gb", 6.0))
         self.proposal_cache_size = int(self.config.get("proposal_cache_size", 8))
         self.tile_image_format = tile_image_format(self.config.get("tile_image_format", "bmp"))
+        self.tile_prefetch = bool(self.config.get("tile_prefetch", True))
         if self.proposal_cache_size < 0:
             raise ProposalError("proposal_cache_size must be non-negative")
         top_k_value = self.config.get("global_top_k")
@@ -244,7 +245,11 @@ class TiledProposalProvider:
         tile_records: list[dict[str, Any]] = []
         base_latency_ms = 0.0
         parallel_workers = self._resolved_parallel_workers()
-        with Image.open(resolved_image) as source, source.convert("RGB") as image:
+        with Image.open(resolved_image) as source:
+            image = source.convert("RGB")
+        # RGB owns its pixels; release the decoded source before inference starts.
+        source.close()
+        with image:
             tiles = generate_tiles(
                 image.width,
                 image.height,
@@ -254,8 +259,23 @@ class TiledProposalProvider:
             with tempfile.TemporaryDirectory(prefix="uhr_tiled_detector_") as temporary:
                 temporary_root = Path(temporary)
 
-                def predict_tile(
+                def prepare_tile(
                     item: tuple[int, tuple[int, int, int, int]],
+                ) -> tuple[int, tuple[int, int, int, int], Path]:
+                    tile_index, coordinates = item
+                    tile_path = temporary_root / (f"tile_{tile_index:05d}.{self.tile_image_format}")
+                    crop = image.crop(coordinates)
+                    try:
+                        save_tile_image(crop, tile_path, self.tile_image_format)
+                    finally:
+                        crop.close()
+                    return tile_index, coordinates, tile_path
+
+                def release_tile(item: tuple[int, tuple[int, int, int, int], Path]) -> None:
+                    item[2].unlink(missing_ok=True)
+
+                def predict_tile(
+                    item: tuple[int, tuple[int, int, int, int], Path],
                 ) -> tuple[
                     int,
                     tuple[int, int, int, int],
@@ -264,19 +284,9 @@ class TiledProposalProvider:
                     list[float],
                     dict[str, int],
                 ]:
-                    tile_index, coordinates = item
+                    tile_index, coordinates, tile_path = item
                     x1, y1, x2, y2 = coordinates
-                    tile_path = temporary_root / (f"tile_{tile_index:05d}.{self.tile_image_format}")
-                    # Only active workers hold crops/files. Preparation overlaps inference.
-                    crop = image.crop(coordinates)
-                    try:
-                        save_tile_image(crop, tile_path, self.tile_image_format)
-                    finally:
-                        crop.close()
-                    try:
-                        result = self.base_provider.predict(tile_path, target_phrase)
-                    finally:
-                        tile_path.unlink(missing_ok=True)
+                    result = self.base_provider.predict(tile_path, target_phrase)
                     local_boxes, local_scores, validation = canonicalize_proposals(
                         result.boxes_xyxy,
                         result.scores,
@@ -292,14 +302,35 @@ class TiledProposalProvider:
                         validation,
                     )
 
-                if parallel_workers == 1 or len(tiles) == 1:
-                    tile_results = [predict_tile(item) for item in enumerate(tiles)]
+                lane_count = min(parallel_workers, len(tiles))
+                inputs = iter(enumerate(tiles))
+                inputs_lock = threading.Lock()
+
+                def lane_inputs():
+                    while True:
+                        with inputs_lock:
+                            item = next(inputs, None)
+                        if item is None:
+                            return
+                        yield item
+
+                def predict_lane(_lane: int) -> list[Any]:
+                    # One CPU lookahead per existing inference worker; no new GPU consumer.
+                    with cpu_prepared_items(
+                        lane_inputs(), prepare_tile, release_tile, prefetch=self.tile_prefetch
+                    ) as prepared:
+                        return [predict_tile(item) for item in prepared]
+
+                if lane_count == 1:
+                    tile_results = predict_lane(0)
                 else:
                     with ThreadPoolExecutor(
-                        max_workers=parallel_workers,
+                        max_workers=lane_count,
                         thread_name_prefix="tiled-detector",
                     ) as executor:
-                        tile_results = list(executor.map(predict_tile, enumerate(tiles)))
+                        lanes = executor.map(predict_lane, range(lane_count))
+                        tile_results = [item for lane in lanes for item in lane]
+                    tile_results.sort(key=lambda item: item[0])
 
                 for (
                     tile_index,
@@ -367,6 +398,8 @@ class TiledProposalProvider:
                 "tile_size": self.tile_size,
                 "overlap_ratio": self.overlap_ratio,
                 "tile_image_format": self.tile_image_format,
+                "tile_prefetch": self.tile_prefetch,
+                "cpu_lookahead_per_worker": 1 if self.tile_prefetch else 0,
                 "global_nms_iou": self.global_nms_iou,
                 "parallel_workers_requested": str(self.parallel_workers_requested),
                 "parallel_workers": parallel_workers,
