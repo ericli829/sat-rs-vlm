@@ -289,3 +289,33 @@ python -m pytest tests/smoke/test_taskgraph_real.py -q -k qwen
 
 The required model/source environment variables are documented directly in the real
 example config. Ordinary pytest runs skip these tests and require no GPU, model, or network.
+
+## CPU image preprocessing
+
+Region score caches retain their existing keys, but compute the source SHA-256 once
+per scoring batch. GeoRSCLIP checks score and embedding caches before decoding pixels;
+only missing embeddings need crops, which are materialized per inference batch.
+Trace metadata includes `image_decode_skipped` and `actual_crop_count` alongside the
+existing candidate `crop_count`.
+
+Tiled detection prepares each crop in its active worker and removes the transport
+file after synchronous prediction, preserving tile order and global coordinates.
+The default transport is lossless RGB BMP, which avoids PNG compression work.
+Set `tile_image_format: png` on the tiled provider or counting detector configuration
+when smaller transport files are needed. BMP uses more disk bandwidth; at most one
+transport file per active tiled worker is retained. The COUNT bridge exposes
+`call_count` and does not retain request images.
+
+Compare a committed baseline with the working tree using local UHR fixtures:
+
+```powershell
+python scripts/experiments/benchmark_image_preprocessing.py `
+  --image-root D:/Desktop/tzb-2026/results/uhr_locator `
+  --baseline-ref c77e098 --repeats 2 `
+  --output .tmp/image-preprocessing-20261001/summary.json
+```
+
+The benchmark runs the committed code and current code on identical images in
+alternating order. It checks score-cache results, transported tile pixels, global
+boxes, and proposal order. A deterministic pixel reader replaces model inference;
+reported speedups apply to CPU image handling, not complete-system latency.

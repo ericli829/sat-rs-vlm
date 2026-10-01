@@ -14,7 +14,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from .cache import RetrievalCache, retrieval_cache_key
+from .cache import RetrievalCache, retrieval_cache_key, retrieval_image_identity
 from .config import resolve_config_path
 from .protocol import RegionXYXY, RetrievalError, RetrievalResult
 
@@ -226,6 +226,7 @@ class VisRAGDirectRetrieverProvider:
         keys: list[str | None] = [None] * len(boxes)
         cache_hits = 0
         if self.cache is not None:
+            image_identity = retrieval_image_identity(resolved_image)
             for index, box in enumerate(boxes):
                 key = retrieval_cache_key(
                     image_path=resolved_image,
@@ -234,6 +235,7 @@ class VisRAGDirectRetrieverProvider:
                     provider=self.provider_name,
                     model_identity=self.model_identity,
                     parameters=self.parameters,
+                    image_identity=image_identity,
                 )
                 keys[index] = key
                 cached_score = self.cache.get(key)

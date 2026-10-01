@@ -10,7 +10,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from .cache import RetrievalCache, retrieval_cache_key
+from .cache import RetrievalCache, retrieval_cache_key, retrieval_image_identity
 from .protocol import RegionXYXY, RetrievalError, RetrievalResult
 
 
@@ -34,9 +34,7 @@ class OpenCLIPRetrieverProvider:
         self.cache = (
             RetrievalCache(self.config["cache_dir"]) if self.config.get("cache_dir") else None
         )
-        self.decoded_image_cache_size = max(
-            0, int(self.config.get("decoded_image_cache_size", 2))
-        )
+        self.decoded_image_cache_size = max(0, int(self.config.get("decoded_image_cache_size", 2)))
         self.decoded_image_cache_max_pixels = max(
             1, int(self.config.get("decoded_image_cache_max_pixels", 4_000_000))
         )
@@ -116,12 +114,8 @@ class OpenCLIPRetrieverProvider:
         if not parameter_names:
             parameter_names = set(model_state)
         loaded_names = parameter_names.difference(missing_keys)
-        total_parameter_count = sum(
-            self._value_size(model_state[name]) for name in parameter_names
-        )
-        loaded_parameter_count = sum(
-            self._value_size(model_state[name]) for name in loaded_names
-        )
+        total_parameter_count = sum(self._value_size(model_state[name]) for name in parameter_names)
+        loaded_parameter_count = sum(self._value_size(model_state[name]) for name in loaded_names)
         loaded_fraction = (
             loaded_parameter_count / total_parameter_count if total_parameter_count else 0.0
         )
@@ -134,9 +128,7 @@ class OpenCLIPRetrieverProvider:
             for key in unexpected_keys
             if self._matches(key, self.allowed_unexpected_key_patterns)
         ]
-        unallowed_unexpected = [
-            key for key in unexpected_keys if key not in allowed_unexpected
-        ]
+        unallowed_unexpected = [key for key in unexpected_keys if key not in allowed_unexpected]
         return {
             "checkpoint": str(self.checkpoint),
             "model_id": self.model_id,
@@ -225,14 +217,16 @@ class OpenCLIPRetrieverProvider:
         return self._model_load_ms
 
     @staticmethod
-    def _crop(image: Any, region: RegionXYXY, index: int) -> tuple[Any, list[float]]:
+    def _canonical_region(
+        image_size: tuple[int, int], region: RegionXYXY, index: int
+    ) -> list[float]:
         try:
             values = [float(value) for value in region]
         except (TypeError, ValueError) as exc:
             raise RetrievalError(f"invalid OpenCLIP region at index {index}") from exc
         if len(values) != 4 or not all(math.isfinite(value) for value in values):
             raise RetrievalError(f"invalid OpenCLIP region at index {index}")
-        width, height = image.size
+        width, height = image_size
         values = [
             max(0.0, min(values[0], width)),
             max(0.0, min(values[1], height)),
@@ -241,6 +235,11 @@ class OpenCLIPRetrieverProvider:
         ]
         if values[2] <= values[0] or values[3] <= values[1]:
             raise RetrievalError(f"degenerate OpenCLIP region at index {index}")
+        return values
+
+    @staticmethod
+    def _crop(image: Any, region: RegionXYXY, index: int) -> tuple[Any, list[float]]:
+        values = OpenCLIPRetrieverProvider._canonical_region(image.size, region, index)
         box = tuple(
             math.floor(values[position]) if position < 2 else math.ceil(values[position])
             for position in range(4)
@@ -295,13 +294,21 @@ class OpenCLIPRetrieverProvider:
         regions = list(regions_xyxy)
         if not regions:
             return RetrievalResult([], 0.0, self.provider_name, self.model_id, {"batch_size": 0})
-        image, decoded_cache_hit, image_identity = self._decoded_image(resolved)
-        canonical = [self._crop(image, box, index) for index, box in enumerate(regions)]
-        boxes = [item[1] for item in canonical]
+        # Validate coordinates using image headers; cache hits need no pixel decode/crop.
+        from PIL import Image
+
+        stat = resolved.stat()
+        image_identity = (str(resolved), stat.st_size, stat.st_mtime_ns)
+        decoded_cache_hit = image_identity in self._decoded_image_cache
+        with Image.open(resolved) as source:
+            boxes = [
+                self._canonical_region(source.size, box, index) for index, box in enumerate(regions)
+            ]
         scores: list[float | None] = [None] * len(boxes)
         score_keys: list[str | None] = [None] * len(boxes)
         score_cache_hits = 0
         if self.cache is not None:
+            cache_image_identity = retrieval_image_identity(resolved)
             for index, box in enumerate(boxes):
                 key = retrieval_cache_key(
                     image_path=resolved,
@@ -313,6 +320,7 @@ class OpenCLIPRetrieverProvider:
                         "model_id": self.model_id,
                     },
                     parameters=self.parameters,
+                    image_identity=cache_image_identity,
                 )
                 score_keys[index] = key
                 cached_score = self.cache.get(key)
@@ -334,6 +342,8 @@ class OpenCLIPRetrieverProvider:
                     "query_cache_hit": query in self._query_cache,
                     "score_cache_hits": score_cache_hits,
                     "decoded_image_cache_hit": decoded_cache_hit,
+                    "image_decode_skipped": True,
+                    "actual_crop_count": 0,
                     "image_embedding_cache_hits": 0,
                     "device": self._resolved_device,
                     "generation_used": False,
@@ -356,9 +366,7 @@ class OpenCLIPRetrieverProvider:
                     self._model.encode_text(tokens), dim=-1
                 )
         query_embedding = self._query_cache[query]
-        embedding_keys = [
-            (*image_identity, *(round(value, 6) for value in box)) for box in boxes
-        ]
+        embedding_keys = [(*image_identity, *(round(value, 6) for value in box)) for box in boxes]
         image_embeddings: dict[int, Any] = {}
         embedding_cache_hits = 0
         uncached: list[int] = []
@@ -370,14 +378,21 @@ class OpenCLIPRetrieverProvider:
                 image_embeddings[index] = cached_embedding
                 embedding_cache_hits += 1
         batches = 0
+        image = None
+        if uncached:
+            image, decoded_cache_hit, _ = self._decoded_image(resolved)
         for offset in range(0, len(uncached), self.batch_size):
             indices = uncached[offset : offset + self.batch_size]
-            batch = [self._preprocess(canonical[index][0]) for index in indices]
+            batch = []
+            for index in indices:
+                crop, _ = self._crop(image, boxes[index], index)
+                try:
+                    batch.append(self._preprocess(crop))
+                finally:
+                    crop.close()
             with torch.inference_mode():
                 images = torch.stack(batch).to(self._resolved_device)
-                embeddings = torch.nn.functional.normalize(
-                    self._model.encode_image(images), dim=-1
-                )
+                embeddings = torch.nn.functional.normalize(self._model.encode_image(images), dim=-1)
             batches += 1
             for index, value in zip(indices, embeddings, strict=True):
                 image_embeddings[index] = value.detach().cpu()
@@ -404,9 +419,11 @@ class OpenCLIPRetrieverProvider:
                 "crop_batch_count": batches,
                 "query_cache_hit": query_cache_hit,
                 "score_cache_hits": score_cache_hits,
-                    "decoded_image_cache_hit": decoded_cache_hit,
-                    "decoded_image_cache_size": len(self._decoded_image_cache),
-                    "decoded_image_cache_max_pixels": self.decoded_image_cache_max_pixels,
+                "decoded_image_cache_hit": decoded_cache_hit,
+                "image_decode_skipped": not uncached,
+                "actual_crop_count": len(uncached),
+                "decoded_image_cache_size": len(self._decoded_image_cache),
+                "decoded_image_cache_max_pixels": self.decoded_image_cache_max_pixels,
                 "image_embedding_cache_hits": embedding_cache_hits,
                 "image_embedding_cache_size": len(self._image_embedding_cache),
                 "load_info": dict(self._load_info),

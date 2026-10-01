@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
-from typing import Any
 
 from sat_rs_vlm.integrations.detectors.protocol import ProposalError, ProposalProvider
+from sat_rs_vlm.integrations.detectors.tile_transport import save_tile_image, tile_image_format
 
 from .bootstrap import ensure_counting_system_importable
 
@@ -26,20 +26,22 @@ class CountingProposalDetectorBridge:
 
     name = "proposal_bridge"
 
-    def __init__(self, provider: ProposalProvider) -> None:
+    def __init__(self, provider: ProposalProvider, *, image_format: str = "bmp") -> None:
         self._provider = provider
         self.provider_name = getattr(provider, "provider_name", "proposal")
         self.name = self.provider_name
         self.impl_name = self.provider_name
-        self.calls: list[Any] = []
+        self.tile_image_format = tile_image_format(image_format)
+        self.call_count = 0
 
     def detect(self, request: DetectionRequest) -> DetectionResponse:
-        self.calls.append(request)
+        # Retain a scalar diagnostic, never requests that own full tile images.
+        self.call_count += 1
         phrase = request.texts or request.target.detection_phrase()
         local_w, local_h = request.image.size
         with tempfile.TemporaryDirectory(prefix="counting_tile_") as temp_dir:
-            tile_path = Path(temp_dir) / "tile.png"
-            request.image.convert("RGB").save(tile_path)
+            tile_path = Path(temp_dir) / f"tile.{self.tile_image_format}"
+            save_tile_image(request.image, tile_path, self.tile_image_format)
             try:
                 result = self._provider.predict(tile_path, phrase)
             except ProposalError as exc:

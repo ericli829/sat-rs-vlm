@@ -23,6 +23,21 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def retrieval_image_identity(image_path: Path) -> dict[str, Any]:
+    """Hash one source once for a batch of region cache keys."""
+
+    resolved = image_path.expanduser().resolve()
+    if not resolved.is_file():
+        raise RetrievalError(f"retrieval image does not exist: {resolved}")
+    stat = resolved.stat()
+    return {
+        "path": str(resolved),
+        "size": stat.st_size,
+        "mtime_ns": stat.st_mtime_ns,
+        "sha256": _file_sha256(resolved),
+    }
+
+
 def retrieval_cache_key(
     *,
     image_path: Path,
@@ -31,19 +46,13 @@ def retrieval_cache_key(
     provider: str,
     model_identity: Any,
     parameters: dict[str, Any],
+    image_identity: dict[str, Any] | None = None,
 ) -> str:
-    resolved = image_path.expanduser().resolve()
-    if not resolved.is_file():
-        raise RetrievalError(f"retrieval image does not exist: {resolved}")
-    stat = resolved.stat()
     payload = {
         "schema_version": RETRIEVAL_CACHE_SCHEMA_VERSION,
-        "image_identity": {
-            "path": str(resolved),
-            "size": stat.st_size,
-            "mtime_ns": stat.st_mtime_ns,
-            "sha256": _file_sha256(resolved),
-        },
+        "image_identity": (
+            retrieval_image_identity(image_path) if image_identity is None else image_identity
+        ),
         "bbox": [float(value) for value in region_xyxy],
         "query": query.strip(),
         "provider": provider,

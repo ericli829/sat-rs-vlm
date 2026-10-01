@@ -104,13 +104,14 @@ class CountingSystemProvider:
                 if key not in {"kind", "backend"}
             }
             proposal_cfg.setdefault("score_threshold", 0.0)
+            image_format = str(proposal_cfg.pop("tile_image_format", "bmp"))
             try:
                 proposal = create_proposal_provider(kind, proposal_cfg)
             except Exception as exc:
                 raise RuntimeError(
                     f"Counting provider unavailable: LAE sidecar failure: {exc}"
                 ) from exc
-            return CountingProposalDetectorBridge(proposal)
+            return CountingProposalDetectorBridge(proposal, image_format=image_format)
         raise ValueError(
             f"Counting provider unavailable: unsupported detector kind {kind!r}"
         )
