@@ -11,6 +11,7 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any
 
+from .benchmark_choices import benchmark_choice_ids
 from .runtime import RuntimeRequest, RuntimeResult, TaskGraphRuntime
 from .runtime_types import ChoiceResult, runtime_summary
 from .schema import QuestionType, parse_taskgraph
@@ -166,6 +167,7 @@ def runtime_request_from_sample(
         question=question,
         image_paths=_resolve_images(images, root),
         options=choices,
+        choice_ids=benchmark_choice_ids(choices),
         question_type=_question_type(raw_question_type, choices),
         target_category=str(target) if target is not None else None,
         graph=graph,
@@ -538,7 +540,9 @@ def _trace_performance_summary(trace: ExecutionTrace) -> dict[str, Any]:
         for item in events if isinstance(events, list) else []:
             if isinstance(item, Mapping):
                 tokens = item.get("tokens")
-                value = tokens.get("decode_tokens_per_second") if isinstance(tokens, Mapping) else None
+                value = (
+                    tokens.get("decode_tokens_per_second") if isinstance(tokens, Mapping) else None
+                )
                 if isinstance(value, int | float):
                     best = max(best or float("-inf"), float(value))
         return best

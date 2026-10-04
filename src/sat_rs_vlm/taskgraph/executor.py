@@ -280,7 +280,11 @@ class GraphExecutor:
         plan = ExecutionPlan.build(
             graph,
             options=context.choices,
-            config=self.fusion_config,
+            config=(
+                FinalChoiceFusionConfig(mode="off")
+                if context.defer_final_answer
+                else self.fusion_config
+            ),
         )
         for node in graph.nodes:
             hint = plan.hint_for(node.id)

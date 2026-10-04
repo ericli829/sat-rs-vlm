@@ -76,6 +76,7 @@ class OperatorContext:
     final_sources: tuple[str, ...] = ()
     final_question: str | None = None
     graph_nodes: tuple[GraphNode, ...] = ()
+    defer_final_answer: bool = False
 
 
 class OperatorExecutor(Protocol):
@@ -497,7 +498,9 @@ class GeometryExecutor:
         if isinstance(value, Entity | Region):
             return value, {"policy": "single", "selected_index": 0}
         if not isinstance(value, EntitySet):
-            raise TypeError(f"BUILD_ROUTE_CONTEXT.{role} must be Entity, EntitySet, Region, or SelectResult")
+            raise TypeError(
+                f"BUILD_ROUTE_CONTEXT.{role} must be Entity, EntitySet, Region, or SelectResult"
+            )
         if not value.entities:
             raise ValueError(f"BUILD_ROUTE_CONTEXT.{role} EntitySet is empty")
         if len(value.entities) == 1:

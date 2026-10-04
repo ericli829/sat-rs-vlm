@@ -194,7 +194,8 @@ def test_hierarchical_locator_adapter_preserves_nested_global_scope(tmp_path: Pa
     config["search"].update({"target_view_size": 1, "max_depth": 1})
     config["scorers"]["detector"]["enabled"] = False
     config["scorers"]["spatial"]["enabled"] = False
-    config["fusion"].update({"max_regions": 4, "score_threshold": -1.0})
+    # Disable filtering using the supported setting; -1 violates the public config contract.
+    config["fusion"].update({"max_regions": 4, "score_threshold": None})
     locator = create_locator("hierarchical", config)
     try:
         result = LocatorRegionRetrieverAdapter(locator).retrieve(

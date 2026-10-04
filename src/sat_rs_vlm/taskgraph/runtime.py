@@ -14,6 +14,7 @@ from sat_rs_vlm.infrastructure.config import ModelConfig
 from sat_rs_vlm.infrastructure.telemetry import SystemTelemetry, collect_provider_inventory
 
 from .answerability import AnswerabilityConfig, EvidenceSufficiencyExecutor
+from .benchmark_choices import benchmark_choice_ids
 from .capabilities import TargetCapabilityClassifier
 from .choice import ChoiceRequest, ChoiceResolver
 from .choice_config import ChoiceSystemConfig
@@ -53,8 +54,8 @@ from .providers import (
     VLMRequest,
 )
 from .referent_refinement import ReferentRefinementConfig, ReferentRefiner
-from .runtime_memory import RuntimeMemory
 from .routing import DatasetExecutionPolicy, ExecutionMode, ExecutionModeRouter
+from .runtime_memory import RuntimeMemory
 from .runtime_types import (
     Answer,
     ChoiceResult,
@@ -109,6 +110,9 @@ class RuntimeRequest:
     choice_answer_type: AnswerType | None = None
     target_category: str | None = None
     graph: TaskGraph | dict[str, Any] | str | None = None
+    execution_mode: ExecutionMode | None = None
+    defer_final_answer: bool = False
+    choice_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -434,10 +438,17 @@ class TaskGraphRuntime:
         question: str | None,
         options: tuple[str, ...],
         answer_type: AnswerType,
+        choice_ids: tuple[str, ...] = (),
     ) -> RuntimeObject | ChoiceResult | tuple[RuntimeObject, ...]:
         if answer_type in {AnswerType.CHOICE_SINGLE, AnswerType.CHOICE_MULTI}:
             return self.choice_resolver.resolve(
-                ChoiceRequest(sources, question, options, answer_type)
+                ChoiceRequest(
+                    sources,
+                    question,
+                    options,
+                    answer_type,
+                    choice_ids=choice_ids or benchmark_choice_ids(options),
+                )
             )
         return sources[0] if len(sources) == 1 else sources
 
@@ -520,7 +531,12 @@ class TaskGraphRuntime:
         if tuple(graph.choices or ()) != request.options:
             raise ValueError("TaskGraph choices differ from the original dataset options")
         store = RuntimeStore({f"${key}": value for key, value in images.items()})
-        context = OperatorContext(request.question, request.options, self.composer)
+        context = OperatorContext(
+            request.question,
+            request.options,
+            self.composer,
+            defer_final_answer=request.defer_final_answer,
+        )
         graph_started = time.perf_counter()
         try:
             trace = self.graph_executor.execute(
@@ -544,7 +560,7 @@ class TaskGraphRuntime:
         if planner_metadata is not None:
             trace.telemetry["planner_metadata"] = dict(planner_metadata)
         postprocess_started = time.perf_counter()
-        choice_requested = graph.final.answer_type in {
+        choice_requested = not request.defer_final_answer and graph.final.answer_type in {
             AnswerType.CHOICE_SINGLE,
             AnswerType.CHOICE_MULTI,
         }
@@ -566,11 +582,16 @@ class TaskGraphRuntime:
                 sources = tuple(images.values())
                 evidence_fallback = True
             choice_started = time.perf_counter()
-            output = self._choice_or_answer(
-                sources,
-                graph.final.question or None,
-                request.options,
-                graph.final.answer_type,
+            output = (
+                (sources[0] if len(sources) == 1 else sources)
+                if request.defer_final_answer
+                else self._choice_or_answer(
+                    sources,
+                    graph.final.question or None,
+                    request.options,
+                    graph.final.answer_type,
+                    request.choice_ids,
+                )
             )
         except Exception as exc:
             if (
@@ -582,9 +603,7 @@ class TaskGraphRuntime:
                 # Last-resort tolerance: unresolved/empty SELECT evidence must not
                 # kill a CHOICE sample.  Fall back to a direct VLM answer over the
                 # input images and record the degradation in telemetry.
-                trace.telemetry["final_evidence_fallback"] = (
-                    f"{type(exc).__name__}: {exc}"
-                )
+                trace.telemetry["final_evidence_fallback"] = f"{type(exc).__name__}: {exc}"
                 sources = tuple(images.values())
                 evidence_fallback = True
                 choice_started = time.perf_counter()
@@ -593,6 +612,7 @@ class TaskGraphRuntime:
                     graph.final.question or request.question or None,
                     request.options,
                     graph.final.answer_type,
+                    request.choice_ids,
                 )
             else:
                 exc.execution_trace = trace
@@ -632,7 +652,10 @@ class TaskGraphRuntime:
     def _direct_vlm(self, request: RuntimeRequest, images: dict[str, ImageRef]) -> RuntimeResult:
         sources = tuple(images.values())
         trace = ExecutionTrace(request.sample_id, ExecutionMode.DIRECT_VLM.value)
-        if request.options:
+        if request.defer_final_answer:
+            trace.final_question = request.question
+            return RuntimeResult(ExecutionMode.DIRECT_VLM, sources, trace)
+        if request.options and not request.defer_final_answer:
             choice_started = time.perf_counter()
             choice_output = self.choice_resolver.resolve(
                 ChoiceRequest(
@@ -640,6 +663,7 @@ class TaskGraphRuntime:
                     request.question,
                     request.options,
                     self._direct_choice_answer_type(request),
+                    choice_ids=request.choice_ids or benchmark_choice_ids(request.options),
                 )
             )
             trace.telemetry["choice_ms"] = (time.perf_counter() - choice_started) * 1000.0
@@ -707,7 +731,7 @@ class TaskGraphRuntime:
             trace.telemetry["detector_metadata"] = dict(detected.metadata)
             source = detected.detections
             trace.result = runtime_summary(source)
-        if request.options:
+        if request.options and not request.defer_final_answer:
             choice_started = time.perf_counter()
             choice_output = self.choice_resolver.resolve(
                 ChoiceRequest(
@@ -715,6 +739,7 @@ class TaskGraphRuntime:
                     request.question,
                     request.options,
                     self._direct_choice_answer_type(request),
+                    choice_ids=request.choice_ids or benchmark_choice_ids(request.options),
                 )
             )
             trace.telemetry["choice_ms"] = (time.perf_counter() - choice_started) * 1000.0
@@ -988,10 +1013,12 @@ class TaskGraphRuntime:
                 torch = _reset_runtime_resources(self.providers)
                 images = self._images(request)
                 routing_started = time.perf_counter()
-                mode = self.mode_router.route(request.dataset, request.task_category)
+                mode = request.execution_mode or self.mode_router.route(
+                    request.dataset, request.task_category
+                )
                 memory_entry = (
                     self.runtime_memory.lookup(request.sample_id)
-                    if self.runtime_memory
+                    if self.runtime_memory and request.execution_mode is None
                     else None
                 )
                 if memory_entry is not None:

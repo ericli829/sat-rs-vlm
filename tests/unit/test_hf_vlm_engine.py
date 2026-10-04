@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from contextlib import nullcontext
 from types import SimpleNamespace
 from typing import Any
@@ -134,6 +135,13 @@ def install_fake_modules(
         return modules[name]
 
     monkeypatch.setattr(hf_vlm_engine.importlib, "import_module", fake_import_module)
+    # Generation telemetry imports this submodule directly. Keep that import
+    # offline as well instead of entering the installed Transformers package.
+    monkeypatch.setitem(
+        sys.modules,
+        "transformers.generation.logits_process",
+        SimpleNamespace(LogitsProcessorList=list),
+    )
 
 
 def test_engine_prefers_qwen3vl_and_uses_auto_device_map(

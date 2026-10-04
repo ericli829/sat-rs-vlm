@@ -1,0 +1,28 @@
+# One HTTP worker owns the existing runtime. All model paths stay in its config.
+runtime_config: ../taskgraph/runtime.real.example.yaml
+offline: false
+package:
+  root: ${COMPETITION_IMAGE_PACKAGE}
+server:
+  timeout_seconds: 120
+  # false: service/providers initialized at startup, model weights load on first use.
+  # true: invoke existing provider preload hooks before healthz becomes available.
+  preload: false
+routing:
+  simple_count_detection: true
+  graph_for_relational_questions: true
+short_text:
+  instruction: "Return only the shortest direct answer. No explanation or reasoning."
+enum:
+  enabled: true
+  legacy_text_fallback: false
+  preserve_reasoning_text: false
+bbox:
+  coordinate_format: pixel_xyxy
+  validate_image_bounds: true
+  # Existing detection fine-tuning prompt uses normalized_0_1 xyxy JSON.
+  # Applies only to model JSON without a declaration, never to global Region coordinates.
+  model_output_coordinate_format: normalized_0_1
+logging:
+  # The dedicated app logs fixed safe metadata only; it never logs request bodies.
+  request_metadata_only: true

@@ -1,0 +1,14 @@
+{
+  "smoke-bbox": {
+    "version": "taskgraph-v1.1",
+    "question": "Locate the ship.\nResolve the referred target using localization and selection. Final evidence must be one Entity or Region in original global pixel coordinates.",
+    "question_type": "FREE_FORM",
+    "inputs": {"image0": {"type": "image", "uri_or_key": "dataset:image0"}},
+    "intent": "OTHER",
+    "nodes": [
+      {"id": "n1", "op": "REGION_FROM_BBOX", "inputs": {"image": "$image0"},
+       "params": {"bbox": [100, 100, 500, 500], "image_size": [1000, 1000]}}
+    ],
+    "final": {"sources": ["$n1"], "question": "", "answer_type": "TEXT"}
+  }
+}

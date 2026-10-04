@@ -1,5 +1,8 @@
 # sat-rs-vlm
 
+正式比赛 Protocol 2.0 接入、密封图片包、单 worker 服务和五类答案 smoke：
+[接入与部署说明](docs/competition_protocol_v2.md)。
+
 `sat-rs-vlm` 是面向卫星平台受限算力部署的多模态遥感大模型工程框架。项目提供
 遥感检测、分类、分割、变化检测、计数、描述和 VQA 的统一领域接口，并包含
 Mock 推理、FastAPI/CLI、本地 Qwen3-VL、VRSBench 转换、LoRA 训练与评估链路。
@@ -405,6 +408,7 @@ pytest -q
 
 ## 文档
 
+- [开发图片集分析与分辨率路由方案（待实施）](docs/competition_resolution_routing_plan.md)
 - [本地环境](docs/local_setup.md)
 - [AutoDL 环境](docs/autodl_setup.md)
 - [数据布局](docs/dataset_layout.md)

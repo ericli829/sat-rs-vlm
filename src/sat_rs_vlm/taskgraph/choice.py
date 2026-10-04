@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, replace
 from typing import cast
 
+from .benchmark_choices import benchmark_choice_ids
 from .choice_config import ChoiceSystemConfig
 from .input_composer import InputComposer
 from .providers import (
@@ -36,6 +38,8 @@ class ChoiceRequest:
     question: str | None
     options: tuple[str, ...]
     answer_type: AnswerType = AnswerType.CHOICE_SINGLE
+    choice_ids: tuple[str, ...] = ()
+    strip_option_prefix: bool = True
 
     def __post_init__(self) -> None:
         normalized = AnswerType(self.answer_type)
@@ -44,12 +48,17 @@ class ChoiceRequest:
         if not self.options:
             raise ValueError("ChoiceRequest requires original dataset options")
         object.__setattr__(self, "answer_type", normalized)
+        # Compatibility boundary for old benchmark callers. New adapters supply IDs.
+        ids = self.choice_ids or benchmark_choice_ids(self.options)
+        if len(ids) != len(self.options) or len(set(ids)) != len(ids) or any(not x for x in ids):
+            raise ValueError("choice_ids must be unique and aligned with options")
+        object.__setattr__(self, "choice_ids", ids)
 
 
 class ChoiceResolver:
     """Resolve choices without parsing free reasoning text on the production path."""
 
-    _OPTION_PREFIX = re.compile(r"^\s*[\(\[]?[A-Z][\)\].:]?\s*")
+    _OPTION_PREFIX = re.compile(r"^\s*(?:[\(\[][A-Z][\)\]]|[A-Z](?:[.:]|\s+))\s*")
 
     def __init__(
         self,
@@ -63,12 +72,6 @@ class ChoiceResolver:
         self.last_model_input: ModelInput | None = None
         self.last_score_result: ChoiceScoreResult | None = None
         self.spatial_resolver = SpatialPositionChoiceResolver()
-
-    @staticmethod
-    def _choice_ids(options: tuple[str, ...]) -> tuple[str, ...]:
-        if len(options) > 26:
-            raise ValueError("final benchmark choice currently supports at most 26 options")
-        return tuple(chr(ord("A") + index) for index in range(len(options)))
 
     @classmethod
     def _option_value(cls, option: str) -> str:
@@ -99,8 +102,10 @@ class ChoiceResolver:
     }
 
     @classmethod
-    def _option_number(cls, option: str) -> int | None:
-        text = cls._option_value(option).rstrip(".")
+    def _option_number(cls, option: str, *, strip_prefix: bool = True) -> int | None:
+        text = (cls._option_value(option) if strip_prefix else option.strip().casefold()).rstrip(
+            "."
+        )
         numeric = re.fullmatch(r"(\d+)", text)
         if numeric:
             return int(numeric.group(1))
@@ -123,10 +128,10 @@ class ChoiceResolver:
         ):
             return None
         target = int(numeric[0].value)
-        choice_ids = cls._choice_ids(request.options)
+        choice_ids = request.choice_ids
         scored: list[tuple[int, str]] = []
         for choice_id, option in zip(choice_ids, request.options, strict=True):
-            option_number = cls._option_number(option)
+            option_number = cls._option_number(option, strip_prefix=request.strip_option_prefix)
             if option_number is not None:
                 scored.append((abs(target - option_number), choice_id))
         if not scored:
@@ -142,7 +147,9 @@ class ChoiceResolver:
                 choice_id: (1.0 if choice_id == selected else 0.0) for choice_id in choice_ids
             },
             answer_type=request.answer_type.value,
-            reasoning_text=f"Resolved numeric evidence {target}; selected the closest numeric option.",
+            reasoning_text=(
+                f"Resolved numeric evidence {target}; selected the closest numeric option."
+            ),
             provider="structured_deterministic",
             model_id="none",
             method="structured_closest_numeric_mapping",
@@ -159,11 +166,16 @@ class ChoiceResolver:
                 return None
             source_values.extend(values)
         normalized_values = set(source_values)
-        choice_ids = self._choice_ids(request.options)
+        choice_ids = request.choice_ids
         matches = tuple(
             choice_id
             for choice_id, option in zip(choice_ids, request.options, strict=True)
-            if self._option_value(option) in normalized_values
+            if (
+                self._option_value(option)
+                if request.strip_option_prefix
+                else option.strip().casefold()
+            )
+            in normalized_values
         )
         if not matches and (answer_id := self._closest_numeric_score(request)):
             return answer_id
@@ -193,7 +205,9 @@ class ChoiceResolver:
         score = scores[0]
         if score.answer_type != request.answer_type.value:
             raise ValueError("precomputed choice answer_type differs from final answer_type")
-        legal = self._choice_ids(request.options)
+        legal = request.choice_ids
+        if any(choice_id not in legal for choice_id in score.selected_ids):
+            raise ValueError("precomputed choice selected an illegal id")
         if any(choice_id not in legal for choice_id in score.scores):
             raise ValueError("precomputed choice contains ids outside original options")
         canonical = tuple(choice_id for choice_id in legal if choice_id in score.selected_ids)
@@ -224,8 +238,17 @@ class ChoiceResolver:
         if self.last_model_input is None:
             raise RuntimeError("legacy choice fallback requires a composed model input")
         result = self.provider.infer(VLMRequest(self.last_model_input, output_contract="choice"))
-        selected = self._legacy_choice_id(result.text, request.options)
-        choice_ids = self._choice_ids(request.options)
+        selected = result.text.strip()
+        choice_ids = request.choice_ids
+        if selected not in choice_ids:
+            matches = [
+                key
+                for key, text in zip(choice_ids, request.options, strict=True)
+                if text.strip().casefold() == selected.casefold()
+            ]
+            if len(matches) != 1:
+                raise ValueError("legacy provider returned no exact legal choice")
+            selected = matches[0]
         return ChoiceScoreResult(
             selected_ids=(selected,),
             scores={choice_id: (1.0 if choice_id == selected else 0.0) for choice_id in choice_ids},
@@ -242,6 +265,7 @@ class ChoiceResolver:
     def _cached_score(self, request: ChoiceRequest) -> ChoiceScoreResult:
         if self.last_model_input is None:
             raise RuntimeError("cached choice requires a composed model input")
+        self.last_model_input = self._with_choice_mapping(request, self.last_model_input)
         scorer = getattr(self.provider, "reason_and_choose", None)
         if scorer is None:
             if self.config.legacy_regex_fallback:
@@ -255,7 +279,7 @@ class ChoiceResolver:
                 ChoiceScoringRequest(
                     model_input=self.last_model_input,
                     answer_type=request.answer_type.value,
-                    choice_ids=self._choice_ids(request.options),
+                    choice_ids=request.choice_ids,
                     option_texts=request.options,
                     single_choice_suffix=self.config.single_choice_suffix,
                     multi_verify_template=self.config.multi_verify_template,
@@ -264,6 +288,19 @@ class ChoiceResolver:
                 )
             ),
         )
+
+    @staticmethod
+    def _with_choice_mapping(request: ChoiceRequest, model_input: ModelInput) -> ModelInput:
+        if (request.strip_option_prefix and len(request.options) <= 26
+                and request.choice_ids == benchmark_choice_ids(request.options)):
+            # Preserve the existing benchmark prompt for legacy labelled options.
+            return model_input
+        # Candidate IDs are arbitrary strings; the reasoning prompt must see the
+        # same ID/text alignment that cached continuation scoring will use.
+        mapping = dict(zip(request.choice_ids, request.options, strict=True))
+        context = model_input.structured_context
+        context += "\n\nChoice ID mapping (JSON):\n" + json.dumps(mapping, ensure_ascii=False)
+        return replace(model_input, structured_context=context.strip())
 
     @staticmethod
     def _needs_semantic_fallback(source: RuntimeObject) -> bool:
@@ -288,6 +325,7 @@ class ChoiceResolver:
             ),
             options=request.options,
         )
+        model_input = self._with_choice_mapping(request, model_input)
         self.last_model_input = model_input
         scorer = getattr(self.provider, "reason_and_choose", None)
         if not callable(scorer):
@@ -300,7 +338,7 @@ class ChoiceResolver:
                 ChoiceScoringRequest(
                     model_input=model_input,
                     answer_type=request.answer_type.value,
-                    choice_ids=self._choice_ids(request.options),
+                    choice_ids=request.choice_ids,
                     option_texts=request.options,
                     single_choice_suffix=self.config.single_choice_suffix,
                     multi_verify_template=self.config.multi_verify_template,
@@ -372,15 +410,23 @@ class ChoiceResolver:
                 if not self._is_non_feature_option(option)
             )
             if kept and len(kept) < len(request.options):
-                request = replace(request, options=kept)
+                kept_ids = tuple(
+                    key
+                    for key, text in zip(request.choice_ids, request.options, strict=True)
+                    if not self._is_non_feature_option(text)
+                )
+                request = replace(request, options=kept, choice_ids=kept_ids)
         fallback_score = self._semantic_fallback_score(request)
         if fallback_score is not None:
+            if any(key not in request.choice_ids for key in fallback_score.selected_ids):
+                raise ValueError("choice provider selected an illegal id")
             self.last_score_result = fallback_score
             return self._to_result(fallback_score)
         spatial_score = self.spatial_resolver.resolve(
             request.sources,
             request.options,
             question=request.question,
+            choice_ids=request.choice_ids,
         )
         if spatial_score is not None:
             self.last_model_input = ModelInput(
@@ -407,4 +453,6 @@ class ChoiceResolver:
                 options=request.options,
             )
         self.last_score_result = score
+        if any(key not in request.choice_ids for key in score.selected_ids):
+            raise ValueError("choice provider selected an illegal id")
         return self._to_result(score)

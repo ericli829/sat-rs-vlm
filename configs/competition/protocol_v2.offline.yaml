@@ -1,0 +1,15 @@
+# Explicit CPU fixtures for integration checks; never register this in the competition.
+runtime_config: runtime.offline.yaml
+offline: true
+package:
+  root: ${COMPETITION_IMAGE_PACKAGE}
+server:
+  timeout_seconds: 120
+  preload: false
+routing:
+  simple_count_detection: true
+  graph_for_relational_questions: true
+short_text:
+  instruction: "Return only the shortest direct answer. No explanation."
+enum:
+  preserve_reasoning_text: false

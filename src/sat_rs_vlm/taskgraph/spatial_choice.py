@@ -54,11 +54,7 @@ class SpatialPositionChoiceResolver:
     @classmethod
     def _is_absence(cls, option: str) -> bool:
         body = cls._body(option)
-        return (
-            "doesn't feature" in body
-            or "does not feature" in body
-            or "no position" in body
-        )
+        return "doesn't feature" in body or "does not feature" in body or "no position" in body
 
     @staticmethod
     def _is_position_question(question: str | None) -> bool:
@@ -135,6 +131,7 @@ class SpatialPositionChoiceResolver:
         options: tuple[str, ...],
         *,
         question: str | None,
+        choice_ids: tuple[str, ...] = (),
     ) -> ChoiceScoreResult | None:
         if len(sources) != 1:
             return None
@@ -152,11 +149,15 @@ class SpatialPositionChoiceResolver:
                 and sources[0].provenance.get("resolution_status", "EMPTY") == "EMPTY"
                 and len(absence_ids) == 1
             ):
-                selected = chr(ord("A") + absence_ids[0])
+                selected = (
+                    choice_ids[absence_ids[0]] if choice_ids else chr(ord("A") + absence_ids[0])
+                )
                 return ChoiceScoreResult(
                     selected_ids=(selected,),
                     scores={
-                        chr(ord("A") + index): (1.0 if index == absence_ids[0] else 0.0)
+                        (choice_ids[index] if choice_ids else chr(ord("A") + index)): (
+                            1.0 if index == absence_ids[0] else 0.0
+                        )
                         for index in range(len(options))
                     },
                     answer_type="CHOICE_SINGLE",
@@ -175,7 +176,7 @@ class SpatialPositionChoiceResolver:
         y = ((y1 + y2) / 2.0) / height
         scored: dict[str, float] = {}
         for index, predicate in enumerate(predicates):
-            choice_id = chr(ord("A") + index)
+            choice_id = choice_ids[index] if choice_ids else chr(ord("A") + index)
             scored[choice_id] = self._score(predicate, x, y) if predicate is not None else -1.0
         valid = [(score, index) for index, score in enumerate(scored.values()) if score >= 0.0]
         if not valid:
@@ -184,7 +185,7 @@ class SpatialPositionChoiceResolver:
         if len(valid) > 1 and valid[0][0] - valid[1][0] <= 1e-6:
             return None
         selected_index = valid[0][1]
-        selected_id = chr(ord("A") + selected_index)
+        selected_id = choice_ids[selected_index] if choice_ids else chr(ord("A") + selected_index)
         return ChoiceScoreResult(
             selected_ids=(selected_id,),
             scores=scored,
@@ -200,7 +201,7 @@ class SpatialPositionChoiceResolver:
                 "question": question,
                 "normalized_center": [x, y],
                 "predicates": {
-                    chr(ord("A") + index): predicate
+                    (choice_ids[index] if choice_ids else chr(ord("A") + index)): predicate
                     for index, predicate in enumerate(predicates)
                 },
                 "bbox_xyxy_global": list(entity.region.bbox_xyxy_global),
