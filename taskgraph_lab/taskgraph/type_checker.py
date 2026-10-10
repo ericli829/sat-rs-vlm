@@ -19,9 +19,7 @@ class TypeIssue:
 class TypeCheckResult:
     errors: list[TypeIssue] = field(default_factory=list)
     inferred: dict[str, TypeSet] = field(default_factory=dict)
-    resolved_inputs: dict[str, dict[str, list[tuple[str, TypeSet]]]] = field(
-        default_factory=dict
-    )
+    resolved_inputs: dict[str, dict[str, list[tuple[str, TypeSet]]]] = field(default_factory=dict)
 
 
 ANY_EVIDENCE: TypeSet = set(RuntimeType)
@@ -35,6 +33,7 @@ SIGNATURES: dict[OperatorName, dict[str, TypeSet]] = {
     OperatorName.SELECT: {
         "candidates": {RuntimeType.ENTITY_SET, RuntimeType.REGION, RuntimeType.REGION_SET},
         "reference": {RuntimeType.ENTITY, RuntimeType.ENTITY_SET, RuntimeType.REGION},
+        "scope": {RuntimeType.IMAGE_REF, RuntimeType.REGION},
     },
     OperatorName.GROUP: {"entities": {RuntimeType.ENTITY_SET}},
     OperatorName.COUNT: {
@@ -132,6 +131,7 @@ OPTIONAL_INPUTS = {
     (OperatorName.COUNT, "image"),
     (OperatorName.COUNT, "entities"),
     (OperatorName.SELECT, "reference"),
+    (OperatorName.SELECT, "scope"),
     (OperatorName.VLM_REASON, "image"),
     (OperatorName.VLM_REASON, "evidence"),
 }
@@ -224,7 +224,10 @@ def check_types(target: PlannerTarget, input_names: set[str]) -> TypeCheckResult
                             )
                         )
                     if node.op is OperatorName.ATTRIBUTE and name == "entity":
-                        if producer_mode not in SINGLETON_SELECT_MODES:
+                        if producer_mode not in SINGLETON_SELECT_MODES and not (
+                            producer_mode == "SEMANTIC"
+                            and producer.params.get("selection_type") == "SINGLE"
+                        ):
                             result.errors.append(
                                 TypeIssue(
                                     "attribute_requires_singleton",
@@ -242,8 +245,10 @@ def check_types(target: PlannerTarget, input_names: set[str]) -> TypeCheckResult
         AnswerType.CHOICE_SINGLE,
         AnswerType.CHOICE_MULTI,
     }
-    if final_types and not is_choice and not final_types.intersection(
-        FINAL_TYPES[target.final.answer_type]
+    if (
+        final_types
+        and not is_choice
+        and not final_types.intersection(FINAL_TYPES[target.final.answer_type])
     ):
         result.errors.append(
             TypeIssue(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import re
 import time
@@ -28,6 +29,10 @@ class ReferentRefinementConfig:
     # to point at it directly (bbox) instead of relying on the detector +
     # reranker chain; the detector path remains the fallback.
     singleton_vlm_primary: bool = False
+    single_detector_fallback: bool = True
+    single_max_pixels: int = 409600
+    single_min_box_area: float = 4.0
+    attribute_policy: str = "unresolved"
 
     def __post_init__(self) -> None:
         if self.max_candidates < 1:
@@ -40,6 +45,10 @@ class ReferentRefinementConfig:
             raise ValueError("locate_refinement.minimum_margin must be non-negative")
         if not 0.0 <= self.candidate_halo_ratio <= 1.0:
             raise ValueError("locate_refinement.candidate_halo_ratio must be in [0, 1]")
+        if self.single_max_pixels < 65536 or self.single_min_box_area <= 0:
+            raise ValueError("invalid LOCATE_SINGLE visual/bbox budget")
+        if self.attribute_policy not in {"unresolved", "vlm"}:
+            raise ValueError("attribute_policy must be unresolved or vlm")
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any] | None) -> ReferentRefinementConfig:
@@ -53,6 +62,10 @@ class ReferentRefinementConfig:
             minimum_margin=float(value.get("minimum_margin", 0.02)),
             candidate_halo_ratio=float(value.get("candidate_halo_ratio", 0.2)),
             singleton_vlm_primary=bool(value.get("singleton_vlm_primary", False)),
+            single_detector_fallback=bool(value.get("single_detector_fallback", True)),
+            single_max_pixels=int(value.get("single_max_pixels", 409600)),
+            single_min_box_area=float(value.get("single_min_box_area", 4.0)),
+            attribute_policy=str(value.get("attribute_policy", "unresolved")),
         )
 
 
@@ -274,16 +287,13 @@ class ReferentRefiner:
                 )
             )
             scores = {
-                choice_id: float(scored.scores.get(choice_id, 0.0))
-                for choice_id in choice_ids
+                choice_id: float(scored.scores.get(choice_id, 0.0)) for choice_id in choice_ids
             }
             ranked = sorted(
                 range(len(choice_ids)),
                 key=lambda index: (-scores[choice_ids[index]], index),
             )
-            selected = {
-                choice_id for choice_id in scored.selected_ids if choice_id in scores
-            }
+            selected = {choice_id for choice_id in scored.selected_ids if choice_id in scores}
             selected_indices = tuple(index for index in ranked if choice_ids[index] in selected)[:3]
             if not selected_indices:
                 selected_indices = (ranked[0],)
@@ -293,16 +303,13 @@ class ReferentRefiner:
                     "selected_grid_ids": [grid_ids[index] for index in selected_indices],
                     "selected_grid_indices": list(selected_indices),
                     "grid_scores": {
-                        grid_ids[index]: scores[choice_ids[index]]
-                        for index in range(len(regions))
+                        grid_ids[index]: scores[choice_ids[index]] for index in range(len(regions))
                     },
                     "selection_status": "SEMANTIC_RESOLVED",
                     "provider": scored.provider,
                     "model_id": scored.model_id,
                     "reasoning_text": scored.reasoning_text,
-                    "selected_model_choice_ids": [
-                        choice_ids[index] for index in selected_indices
-                    ],
+                    "selected_model_choice_ids": [choice_ids[index] for index in selected_indices],
                     "latency_ms": (time.perf_counter() - started) * 1000.0,
                 }
             )
@@ -318,9 +325,7 @@ class ReferentRefiner:
         detector_norm = self._normalize(detector_scores)
         if self.config.semantic_weight <= 0.0:
             # No-VLM mode: rank strictly by detector score (highest first).
-            ranking = [
-                (-detector_norm[index], index) for index in range(len(entities))
-            ]
+            ranking = [(-detector_norm[index], index) for index in range(len(entities))]
             ranking.sort(key=lambda item: (item[0], item[1]))
             return tuple(index for _, index in ranking[: self.config.max_candidates])
         geometry_scores = [self._geometry_prior(entity, question) for entity in entities]
@@ -459,9 +464,7 @@ class ReferentRefiner:
                     model_input=model_input,
                     answer_type="CHOICE_SINGLE",
                     choice_ids=choice_ids,
-                    option_texts=tuple(
-                        str(item) for item in model_input.options
-                    ),
+                    option_texts=tuple(str(item) for item in model_input.options),
                     single_choice_suffix=self.choice_config.single_choice_suffix,
                     multi_verify_template=self.choice_config.multi_verify_template,
                     multi_select_threshold=0.0,
@@ -516,9 +519,7 @@ class ReferentRefiner:
                     "output_candidate_count": 1,
                     "margin": margin,
                     "resolution_status": (
-                        "REFINED_RESOLVED"
-                        if margin > self.config.minimum_margin
-                        else "UNRESOLVED"
+                        "REFINED_RESOLVED" if margin > self.config.minimum_margin else "UNRESOLVED"
                     ),
                     "provider": scored.provider,
                     "model_id": scored.model_id,
@@ -539,21 +540,23 @@ class ReferentRefiner:
             else:
                 selected = selected_entities[best]
                 output = EntitySet(
-                    (Entity(
-                        selected.region,
-                        selected.label,
-                        float(fused_scores[best]),
-                        {
-                            **selected.provenance,
-                            "referent_refinement": {
-                                "selected": True,
-                                "candidate_id": selected_ids[best],
-                                "semantic_score": semantic_scores[selected_ids[best]],
-                                "geometry_prior_score": geometry_scores[best],
-                                "fused_score": fused_scores[best],
+                    (
+                        Entity(
+                            selected.region,
+                            selected.label,
+                            float(fused_scores[best]),
+                            {
+                                **selected.provenance,
+                                "referent_refinement": {
+                                    "selected": True,
+                                    "candidate_id": selected_ids[best],
+                                    "semantic_score": semantic_scores[selected_ids[best]],
+                                    "geometry_prior_score": geometry_scores[best],
+                                    "fused_score": fused_scores[best],
+                                },
                             },
-                        },
-                    ),),
+                        ),
+                    ),
                     {**candidates.provenance, "referent_refinement": common},
                 )
         except Exception as exc:
@@ -581,173 +584,142 @@ class ReferentRefiner:
         self,
         scope: ImageRef | Region,
         *,
-        question: str,
+        question: str = "",
         target: TargetSpec,
-    ) -> ReferentRefinementResult | None:
-        """Ask the semantic VLM to point at a single target and return its bbox.
+    ) -> ReferentRefinementResult:
+        """LOCATE_SINGLE: current TargetSpec only; question is a compatibility argument."""
+        from dataclasses import replace
 
-        Returns a one-entity EntitySet with the pointed region, or None when the
-        model does not emit a parseable, sane box (caller falls back to the
-        detector/retriever chain).
-        """
-        if isinstance(scope, Region):
-            width, height = self._image_size(scope.image)
-            x0, y0, x1, y1 = scope.bbox_xyxy_global
-            if (x0, y0, x1, y1) != (0.0, 0.0, float(width), float(height)):
-                # Non-full-extent scopes need offset mapping; keep v1 simple.
-                return None
-        image = scope if isinstance(scope, ImageRef) else scope.image
-        width, height = self._image_size(image)
         started = time.perf_counter()
-        model_input = self.composer.compose(
-            [image],
-            question=(
-                "Locate the target in the image and output its bounding box as "
-                "pixel coordinates of the image.\n"
-                f"Target: {target.phrase()}\n"
-                f"Original question: {question}\n"
-                "Output format: x1 y1 x2 y2  (for example: 120 80 340 260)\n"
-                "Return only the four numbers."
-            ),
-            options=(),
-        )
-        try:
-            result = self.semantic.infer(VLMRequest(model_input, output_contract="text"))
-        except Exception:
-            return None
-        text = str(getattr(result, "text", "") or "").strip()
-        match = re.search(
-            r"(-?\d+(?:\.\d+)?)\s*[, ]+\s*(-?\d+(?:\.\d+)?)\s*[, ]+\s*"
-            r"(-?\d+(?:\.\d+)?)\s*[, ]+\s*(-?\d+(?:\.\d+)?)",
-            text,
-        )
-        if match is None:
-            return None
-        values = [float(value) for value in match.groups()]
-        x1, y1, x2, y2 = max(0.0, min(values[0], values[2])), max(
-            0.0, min(values[1], values[3])
-        ), min(float(width), max(values[0], values[2])), min(
-            float(height), max(values[1], values[3])
-        )
-        box_width = x2 - x1
-        box_height = y2 - y1
-        if box_width <= 0.0 or box_height <= 0.0:
-            return None
-        if box_width * box_height < 0.0001 * width * height:
-            return None
-        region = Region(
-            image,
-            (x1, y1, x2, y2),
-            {"vlm_referent": True, "origin": "semantic_2b", "pointer_text": text[:200]},
-        )
-        metadata = {
-            "applied": True,
-            "method": "vlm_referent",
-            "input_candidate_count": 0,
-            "output_candidate_count": 1,
-            "selected_candidate_ids": ["vlm_referent_0001"],
-            "semantic_scores": {},
-            "geometry_prior_scores": {},
-            "detector_scores": {},
-            "trigger_reason": "SINGLETON_VLM_PRIMARY",
-            "resolution_status": "VLM_REFERENT_RESOLVED",
-            "fallback_triggered": False,
-            "fallback_reason": None,
-            "fallback_provider": None,
-            "fallback_scope": None,
-            "question": question,
-            "target_spec": {
-                "category": target.category,
-                "attributes": dict(target.attributes),
-            },
-            "bbox_xyxy_global": [x1, y1, x2, y2],
-            "latency_ms": (time.perf_counter() - started) * 1000.0,
+        metadata: dict[str, Any] = {
+            "method": "vlm_single",
+            "target_spec": target.model_dump(mode="json"),
+            "resolution_status": "UNRESOLVED",
+            "candidate_pool_complete": False,
+            "coordinate_system": "render_pixel_xyxy",
+            "question_used": False,
         }
-        output = EntitySet(
-            (
-                Entity(
-                    region,
-                    target.category,
-                    1.0,
+        entities: tuple[Entity, ...] = ()
+        try:
+            provider_pixels = getattr(
+                getattr(self.semantic, "model_config", None), "max_pixels", None
+            )
+            pixel_budget = (
+                min(self.config.single_max_pixels, provider_pixels)
+                if provider_pixels
+                else self.config.single_max_pixels
+            )
+            model_input = self.composer.compose_locate(scope, pixel_budget=pixel_budget)
+            width, height = model_input.metadata["render_size"]
+            attributes = json.dumps(target.attributes, ensure_ascii=False, sort_keys=True)
+            prompt = (
+                "Task: LOCATE_SINGLE. Localize one target object in this remote-sensing visual.\n"
+                f"Target category: {target.category}\n"
+                f"Intrinsic attributes: {attributes}\n"
+                f"Actual supplied visual size: {width} x {height} pixels.\n"
+                "Search scope: the supplied image or crop, and nothing outside it.\n"
+                "Use ONLY the target definition supplied to this LOCATE node. "
+                "Do not solve the overall "
+                "question, use downstream SELECT conditions, or invent additional landmarks.\n"
+                "If one well-supported matching object is identifiable, return exactly "
+                '{"status":"OK","bbox":[x1,y1,x2,y2]}.\n'
+                'If none is visible, return exactly {"status":"NONE"}.\n'
+                "If several plausible targets cannot be distinguished, return exactly "
+                '{"status":"AMBIGUOUS"}.\n'
+                'If evidence is insufficient, return exactly {"status":"UNRESOLVED"}.\n'
+                "The bbox uses pixel XYXY of the ACTUAL supplied visual, top-left origin. "
+                "No Markdown, prose, or extra fields."
+            )
+            model_input = replace(model_input, question=prompt)
+            result = self.semantic.infer(VLMRequest(model_input, output_contract="locate_single"))
+            metadata.update(
+                {
+                    "visual_transform": model_input.metadata,
+                    "provider": result.provider,
+                    "raw_response": result.text,
+                    "provider_metadata": result.metadata,
+                }
+            )
+            payload = json.loads(result.text)
+            if not isinstance(payload, dict) or payload.get("status") not in {
+                "OK",
+                "NONE",
+                "AMBIGUOUS",
+                "UNRESOLVED",
+            }:
+                raise ValueError("invalid_locate_status")
+            status = payload["status"]
+            if status != "OK":
+                if set(payload) != {"status"}:
+                    raise ValueError("unexpected_locate_fields")
+                metadata["resolution_status"] = "EMPTY" if status == "NONE" else status
+                metadata["candidate_pool_complete"] = status == "NONE"
+            else:
+                box = payload.get("bbox")
+                if set(payload) != {"status", "bbox"} or not isinstance(box, list) or len(box) != 4:
+                    raise ValueError("invalid_bbox_shape")
+                if any(
+                    isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v)
+                    for v in box
+                ):
+                    raise ValueError("bbox_must_be_finite_numbers")
+                x1, y1, x2, y2 = box
+                if not (0 <= x1 < x2 <= width and 0 <= y1 < y2 <= height):
+                    raise ValueError("bbox_order_or_bounds_invalid")
+                if (x2 - x1) * (y2 - y1) < self.config.single_min_box_area:
+                    raise ValueError("bbox_area_too_small")
+                transform = model_input.metadata
+                sx, sy = transform["scale_xy"]
+                ox, oy = transform["crop_origin_global"]
+                global_box = (x1 / sx + ox, y1 / sy + oy, x2 / sx + ox, y2 / sy + oy)
+                original_width, original_height = transform["original_image_size"]
+                scope_box = transform["scope_bbox_xyxy_global"]
+                if not (
+                    0 <= global_box[0] < global_box[2] <= original_width
+                    and 0 <= global_box[1] < global_box[3] <= original_height
+                    and scope_box[0] <= global_box[0]
+                    and scope_box[1] <= global_box[1]
+                    and global_box[2] <= scope_box[2]
+                    and global_box[3] <= scope_box[3]
+                ):
+                    raise ValueError("mapped_bbox_outside_scope")
+                image = scope.image if isinstance(scope, Region) else scope
+                metadata.update(
                     {
-                        "candidate_id": "vlm_referent_0001",
-                        "vlm_referent": True,
-                        "fallback_required": False,
-                        "referent_refinement": metadata,
-                    },
-                ),
-            ),
-            {
-                "provider": "semantic_2b",
-                "capability": "vlm_referent",
-                "vlm_referent_applied": True,
-                "referent_refinement": metadata,
-                "resolution_status": "VLM_REFERENT_RESOLVED",
-            },
-        )
-        return ReferentRefinementResult(output, metadata)
+                        "resolution_status": "VLM_REFERENT_RESOLVED",
+                        "candidate_pool_complete": True,
+                        "bbox_xyxy_render": box,
+                        "bbox_xyxy_global": list(global_box),
+                    }
+                )
+                entities = (
+                    Entity(
+                        Region(image, global_box, {"vlm_referent": True}),
+                        target.category,
+                        None,
+                        {"candidate_id": "vlm_referent_0001", "vlm_referent": True},
+                    ),
+                )
+        except Exception as exc:
+            metadata.update(
+                {
+                    "resolution_status": "UNRESOLVED",
+                    "candidate_pool_complete": False,
+                    "failure_reason": f"{type(exc).__name__}: {exc}",
+                }
+            )
+        metadata["latency_ms"] = (time.perf_counter() - started) * 1000.0
+        return ReferentRefinementResult(EntitySet(entities, dict(metadata)), metadata)
 
     def visual_fallback(
-        self,
-        scope: ImageRef | Region,
-        *,
-        question: str,
-        target: TargetSpec,
-        reason: str,
+        self, scope: ImageRef | Region, *, question: str, target: TargetSpec, reason: str
     ) -> ReferentRefinementResult:
-        image = scope if isinstance(scope, ImageRef) else scope.image
-        if isinstance(scope, Region):
-            region = scope
-        else:
-            width, height = self._image_size(image)
-            region = Region(
-                image,
-                (0.0, 0.0, width, height),
-                {"semantic_fallback_scope": "image"},
-            )
+        """Compatibility entry point; an unlocalized scope is never an Entity."""
         metadata = {
-            "applied": False,
             "method": "semantic_visual_fallback",
-            "input_candidate_count": 0,
-            "output_candidate_count": 1,
-            "selected_candidate_ids": ["semantic_fallback_0001"],
-            "semantic_scores": {},
-            "geometry_prior_scores": {},
-            "detector_scores": {},
-            "trigger_reason": reason,
-            "resolution_status": "SEMANTIC_FALLBACK_RESOLVED",
-            "fallback_triggered": True,
-            "fallback_reason": reason,
-            "fallback_provider": "semantic_2b",
-            "fallback_scope": "scoped_region" if isinstance(scope, Region) else "image",
-            "question": question,
-            "target_spec": {
-                "category": target.category,
-                "attributes": dict(target.attributes),
-            },
-            "latency_ms": 0.0,
+            "resolution_status": "UNRESOLVED",
+            "candidate_pool_complete": False,
+            "failure_reason": reason,
+            "output_candidate_count": 0,
         }
-        output = EntitySet(
-            (
-                Entity(
-                    region,
-                    target.category,
-                    0.0,
-                    {
-                        "candidate_id": "semantic_fallback_0001",
-                        "fallback_required": True,
-                        "fallback_kind": "semantic_visual",
-                        "referent_refinement": metadata,
-                    },
-                ),
-            ),
-            {
-                "provider": "semantic_2b",
-                "capability": "semantic_visual_fallback",
-                "fallback_required": True,
-                "fallback_kind": "semantic_visual",
-                "referent_refinement": metadata,
-                "resolution_status": "SEMANTIC_FALLBACK_RESOLVED",
-            },
-        )
-        return ReferentRefinementResult(output, metadata)
+        return ReferentRefinementResult(EntitySet((), dict(metadata)), metadata)

@@ -227,6 +227,10 @@ class SelectResultConsumptionError(ValueError):
     """A downstream consumer attempted to use an unsafe SELECT state."""
 
 
+class CandidateIntegrityError(RuntimeError):
+    """Incomplete physical evidence must not trigger whole-image answer fallback."""
+
+
 def _select_failure_context(value: SelectResult) -> str:
     details: list[str] = []
     if value.method:
@@ -275,8 +279,7 @@ def unwrap_select_result(
         pass
     elif value.status is not SelectStatus.OK:
         raise SelectResultConsumptionError(
-            f"{consumer} refuses SELECT status {value.status.value}"
-            f"{_select_failure_context(value)}"
+            f"{consumer} refuses SELECT status {value.status.value}{_select_failure_context(value)}"
         )
 
     selected: RuntimeObject = value.selected

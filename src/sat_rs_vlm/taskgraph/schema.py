@@ -89,6 +89,7 @@ class RegionPosition(StringEnum):
 
 
 class SelectMode(StringEnum):
+    SEMANTIC = "SEMANTIC"
     RELATION = "RELATION"
     RANK = "RANK"
     ORDINAL = "ORDINAL"
@@ -282,6 +283,7 @@ class LocateParams(StrictModel):
 
 class SelectParams(StrictModel):
     mode: SelectMode
+    query: str | None = Field(default=None, max_length=2048)
     relation: SpatialRelation | None = None
     criterion: RankCriterion | None = None
     rank: int | None = Field(default=None, ge=1)
@@ -295,9 +297,17 @@ class SelectParams(StrictModel):
     overlap_iou_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
     selection_type: SelectionCardinality | None = None
 
+    @field_validator("query")
+    @classmethod
+    def semantic_query(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("SELECT query must not be empty or whitespace")
+        return value.strip() if value is not None else None
+
     @model_validator(mode="after")
     def validate_mode_shape(self) -> SelectParams:
         required = {
+            SelectMode.SEMANTIC: {"query", "selection_type"},
             SelectMode.RELATION: {"relation"},
             SelectMode.RANK: {"criterion", "rank", "order"},
             SelectMode.ORDINAL: {"index", "order"},
@@ -305,14 +315,27 @@ class SelectParams(StrictModel):
             SelectMode.SUBREGION: {"subregion"},
         }[self.mode]
         fields = {
-            "relation", "criterion", "rank", "order", "index", "direction", "subregion",
-            "margin", "overlap_iou_threshold", "selection_type",
+            "relation",
+            "criterion",
+            "rank",
+            "order",
+            "index",
+            "direction",
+            "subregion",
+            "margin",
+            "overlap_iou_threshold",
+            "selection_type",
+            "query",
         }
         present = {name for name in fields if getattr(self, name) is not None}
-        allowed_optional = {
-            SelectMode.RELATION: {"margin", "overlap_iou_threshold", "selection_type"},
-            SelectMode.SUBREGION: {"margin"},
-        }[self.mode] if self.mode in {SelectMode.RELATION, SelectMode.SUBREGION} else set()
+        allowed_optional = (
+            {
+                SelectMode.RELATION: {"margin", "overlap_iou_threshold", "selection_type"},
+                SelectMode.SUBREGION: {"margin"},
+            }[self.mode]
+            if self.mode in {SelectMode.RELATION, SelectMode.SUBREGION}
+            else set()
+        )
         if not required.issubset(present) or present - required - allowed_optional:
             raise ValueError(
                 f"SELECT {self.mode.value} params mismatch; "

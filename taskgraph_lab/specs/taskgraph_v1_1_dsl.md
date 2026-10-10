@@ -20,6 +20,31 @@ Small Planner -> DSL -> restricted parser -> canonical JSON
 Canonical JSON remains the only source of truth. The Executor, Validator, and
 Capability Router do not consume this DSL directly.
 
+### SELECT semantic extension
+
+```text
+n1=LOCATE($image0,T("building"))
+n2=SELECT_SEM($n1,null,"the building with trees to its right and grass below",SINGLE)
+n3=ATTRIBUTE($n2,"color")
+FINAL($n3,LABEL)
+```
+
+`SELECT_SEM(candidates,reference-or-null,JSON_STRING,SINGLE|MULTI)` lowers to the
+existing SELECT operator with `mode=SEMANTIC`, `params.query` and explicit
+`params.selection_type`. The string is never an input reference. Unicode,
+escaped quotes and escaped newlines use normal JSON-string parsing/serialization.
+Query must be nonblank and at most2048 characters; it is mutually exclusive with
+RELATION/RANK/ORDINAL/EXTREME/SUBREGION parameters. SINGLE is permitted as an
+ATTRIBUTE source; MULTI is not an implicit singleton. MULTI may feed
+COUNT_ENTITIES with `entire=false`.
+
+An optional reference round-trips normally. Runtime JSON also supports SELECT
+scope, but the four-argument SELECT_SEM surface cannot encode it: the compiler
+raises an explicit error rather than dropping scope. Existing SELECT surfaces
+and graph meanings are retained. Prefix grammar recognizes JSON strings and the
+two cardinalities; schema/type/semantic validation still applies after parsing.
+No training examples or model weights were rebuilt for this extension.
+
 The serialization version is `taskgraph-v1.1-dsl-v1`. It does not change the
 TaskGraph semantic schema or the Teacher prompt version
 `taskgraph-v1.1-residual-final`.

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import json
 import math
-import re
 from dataclasses import dataclass, field, replace
 from math import hypot
 from statistics import median
@@ -12,10 +12,11 @@ from typing import Any, Protocol, cast
 import numpy as np
 from PIL import Image
 
-from .capabilities import TargetCapability, TargetCapabilityClassifier
+from .capabilities import TargetCapabilityClassifier
 from .choice_config import ChoiceSystemConfig
 from .execution_plan import NodeExecutionHint
 from .input_composer import InputComposer
+from .locate_routing import LocateRequirement, analyze_locate
 from .providers import (
     CachedChoiceUnavailableError,
     ChoiceScoringRequest,
@@ -23,14 +24,13 @@ from .providers import (
     CountingRequest,
     DetectionProvider,
     DetectionRequest,
-    RegionRetrievalRequest,
     RegionRetrieverProvider,
     SemanticVLMProvider,
     VLMRequest,
     VLMResult,
     parse_selection_indices,
 )
-from .referent_refinement import ReferentRefinementResult, ReferentRefiner
+from .referent_refinement import ReferentRefiner
 from .runtime_types import (
     Answer,
     Boolean,
@@ -58,6 +58,7 @@ from .schema import (
 )
 from .semantic_decision import SemanticDecisionConfig, SemanticDecisionLayer
 from .semantic_prompts import semantic_question, semantic_reasoning_instruction
+from .semantic_selection import BoundedSemanticSelector, SemanticSelectionConfig
 
 
 @dataclass(frozen=True)
@@ -285,11 +286,7 @@ class GeometryExecutor:
             component_height = component_y1 - component_y0
             bbox_area = component_width * component_height
             reason = None
-            if (
-                component["pixels"] < minimum_pixels
-                or component_width < 2
-                or component_height < 2
-            ):
+            if component["pixels"] < minimum_pixels or component_width < 2 or component_height < 2:
                 reason = "too_small"
             elif bbox_area > maximum_bbox_area:
                 reason = "too_large_for_artificial_marker"
@@ -474,8 +471,7 @@ class GeometryExecutor:
             status = value.status.value
             if value.status is SelectStatus.EMPTY:
                 raise ValueError(
-                    f"BUILD_ROUTE_CONTEXT.{role} SELECT is EMPTY"
-                    f"{getattr(value, 'reason', '')}"
+                    f"BUILD_ROUTE_CONTEXT.{role} SELECT is EMPTY{getattr(value, 'reason', '')}"
                 )
             value = value.selected
             if isinstance(value, SelectResult):  # pragma: no cover - defensive
@@ -712,6 +708,8 @@ class GeometryExecutor:
 
 
 class LocateExecutor:
+    """Graph-preserving physical backend selection; no question-driven planning."""
+
     def __init__(
         self,
         detection: DetectionProvider,
@@ -721,341 +719,16 @@ class LocateExecutor:
         capability_classifier: TargetCapabilityClassifier | None = None,
         refiner: ReferentRefiner | None = None,
         max_candidates: int = 16,
+        selection_config: SemanticSelectionConfig | None = None,
     ) -> None:
         if max_candidates < 1:
             raise ValueError("locate_detector.max_candidates must be positive")
-        self.detection = detection
-        self.retriever = retriever
-        self.semantic_categories = {item.casefold() for item in (semantic_categories or set())}
-        self.capability_classifier = capability_classifier or TargetCapabilityClassifier(
-            legacy_region_overrides=self.semantic_categories
-        )
-        self.refiner = refiner
-        self.max_candidates = int(max_candidates)
+        self.detection, self.retriever, self.refiner = detection, retriever, refiner
+        # Legacy constructor arguments remain accepted. They no longer truncate
+        # a logical pool or choose its backend by category.
+        self.max_candidates = max_candidates
+        self.selection_config = selection_config or SemanticSelectionConfig()
         self.provider_name = "locate"
-
-    @staticmethod
-    def _references_node(value: object, node_id: str) -> bool:
-        if isinstance(value, str):
-            return value == f"${node_id}"
-        return isinstance(value, (list, tuple)) and f"${node_id}" in value
-
-
-    def _vlm_referent_outcome(
-        self,
-        result: ReferentRefinementResult,
-        scope: ImageRef | Region,
-        decision_metadata: dict[str, Any],
-        trigger_reason: str,
-    ) -> OperatorOutcome:
-        meta = dict(result.metadata)
-        value = result.entities
-        refinement_metadata: dict[str, Any] = {
-            "primary_provider": "semantic_2b",
-            "refinement_applied": True,
-            "refinement_method": "vlm_referent",
-            "candidate_count_before_refinement": 0,
-            "candidate_count_after_refinement": len(value.entities),
-            "selected_candidate_ids": ["vlm_referent_0001"],
-            "resolution_status": "VLM_REFERENT_RESOLVED",
-            "refinement_status": "VLM_REFERENT_RESOLVED",
-            "refinement_trigger": trigger_reason,
-            "fallback_triggered": False,
-            "fallback_reason": None,
-            "fallback_provider": None,
-            "fallback_scope": None,
-            "final_resolution_status": "VLM_REFERENT_RESOLVED",
-            **meta,
-        }
-        value.provenance.update(
-            {
-                "provider": "semantic_2b",
-                "capability": "vlm_referent",
-                "vlm_referent_applied": True,
-                "primary_provider": "semantic_2b",
-                "primary_candidate_count": 0,
-                "candidate_count_after_refinement": len(value.entities),
-                "refinement_applied": True,
-                "refinement_status": "VLM_REFERENT_RESOLVED",
-                "resolution_status": "VLM_REFERENT_RESOLVED",
-                "fallback_triggered": False,
-                "fallback_reason": None,
-                "fallback_provider": None,
-                "fallback_scope": None,
-                "final_resolution_status": "VLM_REFERENT_RESOLVED",
-                "refinement": refinement_metadata,
-            }
-        )
-        return OperatorOutcome(
-            value,
-            "semantic_2b:referent",
-            {
-                **decision_metadata,
-                "capability": "vlm_referent",
-                "latency_ms": meta.get("latency_ms", 0.0),
-                "activated_provider": "semantic_2b:referent",
-                "stage": "locate",
-                "provider_metadata": dict(meta),
-                "vlm_referent_applied": True,
-                "vlm_referent_trigger": trigger_reason,
-                "primary_provider": "semantic_2b",
-                "primary_candidate_count": 0,
-                "refinement_applied": True,
-                "refinement_status": "VLM_REFERENT_RESOLVED",
-                "fallback_triggered": False,
-                "fallback_reason": None,
-                "fallback_provider": None,
-                "fallback_scope": None,
-                "final_resolution_status": "VLM_REFERENT_RESOLVED",
-                "referent_refinement": refinement_metadata,
-            },
-        )
-
-    @classmethod
-    def _needs_refinement(
-        cls, node: GraphNode, target: TargetSpec, context: OperatorContext
-    ) -> tuple[bool, str]:
-        for graph_node in context.graph_nodes:
-            if graph_node.op in {
-                OperatorName.SELECT,
-                OperatorName.GROUP,
-                OperatorName.COUNT,
-                OperatorName.RELATION,
-            } and any(
-                cls._references_node(value, node.id) for value in graph_node.inputs.values()
-            ):
-                return False, f"set_aware_consumer:{graph_node.op.value}"
-        if f"${node.id}" in context.final_sources:
-            question = (context.final_question or context.question).casefold()
-            if re.search(
-                r"\bhow many\b|\bnumber of\b|\bcount\b|多少|几(?:个|艘|架|辆|座|条)",
-                question,
-            ):
-                return False, "multi_instance_question"
-            return True, "direct_final_visual_source"
-        if target.attributes:
-            return True, "target_attributes"
-        for graph_node in context.graph_nodes:
-            if graph_node.op in {
-                OperatorName.ATTRIBUTE,
-                OperatorName.CLASSIFY,
-                OperatorName.MULTILABEL_CLASSIFY,
-                OperatorName.MOTION,
-            } and any(
-                cls._references_node(value, node.id) for value in graph_node.inputs.values()
-            ):
-                return True, f"singular_consumer:{graph_node.op.value}"
-        return False, "set_aware_or_non_singular_consumer"
-
-    @staticmethod
-    def _primary_resolution_status(candidate_count: int) -> str:
-        if candidate_count == 0:
-            return "EMPTY"
-        if candidate_count == 1:
-            return "PRIMARY_RESOLVED"
-        return "MULTIPLE_VALID"
-
-    @staticmethod
-    def _bbox_iou(
-        left: tuple[float, float, float, float], right: tuple[float, float, float, float]
-    ) -> float:
-        x0 = max(left[0], right[0])
-        y0 = max(left[1], right[1])
-        x1 = min(left[2], right[2])
-        y1 = min(left[3], right[3])
-        intersection = max(0.0, x1 - x0) * max(0.0, y1 - y0)
-        left_area = max(0.0, left[2] - left[0]) * max(0.0, left[3] - left[1])
-        right_area = max(0.0, right[2] - right[0]) * max(0.0, right[3] - right[1])
-        union = left_area + right_area - intersection
-        return intersection / union if union > 0.0 else 0.0
-
-    @classmethod
-    def _merge_fallback_entities(
-        cls, entities: list[Entity], max_candidates: int
-    ) -> tuple[Entity, ...]:
-        ordered = sorted(
-            entities,
-            key=lambda entity: (
-                -(
-                    float(entity.score)
-                    if entity.score is not None and math.isfinite(float(entity.score))
-                    else float("-inf")
-                ),
-                str(entity.provenance.get("candidate_id", "")),
-            ),
-        )
-        kept: list[Entity] = []
-        for entity in ordered:
-            if any(
-                cls._bbox_iou(entity.region.bbox_xyxy_global, kept_entity.region.bbox_xyxy_global)
-                > 0.5
-                for kept_entity in kept
-            ):
-                continue
-            kept.append(entity)
-            if len(kept) >= max_candidates:
-                break
-        return tuple(kept)
-
-    @staticmethod
-    def _coarse_grid_regions(scope: ImageRef | Region) -> tuple[Region, ...]:
-        image = scope if isinstance(scope, ImageRef) else scope.image
-        if isinstance(scope, Region):
-            x0, y0, x1, y1 = scope.bbox_xyxy_global
-        else:
-            width, height = _dimensions(scope)
-            x0, y0, x1, y1 = 0.0, 0.0, float(width), float(height)
-        cell_width = (x1 - x0) / 3.0
-        cell_height = (y1 - y0) / 3.0
-        return tuple(
-            Region(
-                image,
-                (
-                    x0 + column * cell_width,
-                    y0 + row * cell_height,
-                    x0 + (column + 1) * cell_width,
-                    y0 + (row + 1) * cell_height,
-                ),
-                {"grid_id": f"grid_{row * 3 + column + 1:02d}"},
-            )
-            for row in range(3)
-            for column in range(3)
-        )
-
-    def _regional_fallback(
-        self,
-        scope: ImageRef | Region,
-        *,
-        target: TargetSpec,
-        detector_target: TargetSpec | None = None,
-        question: str,
-    ) -> tuple[EntitySet, dict[str, Any]]:
-        detector_target = detector_target or target
-        query = target.phrase()
-        grids = self._coarse_grid_regions(scope)
-        if self.refiner is not None:
-            selected_indices, grid_selection = self.refiner.select_grid_ids(
-                grids,
-                question=question,
-                target=target,
-            )
-        else:
-            selected_indices = (4,)
-            grid_selection = {
-                "method": "coarse_grid_geometry_fallback",
-                "grid_count": len(grids),
-                "grid_ids": [
-                    str(region.provenance.get("grid_id", f"grid_{index + 1:02d}"))
-                    for index, region in enumerate(grids)
-                ],
-                "selected_grid_ids": [str(grids[4].provenance.get("grid_id", "grid_05"))],
-                "selected_grid_indices": [4],
-                "selection_status": "GEOMETRY_FALLBACK",
-                "failure_reason": "semantic_refiner_unavailable",
-                "latency_ms": 0.0,
-            }
-        selected_indices = tuple(
-            index for index in selected_indices[:3] if 0 <= index < len(grids)
-        )
-        if not selected_indices:
-            selected_indices = (4,)
-        regional_entities: list[Entity] = []
-        detector_calls = 0
-        region_records: list[dict[str, Any]] = []
-        clip_records: list[dict[str, Any]] = []
-        for grid_index in selected_indices:
-            candidate = grids[grid_index]
-            detector_calls += 1
-            region_record: dict[str, Any] = {
-                "region_id": str(candidate.provenance.get("grid_id", f"grid_{grid_index + 1:02d}")),
-                "grid_index": grid_index,
-                "bbox_xyxy_global": list(candidate.bbox_xyxy_global),
-            }
-            try:
-                regional_detection = self.detection.detect(
-                    DetectionRequest(candidate, detector_target, "LOCATE")
-                )
-            except Exception as exc:
-                region_record.update(
-                    {
-                        "candidate_count": 0,
-                        "provider": self.detection.provider_name,
-                        "error": f"{type(exc).__name__}: {exc}",
-                    }
-                )
-                region_records.append(region_record)
-                continue
-            clip_metadata = regional_detection.metadata.get("clip_rerank", {})
-            if isinstance(clip_metadata, dict):
-                clip_records.append(dict(clip_metadata))
-            region_record.update(
-                {
-                    "candidate_count": len(regional_detection.detections.entities),
-                    "provider": regional_detection.provider,
-                }
-            )
-            region_records.append(region_record)
-            for candidate_index, entity in enumerate(regional_detection.detections.entities):
-                regional_entities.append(
-                    Entity(
-                        entity.region,
-                        entity.label,
-                        entity.score,
-                        {
-                            **entity.provenance,
-                            "candidate_id": (
-                                f"{region_record['region_id']}_{candidate_index + 1:04d}"
-                            ),
-                            "regional_fallback": True,
-                            "coarse_grid_fallback": True,
-                            "regional_fallback_region": region_record["region_id"],
-                        },
-                    )
-                )
-        merged = self._merge_fallback_entities(regional_entities, self.max_candidates)
-        metadata = {
-            "regional_fallback_triggered": True,
-            "regional_fallback_method": "coarse_grid",
-            "coarse_grid_fallback_triggered": True,
-            "coarse_grid_fallback_grid_count": len(grids),
-            "coarse_grid_fallback_selected_grid_indices": list(selected_indices),
-            "coarse_grid_fallback_selected_grid_ids": [
-                str(grids[index].provenance.get("grid_id", f"grid_{index + 1:02d}"))
-                for index in selected_indices
-            ],
-            "coarse_grid_fallback_selection": grid_selection,
-            "coarse_grid_fallback_regions": region_records,
-            "coarse_grid_fallback_detector_calls": detector_calls,
-            "coarse_grid_fallback_candidate_count": len(merged),
-            "regional_fallback_query": query,
-            "regional_fallback_regions": region_records,
-            "regional_fallback_region_count": len(selected_indices),
-            "regional_fallback_detector_calls": detector_calls,
-            "regional_fallback_candidate_count": len(merged),
-            "regional_fallback_provider": self.detection.provider_name,
-            "clip_rerank_applied": any(
-                item.get("status") == "applied" for item in clip_records
-            ),
-            "clip_query": detector_target.category,
-            "clip_input_candidate_count": sum(
-                int(item.get("candidate_count", 0)) for item in clip_records
-            ),
-            "clip_output_candidate_count": len(merged),
-            "clip_scores": [
-                item.get("fused_scores", []) for item in clip_records if item.get("fused_scores")
-            ],
-        }
-        return EntitySet(
-            merged,
-            {
-                "provider": self.detection.provider_name,
-                "capability": "DETECTOR",
-                "regional_fallback": metadata,
-                "coarse_grid_fallback": metadata,
-                "proposal_query": detector_target.category,
-                "proposal_query_mode": "category_only",
-            },
-        ), metadata
 
     def execute(
         self,
@@ -1064,453 +737,221 @@ class LocateExecutor:
         context: OperatorContext,
     ) -> OperatorOutcome:
         scope = inputs["image"]
-        if not isinstance(scope, ImageRef | Region):
+        if not isinstance(scope, (ImageRef, Region)):
             raise TypeError("LOCATE.image must be ImageRef or Region")
         target = TargetSpec.model_validate(node.params["target"])
-        decision = self.capability_classifier.classify(target)
-        decision_metadata = {"capability_decision": decision.to_dict()}
-        if (
-            self.refiner is not None
-            and self.refiner.config.enabled
-            and self.refiner.config.singleton_vlm_primary
-        ):
-            should_refine, trigger_reason = self._needs_refinement(node, target, context)
-            if should_refine and self.refiner.config.enabled:
-                vlm_result = self.refiner.vlm_referent(
-                    scope,
-                    question=context.question or context.final_question or "",
-                    target=target,
-                )
-                if vlm_result is not None:
-                    return self._vlm_referent_outcome(
-                        vlm_result, scope, decision_metadata, trigger_reason
-                    )
-        if decision.effective_capability is TargetCapability.RETRIEVER:
-            result = self.retriever.retrieve(
-                RegionRetrievalRequest(
-                    scope,
-                    target.phrase(),
-                    search_scope=scope if isinstance(scope, Region) else None,
-                    max_candidates=self.max_candidates,
-                )
-            )
-            entities = EntitySet(
-                tuple(
-                    Entity(item.region, target.category, item.relevance_score, item.provenance)
-                    for item in result.candidates
-                ),
-                {
-                    "provider": result.provider,
-                    "capability": "region_retrieval",
-                    **decision_metadata,
-                },
-            )
-            should_refine, trigger_reason = self._needs_refinement(node, target, context)
-            primary_candidate_count = len(entities.entities)
-            primary_resolution_status = self._primary_resolution_status(primary_candidate_count)
-            refinement_metadata: dict[str, Any] = {
-                "primary_provider": result.provider,
-                "refinement_applied": False,
-                "refinement_method": "none",
-                "candidate_count_before_refinement": primary_candidate_count,
-                "candidate_count_after_refinement": primary_candidate_count,
-                "selected_candidate_ids": [
-                    entity.provenance.get("candidate_id", f"candidate_{index + 1:04d}")
-                    for index, entity in enumerate(entities.entities)
-                ],
-                "resolution_status": primary_resolution_status,
-                "refinement_status": primary_resolution_status,
-                "refinement_trigger": trigger_reason,
-                "fallback_triggered": False,
+        hint = context.execution_hint.locate if context.execution_hint else None
+        hint = hint or analyze_locate(node.id, context.graph_nodes)
+        trace = hint.to_dict()
+        trace.update(
+            {
+                "actual_backend": hint.backend,
                 "fallback_reason": None,
-                "fallback_provider": None,
-                "fallback_scope": None,
+                "target_spec": target.model_dump(mode="json"),
+                "stage": "semantic_vlm" if hint.backend == "VLM_SINGLE" else "detector",
             }
-            value = entities
-            if (
-                not entities.entities
-                and should_refine
-                and self.refiner is not None
-                and self.refiner.config.enabled
-            ):
-                # Retriever recall failure (3x3+CLIP missed the target):
-                # fall back to the open-set detector, then to the semantic VLM.
-                detector_fallback = None
-                try:
-                    detector_result = self.detection.detect(
-                        DetectionRequest(
-                            scope,
-                            target,
-                            "LOCATE",
-                            apply_locate_policy=True,
-                            use_clip_rerank=True,
-                        )
-                    )
-                    detector_fallback = detector_result.detections
-                except Exception as exc:
-                    refinement_metadata["detector_fallback_error"] = (
-                        f"{type(exc).__name__}: {exc}"
-                    )
-                if detector_fallback is not None and detector_fallback.entities:
-                    value = detector_fallback
-                    refinement_metadata.update(
-                        {
-                            "fallback_triggered": True,
-                            "fallback_reason": "EMPTY_RETRIEVER_RESULTS",
-                            "fallback_provider": "lae_dino_detector",
-                            "fallback_scope": None,
-                            "final_resolution_status": "DETECTOR_FALLBACK_RESOLVED",
-                            "resolution_status": "DETECTOR_FALLBACK_RESOLVED",
-                            "refinement_status": "DETECTOR_FALLBACK_RESOLVED",
-                            "candidate_count_after_refinement": len(value.entities),
-                        }
-                    )
-                else:
-                    fallback = self.refiner.visual_fallback(
-                        scope,
-                        question=context.final_question or context.question,
-                        target=target,
-                        reason="EMPTY_RETRIEVER_RESULTS",
-                    )
-                    value = fallback.entities
-                    refinement_metadata.update(
-                        {
-                            **fallback.metadata,
-                            "fallback_triggered": True,
-                            "fallback_reason": "EMPTY_RETRIEVER_RESULTS",
-                            "fallback_provider": "semantic_2b",
-                            "fallback_scope": fallback.metadata.get("fallback_scope"),
-                            "final_resolution_status": "SEMANTIC_FALLBACK_RESOLVED",
-                            "resolution_status": "SEMANTIC_FALLBACK_RESOLVED",
-                            "refinement_status": "SEMANTIC_FALLBACK_RESOLVED",
-                            "candidate_count_after_refinement": len(value.entities),
-                        }
-                    )
-            refinement_metadata.setdefault(
-                "final_resolution_status", refinement_metadata["resolution_status"]
-            )
-            value.provenance.update(
-                {
-                    "primary_provider": result.provider,
-                    "primary_candidate_count": primary_candidate_count,
-                    "candidate_count_before_refinement": primary_candidate_count,
-                    "candidate_count_after_refinement": len(value.entities),
-                    "refinement_applied": refinement_metadata["refinement_applied"],
-                    "refinement_status": refinement_metadata["refinement_status"],
-                    "resolution_status": refinement_metadata["resolution_status"],
-                    "fallback_triggered": refinement_metadata["fallback_triggered"],
-                    "fallback_reason": refinement_metadata["fallback_reason"],
-                    "fallback_provider": refinement_metadata["fallback_provider"],
-                    "fallback_scope": refinement_metadata["fallback_scope"],
-                    "final_resolution_status": refinement_metadata[
-                        "final_resolution_status"
-                    ],
-                    "refinement": refinement_metadata,
-                }
-            )
-            return OperatorOutcome(
-                value,
-                result.provider,
-                {
-                    **decision_metadata,
-                    "capability": "RETRIEVER",
-                    "latency_ms": result.latency_ms,
-                    "activated_provider": result.provider,
-                    "stage": "retriever",
-                    "provider_metadata": dict(result.metadata),
-                    "primary_provider": result.provider,
-                    "primary_candidate_count": primary_candidate_count,
-                    "refinement_applied": refinement_metadata["refinement_applied"],
-                    "refinement_status": refinement_metadata["refinement_status"],
-                    "fallback_triggered": refinement_metadata["fallback_triggered"],
-                    "fallback_reason": refinement_metadata["fallback_reason"],
-                    "fallback_provider": refinement_metadata["fallback_provider"],
-                    "fallback_scope": refinement_metadata["fallback_scope"],
-                    "final_resolution_status": refinement_metadata[
-                        "final_resolution_status"
-                    ],
-                    "referent_refinement": refinement_metadata,
-                },
-            )
-        detector_target = (
-            target.model_copy(update={"category": decision.canonical_category})
-            if decision.canonical_category
-            and decision.canonical_category.casefold() != target.category.casefold()
-            else target
         )
-        should_refine, trigger_reason = self._needs_refinement(node, target, context)
-        detected = self.detection.detect(
-            DetectionRequest(
-                scope,
-                detector_target,
-                "LOCATE",
-                apply_locate_policy=should_refine,
-                use_clip_rerank=should_refine,
-            )
-        )
-        before_entities = detected.detections.entities
-        clip_metadata = detected.metadata.get("clip_rerank", {})
-        if not isinstance(clip_metadata, dict):
-            clip_metadata = {}
-        clip_query = detected.metadata.get("clip_query", clip_metadata.get("clip_query"))
-        refinement_metadata: dict[str, Any] = {
-            "primary_provider": detected.provider,
-            "refinement_applied": False,
-            "refinement_method": "none",
-            "candidate_count_before_refinement": len(before_entities),
-            "candidate_count_after_refinement": len(before_entities),
-            "selected_candidate_ids": [
-                entity.provenance.get("candidate_id", f"candidate_{index + 1:04d}")
-                for index, entity in enumerate(before_entities)
-            ],
-            "resolution_status": self._primary_resolution_status(len(before_entities)),
-            "refinement_status": self._primary_resolution_status(len(before_entities)),
-            "refinement_trigger": trigger_reason,
-            "fallback_triggered": False,
-            "fallback_reason": None,
-            "fallback_provider": None,
-            "fallback_scope": None,
-            "clip_rerank_applied": clip_metadata.get("status") == "applied",
-            "clip_query": clip_query,
-            "clip_input_candidate_count": clip_metadata.get("candidate_count"),
-            "clip_output_candidate_count": len(before_entities),
-            "clip_scores": clip_metadata.get("fused_scores", []),
-        }
-        value = detected.detections
-        if not before_entities and should_refine:
-            try:
-                value, regional_metadata = self._regional_fallback(
-                    scope,
-                    target=target,
-                    detector_target=detector_target,
-                    question=context.final_question or context.question,
-                )
-            except Exception as exc:
+        single = hint.requirement is LocateRequirement.SINGLE_TARGET
+        if single:
+            if self.refiner is None:
                 value = EntitySet(
-                    (),
-                    {
-                        **detected.detections.provenance,
-                        "resolution_status": "UNRESOLVED",
-                        "fallback_required": True,
-                    },
+                    (), {"resolution_status": "UNRESOLVED", "candidate_pool_complete": False}
                 )
-                regional_metadata = {
-                    "regional_fallback_triggered": True,
-                    "regional_fallback_method": "coarse_grid",
-                    "coarse_grid_fallback_triggered": True,
-                    "regional_fallback_query": target.phrase(),
-                    "regional_fallback_regions": [],
-                    "regional_fallback_region_count": 0,
-                    "regional_fallback_detector_calls": 0,
-                    "regional_fallback_candidate_count": 0,
-                    "regional_fallback_provider": self.detection.provider_name,
-                    "regional_fallback_error": f"{type(exc).__name__}: {exc}",
-                }
-            refinement_metadata.update(
+                trace["fallback_reason"] = "semantic_provider_unavailable"
+            else:
+                pointed = self.refiner.vlm_referent(scope, target=target)
+                value = pointed.entities
+                trace["vlm_single"] = pointed.metadata
+                status = value.provenance["resolution_status"]
+                if status != "UNRESOLVED" or not self.refiner.config.single_detector_fallback:
+                    value.provenance["locate_route"] = trace
+                    trace["model_role"] = "semantic_2b"
+                    trace["activated_provider"] = "semantic_2b:referent"
+                    return OperatorOutcome(value, "semantic_2b:referent", trace)
+                trace["fallback_reason"] = pointed.metadata.get("failure_reason", "vlm_unresolved")
+            trace["actual_backend"] = "LAE_DINO"
+            trace["stage"] = "detector"
+        # Never invoke the CLIP top-K policy: DINO provides category candidates.
+        # Intrinsic attribute verification is a separate, traceable stage.
+        try:
+            detected = self.detection.detect(
+                DetectionRequest(
+                    scope, target, "LOCATE", apply_locate_policy=False, use_clip_rerank=False
+                )
+            )
+        except Exception as exc:
+            trace.update(
                 {
-                    **regional_metadata,
-                    "fallback_triggered": True,
-                    "fallback_reason": "EMPTY_PROPOSALS",
-                    "fallback_provider": regional_metadata.get(
-                        "regional_fallback_provider", self.detection.provider_name
-                    ),
-                    "fallback_scope": "bounded_coarse_grid_regions",
-                    "resolution_status": (
-                        self._primary_resolution_status(len(value.entities))
-                        if value.entities
-                        else "UNRESOLVED"
-                    ),
-                    "refinement_status": (
-                        self._primary_resolution_status(len(value.entities))
-                        if value.entities
-                        else "UNRESOLVED"
-                    ),
-                    "candidate_count_after_refinement": len(value.entities),
+                    "detector_error": f"{type(exc).__name__}: {exc}",
+                    "candidate_pool_complete": False,
+                    "final_resolution_status": "UNRESOLVED",
                 }
             )
-        if value.entities and len(value.entities) > self.max_candidates:
-            # Unconditional top-K cut: SELECT-consumer LOCATEs skip the locate
-            # policy, and the LAE pool can reach 800-2000 boxes which the
-            # downstream SELECT's semantic compose turns into a multi-GB KV
-            # (OOM).  Keep the highest-scored candidates; every downstream
-            # path tolerates fewer candidates, so no consumer is affected.
-            raw_count = len(value.entities)
-            ranked = sorted(
-                range(raw_count),
-                key=lambda index: (
-                    -(
-                        float(value.entities[index].score)
-                        if value.entities[index].score is not None
-                        and math.isfinite(float(value.entities[index].score))
-                        else float("-inf")
-                    ),
-                    index,
-                ),
-            )
-            kept = tuple(value.entities[index] for index in ranked[: self.max_candidates])
             value = EntitySet(
-                kept,
+                (),
                 {
-                    **value.provenance,
-                    "candidate_truncated": True,
-                    "raw_candidate_count": raw_count,
+                    "candidate_pool_complete": False,
+                    "resolution_status": "UNRESOLVED",
+                    "locate_route": trace,
                 },
             )
-            refinement_metadata.update(
-                {
-                    "candidate_truncated": True,
-                    "raw_candidate_count": raw_count,
-                    "candidate_count_after_truncation": len(kept),
-                }
-            )
-        if value.entities and should_refine and self.refiner is not None:
-            refined = self.refiner.refine(
-                value,
-                question=context.final_question or context.question,
-                target=target,
-                trigger_reason=trigger_reason,
-            )
-            value = refined.entities
-            refinement_metadata = {
-                **refinement_metadata,
-                **refined.metadata,
-                "refinement_applied": bool(refined.metadata.get("applied", False)),
-                "refinement_method": refined.metadata.get("method", "none"),
-                "candidate_count_after_refinement": len(value.entities),
-                "refinement_status": refined.metadata.get(
-                    "resolution_status", refinement_metadata["resolution_status"]
-                ),
+            return OperatorOutcome(value, self.detection.provider_name, trace)
+        value = SelectExecutor._with_candidate_ids(detected.detections)
+        assert isinstance(value, EntitySet)
+        raw_count = len(value.entities)
+        provider_partial = (
+            value.provenance.get("candidate_pool_complete") is False
+            or value.provenance.get("candidate_truncated") is True
+            or detected.metadata.get("candidate_truncated") is True
+        )
+        value.provenance.update(
+            {
+                "candidate_pool_complete": not provider_partial,
+                "resolution_status": "PARTIAL"
+                if provider_partial
+                else "MULTIPLE_VALID"
+                if raw_count > 1
+                else "PRIMARY_RESOLVED"
+                if raw_count
+                else "EMPTY",
             }
-            if value.provenance.get("fallback_required"):
-                refinement_metadata.update(
+        )
+        trace.update(
+            {
+                "category_candidate_count": raw_count,
+                "detector_provider": detected.provider,
+                "activated_provider": detected.provider,
+                "detector_metadata": detected.metadata,
+                "attributes": {"policy": "not_required", "verified": True},
+            }
+        )
+        if target.attributes and value.entities:
+            policy = self.refiner.config.attribute_policy if self.refiner else "unresolved"
+            trace["attributes"] = {
+                "policy": policy,
+                "target_attributes": target.attributes,
+                "verified": False,
+                "clip_similarity_is_truth": False,
+            }
+            if policy == "vlm" and self.refiner is not None:
+                checked = BoundedSemanticSelector(
+                    self.refiner.semantic, self.selection_config
+                ).select(
+                    value,
+                    query="Match the category and ALL intrinsic attributes "
+                    "of this LOCATE TargetSpec: "
+                    + json.dumps(
+                        target.model_dump(mode="json"), ensure_ascii=False, sort_keys=True
+                    ),
+                    cardinality="MULTI",
+                    composer=context.composer,
+                    scope=scope,
+                    purpose="locate_attribute_verification",
+                )
+                trace["attributes"].update(checked.metadata)
+                trace["attributes"]["verified"] = checked.status in {
+                    SelectStatus.OK,
+                    SelectStatus.EMPTY,
+                }
+                uncertain_ids = set(checked.metadata["uncertain_candidate_ids"])
+                keep = set(checked.indices) | {
+                    i
+                    for i, entity in enumerate(value.entities)
+                    if entity.provenance["candidate_id"] in uncertain_ids
+                }
+                value = EntitySet(
+                    tuple(
+                        replace(
+                            entity,
+                            provenance={
+                                **entity.provenance,
+                                "attribute_verdict": "UNCERTAIN"
+                                if entity.provenance["candidate_id"] in uncertain_ids
+                                else "MATCH",
+                            },
+                        )
+                        for i, entity in enumerate(value.entities)
+                        if i in keep
+                    ),
+                    dict(value.provenance),
+                )
+                if checked.status is SelectStatus.UNRESOLVED:
+                    value.provenance.update(
+                        {"candidate_pool_complete": False, "resolution_status": "UNRESOLVED"}
+                    )
+                elif value.provenance["candidate_pool_complete"]:
+                    value.provenance["resolution_status"] = (
+                        "EMPTY"
+                        if not value.entities
+                        else "PRIMARY_RESOLVED"
+                        if len(value.entities) == 1
+                        else "MULTIPLE_VALID"
+                    )
+            else:
+                # Retain unverified instances for audit; no downstream exact
+                # set operation may silently treat them as verified targets.
+                value.provenance.update(
                     {
-                        "fallback_triggered": True,
-                        "fallback_reason": refined.metadata.get(
-                            "failure_reason", "REFERENT_UNRESOLVED"
-                        ),
-                        "fallback_provider": "semantic_2b",
-                        "fallback_scope": "bounded_candidate_set",
+                        "candidate_pool_complete": False,
+                        "resolution_status": "UNRESOLVED",
+                        "attribute_verification": "uncalibrated_no_reliable_verifier",
                     }
                 )
-        elif (
-            should_refine
+        if single and len(value.entities) > 1:
+            # Detector fallback must not pick its highest score as identity.
+            if self.refiner is not None and value.provenance["candidate_pool_complete"]:
+                selected = BoundedSemanticSelector(
+                    self.refiner.semantic, self.selection_config
+                ).select(
+                    value,
+                    query="Identify the unique target defined ONLY by "
+                    + json.dumps(target.model_dump(mode="json"), sort_keys=True),
+                    cardinality="SINGLE",
+                    composer=context.composer,
+                    scope=scope,
+                    purpose="locate_single_fallback",
+                )
+                trace["fallback_selection"] = selected.metadata
+                value = EntitySet(
+                    tuple(value.entities[i] for i in selected.indices),
+                    {
+                        **value.provenance,
+                        "resolution_status": selected.status.value,
+                        "candidate_pool_complete": selected.status
+                        in {SelectStatus.OK, SelectStatus.EMPTY},
+                    },
+                )
+            else:
+                value.provenance.update(
+                    {"candidate_pool_complete": False, "resolution_status": "AMBIGUOUS"}
+                )
+        if (
+            single
             and not value.entities
-            and self.refiner is not None
-            and self.refiner.config.enabled
+            and trace["fallback_reason"]
+            and value.provenance["resolution_status"] == "EMPTY"
         ):
-            # Detector recall failure: the detector and its regional fallback both
-            # missed the target.  Hand the whole search scope to the semantic VLM
-            # as a single visual candidate so downstream ATTRIBUTE/CLASSIFY and the
-            # final Choice VLM can still answer from the visible region instead of
-            # failing on an empty EntitySet.
-            fallback = self.refiner.visual_fallback(
-                scope,
-                question=context.final_question or context.question,
-                target=target,
-                reason="EMPTY_PROPOSALS_AND_REGIONAL_FALLBACK",
-            )
-            value = fallback.entities
-            refinement_metadata.update(
-                {
-                    **fallback.metadata,
-                    "fallback_triggered": True,
-                    "fallback_reason": "EMPTY_PROPOSALS_AND_REGIONAL_FALLBACK",
-                    "fallback_provider": "semantic_2b",
-                    "fallback_scope": (
-                        "scoped_region" if isinstance(scope, Region) else "image"
-                    ),
-                    "candidate_count_after_refinement": len(value.entities),
-                    "resolution_status": "SEMANTIC_FALLBACK_RESOLVED",
-                    "refinement_status": "SEMANTIC_FALLBACK_RESOLVED",
-                    "final_resolution_status": "SEMANTIC_FALLBACK_RESOLVED",
-                }
-            )
-        if "final_resolution_status" not in refinement_metadata:
-            refinement_metadata["final_resolution_status"] = refinement_metadata[
-                "resolution_status"
-            ]
-        if refinement_metadata.get("fallback_triggered"):
             value.provenance.update(
-                {
-                    "fallback_triggered": True,
-                    "fallback_reason": refinement_metadata.get("fallback_reason"),
-                    "fallback_provider": refinement_metadata.get("fallback_provider"),
-                    "fallback_scope": refinement_metadata.get("fallback_scope"),
-                    "fallback_kind": value.provenance.get("fallback_kind", "semantic_visual"),
-                }
+                {"candidate_pool_complete": False, "resolution_status": "UNRESOLVED"}
             )
         value.provenance.update(
             {
-                "proposal_query": detector_target.category,
-                "original_target_spec": {
-                    "category": target.category,
-                    "attributes": dict(target.attributes),
-                },
-                "candidate_count_before_refinement": len(before_entities),
+                "locate_route": trace,
+                "category_candidate_count": raw_count,
                 "candidate_count_after_refinement": len(value.entities),
-                "refinement_applied": refinement_metadata["refinement_applied"],
-                "refinement_method": refinement_metadata["refinement_method"],
-                "resolution_status": refinement_metadata["resolution_status"],
-                "final_resolution_status": refinement_metadata["final_resolution_status"],
-                "regional_fallback_triggered": refinement_metadata.get(
-                    "regional_fallback_triggered", False
-                ),
-                "regional_fallback_regions": refinement_metadata.get(
-                    "regional_fallback_regions", []
-                ),
-                "clip_rerank_applied": refinement_metadata.get(
-                    "clip_rerank_applied", False
-                ),
-                "clip_query": refinement_metadata.get("clip_query"),
-                "clip_input_candidate_count": refinement_metadata.get(
-                    "clip_input_candidate_count"
-                ),
-                "clip_output_candidate_count": refinement_metadata.get(
-                    "clip_output_candidate_count"
-                ),
-                "clip_scores": refinement_metadata.get("clip_scores", []),
-                "refinement": refinement_metadata,
+                "original_target_spec": target.model_dump(mode="json"),
+                "proposal_query": target.detection_phrase(),
+                "attribute_trace": trace["attributes"],
             }
         )
-        return OperatorOutcome(
-            value,
-            detected.provider,
+        trace.update(
             {
-                **decision_metadata,
-                "capability": "DETECTOR",
-                "latency_ms": detected.latency_ms,
-                "activated_provider": detected.provider,
-                "stage": "detector",
-                "provider_metadata": dict(detected.metadata),
-                "primary_provider": detected.provider,
-                "primary_candidate_count": len(before_entities),
-                "refinement_applied": refinement_metadata["refinement_applied"],
-                "refinement_status": refinement_metadata["refinement_status"],
-                "fallback_triggered": refinement_metadata["fallback_triggered"],
-                "fallback_reason": refinement_metadata["fallback_reason"],
-                "fallback_provider": refinement_metadata["fallback_provider"],
-                "fallback_scope": refinement_metadata["fallback_scope"],
-                "final_resolution_status": refinement_metadata["final_resolution_status"],
-                "regional_fallback_triggered": refinement_metadata.get(
-                    "regional_fallback_triggered", False
-                ),
-                "regional_fallback_regions": refinement_metadata.get(
-                    "regional_fallback_regions", []
-                ),
-                "clip_rerank_applied": refinement_metadata.get(
-                    "clip_rerank_applied", False
-                ),
-                "clip_query": refinement_metadata.get("clip_query"),
-                "clip_input_candidate_count": refinement_metadata.get(
-                    "clip_input_candidate_count"
-                ),
-                "clip_output_candidate_count": refinement_metadata.get(
-                    "clip_output_candidate_count"
-                ),
-                "clip_scores": refinement_metadata.get("clip_scores", []),
-                "referent_refinement": refinement_metadata,
-            },
+                "final_candidate_count": len(value.entities),
+                "candidate_pool_complete": value.provenance["candidate_pool_complete"],
+                "final_resolution_status": value.provenance["resolution_status"],
+            }
         )
+        return OperatorOutcome(value, detected.provider, trace)
 
 
 class CountExecutor:
@@ -1565,6 +1006,8 @@ class CountExecutor:
             )
             if not isinstance(entities, EntitySet):
                 raise TypeError("COUNT.entities must be EntitySet")
+            if entities.provenance.get("candidate_pool_complete") is False:
+                raise ValueError("COUNT.entities refuses an incomplete/unverified candidate pool")
             return OperatorOutcome(
                 ScalarInt(
                     len(entities.entities), {"provider": "cardinality", "source": "EntitySet"}
@@ -1640,10 +1083,12 @@ class SelectExecutor:
         self,
         semantic: SemanticVLMProvider,
         choice_config: ChoiceSystemConfig | None = None,
+        selection_config: SemanticSelectionConfig | None = None,
     ) -> None:
         self.semantic = semantic
         self.provider_name = semantic.provider_name
         self.choice_config = choice_config or ChoiceSystemConfig()
+        self.selection_config = selection_config or SemanticSelectionConfig()
 
     @staticmethod
     def _sort_entities(entities: tuple[Entity, ...], order: str) -> list[Entity]:
@@ -1715,6 +1160,8 @@ class SelectExecutor:
         provenance: dict[str, object],
     ) -> EntitySet | Region | RegionSet:
         items = SelectExecutor._items(source)
+        if source.provenance.get("semantic_selection_ancestor"):
+            provenance = {**provenance, "semantic_selection_ancestor": True}
         selected = tuple(items[index] for index in indices)
         if isinstance(source, EntitySet):
             return EntitySet(
@@ -2002,6 +1449,22 @@ class SelectExecutor:
             "clear_positive_candidate_ids": clear_ids,
             "grey_candidate_ids": grey_ids,
         }
+        if len(semantic_indices) > self.selection_config.batch_size:
+            return self._result(
+                self._selected_like(
+                    candidates,
+                    clear_positive_indices,
+                    provenance={"candidate_pool_complete": False},
+                ),
+                status=SelectStatus.UNRESOLVED,
+                method="relation_visual_budget",
+                reason="relation_grey_candidates_exceed_visual_budget",
+                provenance={
+                    **common_provenance,
+                    "unseen_candidate_ids": grey_ids,
+                    "visual_budget": self.selection_config.batch_size,
+                },
+            )
         if selection_type == "SINGLE" and len(clear_positive_indices) >= 2:
             selected = self._selected_like(
                 candidates,
@@ -2405,6 +1868,12 @@ class SelectExecutor:
         if isinstance(raw_candidates, list):
             raise TypeError("SELECT.candidates does not allow reference lists")
         candidates = self._with_candidate_ids(self._unwrap(raw_candidates, role="candidates"))
+        mode = str(node.params["mode"])
+        if mode == "SEMANTIC":
+            candidates = replace(
+                candidates,
+                provenance={**candidates.provenance, "semantic_selection_ancestor": True},
+            )
         safe_inputs = dict(inputs)
         safe_inputs["candidates"] = candidates
         for role in ("reference", "scope"):
@@ -2418,12 +1887,22 @@ class SelectExecutor:
                     require_single=role == "scope",
                     consumer=f"SELECT.{role}",
                 )
-        mode = str(node.params["mode"])
         items = self._items(candidates)
         reference_input = safe_inputs.get("reference")
         scope_input = safe_inputs.get("scope")
         reference_value = reference_input if not isinstance(reference_input, list) else None
         scope_value = scope_input if not isinstance(scope_input, list) else None
+        if any(
+            getattr(value, "provenance", {}).get("candidate_pool_complete") is False
+            for value in (candidates, reference_value, scope_value)
+        ):
+            return self._result(
+                self._empty_like(candidates),
+                status=SelectStatus.UNRESOLVED,
+                method="candidate_integrity",
+                reason="incomplete_or_unverified_candidate_pool",
+                provenance={"upstream": candidates.provenance},
+            )
         if not self._same_image_inputs(candidates, reference_value, scope_value):
             return self._result(
                 self._empty_like(candidates),
@@ -2445,12 +1924,30 @@ class SelectExecutor:
                 reason="invalid_candidate_ids",
                 provenance={"error": str(exc)},
             )
-        if not items:
+        if not items and mode != "SEMANTIC":
             return self._result(
                 self._empty_like(candidates),
                 status=SelectStatus.EMPTY,
                 method="geometry",
                 reason="empty_candidates",
+            )
+        if mode == "SEMANTIC":
+            selected = BoundedSemanticSelector(self.semantic, self.selection_config).select(
+                candidates,
+                query=node.params["query"],
+                cardinality=node.params["selection_type"],
+                composer=context.composer,
+                reference=reference_value,
+                scope=scope_value,
+            )
+            return self._result(
+                self._selected_like(candidates, selected.indices, provenance=selected.metadata),
+                status=selected.status,
+                method="qwen3_vl_semantic_finite",
+                reason=None
+                if selected.status in {SelectStatus.OK, SelectStatus.EMPTY}
+                else selected.status.value.lower(),
+                provenance=selected.metadata,
             )
         if mode == "SUBREGION":
             return self._subregion(safe_inputs, candidates, node)
@@ -2889,9 +2386,7 @@ class SemanticExecutor:
             return False
 
         empty_visual_evidence = any(
-            _is_empty_visual(item)
-            for item in inputs.values()
-            if not isinstance(item, list)
+            _is_empty_visual(item) for item in inputs.values() if not isinstance(item, list)
         )
         if empty_visual_evidence and node.op in {
             OperatorName.ATTRIBUTE,
@@ -2903,9 +2398,9 @@ class SemanticExecutor:
             # Detector/relation evidence is empty: answer from the question
             # (with the configured option space when available) so the sample
             # still yields a label instead of hard-failing on materialization.
-            option_fallback = tuple(
-                str(value) for value in node.params.get("label_space") or ()
-            ) or None
+            option_fallback = (
+                tuple(str(value) for value in node.params.get("label_space") or ()) or None
+            )
             if node.op is OperatorName.RELATION:
                 option_fallback = tuple(relation.value for relation in SpatialRelation)
             elif node.op is OperatorName.MOTION:

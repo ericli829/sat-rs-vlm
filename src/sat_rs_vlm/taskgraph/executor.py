@@ -12,6 +12,8 @@ from .contracts import validate_runtime_inputs, validate_runtime_output
 from .execution_plan import ExecutionPlan, FinalChoiceFusionConfig
 from .operators import OperatorContext, OperatorExecutor, OperatorOutcome
 from .runtime_types import (
+    EntitySet,
+    RegionSet,
     RuntimeObject,
     runtime_summary,
     runtime_type_name,
@@ -160,6 +162,31 @@ class CapabilityRouter:
             # roles but is not itself an ImageRef/Region.  The runtime contract
             # validates what the operator actually receives.
             inputs = self._materialize_select_inputs(node, inputs)
+            if node.op is not OperatorName.SELECT:
+                for value in inputs.values():
+                    for item in value if isinstance(value, list) else (value,):
+                        if (
+                            node.op not in {OperatorName.COUNT, OperatorName.GROUP}
+                            and (
+                                getattr(item, "provenance", {}).get("semantic_selection_ancestor")
+                                or getattr(item, "provenance", {})
+                                .get("locate_route", {})
+                                .get("requirement")
+                                == "SINGLE_TARGET"
+                            )
+                            and (
+                                isinstance(item, EntitySet)
+                                and not item.entities
+                                or isinstance(item, RegionSet)
+                                and not item.regions
+                            )
+                        ):
+                            raise ValueError(f"{node.op.value} has no located/selected target")
+                        if getattr(item, "provenance", {}).get("candidate_pool_complete") is False:
+                            raise ValueError(
+                                f"{node.op.value} refuses incomplete or unverified "
+                                "upstream candidates"
+                            )
             validate_runtime_inputs(node.op.value, inputs)
         except Exception as contract_error:
             raise TaskGraphExecutionError(
@@ -302,9 +329,7 @@ class GraphExecutor:
                 outcome, fallback = self.router.execute(node, resolved, node_context)
                 store.put(node.id, outcome.value)
             except TaskGraphExecutionError as exc:
-                producers = {
-                    f"${producer.id}": producer.op.value for producer in graph.nodes
-                }
+                producers = {f"${producer.id}": producer.op.value for producer in graph.nodes}
                 exc.details["input_producers"] = {
                     str(role): (
                         [producers.get(str(ref)) for ref in refs]

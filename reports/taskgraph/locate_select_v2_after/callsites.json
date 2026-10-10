@@ -1,0 +1,170 @@
+[
+  {
+    "file": "src\\sat_rs_vlm\\taskgraph\\operators.py",
+    "function": "SelectExecutor._semantic_select",
+    "start": 1426,
+    "end": 1702
+  },
+  {
+    "file": "src\\sat_rs_vlm\\taskgraph\\referent_refinement.py",
+    "function": "ReferentRefiner.select_grid_ids",
+    "start": 189,
+    "end": 318
+  },
+  {
+    "file": "src\\sat_rs_vlm\\taskgraph\\referent_refinement.py",
+    "function": "ReferentRefiner.refine",
+    "start": 347,
+    "end": 581
+  },
+  {
+    "file": "src\\sat_rs_vlm\\taskgraph\\referent_refinement.py",
+    "function": "ReferentRefiner.vlm_referent",
+    "start": 583,
+    "end": 712
+  },
+  {
+    "file": "src\\sat_rs_vlm\\taskgraph\\referent_refinement.py",
+    "function": "ReferentRefiner.visual_fallback",
+    "start": 714,
+    "end": 725
+  },
+  {
+    "file": "src\\sat_rs_vlm\\taskgraph\\providers.py",
+    "function": "SemanticVLMProvider.infer",
+    "start": 305,
+    "end": 305
+  },
+  {
+    "file": "src\\sat_rs_vlm\\taskgraph\\providers.py",
+    "function": "SemanticVLMProvider.reason_and_decide",
+    "start": 307,
+    "end": 307
+  },
+  {
+    "file": "src\\sat_rs_vlm\\taskgraph\\providers.py",
+    "function": "SemanticVLMProvider.reason_and_choose",
+    "start": 309,
+    "end": 309
+  },
+  {
+    "file": "src\\sat_rs_vlm\\taskgraph\\providers.py",
+    "function": "LazyQwenSemanticProvider._prompt",
+    "start": 1686,
+    "end": 1703
+  },
+  {
+    "file": "src\\sat_rs_vlm\\taskgraph\\providers.py",
+    "function": "LazyQwenSemanticProvider.infer",
+    "start": 1705,
+    "end": 1749
+  },
+  {
+    "file": "src\\sat_rs_vlm\\taskgraph\\providers.py",
+    "function": "LazyQwenSemanticProvider._choice_instruction",
+    "start": 1752,
+    "end": 1769
+  },
+  {
+    "file": "src\\sat_rs_vlm\\taskgraph\\providers.py",
+    "function": "LazyQwenSemanticProvider.reason_and_decide",
+    "start": 1771,
+    "end": 1808
+  },
+  {
+    "file": "src\\sat_rs_vlm\\taskgraph\\providers.py",
+    "function": "LazyQwenSemanticProvider.reason_and_choose",
+    "start": 1810,
+    "end": 1835
+  },
+  {
+    "file": "src\\sat_rs_vlm\\taskgraph\\providers.py",
+    "function": "FakeSemanticVLMProvider.infer",
+    "start": 1863,
+    "end": 1886
+  },
+  {
+    "file": "src\\sat_rs_vlm\\taskgraph\\providers.py",
+    "function": "FakeSemanticVLMProvider.reason_and_decide",
+    "start": 1957,
+    "end": 2022
+  },
+  {
+    "file": "src\\sat_rs_vlm\\taskgraph\\providers.py",
+    "function": "FakeSemanticVLMProvider.reason_and_choose",
+    "start": 2024,
+    "end": 2091
+  },
+  {
+    "file": "src\\sat_rs_vlm\\taskgraph\\input_composer.py",
+    "function": "InputComposer.compose_locate",
+    "start": 178,
+    "end": 209
+  },
+  {
+    "file": "src\\sat_rs_vlm\\taskgraph\\input_composer.py",
+    "function": "InputComposer.compose_selection",
+    "start": 211,
+    "end": 269
+  },
+  {
+    "file": "src\\sat_rs_vlm\\taskgraph\\choice.py",
+    "function": "ChoiceResolver._legacy_score",
+    "start": 235,
+    "end": 263
+  },
+  {
+    "file": "src\\sat_rs_vlm\\taskgraph\\choice.py",
+    "function": "ChoiceResolver._cached_score",
+    "start": 265,
+    "end": 290
+  },
+  {
+    "file": "src\\sat_rs_vlm\\taskgraph\\choice.py",
+    "function": "ChoiceResolver._semantic_fallback_score",
+    "start": 313,
+    "end": 361
+  },
+  {
+    "file": "src\\sat_rs_vlm\\taskgraph\\semantic_selection.py",
+    "function": "BoundedSemanticSelector.select",
+    "start": 45,
+    "end": 240
+  },
+  {
+    "file": "src\\sat_rs_vlm\\taskgraph\\runtime.py",
+    "function": "TaskGraphRuntime._taskgraph",
+    "start": 476,
+    "end": 698
+  },
+  {
+    "file": "src\\sat_rs_vlm\\models\\hf_vlm_engine.py",
+    "function": "HuggingFaceVLMEngine.infer",
+    "start": 281,
+    "end": 308
+  },
+  {
+    "file": "src\\sat_rs_vlm\\models\\hf_vlm_engine.py",
+    "function": "HuggingFaceVLMEngine.reason_with_cache",
+    "start": 411,
+    "end": 569
+  },
+  {
+    "file": "src\\sat_rs_vlm\\models\\hf_vlm_engine.py",
+    "function": "HuggingFaceVLMEngine.score_choice_from_cache",
+    "start": 1132,
+    "end": 1261
+  },
+  {
+    "file": "src\\sat_rs_vlm\\models\\hf_vlm_engine.py",
+    "function": "HuggingFaceVLMEngine.reason_and_choose",
+    "start": 1263,
+    "end": 1296
+  },
+  {
+    "file": "src\\sat_rs_vlm\\models\\hf_vlm_engine.py",
+    "function": "HuggingFaceVLMEngine._build_messages",
+    "start": 1400,
+    "end": 1413
+  }
+]

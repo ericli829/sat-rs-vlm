@@ -82,7 +82,7 @@ def _detector_locator(
     return locate, semantic
 
 
-def test_empty_detection_falls_back_to_semantic_visual_entity(tmp_path: Path) -> None:
+def test_empty_detection_never_returns_a_scope_proxy_entity(tmp_path: Path) -> None:
     image = _image(tmp_path)
     scope = Region(image, (5, 5, 155, 115), {"operator": "REGION"})
     composer, context = _context(tmp_path)
@@ -98,23 +98,11 @@ def test_empty_detection_falls_back_to_semantic_visual_entity(tmp_path: Path) ->
         )
         outcome = locate.execute(node, {"image": scope}, context)
         assert isinstance(outcome.value, EntitySet)
-        # The fallback produced one visual candidate covering the scope.
-        assert len(outcome.value.entities) == 1
-        entity = outcome.value.entities[0]
-        assert entity.provenance.get("fallback_kind") == "semantic_visual"
-        assert entity.provenance.get("fallback_required") is True
-        assert entity.region.bbox_xyxy_global == (5.0, 5.0, 155.0, 115.0)
-        # The fallback is visible on the EntitySet provenance for tracing.
-        assert outcome.value.provenance.get("fallback_triggered") is True
-        assert outcome.value.provenance.get("fallback_reason") == (
-            "EMPTY_PROPOSALS_AND_REGIONAL_FALLBACK"
-        )
-        # The semantic VLM can compose a visual from the fallback entity.
-        composed = composer.compose_named(
-            {"entity": outcome.value},
-            question="What color is the minibus?",
-        )
-        assert len(composed.visual_inputs) >= 1
+        assert not outcome.value.entities
+        assert outcome.value.provenance["resolution_status"] == "UNRESOLVED"
+        assert outcome.value.provenance["candidate_pool_complete"] is False
+        assert outcome.trace_metadata["fallback_reason"]
+        assert outcome.trace_metadata["actual_backend"] == "LAE_DINO"
     finally:
         composer.close()
 
@@ -244,7 +232,7 @@ def test_final_choice_falls_back_to_image_vlm_on_empty_evidence(
 def test_semantic_attribute_answers_on_empty_entity_evidence(tmp_path: Path) -> None:
     """ATTRIBUTE with an empty EntitySet answers from the question instead of
     hard-failing on materialization (recall-fallback chain)."""
-    image = _image(tmp_path)
+    _image(tmp_path)
     composer, context = _context(tmp_path)
 
     class EmptyEvidenceSemantic:

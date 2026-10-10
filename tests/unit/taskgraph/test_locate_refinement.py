@@ -90,7 +90,7 @@ def test_unresolved_refinement_keeps_bounded_candidates_for_fallback(tmp_path: P
     composer.close()
 
 
-def test_empty_proposals_get_one_scoped_visual_fallback_entity(tmp_path: Path) -> None:
+def test_empty_proposals_never_forge_scoped_visual_fallback_entity(tmp_path: Path) -> None:
     image_path = tmp_path / "image.png"
     Image.new("RGB", (100, 80), "white").save(image_path)
     image = ImageRef(str(image_path), width=100, height=80)
@@ -109,9 +109,9 @@ def test_empty_proposals_get_one_scoped_visual_fallback_entity(tmp_path: Path) -
         reason="EMPTY_PROPOSALS",
     )
 
-    assert len(result.entities.entities) == 1
-    assert result.entities.provenance["fallback_kind"] == "semantic_visual"
-    assert result.metadata["resolution_status"] == "SEMANTIC_FALLBACK_RESOLVED"
+    assert len(result.entities.entities) == 0
+    assert result.entities.provenance["candidate_pool_complete"] is False
+    assert result.metadata["resolution_status"] == "UNRESOLVED"
     composer.close()
 
 
@@ -179,7 +179,7 @@ def _locate_node() -> GraphNode:
     )
 
 
-def test_empty_detector_uses_bounded_regional_fallback(tmp_path: Path) -> None:
+def test_single_vlm_failure_and_empty_detector_remain_unresolved(tmp_path: Path) -> None:
     image_path = tmp_path / "empty.png"
     Image.new("RGB", (100, 80), "white").save(image_path)
     image = ImageRef(str(image_path), width=100, height=80)
@@ -211,13 +211,13 @@ def test_empty_detector_uses_bounded_regional_fallback(tmp_path: Path) -> None:
         refiner=refiner,
     ).execute(node, {"image": image}, context)
 
-    assert len(outcome.value.entities) == 1
-    assert outcome.trace_metadata["primary_candidate_count"] == 0
-    assert outcome.trace_metadata["fallback_reason"] == "EMPTY_PROPOSALS"
-    assert outcome.trace_metadata["regional_fallback_triggered"] is True
-    assert outcome.trace_metadata["regional_fallback_regions"]
-    assert outcome.value.entities[0].region.bbox_xyxy_global == (20.0, 10.0, 30.0, 20.0)
-    assert len(detection.calls) == 2
+    assert not outcome.value.entities
+    assert outcome.trace_metadata["planned_backend"] == "VLM_SINGLE"
+    assert outcome.trace_metadata["actual_backend"] == "LAE_DINO"
+    assert outcome.trace_metadata["fallback_reason"]
+    assert outcome.value.provenance["resolution_status"] == "UNRESOLVED"
+    assert outcome.value.provenance["candidate_pool_complete"] is False
+    assert len(detection.calls) == 1
     composer.close()
 
 
@@ -300,7 +300,7 @@ def test_locate_count_preserves_all_candidates_and_skips_semantic_refinement(
     )
 
     assert len(outcome.value.entities) == 5
-    assert outcome.trace_metadata["refinement_status"] == "MULTIPLE_VALID"
+    assert outcome.trace_metadata["final_resolution_status"] == "MULTIPLE_VALID"
     assert semantic.choice_calls == []
     assert counted.value.value == 5
     composer.close()

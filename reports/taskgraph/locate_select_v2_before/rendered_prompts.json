@@ -1,0 +1,199 @@
+[
+  {
+    "name": "LOCATE_SINGLE white square building -> ATTRIBUTE",
+    "calls": [
+      {
+        "prompt": "Visual inputs:\n[image_1] role: RESULT_1\n\nQuestion:\nLocate the target in the image and output its bounding box as pixel coordinates of the image.\nTarget: white square building\nOriginal question: What color is its roof?\nOutput format: x1 y1 x2 y2  (for example: 120 80 340 260)\nReturn only the four numbers.",
+        "visuals": [
+          "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_before\\audit_scene.png"
+        ],
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image",
+                "image": "<IMAGE>"
+              },
+              {
+                "type": "text",
+                "text": "Visual inputs:\n[image_1] role: RESULT_1\n\nQuestion:\nLocate the target in the image and output its bounding box as pixel coordinates of the image.\nTarget: white square building\nOriginal question: What color is its roof?\nOutput format: x1 y1 x2 y2  (for example: 120 80 340 260)\nReturn only the four numbers."
+              }
+            ]
+          }
+        ],
+        "allowed_outputs": null,
+        "suffixes": [],
+        "mock": true,
+        "chat_template_rendered": "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Visual inputs:\n[image_1] role: RESULT_1\n\nQuestion:\nLocate the target in the image and output its bounding box as pixel coordinates of the image.\nTarget: white square building\nOriginal question: What color is its roof?\nOutput format: x1 y1 x2 y2  (for example: 120 80 340 260)\nReturn only the four numbers.<|im_end|>\n<|im_start|>assistant\n"
+      }
+    ],
+    "result": "ReferentRefinementResult(entities=EntitySet(entities=(Entity(region=Region(image=ImageRef(uri_or_key='D:\\\\Desktop\\\\tzb-2026\\\\sat-rs-vlm\\\\reports\\\\taskgraph\\\\locate_select_v2_before\\\\audit_scene.png', width=640, height=480, provenance={}), bbox_xyxy_global=(40.0, 40.0, 100.0, 100.0), provenance={'vlm_referent': True, 'origin': 'semantic_2b', 'pointer_text': '40 40 100 100'}), label='building', score=1.0, provenance={'candidate_id': 'vlm_referent_0001', 'vlm_referent': True, 'fallback_required': False, 'referent_refinement': {'applied': True, 'method': 'vlm_referent', 'input_candidate_count': 0, 'output_candidate_count': 1, 'selected_candidate_ids': ['vlm_referent_0001'], 'semantic_scores': {}, 'geometry_prior_scores': {}, 'detector_scores': {}, 'trigger_reason': 'SINGLETON_VLM_PRIMARY', 'resolution_status': 'VLM_REFERENT_RESOLVED', 'fallback_triggered': False, 'fallback_reason': None, 'fallback_provider': None, 'fallback_scope': None, 'question': 'What color is its roof?', 'target_spec': {'category': 'building', 'attributes': {'color': 'white', 'shape': 'square'}}, 'bbox_xyxy_global': [40.0, 40.0, 100.0, 100.0], 'latency_ms': 1.0278000263497233}}),), provenance={'provider': 'semantic_2b', 'capability': 'vlm_referent', 'vlm_referent_applied': True, 'referent_refinement': {'applied': True, 'method': 'vlm_referent', 'input_candidate_count': 0, 'output_candidate_count': 1, 'selected_candidate_ids': ['vlm_referent_0001'], 'semantic_scores': {}, 'geometry_prior_scores': {}, 'detector_scores': {}, 'trigger_reason': 'SINGLETON_VLM_PRIMARY', 'resolution_status': 'VLM_REFERENT_RESOLVED', 'fallback_triggered': False, 'fallback_reason': None, 'fallback_provider': None, 'fallback_scope': None, 'question': 'What color is its roof?', 'target_spec': {'category': 'building', 'attributes': {'color': 'white', 'shape': 'square'}}, 'bbox_xyxy_global': [40.0, 40.0, 100.0, 100.0], 'latency_ms': 1.0278000263497233}, 'resolution_status': 'VLM_REFERENT_RESOLVED'}), metadata={'applied': True, 'method': 'vlm_referent', 'input_candidate_count': 0, 'output_candidate_count': 1, 'selected_candidate_ids': ['vlm_referent_0001'], 'semantic_scores': {}, 'geometry_prior_scores': {}, 'detector_scores': {}, 'trigger_reason': 'SINGLETON_VLM_PRIMARY', 'resolution_status': 'VLM_REFERENT_RESOLVED', 'fallback_triggered': False, 'fallback_reason': None, 'fallback_provider': None, 'fallback_scope': None, 'question': 'What color is its roof?', 'target_spec': {'category': 'building', 'attributes': {'color': 'white', 'shape': 'square'}}, 'bbox_xyxy_global': [40.0, 40.0, 100.0, 100.0], 'latency_ms': 1.0278000263497233})",
+    "provenance": "real source prompt construction; synthetic visual; mocked inference, not accuracy"
+  },
+  {
+    "name": "LOCATE detector -> singleton refinement",
+    "calls": [
+      {
+        "prompt": "Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B/C\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: building; score: 0.9; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: building; score: 0.8; bbox_xyxy_global: [180.0, 160.0, 250.0, 220.0]\n- index: 2; label: building; score: 0.7; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\nQuestion:\nYou are verifying which supplied candidate matches the referring expression. Do not answer the original multiple-choice question. Do not search outside the supplied candidates. Select exactly one candidate only if the evidence supports it.\n\nOriginal referring question: Find the building in the lower right\nTarget specification: category=building; attributes={'color': 'white', 'shape': 'square'}\n\nOptions:\nCandidate A: building_1\nCandidate B: building_2\nCandidate C: building_3\n\nAnalyze the visual evidence, question, and all candidate options carefully. Reason through the problem before making the final decision. The final option will be selected in a separate constrained step.",
+        "visuals": [
+          "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_before\\visuals\\visual_00005.png"
+        ],
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image",
+                "image": "<IMAGE>"
+              },
+              {
+                "type": "text",
+                "text": "Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B/C\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: building; score: 0.9; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: building; score: 0.8; bbox_xyxy_global: [180.0, 160.0, 250.0, 220.0]\n- index: 2; label: building; score: 0.7; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\nQuestion:\nYou are verifying which supplied candidate matches the referring expression. Do not answer the original multiple-choice question. Do not search outside the supplied candidates. Select exactly one candidate only if the evidence supports it.\n\nOriginal referring question: Find the building in the lower right\nTarget specification: category=building; attributes={'color': 'white', 'shape': 'square'}\n\nOptions:\nCandidate A: building_1\nCandidate B: building_2\nCandidate C: building_3\n\nAnalyze the visual evidence, question, and all candidate options carefully. Reason through the problem before making the final decision. The final option will be selected in a separate constrained step."
+              }
+            ]
+          }
+        ],
+        "terminal_candidates": [
+          "A",
+          "B",
+          "C"
+        ],
+        "suffixes": [
+          "\n\nFinal choice:"
+        ],
+        "purpose": null,
+        "mock": true,
+        "chat_template_rendered": "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B/C\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: building; score: 0.9; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: building; score: 0.8; bbox_xyxy_global: [180.0, 160.0, 250.0, 220.0]\n- index: 2; label: building; score: 0.7; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\nQuestion:\nYou are verifying which supplied candidate matches the referring expression. Do not answer the original multiple-choice question. Do not search outside the supplied candidates. Select exactly one candidate only if the evidence supports it.\n\nOriginal referring question: Find the building in the lower right\nTarget specification: category=building; attributes={'color': 'white', 'shape': 'square'}\n\nOptions:\nCandidate A: building_1\nCandidate B: building_2\nCandidate C: building_3\n\nAnalyze the visual evidence, question, and all candidate options carefully. Reason through the problem before making the final decision. The final option will be selected in a separate constrained step.<|im_end|>\n<|im_start|>assistant\n"
+      }
+    ],
+    "result": "ReferentRefinementResult(entities=EntitySet(entities=(Entity(region=Region(image=ImageRef(uri_or_key='D:\\\\Desktop\\\\tzb-2026\\\\sat-rs-vlm\\\\reports\\\\taskgraph\\\\locate_select_v2_before\\\\audit_scene.png', width=640, height=480, provenance={}), bbox_xyxy_global=(40.0, 40.0, 100.0, 100.0), provenance={}), label='building', score=0.7818534333677926, provenance={'candidate_id': 'building_1', 'referent_refinement': {'selected': True, 'candidate_id': 'building_1', 'semantic_score': 1.0, 'geometry_prior_score': 0.12741373347117013, 'fused_score': 0.7818534333677926}}),), provenance={'referent_refinement': {'applied': True, 'method': 'semantic_2b_candidate_verification', 'input_candidate_count': 3, 'output_candidate_count': 1, 'selected_candidate_ids': ['building_1'], 'semantic_scores': {'building_1': 1.0, 'building_2': -1.0, 'building_3': -1.0}, 'geometry_prior_scores': {'building_1': 0.12741373347117013, 'building_2': 0.36517862157242964, 'building_3': 0.7005095110835924}, 'detector_scores': {'building_1': 0.9, 'building_2': 0.8, 'building_3': 0.7}, 'trigger_reason': 'audit', 'resolution_status': 'REFINED_RESOLVED', 'latency_ms': 23.521600000094622, 'semantic_candidate_ids': ['building_1', 'building_2', 'building_3'], 'fused_scores': {'building_1': 0.7818534333677926, 'building_2': 0.09129465539310741, 'building_3': 0.1751273777708981}, 'candidate_budget_indices': [0, 1, 2], 'semantic_selected_ids': ['building_1'], 'margin': 0.6067260555968945, 'provider': 'qwen3_vl:semantic', 'model_id': 'AUDIT_MOCK_NO_WEIGHTS', 'latency': {}}}), metadata={'applied': True, 'method': 'semantic_2b_candidate_verification', 'input_candidate_count': 3, 'output_candidate_count': 1, 'selected_candidate_ids': ['building_1'], 'semantic_scores': {'building_1': 1.0, 'building_2': -1.0, 'building_3': -1.0}, 'geometry_prior_scores': {'building_1': 0.12741373347117013, 'building_2': 0.36517862157242964, 'building_3': 0.7005095110835924}, 'detector_scores': {'building_1': 0.9, 'building_2': 0.8, 'building_3': 0.7}, 'trigger_reason': 'audit', 'resolution_status': 'REFINED_RESOLVED', 'latency_ms': 23.521600000094622, 'semantic_candidate_ids': ['building_1', 'building_2', 'building_3'], 'fused_scores': {'building_1': 0.7818534333677926, 'building_2': 0.09129465539310741, 'building_3': 0.1751273777708981}, 'candidate_budget_indices': [0, 1, 2], 'semantic_selected_ids': ['building_1'], 'margin': 0.6067260555968945, 'provider': 'qwen3_vl:semantic', 'model_id': 'AUDIT_MOCK_NO_WEIGHTS', 'latency': {}})",
+    "provenance": "real source prompt construction; synthetic visual; mocked inference, not accuracy"
+  },
+  {
+    "name": "LOCATE empty -> 3x3 fallback",
+    "calls": [
+      {
+        "prompt": "Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B/C/D/E/F/G/H/I\n\n[CANDIDATES]\ntype: RegionSet\nboxes_xyxy_global:\n- [0.0, 0.0, 200.0, 150.0]\n- [200.0, 0.0, 400.0, 150.0]\n- [400.0, 0.0, 600.0, 150.0]\n- [0.0, 150.0, 200.0, 300.0]\n- [200.0, 150.0, 400.0, 300.0]\n- [400.0, 150.0, 600.0, 300.0]\n- [0.0, 300.0, 200.0, 450.0]\n- [200.0, 300.0, 400.0, 450.0]\n- [400.0, 300.0, 600.0, 450.0]\n\nQuestion:\nSelect one to three grid cells that most likely contain the target. Use only the marked 3x3 overview and do not answer the original question.\n\nOriginal referring expression: Find white square building\nTarget specification: category=building; attributes={'color': 'white', 'shape': 'square'}\n\nOptions:\nGrid A: top-left\nGrid B: top-center\nGrid C: top-right\nGrid D: middle-left\nGrid E: center\nGrid F: middle-right\nGrid G: bottom-left\nGrid H: bottom-center\nGrid I: bottom-right\n\nAnalyze the visual evidence, question, and all candidate options carefully. Reason through the problem before making the final decision. The final option will be selected in a separate constrained step.",
+        "visuals": [
+          "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_before\\visuals\\visual_00006.png"
+        ],
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image",
+                "image": "<IMAGE>"
+              },
+              {
+                "type": "text",
+                "text": "Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B/C/D/E/F/G/H/I\n\n[CANDIDATES]\ntype: RegionSet\nboxes_xyxy_global:\n- [0.0, 0.0, 200.0, 150.0]\n- [200.0, 0.0, 400.0, 150.0]\n- [400.0, 0.0, 600.0, 150.0]\n- [0.0, 150.0, 200.0, 300.0]\n- [200.0, 150.0, 400.0, 300.0]\n- [400.0, 150.0, 600.0, 300.0]\n- [0.0, 300.0, 200.0, 450.0]\n- [200.0, 300.0, 400.0, 450.0]\n- [400.0, 300.0, 600.0, 450.0]\n\nQuestion:\nSelect one to three grid cells that most likely contain the target. Use only the marked 3x3 overview and do not answer the original question.\n\nOriginal referring expression: Find white square building\nTarget specification: category=building; attributes={'color': 'white', 'shape': 'square'}\n\nOptions:\nGrid A: top-left\nGrid B: top-center\nGrid C: top-right\nGrid D: middle-left\nGrid E: center\nGrid F: middle-right\nGrid G: bottom-left\nGrid H: bottom-center\nGrid I: bottom-right\n\nAnalyze the visual evidence, question, and all candidate options carefully. Reason through the problem before making the final decision. The final option will be selected in a separate constrained step."
+              }
+            ]
+          }
+        ],
+        "terminal_candidates": [
+          "YES",
+          "NO"
+        ],
+        "suffixes": [
+          "Verify the following option independently.\n\nCandidate option A: Grid A: top-left\nIs this option a correct answer to the original question?\nAnswer YES or NO:",
+          "Verify the following option independently.\n\nCandidate option B: Grid B: top-center\nIs this option a correct answer to the original question?\nAnswer YES or NO:",
+          "Verify the following option independently.\n\nCandidate option C: Grid C: top-right\nIs this option a correct answer to the original question?\nAnswer YES or NO:",
+          "Verify the following option independently.\n\nCandidate option D: Grid D: middle-left\nIs this option a correct answer to the original question?\nAnswer YES or NO:",
+          "Verify the following option independently.\n\nCandidate option E: Grid E: center\nIs this option a correct answer to the original question?\nAnswer YES or NO:",
+          "Verify the following option independently.\n\nCandidate option F: Grid F: middle-right\nIs this option a correct answer to the original question?\nAnswer YES or NO:",
+          "Verify the following option independently.\n\nCandidate option G: Grid G: bottom-left\nIs this option a correct answer to the original question?\nAnswer YES or NO:",
+          "Verify the following option independently.\n\nCandidate option H: Grid H: bottom-center\nIs this option a correct answer to the original question?\nAnswer YES or NO:",
+          "Verify the following option independently.\n\nCandidate option I: Grid I: bottom-right\nIs this option a correct answer to the original question?\nAnswer YES or NO:"
+        ],
+        "purpose": null,
+        "mock": true,
+        "chat_template_rendered": "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B/C/D/E/F/G/H/I\n\n[CANDIDATES]\ntype: RegionSet\nboxes_xyxy_global:\n- [0.0, 0.0, 200.0, 150.0]\n- [200.0, 0.0, 400.0, 150.0]\n- [400.0, 0.0, 600.0, 150.0]\n- [0.0, 150.0, 200.0, 300.0]\n- [200.0, 150.0, 400.0, 300.0]\n- [400.0, 150.0, 600.0, 300.0]\n- [0.0, 300.0, 200.0, 450.0]\n- [200.0, 300.0, 400.0, 450.0]\n- [400.0, 300.0, 600.0, 450.0]\n\nQuestion:\nSelect one to three grid cells that most likely contain the target. Use only the marked 3x3 overview and do not answer the original question.\n\nOriginal referring expression: Find white square building\nTarget specification: category=building; attributes={'color': 'white', 'shape': 'square'}\n\nOptions:\nGrid A: top-left\nGrid B: top-center\nGrid C: top-right\nGrid D: middle-left\nGrid E: center\nGrid F: middle-right\nGrid G: bottom-left\nGrid H: bottom-center\nGrid I: bottom-right\n\nAnalyze the visual evidence, question, and all candidate options carefully. Reason through the problem before making the final decision. The final option will be selected in a separate constrained step.<|im_end|>\n<|im_start|>assistant\n"
+      }
+    ],
+    "result": "((0,), {'method': 'coarse_grid_semantic_selection', 'grid_count': 9, 'grid_ids': ['grid_0', 'grid_1', 'grid_2', 'grid_3', 'grid_4', 'grid_5', 'grid_6', 'grid_7', 'grid_8'], 'selected_grid_ids': ['grid_0'], 'selected_grid_indices': [0], 'grid_scores': {'grid_0': 1.0, 'grid_1': -1.0, 'grid_2': -1.0, 'grid_3': -1.0, 'grid_4': -1.0, 'grid_5': -1.0, 'grid_6': -1.0, 'grid_7': -1.0, 'grid_8': -1.0}, 'selection_status': 'SEMANTIC_RESOLVED', 'question': 'Find white square building', 'target_spec': {'category': 'building', 'attributes': {'color': 'white', 'shape': 'square'}}, 'provider': 'qwen3_vl:semantic', 'model_id': 'AUDIT_MOCK_NO_WEIGHTS', 'reasoning_text': 'AUDIT MOCK reasoning', 'latency_ms': 13.909800007240847, 'selected_model_choice_ids': ['A']})",
+    "provenance": "real source prompt construction; synthetic visual; mocked inference, not accuracy"
+  },
+  {
+    "name": "SELECT_REL NEAR SINGLE",
+    "calls": [
+      {
+        "prompt": "Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B/C\nREFERENCE: REF\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: building; score: 0.9; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: building; score: 0.8; bbox_xyxy_global: [180.0, 160.0, 250.0, 220.0]\n- index: 2; label: building; score: 0.7; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\n[REFERENCE]\ntype: Region\nbbox_xyxy_global: [280.0, 230.0, 310.0, 260.0]\n\nQuestion:\nAnalyze which candidate objects satisfy relation NEAR relative to the marked reference. Use candidate labels only as visual references during reasoning. A separate constrained verification step will determine the final selection.\n\nAnalyze which candidate object or objects satisfy the requested relation. Use candidate labels only as visual references during reasoning. A separate constrained step will determine the final selection.",
+        "visuals": [
+          "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_before\\visuals\\visual_00007.png"
+        ],
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image",
+                "image": "<IMAGE>"
+              },
+              {
+                "type": "text",
+                "text": "Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B/C\nREFERENCE: REF\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: building; score: 0.9; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: building; score: 0.8; bbox_xyxy_global: [180.0, 160.0, 250.0, 220.0]\n- index: 2; label: building; score: 0.7; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\n[REFERENCE]\ntype: Region\nbbox_xyxy_global: [280.0, 230.0, 310.0, 260.0]\n\nQuestion:\nAnalyze which candidate objects satisfy relation NEAR relative to the marked reference. Use candidate labels only as visual references during reasoning. A separate constrained verification step will determine the final selection.\n\nAnalyze which candidate object or objects satisfy the requested relation. Use candidate labels only as visual references during reasoning. A separate constrained step will determine the final selection."
+              }
+            ]
+          }
+        ],
+        "terminal_candidates": [
+          "YES",
+          "NO"
+        ],
+        "suffixes": [
+          "Verify the following option independently.\n\nCandidate option A: Candidate A: building\nIs this option a correct answer to the original question?\nAnswer YES or NO:",
+          "Verify the following option independently.\n\nCandidate option B: Candidate B: building\nIs this option a correct answer to the original question?\nAnswer YES or NO:",
+          "Verify the following option independently.\n\nCandidate option C: Candidate C: building\nIs this option a correct answer to the original question?\nAnswer YES or NO:"
+        ],
+        "purpose": null,
+        "mock": true,
+        "chat_template_rendered": "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B/C\nREFERENCE: REF\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: building; score: 0.9; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: building; score: 0.8; bbox_xyxy_global: [180.0, 160.0, 250.0, 220.0]\n- index: 2; label: building; score: 0.7; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\n[REFERENCE]\ntype: Region\nbbox_xyxy_global: [280.0, 230.0, 310.0, 260.0]\n\nQuestion:\nAnalyze which candidate objects satisfy relation NEAR relative to the marked reference. Use candidate labels only as visual references during reasoning. A separate constrained verification step will determine the final selection.\n\nAnalyze which candidate object or objects satisfy the requested relation. Use candidate labels only as visual references during reasoning. A separate constrained step will determine the final selection.<|im_end|>\n<|im_start|>assistant\n"
+      }
+    ],
+    "result": "OperatorOutcome(value=SelectResult(selected=EntitySet(entities=(Entity(region=Region(image=ImageRef(uri_or_key='D:\\\\Desktop\\\\tzb-2026\\\\sat-rs-vlm\\\\reports\\\\taskgraph\\\\locate_select_v2_before\\\\audit_scene.png', width=640, height=480, provenance={}), bbox_xyxy_global=(40.0, 40.0, 100.0, 100.0), provenance={}), label='building', score=0.9, provenance={'candidate_id': 'building_1'}),), provenance={'provider': 'qwen3_vl:semantic', 'select': 'RELATION'}), status=<SelectStatus.OK: 'OK'>, method='qwen3_vl_kv_cached_choice', reason=None, confidence=None, provenance={'selection_type': 'SINGLE', 'all_candidate_ids': ['building_1', 'building_2', 'building_3'], 'clear_positive_candidate_ids': [], 'grey_candidate_ids': ['building_1', 'building_2', 'building_3'], 'provider': 'qwen3_vl:semantic', 'candidate_ids': ['building_1'], 'semantic_positive_candidate_ids': ['building_1'], 'final_candidate_ids': ['building_1'], 'choice_labels': ['A'], 'scores': {'A': 1.0, 'B': -1.0, 'C': -1.0}, 'score_method': 'audit_mock', 'cache_reused': True, 'latency_ms': {}, 'reasoning_text': 'AUDIT MOCK reasoning', 'choice_metadata': {'purpose': 'select_relation', 'generation': {}}, 'fallback_used': False, 'fallback_reason': None, 'fallback_type': None}), provider='qwen3_vl_kv_cached_choice', trace_metadata={})",
+    "provenance": "real source prompt construction; synthetic visual; mocked inference, not accuracy"
+  },
+  {
+    "name": "SELECT_REL NEAR MULTI",
+    "calls": [
+      {
+        "prompt": "Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B/C\nREFERENCE: REF\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: building; score: 0.9; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: building; score: 0.8; bbox_xyxy_global: [180.0, 160.0, 250.0, 220.0]\n- index: 2; label: building; score: 0.7; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\n[REFERENCE]\ntype: Region\nbbox_xyxy_global: [280.0, 230.0, 310.0, 260.0]\n\nQuestion:\nAnalyze which candidate objects satisfy relation NEAR relative to the marked reference. Use candidate labels only as visual references during reasoning. A separate constrained verification step will determine the final selection.\n\nAnalyze which candidate object or objects satisfy the requested relation. Use candidate labels only as visual references during reasoning. A separate constrained step will determine the final selection.",
+        "visuals": [
+          "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_before\\visuals\\visual_00008.png"
+        ],
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image",
+                "image": "<IMAGE>"
+              },
+              {
+                "type": "text",
+                "text": "Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B/C\nREFERENCE: REF\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: building; score: 0.9; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: building; score: 0.8; bbox_xyxy_global: [180.0, 160.0, 250.0, 220.0]\n- index: 2; label: building; score: 0.7; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\n[REFERENCE]\ntype: Region\nbbox_xyxy_global: [280.0, 230.0, 310.0, 260.0]\n\nQuestion:\nAnalyze which candidate objects satisfy relation NEAR relative to the marked reference. Use candidate labels only as visual references during reasoning. A separate constrained verification step will determine the final selection.\n\nAnalyze which candidate object or objects satisfy the requested relation. Use candidate labels only as visual references during reasoning. A separate constrained step will determine the final selection."
+              }
+            ]
+          }
+        ],
+        "terminal_candidates": [
+          "YES",
+          "NO"
+        ],
+        "suffixes": [
+          "Verify the following option independently.\n\nCandidate option A: Candidate A: building\nIs this option a correct answer to the original question?\nAnswer YES or NO:",
+          "Verify the following option independently.\n\nCandidate option B: Candidate B: building\nIs this option a correct answer to the original question?\nAnswer YES or NO:",
+          "Verify the following option independently.\n\nCandidate option C: Candidate C: building\nIs this option a correct answer to the original question?\nAnswer YES or NO:"
+        ],
+        "purpose": null,
+        "mock": true,
+        "chat_template_rendered": "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B/C\nREFERENCE: REF\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: building; score: 0.9; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: building; score: 0.8; bbox_xyxy_global: [180.0, 160.0, 250.0, 220.0]\n- index: 2; label: building; score: 0.7; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\n[REFERENCE]\ntype: Region\nbbox_xyxy_global: [280.0, 230.0, 310.0, 260.0]\n\nQuestion:\nAnalyze which candidate objects satisfy relation NEAR relative to the marked reference. Use candidate labels only as visual references during reasoning. A separate constrained verification step will determine the final selection.\n\nAnalyze which candidate object or objects satisfy the requested relation. Use candidate labels only as visual references during reasoning. A separate constrained step will determine the final selection.<|im_end|>\n<|im_start|>assistant\n"
+      }
+    ],
+    "result": "OperatorOutcome(value=SelectResult(selected=EntitySet(entities=(Entity(region=Region(image=ImageRef(uri_or_key='D:\\\\Desktop\\\\tzb-2026\\\\sat-rs-vlm\\\\reports\\\\taskgraph\\\\locate_select_v2_before\\\\audit_scene.png', width=640, height=480, provenance={}), bbox_xyxy_global=(40.0, 40.0, 100.0, 100.0), provenance={}), label='building', score=0.9, provenance={'candidate_id': 'building_1'}),), provenance={'provider': 'qwen3_vl:semantic', 'select': 'RELATION'}), status=<SelectStatus.OK: 'OK'>, method='qwen3_vl_kv_cached_choice', reason=None, confidence=None, provenance={'selection_type': 'MULTI', 'all_candidate_ids': ['building_1', 'building_2', 'building_3'], 'clear_positive_candidate_ids': [], 'grey_candidate_ids': ['building_1', 'building_2', 'building_3'], 'provider': 'qwen3_vl:semantic', 'candidate_ids': ['building_1'], 'semantic_positive_candidate_ids': ['building_1'], 'final_candidate_ids': ['building_1'], 'choice_labels': ['A'], 'scores': {'A': 1.0, 'B': -1.0, 'C': -1.0}, 'score_method': 'audit_mock', 'cache_reused': True, 'latency_ms': {}, 'reasoning_text': 'AUDIT MOCK reasoning', 'choice_metadata': {'purpose': 'select_relation', 'generation': {}}, 'fallback_used': False, 'fallback_reason': None, 'fallback_type': None}), provider='qwen3_vl_kv_cached_choice', trace_metadata={})",
+    "provenance": "real source prompt construction; synthetic visual; mocked inference, not accuracy"
+  }
+]

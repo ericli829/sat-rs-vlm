@@ -35,6 +35,31 @@ from .runtime_types import (
 VisualInput = str | Image.Image
 
 
+def _qwen_render_size(size: tuple[int, int], pixel_budget: int) -> tuple[int, int]:
+    """Qwen3-VL uses 16px patches merged by 2; avoid hidden processor resizing.
+
+    The installed processor's minimum is 65536 pixels. Reserve that minimum
+    per visual, then round both axes to 32 with an explicit inverse transform.
+    """
+    width, height = size
+    if pixel_budget < 65536 or max(width, height) / min(width, height) > 200:
+        raise ValueError("visual cannot fit Qwen pixel/aspect budget")
+    area = width * height
+    scale = math.sqrt(min(pixel_budget, max(65536, area)) / area)
+    render = [max(32, round(width * scale / 32) * 32), max(32, round(height * scale / 32) * 32)]
+    while render[0] * render[1] > pixel_budget:
+        axis = 0 if render[0] >= render[1] else 1
+        render[axis] -= 32
+        if render[axis] < 32:
+            raise ValueError("visual cannot fit Qwen pixel budget")
+    while render[0] * render[1] < 65536:
+        axis = 0 if render[0] <= render[1] else 1
+        render[axis] += 32
+        if render[0] * render[1] > pixel_budget:
+            raise ValueError("visual cannot fit Qwen minimum pixel budget")
+    return render[0], render[1]
+
+
 @lru_cache(maxsize=2)
 def _load_rgb_image(path: str) -> Image.Image:
     """Decode a normalized source image once per process."""
@@ -149,6 +174,99 @@ class InputComposer:
                 Image.Resampling.LANCZOS,
             )
         return self._materialize(canvas)
+
+    def compose_locate(self, scope: ImageRef | Region, *, pixel_budget: int = 409600) -> ModelInput:
+        """One explicitly sized visual with a reversible local/global transform."""
+        image = scope.image if isinstance(scope, Region) else scope
+        source = _load_rgb_image(str(image.path.resolve()))
+        box = scope.bbox_xyxy_global if isinstance(scope, Region) else (0, 0, *source.size)
+        if not (0 <= box[0] < box[2] <= source.width and 0 <= box[1] < box[3] <= source.height):
+            raise ValueError("LOCATE scope is outside the original image")
+        crop_box = (math.floor(box[0]), math.floor(box[1]), math.ceil(box[2]), math.ceil(box[3]))
+        canvas = source.crop(crop_box)
+        source_size = canvas.size
+        scale = min(
+            1.0,
+            self.entity_set_max_side / max(source_size),
+            math.sqrt(pixel_budget / (canvas.width * canvas.height)),
+        )
+        render_size = _qwen_render_size(
+            (max(1, math.floor(canvas.width * scale)), max(1, math.floor(canvas.height * scale))),
+            pixel_budget,
+        )
+        if canvas.size != render_size:
+            canvas = canvas.resize(render_size, Image.Resampling.LANCZOS)
+        metadata = {
+            "crop_origin_global": list(crop_box[:2]),
+            "source_crop_size": list(source_size),
+            "render_size": list(render_size),
+            "scale_xy": [render_size[0] / source_size[0], render_size[1] / source_size[1]],
+            "scope_bbox_xyxy_global": list(box),
+            "original_image_size": list(source.size),
+        }
+        return ModelInput(
+            (self._materialize(canvas),), "", "", visual_roles=("LOCATE_SCOPE",), metadata=metadata
+        )
+
+    def compose_selection(
+        self,
+        candidates: EntitySet | RegionSet,
+        *,
+        question: str,
+        reference: RuntimeObject | None = None,
+        scope: RuntimeObject | None = None,
+        pixel_budget: int = 409600,
+    ) -> ModelInput:
+        """Candidate canvas plus overview for background context, with one total vision budget."""
+        from dataclasses import replace
+
+        regions = self._regions(candidates)
+        named: dict[str, RuntimeObject | list[RuntimeObject]] = {"candidates": candidates}
+        if reference is not None:
+            named["reference"] = reference
+        if scope is None and regions:
+            image = regions[0][0].image
+            source = _load_rgb_image(str(image.path.resolve()))
+            scope = Region(image, (0.0, 0.0, float(source.width), float(source.height)))
+        if scope is not None:
+            named["scope"] = scope
+        result = self.compose_named(named, question=question)
+        images = []
+        for visual in result.visual_inputs:
+            if isinstance(visual, str):
+                with Image.open(visual) as raw:
+                    images.append(raw.convert("RGB"))
+            else:
+                images.append(visual)
+        per_visual_budget = pixel_budget // max(1, len(images))
+        visuals = []
+        sizes = []
+        scales = []
+        for visual in images:
+            size = _qwen_render_size(visual.size, per_visual_budget)
+            scales.append([size[0] / visual.width, size[1] / visual.height])
+            if visual.size != size:
+                visual = visual.resize(size, Image.Resampling.LANCZOS)
+            sizes.append(list(size))
+            visuals.append(self._materialize(visual))
+        metadata = {
+            **result.metadata,
+            "selection_render_sizes": sizes,
+            "selection_render_scale_xy": scales,
+            "total_render_pixels": sum(w * h for w, h in sizes),
+            "context_overview": scope is not None,
+        }
+        # Keep both coordinate frames explicit after the final budget resize.
+        metadata["candidate_mapping"] = {
+            key: {
+                **value,
+                "bbox_xyxy_render": [
+                    float(x) * scales[0][i % 2] for i, x in enumerate(value["bbox_xyxy_canvas"])
+                ],
+            }
+            for key, value in result.metadata.get("candidate_mapping", {}).items()
+        }
+        return replace(result, visual_inputs=tuple(visuals), metadata=metadata)
 
     @staticmethod
     def _candidate_id(index: int) -> str:
@@ -828,9 +946,7 @@ class InputComposer:
                                 continue
                             score = item.get("score")
                             score_text = (
-                                f"{float(score):.3f}"
-                                if isinstance(score, (int, float))
-                                else "n/a"
+                                f"{float(score):.3f}" if isinstance(score, (int, float)) else "n/a"
                             )
                             lines.append(
                                 f"Visual {item.get('visual')}: candidate {item.get('id')} "

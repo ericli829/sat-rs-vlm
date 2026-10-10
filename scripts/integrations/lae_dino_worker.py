@@ -30,9 +30,11 @@ def _iou(left: list[float], right: list[float]) -> float:
     x1, y1 = max(left[0], right[0]), max(left[1], right[1])
     x2, y2 = min(left[2], right[2]), min(left[3], right[3])
     intersection = max(0.0, x2 - x1) * max(0.0, y2 - y1)
-    union = ((left[2] - left[0]) * (left[3] - left[1])) + (
-        (right[2] - right[0]) * (right[3] - right[1])
-    ) - intersection
+    union = (
+        ((left[2] - left[0]) * (left[3] - left[1]))
+        + ((right[2] - right[0]) * (right[3] - right[1]))
+        - intersection
+    )
     return intersection / union if union > 0.0 else 0.0
 
 
@@ -105,11 +107,7 @@ def _patch_lae_config_for_local_runtime(config: Any, bert_root: Path) -> Any:
             config["load_from"] = None
     elif getattr(config, "load_from", None):
         config.load_from = None
-    backbone = (
-        model.get("backbone")
-        if hasattr(model, "get")
-        else getattr(model, "backbone", None)
-    )
+    backbone = model.get("backbone") if hasattr(model, "get") else getattr(model, "backbone", None)
     if backbone is not None:
         init_cfg = (
             backbone.get("init_cfg")
@@ -195,9 +193,7 @@ def _load_detector(args: argparse.Namespace) -> Any:
         # discover a palette, forcing unrelated DIOR/DOTA annotations.
         # The vendored API's ``palette='none'`` branch builds the full test
         # dataset; ``random`` selects a visualization-only palette directly.
-        model = init_detector(
-            cfg, str(checkpoint), device=args.device, palette="random"
-        )
+        model = init_detector(cfg, str(checkpoint), device=args.device, palette="random")
     return model
 
 
@@ -247,9 +243,7 @@ def _predict(
         )
     boxes, scores = _extract_predictions(result)
     if len(boxes) != len(scores):
-        raise ProposalError(
-            f"LAE-DINO boxes/scores length mismatch: {len(boxes)} != {len(scores)}"
-        )
+        raise ProposalError(f"LAE-DINO boxes/scores length mismatch: {len(boxes)} != {len(scores)}")
     filtered = [
         (box, score)
         # The isolated official LAE runtime uses Python 3.9.  Length equality
@@ -270,6 +264,7 @@ def _predict(
     )
     if args.nms_threshold is not None:
         boxes, scores = _nms(boxes, scores, args.nms_threshold)
+    candidate_count_before_top_k = len(boxes)
     boxes, scores = boxes[: args.top_k], scores[: args.top_k]
     return {
         "id": request["id"],
@@ -291,6 +286,10 @@ def _predict(
             ),
             "score_threshold": args.score_threshold,
             "top_k": args.top_k,
+            "candidate_count_before_top_k": candidate_count_before_top_k,
+            "candidate_truncated": candidate_count_before_top_k > len(boxes),
+            "candidate_pool_complete": candidate_count_before_top_k == len(boxes)
+            and stats["invalid_count"] == 0,
             "nms_threshold": args.nms_threshold,
             "coordinate_mode": "absolute_pixel_xyxy",
             "image_width": image_width,
@@ -312,9 +311,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--nms-threshold", type=float)
     parser.add_argument("--checkpoint-training-regime", default="unspecified")
     parser.add_argument("--source-revision", default="unspecified")
-    parser.add_argument(
-        "--inference-query-mode", default="target_conditioned_text_prompt"
-    )
+    parser.add_argument("--inference-query-mode", default="target_conditioned_text_prompt")
     return parser.parse_args()
 
 
@@ -330,9 +327,7 @@ def main() -> int:
             raise RuntimeError("compatible mmdet inference_detector is unavailable") from exc
     except Exception as exc:
         print(
-            json.dumps(
-                {"status": "failed", "failure_stage": "model_init", "error": str(exc)}
-            ),
+            json.dumps({"status": "failed", "failure_stage": "model_init", "error": str(exc)}),
             flush=True,
         )
         return 2

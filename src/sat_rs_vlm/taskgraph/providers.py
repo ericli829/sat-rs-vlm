@@ -339,9 +339,7 @@ class ModelTaskGraphPlannerProvider:
     def __init__(self, provider: SemanticVLMProvider) -> None:
         self.provider = provider
         role = str(getattr(provider, "role", ""))
-        self.provider_name = (
-            f"{provider.provider_name}:{role}" if role else provider.provider_name
-        )
+        self.provider_name = f"{provider.provider_name}:{role}" if role else provider.provider_name
         self.last_generation_telemetry: dict[str, Any] = {}
         self.last_raw_response: str | None = None
 
@@ -902,15 +900,9 @@ class Qwen3VLPlannerProvider:
         for source in sources:
             current = lineage(str(source))
             lineage_ops.append(
-                {
-                    str(nodes_by_ref[ref].get("op", ""))
-                    for ref in current
-                    if ref in nodes_by_ref
-                }
+                {str(nodes_by_ref[ref].get("op", "")) for ref in current if ref in nodes_by_ref}
             )
-        count_indexes = {
-            index for index, ops in enumerate(lineage_ops) if "COUNT" in ops
-        }
+        count_indexes = {index for index, ops in enumerate(lineage_ops) if "COUNT" in ops}
         visual_indexes = {
             index for index, ops in enumerate(lineage_ops) if ops.intersection(visual_ops)
         }
@@ -930,10 +922,7 @@ class Qwen3VLPlannerProvider:
         )
         final["sources"] = [f"${node_id}"]
         final.pop("question", None)
-        input_names = {
-            str(key).removeprefix("$"): value
-            for key, value in request.inputs.items()
-        }
+        input_names = {str(key).removeprefix("$"): value for key, value in request.inputs.items()}
         target, report = validate_candidate(payload, inputs=input_names)
         if target is None or not report.valid:
             return None
@@ -1152,11 +1141,25 @@ class ProposalDetectionAdapter:
         if not source_path.is_file():
             raise FileNotFoundError(f"detection image does not exist: {source_path}")
         started = time.perf_counter()
+        with Image.open(source_path) as source:
+            original_size = source.size
+        scope_box = (0.0, 0.0, float(original_size[0]), float(original_size[1]))
+        if isinstance(request.scope, Region):
+            scope_box = request.scope.bbox_xyxy_global
+            if not _bbox_contains((0.0, 0.0, *original_size), scope_box):
+                raise ValueError("detector scope is outside original image")
         with tempfile.TemporaryDirectory(prefix="taskgraph_detection_") as temp_dir:
             detector_path = source_path
             if isinstance(request.scope, Region):
                 with Image.open(source_path) as source:
-                    crop = source.convert("RGB").crop(request.scope.bbox_xyxy_global)
+                    crop_box = (
+                        math.floor(scope_box[0]),
+                        math.floor(scope_box[1]),
+                        math.ceil(scope_box[2]),
+                        math.ceil(scope_box[3]),
+                    )
+                    crop = source.convert("RGB").crop(crop_box)
+                    offset = (float(crop_box[0]), float(crop_box[1]))
                     detector_path = Path(temp_dir) / "scope.png"
                     crop.save(detector_path)
             proposal_query = request.target.detection_phrase()
@@ -1200,15 +1203,14 @@ class ProposalDetectionAdapter:
                     "score_threshold": self.score_threshold,
                     "max_candidates": self.max_candidates,
                     "policy_applied": request.apply_locate_policy,
-                    "clip_rerank_top_k": (
-                        effective_clip_top_k
-                    ),
+                    "clip_rerank_top_k": (effective_clip_top_k),
                     "raw_candidate_count": raw_candidate_count,
                     "retained_candidate_count": len(retained),
                 },
             }
         )
         entities = []
+        invalid_indices = []
         for index in retained:
             box = result.boxes_xyxy[index]
             score = result.scores[index]
@@ -1218,6 +1220,16 @@ class ProposalDetectionAdapter:
                 float(box[2]) + offset[0],
                 float(box[3]) + offset[1],
             )
+            if (
+                not all(math.isfinite(v) for v in global_box)
+                or global_box[0] >= global_box[2]
+                or global_box[1] >= global_box[3]
+                or not _bbox_contains(scope_box, global_box)
+                or not math.isfinite(float(score))
+            ):
+                invalid_indices.append(index)
+                continue
+            candidate_id = f"candidate_{len(entities) + 1:04d}"
             entities.append(
                 Entity(
                     region=Region(
@@ -1226,7 +1238,7 @@ class ProposalDetectionAdapter:
                         provenance={
                             "provider": result.provider,
                             "coordinate_mode": "absolute_original_pixel_xyxy",
-                            "candidate_id": f"candidate_{index + 1:04d}",
+                            "candidate_id": candidate_id,
                         },
                     ),
                     label=request.target.category,
@@ -1234,11 +1246,31 @@ class ProposalDetectionAdapter:
                     provenance={
                         "provider": result.provider,
                         "model_id": result.model_id,
-                        "candidate_id": f"candidate_{len(entities) + 1:04d}",
+                        "candidate_id": candidate_id,
                         "scale_tile_metadata": result_metadata,
                     },
                 )
             )
+        clip_metadata = result_metadata.get("clip_rerank", {})
+        clip_limited = (
+            isinstance(clip_metadata, dict)
+            and clip_metadata.get("status") == "applied"
+            and clip_metadata.get("candidate_top_k") is not None
+        )
+        pool_complete = (
+            len(retained) == raw_candidate_count
+            and not invalid_indices
+            and not clip_limited
+            and result_metadata.get("candidate_pool_complete") is not False
+            and not result_metadata.get("candidate_truncated")
+        )
+        result_metadata.update(
+            {
+                "invalid_candidate_indices": invalid_indices,
+                "candidate_pool_complete": pool_complete,
+                "pool_completeness_scope": "detector_threshold_and_nms_policy",
+            }
+        )
         return DetectionSet(
             detections=EntitySet(
                 tuple(entities),
@@ -1252,6 +1284,7 @@ class ProposalDetectionAdapter:
                     "locate_policy_applied": request.apply_locate_policy,
                     "candidate_count_before_limit": raw_candidate_count,
                     "candidate_count_after_limit": len(entities),
+                    "candidate_pool_complete": pool_complete,
                 },
             ),
             latency_ms=(time.perf_counter() - started) * 1000.0,

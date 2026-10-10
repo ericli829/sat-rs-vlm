@@ -85,6 +85,16 @@ class LocateParams(StrictModel):
 
 class SelectParams(StrictModel):
     mode: SelectMode
+    query: str | None = Field(default=None, max_length=2048)
+    selection_type: Literal["SINGLE", "MULTI"] | None = None
+
+    @field_validator("query")
+    @classmethod
+    def semantic_query(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("SELECT query must not be empty or whitespace")
+        return value.strip() if value is not None else None
+
     relation: SpatialRelation | None = None
     criterion: str | None = None
     rank: int | None = Field(default=None, ge=1)
@@ -96,13 +106,24 @@ class SelectParams(StrictModel):
     @model_validator(mode="after")
     def validate_mode_shape(self) -> SelectParams:
         required = {
+            SelectMode.SEMANTIC: {"query", "selection_type"},
             SelectMode.RELATION: {"relation"},
             SelectMode.RANK: {"criterion", "rank", "order"},
             SelectMode.ORDINAL: {"index", "order"},
             SelectMode.EXTREME: {"direction"},
             SelectMode.SUBREGION: {"subregion"},
         }[self.mode]
-        fields = {"relation", "criterion", "rank", "order", "index", "direction", "subregion"}
+        fields = {
+            "relation",
+            "criterion",
+            "rank",
+            "order",
+            "index",
+            "direction",
+            "subregion",
+            "query",
+            "selection_type",
+        }
         present = {name for name in fields if getattr(self, name) is not None}
         missing = required - present
         unexpected = present - required

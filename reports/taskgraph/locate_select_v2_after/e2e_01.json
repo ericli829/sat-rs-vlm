@@ -1,0 +1,732 @@
+{
+  "name": "01 VLM white square -> ATTRIBUTE",
+  "graph": {
+    "version": "taskgraph-v1.1",
+    "question": "Full final question is intentionally not used by LOCATE",
+    "question_type": "FREE_FORM",
+    "choices": null,
+    "inputs": {
+      "image0": {
+        "type": "image",
+        "uri_or_key": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\audit_scene.png"
+      }
+    },
+    "intent": "OTHER",
+    "nodes": [
+      {
+        "id": "n1",
+        "op": "LOCATE",
+        "inputs": {
+          "image": "$image0"
+        },
+        "params": {
+          "target": {
+            "category": "building",
+            "attributes": {
+              "color": "white",
+              "shape": "square"
+            }
+          }
+        }
+      },
+      {
+        "id": "n2",
+        "op": "ATTRIBUTE",
+        "inputs": {
+          "entity": "$n1"
+        },
+        "params": {
+          "attribute": "color",
+          "part": null
+        }
+      }
+    ],
+    "final": {
+      "sources": [
+        "$n2"
+      ],
+      "question": "What color is the selected target?",
+      "answer_type": "LABEL"
+    }
+  },
+  "dsl": "INTENT(OTHER)\nn1=LOCATE($image0,T(\"building\",color=\"white\",shape=\"square\"))\nn2=ATTRIBUTE($n1,\"color\")\nFINAL_QUESTION($n2,LABEL,\"What color is the selected target?\")",
+  "trace": {
+    "sample_id": "audit-1",
+    "execution_mode": "TASKGRAPH_UHR",
+    "input_image_paths": [],
+    "intermediate_output_paths": [],
+    "taskgraph": {
+      "version": "taskgraph-v1.1",
+      "question": "Full final question is intentionally not used by LOCATE",
+      "question_type": "FREE_FORM",
+      "choices": null,
+      "inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\audit_scene.png"
+        }
+      },
+      "intent": "OTHER",
+      "nodes": [
+        {
+          "id": "n1",
+          "op": "LOCATE",
+          "inputs": {
+            "image": "$image0"
+          },
+          "params": {
+            "target": {
+              "category": "building",
+              "attributes": {
+                "color": "white",
+                "shape": "square"
+              }
+            }
+          }
+        },
+        {
+          "id": "n2",
+          "op": "ATTRIBUTE",
+          "inputs": {
+            "entity": "$n1"
+          },
+          "params": {
+            "attribute": "color",
+            "part": null
+          }
+        }
+      ],
+      "final": {
+        "sources": [
+          "$n2"
+        ],
+        "question": "What color is the selected target?",
+        "answer_type": "LABEL"
+      }
+    },
+    "nodes": [
+      {
+        "node_id": "n1",
+        "operator": "LOCATE",
+        "input_refs": {
+          "image": "$image0"
+        },
+        "resolved_input_types": {
+          "image": "ImageRef"
+        },
+        "provider": "semantic_2b:referent",
+        "latency_ms": 10.056700004497543,
+        "execution_mode": null,
+        "semantic_method": null,
+        "cache_reused": null,
+        "final_choice_fusion": false,
+        "fusion_reason": "operator_not_eligible",
+        "output_runtime_type": "EntitySet",
+        "output_summary": {
+          "type": "EntitySet",
+          "count": 1,
+          "detections": [
+            {
+              "label": "building",
+              "score": null,
+              "bbox": [
+                100.0,
+                60.0,
+                200.0,
+                140.0
+              ]
+            }
+          ],
+          "provenance": {
+            "method": "vlm_single",
+            "target_spec": {
+              "category": "building",
+              "attributes": {
+                "color": "white",
+                "shape": "square"
+              }
+            },
+            "resolution_status": "VLM_REFERENT_RESOLVED",
+            "candidate_pool_complete": true,
+            "coordinate_system": "render_pixel_xyxy",
+            "question_used": false,
+            "visual_transform": {
+              "crop_origin_global": [
+                0,
+                0
+              ],
+              "source_crop_size": [
+                640,
+                480
+              ],
+              "render_size": [
+                640,
+                480
+              ],
+              "scale_xy": [
+                1.0,
+                1.0
+              ],
+              "scope_bbox_xyxy_global": [
+                0,
+                0,
+                640,
+                480
+              ],
+              "original_image_size": [
+                640,
+                480
+              ]
+            },
+            "provider": "qwen3_vl:semantic",
+            "raw_response": "{\"status\":\"OK\",\"bbox\":[100,60,200,140]}",
+            "provider_metadata": {
+              "model_id": "AUDIT_MOCK_NO_WEIGHTS",
+              "output_contract": "locate_single",
+              "constrained_decoding": false,
+              "allowed_output_count": 0,
+              "generation": {}
+            },
+            "bbox_xyxy_render": [
+              100,
+              60,
+              200,
+              140
+            ],
+            "bbox_xyxy_global": [
+              100.0,
+              60.0,
+              200.0,
+              140.0
+            ],
+            "latency_ms": 9.95179999154061,
+            "locate_route": {
+              "requirement": "SINGLE_TARGET",
+              "route_reason": "single_consumer",
+              "consumer_paths": [
+                "n1 -> n2:ATTRIBUTE.entity"
+              ],
+              "planned_backend": "VLM_SINGLE",
+              "actual_backend": "VLM_SINGLE",
+              "fallback_reason": null,
+              "target_spec": {
+                "category": "building",
+                "attributes": {
+                  "color": "white",
+                  "shape": "square"
+                }
+              },
+              "stage": "semantic_vlm",
+              "vlm_single": {
+                "method": "vlm_single",
+                "target_spec": {
+                  "category": "building",
+                  "attributes": {
+                    "color": "white",
+                    "shape": "square"
+                  }
+                },
+                "resolution_status": "VLM_REFERENT_RESOLVED",
+                "candidate_pool_complete": true,
+                "coordinate_system": "render_pixel_xyxy",
+                "question_used": false,
+                "visual_transform": {
+                  "crop_origin_global": [
+                    0,
+                    0
+                  ],
+                  "source_crop_size": [
+                    640,
+                    480
+                  ],
+                  "render_size": [
+                    640,
+                    480
+                  ],
+                  "scale_xy": [
+                    1.0,
+                    1.0
+                  ],
+                  "scope_bbox_xyxy_global": [
+                    0,
+                    0,
+                    640,
+                    480
+                  ],
+                  "original_image_size": [
+                    640,
+                    480
+                  ]
+                },
+                "provider": "qwen3_vl:semantic",
+                "raw_response": "{\"status\":\"OK\",\"bbox\":[100,60,200,140]}",
+                "provider_metadata": {
+                  "model_id": "AUDIT_MOCK_NO_WEIGHTS",
+                  "output_contract": "locate_single",
+                  "constrained_decoding": false,
+                  "allowed_output_count": 0,
+                  "generation": {}
+                },
+                "bbox_xyxy_render": [
+                  100,
+                  60,
+                  200,
+                  140
+                ],
+                "bbox_xyxy_global": [
+                  100.0,
+                  60.0,
+                  200.0,
+                  140.0
+                ],
+                "latency_ms": 9.95179999154061
+              },
+              "model_role": "semantic_2b",
+              "activated_provider": "semantic_2b:referent"
+            }
+          }
+        },
+        "telemetry": {
+          "method": "vlm_single",
+          "target_spec": {
+            "category": "building",
+            "attributes": {
+              "color": "white",
+              "shape": "square"
+            }
+          },
+          "resolution_status": "VLM_REFERENT_RESOLVED",
+          "candidate_pool_complete": true,
+          "coordinate_system": "render_pixel_xyxy",
+          "question_used": false,
+          "visual_transform": {
+            "crop_origin_global": [
+              0,
+              0
+            ],
+            "source_crop_size": [
+              640,
+              480
+            ],
+            "render_size": [
+              640,
+              480
+            ],
+            "scale_xy": [
+              1.0,
+              1.0
+            ],
+            "scope_bbox_xyxy_global": [
+              0,
+              0,
+              640,
+              480
+            ],
+            "original_image_size": [
+              640,
+              480
+            ]
+          },
+          "provider": "qwen3_vl:semantic",
+          "raw_response": "{\"status\":\"OK\",\"bbox\":[100,60,200,140]}",
+          "provider_metadata": {
+            "model_id": "AUDIT_MOCK_NO_WEIGHTS",
+            "output_contract": "locate_single",
+            "constrained_decoding": false,
+            "allowed_output_count": 0,
+            "generation": {}
+          },
+          "bbox_xyxy_render": [
+            100,
+            60,
+            200,
+            140
+          ],
+          "bbox_xyxy_global": [
+            100.0,
+            60.0,
+            200.0,
+            140.0
+          ],
+          "latency_ms": 9.95179999154061,
+          "locate_route": {
+            "requirement": "SINGLE_TARGET",
+            "route_reason": "single_consumer",
+            "consumer_paths": [
+              "n1 -> n2:ATTRIBUTE.entity"
+            ],
+            "planned_backend": "VLM_SINGLE",
+            "actual_backend": "VLM_SINGLE",
+            "fallback_reason": null,
+            "target_spec": {
+              "category": "building",
+              "attributes": {
+                "color": "white",
+                "shape": "square"
+              }
+            },
+            "stage": "semantic_vlm",
+            "vlm_single": {
+              "method": "vlm_single",
+              "target_spec": {
+                "category": "building",
+                "attributes": {
+                  "color": "white",
+                  "shape": "square"
+                }
+              },
+              "resolution_status": "VLM_REFERENT_RESOLVED",
+              "candidate_pool_complete": true,
+              "coordinate_system": "render_pixel_xyxy",
+              "question_used": false,
+              "visual_transform": {
+                "crop_origin_global": [
+                  0,
+                  0
+                ],
+                "source_crop_size": [
+                  640,
+                  480
+                ],
+                "render_size": [
+                  640,
+                  480
+                ],
+                "scale_xy": [
+                  1.0,
+                  1.0
+                ],
+                "scope_bbox_xyxy_global": [
+                  0,
+                  0,
+                  640,
+                  480
+                ],
+                "original_image_size": [
+                  640,
+                  480
+                ]
+              },
+              "provider": "qwen3_vl:semantic",
+              "raw_response": "{\"status\":\"OK\",\"bbox\":[100,60,200,140]}",
+              "provider_metadata": {
+                "model_id": "AUDIT_MOCK_NO_WEIGHTS",
+                "output_contract": "locate_single",
+                "constrained_decoding": false,
+                "allowed_output_count": 0,
+                "generation": {}
+              },
+              "bbox_xyxy_render": [
+                100,
+                60,
+                200,
+                140
+              ],
+              "bbox_xyxy_global": [
+                100.0,
+                60.0,
+                200.0,
+                140.0
+              ],
+              "latency_ms": 9.95179999154061
+            },
+            "model_role": "semantic_2b",
+            "activated_provider": "semantic_2b:referent"
+          }
+        },
+        "error": null,
+        "fallback": null,
+        "trace_metadata": {
+          "requirement": "SINGLE_TARGET",
+          "route_reason": "single_consumer",
+          "consumer_paths": [
+            "n1 -> n2:ATTRIBUTE.entity"
+          ],
+          "planned_backend": "VLM_SINGLE",
+          "actual_backend": "VLM_SINGLE",
+          "fallback_reason": null,
+          "target_spec": {
+            "category": "building",
+            "attributes": {
+              "color": "white",
+              "shape": "square"
+            }
+          },
+          "stage": "semantic_vlm",
+          "vlm_single": {
+            "method": "vlm_single",
+            "target_spec": {
+              "category": "building",
+              "attributes": {
+                "color": "white",
+                "shape": "square"
+              }
+            },
+            "resolution_status": "VLM_REFERENT_RESOLVED",
+            "candidate_pool_complete": true,
+            "coordinate_system": "render_pixel_xyxy",
+            "question_used": false,
+            "visual_transform": {
+              "crop_origin_global": [
+                0,
+                0
+              ],
+              "source_crop_size": [
+                640,
+                480
+              ],
+              "render_size": [
+                640,
+                480
+              ],
+              "scale_xy": [
+                1.0,
+                1.0
+              ],
+              "scope_bbox_xyxy_global": [
+                0,
+                0,
+                640,
+                480
+              ],
+              "original_image_size": [
+                640,
+                480
+              ]
+            },
+            "provider": "qwen3_vl:semantic",
+            "raw_response": "{\"status\":\"OK\",\"bbox\":[100,60,200,140]}",
+            "provider_metadata": {
+              "model_id": "AUDIT_MOCK_NO_WEIGHTS",
+              "output_contract": "locate_single",
+              "constrained_decoding": false,
+              "allowed_output_count": 0,
+              "generation": {}
+            },
+            "bbox_xyxy_render": [
+              100,
+              60,
+              200,
+              140
+            ],
+            "bbox_xyxy_global": [
+              100.0,
+              60.0,
+              200.0,
+              140.0
+            ],
+            "latency_ms": 9.95179999154061
+          },
+          "model_role": "semantic_2b",
+          "activated_provider": "semantic_2b:referent"
+        }
+      },
+      {
+        "node_id": "n2",
+        "operator": "ATTRIBUTE",
+        "input_refs": {
+          "entity": "$n1"
+        },
+        "resolved_input_types": {
+          "entity": "EntitySet"
+        },
+        "provider": "qwen3_vl:semantic",
+        "latency_ms": 2840.7184000243433,
+        "execution_mode": "free_text",
+        "semantic_method": "free_generation",
+        "cache_reused": false,
+        "final_choice_fusion": false,
+        "fusion_reason": "disabled_by_config",
+        "output_runtime_type": "Label",
+        "output_summary": {
+          "type": "Label",
+          "value": "white",
+          "provenance": {
+            "provider": "qwen3_vl:semantic",
+            "model_id": "AUDIT_MOCK_NO_WEIGHTS",
+            "method": "free_text_generation",
+            "canonical": false,
+            "execution_mode": "free_text",
+            "semantic_method": "free_generation",
+            "cache_reused": false,
+            "final_choice_fusion": false,
+            "fusion_reason": "disabled_by_config",
+            "generation_metadata": {
+              "model_id": "AUDIT_MOCK_NO_WEIGHTS",
+              "output_contract": "attribute",
+              "constrained_decoding": false,
+              "allowed_output_count": 0,
+              "generation": {}
+            },
+            "model_role": "semantic_2b"
+          }
+        },
+        "telemetry": {
+          "provider": "qwen3_vl:semantic",
+          "model_id": "AUDIT_MOCK_NO_WEIGHTS",
+          "method": "free_text_generation",
+          "canonical": false,
+          "execution_mode": "free_text",
+          "semantic_method": "free_generation",
+          "cache_reused": false,
+          "final_choice_fusion": false,
+          "fusion_reason": "disabled_by_config",
+          "generation_metadata": {
+            "model_id": "AUDIT_MOCK_NO_WEIGHTS",
+            "output_contract": "attribute",
+            "constrained_decoding": false,
+            "allowed_output_count": 0,
+            "generation": {}
+          },
+          "model_role": "semantic_2b"
+        },
+        "error": null,
+        "fallback": null,
+        "trace_metadata": {
+          "execution_mode": "free_text",
+          "semantic_method": "free_generation",
+          "cache_reused": false,
+          "final_choice_fusion": false,
+          "fusion_reason": "disabled_by_config",
+          "model_id": "AUDIT_MOCK_NO_WEIGHTS",
+          "model_role": "semantic_2b"
+        }
+      }
+    ],
+    "final_sources": [
+      "$n2"
+    ],
+    "final_question": "What color is the selected target?",
+    "choice_provider": null,
+    "choice_result": null,
+    "result": null,
+    "routing_ms": null,
+    "planner_ms": null,
+    "retriever_ms": null,
+    "detector_ms": null,
+    "counting_ms": null,
+    "semantic_vlm_ms": null,
+    "route_vlm_ms": null,
+    "choice_ms": null,
+    "postprocess_ms": null,
+    "e2e_ms": null,
+    "stage_status": {},
+    "activated_providers": [],
+    "activated_model_roles": [],
+    "activated_parameter_counts": {},
+    "resource_metrics": {},
+    "ttft_ms": "NOT_AVAILABLE_FROM_BACKEND",
+    "visual_tokens": "NOT_AVAILABLE_FROM_BACKEND",
+    "output_tokens": "NOT_AVAILABLE_FROM_BACKEND",
+    "decode_tokens_per_s": "NOT_AVAILABLE_FROM_BACKEND",
+    "telemetry": {
+      "executor": {
+        "schema_version": "1.0",
+        "scope": "taskgraph_executor",
+        "success": true,
+        "error_type": null,
+        "started_at_utc": "2026-10-09T18:54:54.707355+00:00",
+        "ended_at_utc": "2026-10-09T18:54:57.683349+00:00",
+        "timing_ms": {
+          "e2e": 2965.072599996347
+        },
+        "resources": {
+          "cpu_rss_start_mb": 67.789,
+          "cpu_rss_end_mb": 547.863,
+          "peak_cpu_rss_mb": 547.867,
+          "peak_gpu_allocated_mb": 0.0,
+          "peak_gpu_reserved_mb": 0.0
+        },
+        "measurement": {
+          "clock": "time.perf_counter",
+          "cpu_rss": "process RSS sampled during scope",
+          "cpu_sample_interval_ms": 50.0,
+          "cuda_synchronized": true,
+          "cuda_peak_stats_reset": false
+        },
+        "activated_providers": [
+          "qwen3_vl:semantic",
+          "semantic_2b:referent"
+        ],
+        "fallback_count": 0,
+        "node_count": 2
+      }
+    }
+  },
+  "result": {
+    "type": "Label",
+    "value": "white",
+    "provenance": {
+      "provider": "qwen3_vl:semantic",
+      "model_id": "AUDIT_MOCK_NO_WEIGHTS",
+      "method": "free_text_generation",
+      "canonical": false,
+      "execution_mode": "free_text",
+      "semantic_method": "free_generation",
+      "cache_reused": false,
+      "final_choice_fusion": false,
+      "fusion_reason": "disabled_by_config",
+      "generation_metadata": {
+        "model_id": "AUDIT_MOCK_NO_WEIGHTS",
+        "output_contract": "attribute",
+        "constrained_decoding": false,
+        "allowed_output_count": 0,
+        "generation": {}
+      },
+      "model_role": "semantic_2b"
+    }
+  },
+  "calls": [
+    {
+      "prompt": "Visual inputs:\n[image_1] role: LOCATE_SCOPE\n\nQuestion:\nTask: LOCATE_SINGLE. Localize one target object in this remote-sensing visual.\nTarget category: building\nIntrinsic attributes: {\"color\": \"white\", \"shape\": \"square\"}\nActual supplied visual size: 640 x 480 pixels.\nSearch scope: the supplied image or crop, and nothing outside it.\nUse ONLY the target definition supplied to this LOCATE node. Do not solve the overall question, use downstream SELECT conditions, or invent additional landmarks.\nIf one well-supported matching object is identifiable, return exactly {\"status\":\"OK\",\"bbox\":[x1,y1,x2,y2]}.\nIf none is visible, return exactly {\"status\":\"NONE\"}.\nIf several plausible targets cannot be distinguished, return exactly {\"status\":\"AMBIGUOUS\"}.\nIf evidence is insufficient, return exactly {\"status\":\"UNRESOLVED\"}.\nThe bbox uses pixel XYXY of the ACTUAL supplied visual, top-left origin. No Markdown, prose, or extra fields.",
+      "visuals": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00149.png"
+      ],
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "image",
+              "image": "<IMAGE>"
+            },
+            {
+              "type": "text",
+              "text": "Visual inputs:\n[image_1] role: LOCATE_SCOPE\n\nQuestion:\nTask: LOCATE_SINGLE. Localize one target object in this remote-sensing visual.\nTarget category: building\nIntrinsic attributes: {\"color\": \"white\", \"shape\": \"square\"}\nActual supplied visual size: 640 x 480 pixels.\nSearch scope: the supplied image or crop, and nothing outside it.\nUse ONLY the target definition supplied to this LOCATE node. Do not solve the overall question, use downstream SELECT conditions, or invent additional landmarks.\nIf one well-supported matching object is identifiable, return exactly {\"status\":\"OK\",\"bbox\":[x1,y1,x2,y2]}.\nIf none is visible, return exactly {\"status\":\"NONE\"}.\nIf several plausible targets cannot be distinguished, return exactly {\"status\":\"AMBIGUOUS\"}.\nIf evidence is insufficient, return exactly {\"status\":\"UNRESOLVED\"}.\nThe bbox uses pixel XYXY of the ACTUAL supplied visual, top-left origin. No Markdown, prose, or extra fields."
+            }
+          ]
+        }
+      ],
+      "allowed_outputs": null,
+      "suffixes": [],
+      "mock": true,
+      "chat_template_rendered": "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Visual inputs:\n[image_1] role: LOCATE_SCOPE\n\nQuestion:\nTask: LOCATE_SINGLE. Localize one target object in this remote-sensing visual.\nTarget category: building\nIntrinsic attributes: {\"color\": \"white\", \"shape\": \"square\"}\nActual supplied visual size: 640 x 480 pixels.\nSearch scope: the supplied image or crop, and nothing outside it.\nUse ONLY the target definition supplied to this LOCATE node. Do not solve the overall question, use downstream SELECT conditions, or invent additional landmarks.\nIf one well-supported matching object is identifiable, return exactly {\"status\":\"OK\",\"bbox\":[x1,y1,x2,y2]}.\nIf none is visible, return exactly {\"status\":\"NONE\"}.\nIf several plausible targets cannot be distinguished, return exactly {\"status\":\"AMBIGUOUS\"}.\nIf evidence is insufficient, return exactly {\"status\":\"UNRESOLVED\"}.\nThe bbox uses pixel XYXY of the ACTUAL supplied visual, top-left origin. No Markdown, prose, or extra fields.<|im_end|>\n<|im_start|>assistant\n"
+    },
+    {
+      "prompt": "Visual inputs:\n[image_1] role: ENTITY\n\nStructured results:\n[ENTITY]\ntype: EntitySet\nentities:\n- index: 0; label: building; score: None; bbox_xyxy_global: [100.0, 60.0, 200.0, 140.0]\n\nQuestion:\nDetermine the color of the already selected target. The upstream target selection is authoritative; do not localize a replacement.",
+      "visuals": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00150.png"
+      ],
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "image",
+              "image": "<IMAGE>"
+            },
+            {
+              "type": "text",
+              "text": "Visual inputs:\n[image_1] role: ENTITY\n\nStructured results:\n[ENTITY]\ntype: EntitySet\nentities:\n- index: 0; label: building; score: None; bbox_xyxy_global: [100.0, 60.0, 200.0, 140.0]\n\nQuestion:\nDetermine the color of the already selected target. The upstream target selection is authoritative; do not localize a replacement."
+            }
+          ]
+        }
+      ],
+      "allowed_outputs": null,
+      "suffixes": [],
+      "mock": true,
+      "chat_template_rendered": "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Visual inputs:\n[image_1] role: ENTITY\n\nStructured results:\n[ENTITY]\ntype: EntitySet\nentities:\n- index: 0; label: building; score: None; bbox_xyxy_global: [100.0, 60.0, 200.0, 140.0]\n\nQuestion:\nDetermine the color of the already selected target. The upstream target selection is authoritative; do not localize a replacement.<|im_end|>\n<|im_start|>assistant\n"
+    }
+  ],
+  "provenance": "actual GraphExecutor/InputComposer/Qwen wrapper; mocked detector/model predictions; no accuracy claim"
+}

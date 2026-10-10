@@ -1,0 +1,3277 @@
+{
+  "name": "04 DINO red cars -> SELECT_SEM MULTI -> COUNT",
+  "graph": {
+    "version": "taskgraph-v1.1",
+    "question": "Full final question is intentionally not used by LOCATE",
+    "question_type": "FREE_FORM",
+    "choices": null,
+    "inputs": {
+      "image0": {
+        "type": "image",
+        "uri_or_key": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\audit_scene.png"
+      }
+    },
+    "intent": "OTHER",
+    "nodes": [
+      {
+        "id": "n1",
+        "op": "LOCATE",
+        "inputs": {
+          "image": "$image0"
+        },
+        "params": {
+          "target": {
+            "category": "car",
+            "attributes": {
+              "color": "red"
+            }
+          }
+        }
+      },
+      {
+        "id": "n2",
+        "op": "SELECT",
+        "inputs": {
+          "candidates": "$n1"
+        },
+        "params": {
+          "mode": "SEMANTIC",
+          "query": "cars parked beside the road",
+          "relation": null,
+          "criterion": null,
+          "rank": null,
+          "order": null,
+          "index": null,
+          "direction": null,
+          "subregion": null,
+          "margin": null,
+          "overlap_iou_threshold": null,
+          "selection_type": "MULTI"
+        }
+      },
+      {
+        "id": "n3",
+        "op": "COUNT",
+        "inputs": {
+          "entities": "$n2"
+        },
+        "params": {
+          "target": {
+            "category": "car",
+            "attributes": {}
+          },
+          "entire": false
+        }
+      }
+    ],
+    "final": {
+      "sources": [
+        "$n3"
+      ],
+      "question": "",
+      "answer_type": "INTEGER"
+    }
+  },
+  "dsl": "INTENT(OTHER)\nn1=LOCATE($image0,T(\"car\",color=\"red\"))\nn2=SELECT_SEM($n1,null,\"cars parked beside the road\",MULTI)\nn3=COUNT_ENTITIES($n2,T(\"car\"),false)\nFINAL($n3,INTEGER)",
+  "trace": {
+    "sample_id": "audit-4",
+    "execution_mode": "TASKGRAPH_UHR",
+    "input_image_paths": [],
+    "intermediate_output_paths": [],
+    "taskgraph": {
+      "version": "taskgraph-v1.1",
+      "question": "Full final question is intentionally not used by LOCATE",
+      "question_type": "FREE_FORM",
+      "choices": null,
+      "inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\audit_scene.png"
+        }
+      },
+      "intent": "OTHER",
+      "nodes": [
+        {
+          "id": "n1",
+          "op": "LOCATE",
+          "inputs": {
+            "image": "$image0"
+          },
+          "params": {
+            "target": {
+              "category": "car",
+              "attributes": {
+                "color": "red"
+              }
+            }
+          }
+        },
+        {
+          "id": "n2",
+          "op": "SELECT",
+          "inputs": {
+            "candidates": "$n1"
+          },
+          "params": {
+            "mode": "SEMANTIC",
+            "query": "cars parked beside the road",
+            "relation": null,
+            "criterion": null,
+            "rank": null,
+            "order": null,
+            "index": null,
+            "direction": null,
+            "subregion": null,
+            "margin": null,
+            "overlap_iou_threshold": null,
+            "selection_type": "MULTI"
+          }
+        },
+        {
+          "id": "n3",
+          "op": "COUNT",
+          "inputs": {
+            "entities": "$n2"
+          },
+          "params": {
+            "target": {
+              "category": "car",
+              "attributes": {}
+            },
+            "entire": false
+          }
+        }
+      ],
+      "final": {
+        "sources": [
+          "$n3"
+        ],
+        "question": "",
+        "answer_type": "INTEGER"
+      }
+    },
+    "nodes": [
+      {
+        "node_id": "n1",
+        "operator": "LOCATE",
+        "input_refs": {
+          "image": "$image0"
+        },
+        "resolved_input_types": {
+          "image": "ImageRef"
+        },
+        "provider": "fake_lae",
+        "latency_ms": 56.4650000014808,
+        "execution_mode": null,
+        "semantic_method": null,
+        "cache_reused": null,
+        "final_choice_fusion": false,
+        "fusion_reason": "operator_not_eligible",
+        "output_runtime_type": "EntitySet",
+        "output_summary": {
+          "type": "EntitySet",
+          "count": 2,
+          "detections": [
+            {
+              "label": "car",
+              "score": 0.99,
+              "bbox": [
+                40.0,
+                40.0,
+                100.0,
+                100.0
+              ]
+            },
+            {
+              "label": "car",
+              "score": 0.97,
+              "bbox": [
+                420.0,
+                300.0,
+                480.0,
+                370.0
+              ]
+            }
+          ],
+          "provenance": {
+            "provider": "fake_lae",
+            "candidate_pool_complete": true,
+            "resolution_status": "MULTIPLE_VALID",
+            "locate_route": {
+              "requirement": "SET_REQUIRED",
+              "route_reason": "set_consumer",
+              "consumer_paths": [
+                "n1 -> n2:SELECT.candidates",
+                "n1 -> n2:SELECT.candidates -> n3:COUNT.entities"
+              ],
+              "planned_backend": "LAE_DINO",
+              "actual_backend": "LAE_DINO",
+              "fallback_reason": null,
+              "target_spec": {
+                "category": "car",
+                "attributes": {
+                  "color": "red"
+                }
+              },
+              "stage": "detector",
+              "category_candidate_count": 3,
+              "detector_provider": "fake_lae",
+              "activated_provider": "fake_lae",
+              "detector_metadata": {
+                "deterministic": true
+              },
+              "attributes": {
+                "policy": "vlm",
+                "target_attributes": {
+                  "color": "red"
+                },
+                "verified": true,
+                "clip_similarity_is_truth": false,
+                "query": "Match the category and ALL intrinsic attributes of this LOCATE TargetSpec: {\"attributes\": {\"color\": \"red\"}, \"category\": \"car\"}",
+                "selection_type": "MULTI",
+                "purpose": "locate_attribute_verification",
+                "semantic_selection_ancestor": false,
+                "all_candidate_ids": [
+                  "candidate_0001",
+                  "candidate_0002",
+                  "candidate_0003"
+                ],
+                "selected_candidate_ids": [
+                  "candidate_0001",
+                  "candidate_0003"
+                ],
+                "uncertain_candidate_ids": [],
+                "unseen_candidate_ids": [],
+                "batches": [
+                  {
+                    "candidate_ids": [
+                      "candidate_0001",
+                      "candidate_0002",
+                      "candidate_0003"
+                    ],
+                    "mapping": {
+                      "A": {
+                        "index": 0,
+                        "bbox_xyxy_global": [
+                          40.0,
+                          40.0,
+                          100.0,
+                          100.0
+                        ],
+                        "bbox_xyxy_canvas": [
+                          40.0,
+                          40.0,
+                          100.0,
+                          100.0
+                        ],
+                        "candidate_id": "candidate_0001",
+                        "label": "car",
+                        "score": 0.99,
+                        "bbox_xyxy_render": [
+                          33.80281690140845,
+                          36.33187772925764,
+                          84.50704225352112,
+                          90.82969432314411
+                        ]
+                      },
+                      "B": {
+                        "index": 1,
+                        "bbox_xyxy_global": [
+                          180.0,
+                          160.0,
+                          250.0,
+                          220.0
+                        ],
+                        "bbox_xyxy_canvas": [
+                          180.0,
+                          160.0,
+                          250.0,
+                          220.0
+                        ],
+                        "candidate_id": "candidate_0002",
+                        "label": "car",
+                        "score": 0.98,
+                        "bbox_xyxy_render": [
+                          152.11267605633802,
+                          145.32751091703057,
+                          211.26760563380282,
+                          199.82532751091702
+                        ]
+                      },
+                      "C": {
+                        "index": 2,
+                        "bbox_xyxy_global": [
+                          420.0,
+                          300.0,
+                          480.0,
+                          370.0
+                        ],
+                        "bbox_xyxy_canvas": [
+                          420.0,
+                          300.0,
+                          480.0,
+                          370.0
+                        ],
+                        "candidate_id": "candidate_0003",
+                        "label": "car",
+                        "score": 0.97,
+                        "bbox_xyxy_render": [
+                          354.92957746478874,
+                          272.48908296943233,
+                          405.6338028169014,
+                          336.0698689956332
+                        ]
+                      }
+                    },
+                    "visual_metadata": {
+                      "canvas_kind": "CANDIDATE_CANVAS",
+                      "canvas_bbox_xyxy_global": [
+                        0,
+                        0,
+                        568,
+                        458
+                      ],
+                      "canvas_size": [
+                        568,
+                        458
+                      ],
+                      "source_canvas_size": [
+                        568,
+                        458
+                      ],
+                      "resize_scale": 1.0,
+                      "original_image_size": [
+                        640,
+                        480
+                      ],
+                      "coordinate_transform": {
+                        "origin_global": [
+                          0,
+                          0
+                        ],
+                        "canvas_to_global": "translate_then_scale",
+                        "scale_xy": [
+                          1.0,
+                          1.0
+                        ]
+                      },
+                      "candidate_mapping": {
+                        "A": {
+                          "index": 0,
+                          "bbox_xyxy_global": [
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>"
+                          ],
+                          "bbox_xyxy_canvas": [
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>"
+                          ],
+                          "candidate_id": "candidate_0001",
+                          "label": "car",
+                          "score": 0.99,
+                          "bbox_xyxy_render": [
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>"
+                          ]
+                        },
+                        "B": {
+                          "index": 1,
+                          "bbox_xyxy_global": [
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>"
+                          ],
+                          "bbox_xyxy_canvas": [
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>"
+                          ],
+                          "candidate_id": "candidate_0002",
+                          "label": "car",
+                          "score": 0.98,
+                          "bbox_xyxy_render": [
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>"
+                          ]
+                        },
+                        "C": {
+                          "index": 2,
+                          "bbox_xyxy_global": [
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>"
+                          ],
+                          "bbox_xyxy_canvas": [
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>"
+                          ],
+                          "candidate_id": "candidate_0003",
+                          "label": "car",
+                          "score": 0.97,
+                          "bbox_xyxy_render": [
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>"
+                          ]
+                        }
+                      },
+                      "role_mapping": {
+                        "candidates": [
+                          {
+                            "id": "<trace_depth_limit>",
+                            "index": "<trace_depth_limit>",
+                            "bbox_xyxy_global": "<trace_depth_limit>",
+                            "bbox_xyxy_canvas": "<trace_depth_limit>",
+                            "candidate_id": "<trace_depth_limit>",
+                            "label": "<trace_depth_limit>",
+                            "score": "<trace_depth_limit>"
+                          },
+                          {
+                            "id": "<trace_depth_limit>",
+                            "index": "<trace_depth_limit>",
+                            "bbox_xyxy_global": "<trace_depth_limit>",
+                            "bbox_xyxy_canvas": "<trace_depth_limit>",
+                            "candidate_id": "<trace_depth_limit>",
+                            "label": "<trace_depth_limit>",
+                            "score": "<trace_depth_limit>"
+                          },
+                          {
+                            "id": "<trace_depth_limit>",
+                            "index": "<trace_depth_limit>",
+                            "bbox_xyxy_global": "<trace_depth_limit>",
+                            "bbox_xyxy_canvas": "<trace_depth_limit>",
+                            "candidate_id": "<trace_depth_limit>",
+                            "label": "<trace_depth_limit>",
+                            "score": "<trace_depth_limit>"
+                          }
+                        ]
+                      },
+                      "source_roles": [
+                        "CANDIDATES",
+                        "SCOPE"
+                      ],
+                      "source_types": [
+                        "EntitySet",
+                        "ImageRef"
+                      ],
+                      "visual_roles": [
+                        "CANDIDATE_CANVAS",
+                        "SCOPE"
+                      ],
+                      "visual_paths": [
+                        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00156.png",
+                        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\audit_scene.png"
+                      ],
+                      "selection_render_sizes": [
+                        [
+                          480,
+                          416
+                        ],
+                        [
+                          512,
+                          384
+                        ]
+                      ],
+                      "selection_render_scale_xy": [
+                        [
+                          0.8450704225352113,
+                          0.9082969432314411
+                        ],
+                        [
+                          0.8,
+                          0.8
+                        ]
+                      ],
+                      "total_render_pixels": 396288,
+                      "context_overview": true
+                    },
+                    "decisions": [
+                      {
+                        "label": "A",
+                        "decision": "MATCH",
+                        "scores": {
+                          "MATCH": 1.0,
+                          "NO_MATCH": -1.0,
+                          "UNCERTAIN": -1.0
+                        },
+                        "provider": "qwen3_vl:semantic",
+                        "cache_reused": true,
+                        "reasoning_text": "AUDIT MOCK reasoning",
+                        "latency_ms": {},
+                        "purpose": "locate_attribute_verification",
+                        "suffix": "\n\nCandidate A semantic verdict:"
+                      },
+                      {
+                        "label": "B",
+                        "decision": "NO_MATCH",
+                        "scores": {
+                          "MATCH": -1.0,
+                          "NO_MATCH": 1.0,
+                          "UNCERTAIN": -1.0
+                        },
+                        "provider": "qwen3_vl:semantic",
+                        "cache_reused": true,
+                        "reasoning_text": "AUDIT MOCK reasoning",
+                        "latency_ms": {},
+                        "purpose": "locate_attribute_verification",
+                        "suffix": "\n\nCandidate B semantic verdict:"
+                      },
+                      {
+                        "label": "C",
+                        "decision": "MATCH",
+                        "scores": {
+                          "MATCH": 1.0,
+                          "NO_MATCH": -1.0,
+                          "UNCERTAIN": -1.0
+                        },
+                        "provider": "qwen3_vl:semantic",
+                        "cache_reused": true,
+                        "reasoning_text": "AUDIT MOCK reasoning",
+                        "latency_ms": {},
+                        "purpose": "locate_attribute_verification",
+                        "suffix": "\n\nCandidate C semantic verdict:"
+                      }
+                    ]
+                  }
+                ],
+                "candidate_pool_complete": true,
+                "budget": {
+                  "batch_size": 8,
+                  "max_candidates": 64,
+                  "max_pixels": 409600,
+                  "effective_max_pixels": 409600
+                },
+                "inference_serial": true
+              },
+              "final_candidate_count": 2,
+              "candidate_pool_complete": true,
+              "final_resolution_status": "MULTIPLE_VALID"
+            },
+            "category_candidate_count": 3,
+            "candidate_count_after_refinement": 2,
+            "original_target_spec": {
+              "category": "car",
+              "attributes": {
+                "color": "red"
+              }
+            },
+            "proposal_query": "car . vehicle . truck . sedan",
+            "attribute_trace": {
+              "policy": "vlm",
+              "target_attributes": {
+                "color": "red"
+              },
+              "verified": true,
+              "clip_similarity_is_truth": false,
+              "query": "Match the category and ALL intrinsic attributes of this LOCATE TargetSpec: {\"attributes\": {\"color\": \"red\"}, \"category\": \"car\"}",
+              "selection_type": "MULTI",
+              "purpose": "locate_attribute_verification",
+              "semantic_selection_ancestor": false,
+              "all_candidate_ids": [
+                "candidate_0001",
+                "candidate_0002",
+                "candidate_0003"
+              ],
+              "selected_candidate_ids": [
+                "candidate_0001",
+                "candidate_0003"
+              ],
+              "uncertain_candidate_ids": [],
+              "unseen_candidate_ids": [],
+              "batches": [
+                {
+                  "candidate_ids": [
+                    "candidate_0001",
+                    "candidate_0002",
+                    "candidate_0003"
+                  ],
+                  "mapping": {
+                    "A": {
+                      "index": 0,
+                      "bbox_xyxy_global": [
+                        40.0,
+                        40.0,
+                        100.0,
+                        100.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        40.0,
+                        40.0,
+                        100.0,
+                        100.0
+                      ],
+                      "candidate_id": "candidate_0001",
+                      "label": "car",
+                      "score": 0.99,
+                      "bbox_xyxy_render": [
+                        33.80281690140845,
+                        36.33187772925764,
+                        84.50704225352112,
+                        90.82969432314411
+                      ]
+                    },
+                    "B": {
+                      "index": 1,
+                      "bbox_xyxy_global": [
+                        180.0,
+                        160.0,
+                        250.0,
+                        220.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        180.0,
+                        160.0,
+                        250.0,
+                        220.0
+                      ],
+                      "candidate_id": "candidate_0002",
+                      "label": "car",
+                      "score": 0.98,
+                      "bbox_xyxy_render": [
+                        152.11267605633802,
+                        145.32751091703057,
+                        211.26760563380282,
+                        199.82532751091702
+                      ]
+                    },
+                    "C": {
+                      "index": 2,
+                      "bbox_xyxy_global": [
+                        420.0,
+                        300.0,
+                        480.0,
+                        370.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        420.0,
+                        300.0,
+                        480.0,
+                        370.0
+                      ],
+                      "candidate_id": "candidate_0003",
+                      "label": "car",
+                      "score": 0.97,
+                      "bbox_xyxy_render": [
+                        354.92957746478874,
+                        272.48908296943233,
+                        405.6338028169014,
+                        336.0698689956332
+                      ]
+                    }
+                  },
+                  "visual_metadata": {
+                    "canvas_kind": "CANDIDATE_CANVAS",
+                    "canvas_bbox_xyxy_global": [
+                      0,
+                      0,
+                      568,
+                      458
+                    ],
+                    "canvas_size": [
+                      568,
+                      458
+                    ],
+                    "source_canvas_size": [
+                      568,
+                      458
+                    ],
+                    "resize_scale": 1.0,
+                    "original_image_size": [
+                      640,
+                      480
+                    ],
+                    "coordinate_transform": {
+                      "origin_global": [
+                        0,
+                        0
+                      ],
+                      "canvas_to_global": "translate_then_scale",
+                      "scale_xy": [
+                        1.0,
+                        1.0
+                      ]
+                    },
+                    "candidate_mapping": {
+                      "A": {
+                        "index": 0,
+                        "bbox_xyxy_global": [
+                          40.0,
+                          40.0,
+                          100.0,
+                          100.0
+                        ],
+                        "bbox_xyxy_canvas": [
+                          40.0,
+                          40.0,
+                          100.0,
+                          100.0
+                        ],
+                        "candidate_id": "candidate_0001",
+                        "label": "car",
+                        "score": 0.99,
+                        "bbox_xyxy_render": [
+                          33.80281690140845,
+                          36.33187772925764,
+                          84.50704225352112,
+                          90.82969432314411
+                        ]
+                      },
+                      "B": {
+                        "index": 1,
+                        "bbox_xyxy_global": [
+                          180.0,
+                          160.0,
+                          250.0,
+                          220.0
+                        ],
+                        "bbox_xyxy_canvas": [
+                          180.0,
+                          160.0,
+                          250.0,
+                          220.0
+                        ],
+                        "candidate_id": "candidate_0002",
+                        "label": "car",
+                        "score": 0.98,
+                        "bbox_xyxy_render": [
+                          152.11267605633802,
+                          145.32751091703057,
+                          211.26760563380282,
+                          199.82532751091702
+                        ]
+                      },
+                      "C": {
+                        "index": 2,
+                        "bbox_xyxy_global": [
+                          420.0,
+                          300.0,
+                          480.0,
+                          370.0
+                        ],
+                        "bbox_xyxy_canvas": [
+                          420.0,
+                          300.0,
+                          480.0,
+                          370.0
+                        ],
+                        "candidate_id": "candidate_0003",
+                        "label": "car",
+                        "score": 0.97,
+                        "bbox_xyxy_render": [
+                          354.92957746478874,
+                          272.48908296943233,
+                          405.6338028169014,
+                          336.0698689956332
+                        ]
+                      }
+                    },
+                    "role_mapping": {
+                      "candidates": [
+                        {
+                          "id": "A",
+                          "index": 0,
+                          "bbox_xyxy_global": [
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>"
+                          ],
+                          "bbox_xyxy_canvas": [
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>"
+                          ],
+                          "candidate_id": "candidate_0001",
+                          "label": "car",
+                          "score": 0.99
+                        },
+                        {
+                          "id": "B",
+                          "index": 1,
+                          "bbox_xyxy_global": [
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>"
+                          ],
+                          "bbox_xyxy_canvas": [
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>"
+                          ],
+                          "candidate_id": "candidate_0002",
+                          "label": "car",
+                          "score": 0.98
+                        },
+                        {
+                          "id": "C",
+                          "index": 2,
+                          "bbox_xyxy_global": [
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>"
+                          ],
+                          "bbox_xyxy_canvas": [
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>",
+                            "<trace_depth_limit>"
+                          ],
+                          "candidate_id": "candidate_0003",
+                          "label": "car",
+                          "score": 0.97
+                        }
+                      ]
+                    },
+                    "source_roles": [
+                      "CANDIDATES",
+                      "SCOPE"
+                    ],
+                    "source_types": [
+                      "EntitySet",
+                      "ImageRef"
+                    ],
+                    "visual_roles": [
+                      "CANDIDATE_CANVAS",
+                      "SCOPE"
+                    ],
+                    "visual_paths": [
+                      "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00156.png",
+                      "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\audit_scene.png"
+                    ],
+                    "selection_render_sizes": [
+                      [
+                        480,
+                        416
+                      ],
+                      [
+                        512,
+                        384
+                      ]
+                    ],
+                    "selection_render_scale_xy": [
+                      [
+                        0.8450704225352113,
+                        0.9082969432314411
+                      ],
+                      [
+                        0.8,
+                        0.8
+                      ]
+                    ],
+                    "total_render_pixels": 396288,
+                    "context_overview": true
+                  },
+                  "decisions": [
+                    {
+                      "label": "A",
+                      "decision": "MATCH",
+                      "scores": {
+                        "MATCH": 1.0,
+                        "NO_MATCH": -1.0,
+                        "UNCERTAIN": -1.0
+                      },
+                      "provider": "qwen3_vl:semantic",
+                      "cache_reused": true,
+                      "reasoning_text": "AUDIT MOCK reasoning",
+                      "latency_ms": {},
+                      "purpose": "locate_attribute_verification",
+                      "suffix": "\n\nCandidate A semantic verdict:"
+                    },
+                    {
+                      "label": "B",
+                      "decision": "NO_MATCH",
+                      "scores": {
+                        "MATCH": -1.0,
+                        "NO_MATCH": 1.0,
+                        "UNCERTAIN": -1.0
+                      },
+                      "provider": "qwen3_vl:semantic",
+                      "cache_reused": true,
+                      "reasoning_text": "AUDIT MOCK reasoning",
+                      "latency_ms": {},
+                      "purpose": "locate_attribute_verification",
+                      "suffix": "\n\nCandidate B semantic verdict:"
+                    },
+                    {
+                      "label": "C",
+                      "decision": "MATCH",
+                      "scores": {
+                        "MATCH": 1.0,
+                        "NO_MATCH": -1.0,
+                        "UNCERTAIN": -1.0
+                      },
+                      "provider": "qwen3_vl:semantic",
+                      "cache_reused": true,
+                      "reasoning_text": "AUDIT MOCK reasoning",
+                      "latency_ms": {},
+                      "purpose": "locate_attribute_verification",
+                      "suffix": "\n\nCandidate C semantic verdict:"
+                    }
+                  ]
+                }
+              ],
+              "candidate_pool_complete": true,
+              "budget": {
+                "batch_size": 8,
+                "max_candidates": 64,
+                "max_pixels": 409600,
+                "effective_max_pixels": 409600
+              },
+              "inference_serial": true
+            }
+          }
+        },
+        "telemetry": {
+          "provider": "fake_lae",
+          "candidate_pool_complete": true,
+          "resolution_status": "MULTIPLE_VALID",
+          "locate_route": {
+            "requirement": "SET_REQUIRED",
+            "route_reason": "set_consumer",
+            "consumer_paths": [
+              "n1 -> n2:SELECT.candidates",
+              "n1 -> n2:SELECT.candidates -> n3:COUNT.entities"
+            ],
+            "planned_backend": "LAE_DINO",
+            "actual_backend": "LAE_DINO",
+            "fallback_reason": null,
+            "target_spec": {
+              "category": "car",
+              "attributes": {
+                "color": "red"
+              }
+            },
+            "stage": "detector",
+            "category_candidate_count": 3,
+            "detector_provider": "fake_lae",
+            "activated_provider": "fake_lae",
+            "detector_metadata": {
+              "deterministic": true
+            },
+            "attributes": {
+              "policy": "vlm",
+              "target_attributes": {
+                "color": "red"
+              },
+              "verified": true,
+              "clip_similarity_is_truth": false,
+              "query": "Match the category and ALL intrinsic attributes of this LOCATE TargetSpec: {\"attributes\": {\"color\": \"red\"}, \"category\": \"car\"}",
+              "selection_type": "MULTI",
+              "purpose": "locate_attribute_verification",
+              "semantic_selection_ancestor": false,
+              "all_candidate_ids": [
+                "candidate_0001",
+                "candidate_0002",
+                "candidate_0003"
+              ],
+              "selected_candidate_ids": [
+                "candidate_0001",
+                "candidate_0003"
+              ],
+              "uncertain_candidate_ids": [],
+              "unseen_candidate_ids": [],
+              "batches": [
+                {
+                  "candidate_ids": [
+                    "candidate_0001",
+                    "candidate_0002",
+                    "candidate_0003"
+                  ],
+                  "mapping": {
+                    "A": {
+                      "index": 0,
+                      "bbox_xyxy_global": [
+                        40.0,
+                        40.0,
+                        100.0,
+                        100.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        40.0,
+                        40.0,
+                        100.0,
+                        100.0
+                      ],
+                      "candidate_id": "candidate_0001",
+                      "label": "car",
+                      "score": 0.99,
+                      "bbox_xyxy_render": [
+                        33.80281690140845,
+                        36.33187772925764,
+                        84.50704225352112,
+                        90.82969432314411
+                      ]
+                    },
+                    "B": {
+                      "index": 1,
+                      "bbox_xyxy_global": [
+                        180.0,
+                        160.0,
+                        250.0,
+                        220.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        180.0,
+                        160.0,
+                        250.0,
+                        220.0
+                      ],
+                      "candidate_id": "candidate_0002",
+                      "label": "car",
+                      "score": 0.98,
+                      "bbox_xyxy_render": [
+                        152.11267605633802,
+                        145.32751091703057,
+                        211.26760563380282,
+                        199.82532751091702
+                      ]
+                    },
+                    "C": {
+                      "index": 2,
+                      "bbox_xyxy_global": [
+                        420.0,
+                        300.0,
+                        480.0,
+                        370.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        420.0,
+                        300.0,
+                        480.0,
+                        370.0
+                      ],
+                      "candidate_id": "candidate_0003",
+                      "label": "car",
+                      "score": 0.97,
+                      "bbox_xyxy_render": [
+                        354.92957746478874,
+                        272.48908296943233,
+                        405.6338028169014,
+                        336.0698689956332
+                      ]
+                    }
+                  },
+                  "visual_metadata": {
+                    "canvas_kind": "CANDIDATE_CANVAS",
+                    "canvas_bbox_xyxy_global": [
+                      0,
+                      0,
+                      568,
+                      458
+                    ],
+                    "canvas_size": [
+                      568,
+                      458
+                    ],
+                    "source_canvas_size": [
+                      568,
+                      458
+                    ],
+                    "resize_scale": 1.0,
+                    "original_image_size": [
+                      640,
+                      480
+                    ],
+                    "coordinate_transform": {
+                      "origin_global": [
+                        0,
+                        0
+                      ],
+                      "canvas_to_global": "translate_then_scale",
+                      "scale_xy": [
+                        1.0,
+                        1.0
+                      ]
+                    },
+                    "candidate_mapping": {
+                      "A": {
+                        "index": 0,
+                        "bbox_xyxy_global": [
+                          40.0,
+                          40.0,
+                          100.0,
+                          100.0
+                        ],
+                        "bbox_xyxy_canvas": [
+                          40.0,
+                          40.0,
+                          100.0,
+                          100.0
+                        ],
+                        "candidate_id": "candidate_0001",
+                        "label": "car",
+                        "score": 0.99,
+                        "bbox_xyxy_render": [
+                          33.80281690140845,
+                          36.33187772925764,
+                          84.50704225352112,
+                          90.82969432314411
+                        ]
+                      },
+                      "B": {
+                        "index": 1,
+                        "bbox_xyxy_global": [
+                          180.0,
+                          160.0,
+                          250.0,
+                          220.0
+                        ],
+                        "bbox_xyxy_canvas": [
+                          180.0,
+                          160.0,
+                          250.0,
+                          220.0
+                        ],
+                        "candidate_id": "candidate_0002",
+                        "label": "car",
+                        "score": 0.98,
+                        "bbox_xyxy_render": [
+                          152.11267605633802,
+                          145.32751091703057,
+                          211.26760563380282,
+                          199.82532751091702
+                        ]
+                      },
+                      "C": {
+                        "index": 2,
+                        "bbox_xyxy_global": [
+                          420.0,
+                          300.0,
+                          480.0,
+                          370.0
+                        ],
+                        "bbox_xyxy_canvas": [
+                          420.0,
+                          300.0,
+                          480.0,
+                          370.0
+                        ],
+                        "candidate_id": "candidate_0003",
+                        "label": "car",
+                        "score": 0.97,
+                        "bbox_xyxy_render": [
+                          354.92957746478874,
+                          272.48908296943233,
+                          405.6338028169014,
+                          336.0698689956332
+                        ]
+                      }
+                    },
+                    "role_mapping": {
+                      "candidates": [
+                        {
+                          "id": "A",
+                          "index": 0,
+                          "bbox_xyxy_global": [
+                            40.0,
+                            40.0,
+                            100.0,
+                            100.0
+                          ],
+                          "bbox_xyxy_canvas": [
+                            40.0,
+                            40.0,
+                            100.0,
+                            100.0
+                          ],
+                          "candidate_id": "candidate_0001",
+                          "label": "car",
+                          "score": 0.99
+                        },
+                        {
+                          "id": "B",
+                          "index": 1,
+                          "bbox_xyxy_global": [
+                            180.0,
+                            160.0,
+                            250.0,
+                            220.0
+                          ],
+                          "bbox_xyxy_canvas": [
+                            180.0,
+                            160.0,
+                            250.0,
+                            220.0
+                          ],
+                          "candidate_id": "candidate_0002",
+                          "label": "car",
+                          "score": 0.98
+                        },
+                        {
+                          "id": "C",
+                          "index": 2,
+                          "bbox_xyxy_global": [
+                            420.0,
+                            300.0,
+                            480.0,
+                            370.0
+                          ],
+                          "bbox_xyxy_canvas": [
+                            420.0,
+                            300.0,
+                            480.0,
+                            370.0
+                          ],
+                          "candidate_id": "candidate_0003",
+                          "label": "car",
+                          "score": 0.97
+                        }
+                      ]
+                    },
+                    "source_roles": [
+                      "CANDIDATES",
+                      "SCOPE"
+                    ],
+                    "source_types": [
+                      "EntitySet",
+                      "ImageRef"
+                    ],
+                    "visual_roles": [
+                      "CANDIDATE_CANVAS",
+                      "SCOPE"
+                    ],
+                    "visual_paths": [
+                      "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00156.png",
+                      "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\audit_scene.png"
+                    ],
+                    "selection_render_sizes": [
+                      [
+                        480,
+                        416
+                      ],
+                      [
+                        512,
+                        384
+                      ]
+                    ],
+                    "selection_render_scale_xy": [
+                      [
+                        0.8450704225352113,
+                        0.9082969432314411
+                      ],
+                      [
+                        0.8,
+                        0.8
+                      ]
+                    ],
+                    "total_render_pixels": 396288,
+                    "context_overview": true
+                  },
+                  "decisions": [
+                    {
+                      "label": "A",
+                      "decision": "MATCH",
+                      "scores": {
+                        "MATCH": 1.0,
+                        "NO_MATCH": -1.0,
+                        "UNCERTAIN": -1.0
+                      },
+                      "provider": "qwen3_vl:semantic",
+                      "cache_reused": true,
+                      "reasoning_text": "AUDIT MOCK reasoning",
+                      "latency_ms": {},
+                      "purpose": "locate_attribute_verification",
+                      "suffix": "\n\nCandidate A semantic verdict:"
+                    },
+                    {
+                      "label": "B",
+                      "decision": "NO_MATCH",
+                      "scores": {
+                        "MATCH": -1.0,
+                        "NO_MATCH": 1.0,
+                        "UNCERTAIN": -1.0
+                      },
+                      "provider": "qwen3_vl:semantic",
+                      "cache_reused": true,
+                      "reasoning_text": "AUDIT MOCK reasoning",
+                      "latency_ms": {},
+                      "purpose": "locate_attribute_verification",
+                      "suffix": "\n\nCandidate B semantic verdict:"
+                    },
+                    {
+                      "label": "C",
+                      "decision": "MATCH",
+                      "scores": {
+                        "MATCH": 1.0,
+                        "NO_MATCH": -1.0,
+                        "UNCERTAIN": -1.0
+                      },
+                      "provider": "qwen3_vl:semantic",
+                      "cache_reused": true,
+                      "reasoning_text": "AUDIT MOCK reasoning",
+                      "latency_ms": {},
+                      "purpose": "locate_attribute_verification",
+                      "suffix": "\n\nCandidate C semantic verdict:"
+                    }
+                  ]
+                }
+              ],
+              "candidate_pool_complete": true,
+              "budget": {
+                "batch_size": 8,
+                "max_candidates": 64,
+                "max_pixels": 409600,
+                "effective_max_pixels": 409600
+              },
+              "inference_serial": true
+            },
+            "final_candidate_count": 2,
+            "candidate_pool_complete": true,
+            "final_resolution_status": "MULTIPLE_VALID"
+          },
+          "category_candidate_count": 3,
+          "candidate_count_after_refinement": 2,
+          "original_target_spec": {
+            "category": "car",
+            "attributes": {
+              "color": "red"
+            }
+          },
+          "proposal_query": "car . vehicle . truck . sedan",
+          "attribute_trace": {
+            "policy": "vlm",
+            "target_attributes": {
+              "color": "red"
+            },
+            "verified": true,
+            "clip_similarity_is_truth": false,
+            "query": "Match the category and ALL intrinsic attributes of this LOCATE TargetSpec: {\"attributes\": {\"color\": \"red\"}, \"category\": \"car\"}",
+            "selection_type": "MULTI",
+            "purpose": "locate_attribute_verification",
+            "semantic_selection_ancestor": false,
+            "all_candidate_ids": [
+              "candidate_0001",
+              "candidate_0002",
+              "candidate_0003"
+            ],
+            "selected_candidate_ids": [
+              "candidate_0001",
+              "candidate_0003"
+            ],
+            "uncertain_candidate_ids": [],
+            "unseen_candidate_ids": [],
+            "batches": [
+              {
+                "candidate_ids": [
+                  "candidate_0001",
+                  "candidate_0002",
+                  "candidate_0003"
+                ],
+                "mapping": {
+                  "A": {
+                    "index": 0,
+                    "bbox_xyxy_global": [
+                      40.0,
+                      40.0,
+                      100.0,
+                      100.0
+                    ],
+                    "bbox_xyxy_canvas": [
+                      40.0,
+                      40.0,
+                      100.0,
+                      100.0
+                    ],
+                    "candidate_id": "candidate_0001",
+                    "label": "car",
+                    "score": 0.99,
+                    "bbox_xyxy_render": [
+                      33.80281690140845,
+                      36.33187772925764,
+                      84.50704225352112,
+                      90.82969432314411
+                    ]
+                  },
+                  "B": {
+                    "index": 1,
+                    "bbox_xyxy_global": [
+                      180.0,
+                      160.0,
+                      250.0,
+                      220.0
+                    ],
+                    "bbox_xyxy_canvas": [
+                      180.0,
+                      160.0,
+                      250.0,
+                      220.0
+                    ],
+                    "candidate_id": "candidate_0002",
+                    "label": "car",
+                    "score": 0.98,
+                    "bbox_xyxy_render": [
+                      152.11267605633802,
+                      145.32751091703057,
+                      211.26760563380282,
+                      199.82532751091702
+                    ]
+                  },
+                  "C": {
+                    "index": 2,
+                    "bbox_xyxy_global": [
+                      420.0,
+                      300.0,
+                      480.0,
+                      370.0
+                    ],
+                    "bbox_xyxy_canvas": [
+                      420.0,
+                      300.0,
+                      480.0,
+                      370.0
+                    ],
+                    "candidate_id": "candidate_0003",
+                    "label": "car",
+                    "score": 0.97,
+                    "bbox_xyxy_render": [
+                      354.92957746478874,
+                      272.48908296943233,
+                      405.6338028169014,
+                      336.0698689956332
+                    ]
+                  }
+                },
+                "visual_metadata": {
+                  "canvas_kind": "CANDIDATE_CANVAS",
+                  "canvas_bbox_xyxy_global": [
+                    0,
+                    0,
+                    568,
+                    458
+                  ],
+                  "canvas_size": [
+                    568,
+                    458
+                  ],
+                  "source_canvas_size": [
+                    568,
+                    458
+                  ],
+                  "resize_scale": 1.0,
+                  "original_image_size": [
+                    640,
+                    480
+                  ],
+                  "coordinate_transform": {
+                    "origin_global": [
+                      0,
+                      0
+                    ],
+                    "canvas_to_global": "translate_then_scale",
+                    "scale_xy": [
+                      1.0,
+                      1.0
+                    ]
+                  },
+                  "candidate_mapping": {
+                    "A": {
+                      "index": 0,
+                      "bbox_xyxy_global": [
+                        40.0,
+                        40.0,
+                        100.0,
+                        100.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        40.0,
+                        40.0,
+                        100.0,
+                        100.0
+                      ],
+                      "candidate_id": "candidate_0001",
+                      "label": "car",
+                      "score": 0.99,
+                      "bbox_xyxy_render": [
+                        33.80281690140845,
+                        36.33187772925764,
+                        84.50704225352112,
+                        90.82969432314411
+                      ]
+                    },
+                    "B": {
+                      "index": 1,
+                      "bbox_xyxy_global": [
+                        180.0,
+                        160.0,
+                        250.0,
+                        220.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        180.0,
+                        160.0,
+                        250.0,
+                        220.0
+                      ],
+                      "candidate_id": "candidate_0002",
+                      "label": "car",
+                      "score": 0.98,
+                      "bbox_xyxy_render": [
+                        152.11267605633802,
+                        145.32751091703057,
+                        211.26760563380282,
+                        199.82532751091702
+                      ]
+                    },
+                    "C": {
+                      "index": 2,
+                      "bbox_xyxy_global": [
+                        420.0,
+                        300.0,
+                        480.0,
+                        370.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        420.0,
+                        300.0,
+                        480.0,
+                        370.0
+                      ],
+                      "candidate_id": "candidate_0003",
+                      "label": "car",
+                      "score": 0.97,
+                      "bbox_xyxy_render": [
+                        354.92957746478874,
+                        272.48908296943233,
+                        405.6338028169014,
+                        336.0698689956332
+                      ]
+                    }
+                  },
+                  "role_mapping": {
+                    "candidates": [
+                      {
+                        "id": "A",
+                        "index": 0,
+                        "bbox_xyxy_global": [
+                          40.0,
+                          40.0,
+                          100.0,
+                          100.0
+                        ],
+                        "bbox_xyxy_canvas": [
+                          40.0,
+                          40.0,
+                          100.0,
+                          100.0
+                        ],
+                        "candidate_id": "candidate_0001",
+                        "label": "car",
+                        "score": 0.99
+                      },
+                      {
+                        "id": "B",
+                        "index": 1,
+                        "bbox_xyxy_global": [
+                          180.0,
+                          160.0,
+                          250.0,
+                          220.0
+                        ],
+                        "bbox_xyxy_canvas": [
+                          180.0,
+                          160.0,
+                          250.0,
+                          220.0
+                        ],
+                        "candidate_id": "candidate_0002",
+                        "label": "car",
+                        "score": 0.98
+                      },
+                      {
+                        "id": "C",
+                        "index": 2,
+                        "bbox_xyxy_global": [
+                          420.0,
+                          300.0,
+                          480.0,
+                          370.0
+                        ],
+                        "bbox_xyxy_canvas": [
+                          420.0,
+                          300.0,
+                          480.0,
+                          370.0
+                        ],
+                        "candidate_id": "candidate_0003",
+                        "label": "car",
+                        "score": 0.97
+                      }
+                    ]
+                  },
+                  "source_roles": [
+                    "CANDIDATES",
+                    "SCOPE"
+                  ],
+                  "source_types": [
+                    "EntitySet",
+                    "ImageRef"
+                  ],
+                  "visual_roles": [
+                    "CANDIDATE_CANVAS",
+                    "SCOPE"
+                  ],
+                  "visual_paths": [
+                    "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00156.png",
+                    "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\audit_scene.png"
+                  ],
+                  "selection_render_sizes": [
+                    [
+                      480,
+                      416
+                    ],
+                    [
+                      512,
+                      384
+                    ]
+                  ],
+                  "selection_render_scale_xy": [
+                    [
+                      0.8450704225352113,
+                      0.9082969432314411
+                    ],
+                    [
+                      0.8,
+                      0.8
+                    ]
+                  ],
+                  "total_render_pixels": 396288,
+                  "context_overview": true
+                },
+                "decisions": [
+                  {
+                    "label": "A",
+                    "decision": "MATCH",
+                    "scores": {
+                      "MATCH": 1.0,
+                      "NO_MATCH": -1.0,
+                      "UNCERTAIN": -1.0
+                    },
+                    "provider": "qwen3_vl:semantic",
+                    "cache_reused": true,
+                    "reasoning_text": "AUDIT MOCK reasoning",
+                    "latency_ms": {},
+                    "purpose": "locate_attribute_verification",
+                    "suffix": "\n\nCandidate A semantic verdict:"
+                  },
+                  {
+                    "label": "B",
+                    "decision": "NO_MATCH",
+                    "scores": {
+                      "MATCH": -1.0,
+                      "NO_MATCH": 1.0,
+                      "UNCERTAIN": -1.0
+                    },
+                    "provider": "qwen3_vl:semantic",
+                    "cache_reused": true,
+                    "reasoning_text": "AUDIT MOCK reasoning",
+                    "latency_ms": {},
+                    "purpose": "locate_attribute_verification",
+                    "suffix": "\n\nCandidate B semantic verdict:"
+                  },
+                  {
+                    "label": "C",
+                    "decision": "MATCH",
+                    "scores": {
+                      "MATCH": 1.0,
+                      "NO_MATCH": -1.0,
+                      "UNCERTAIN": -1.0
+                    },
+                    "provider": "qwen3_vl:semantic",
+                    "cache_reused": true,
+                    "reasoning_text": "AUDIT MOCK reasoning",
+                    "latency_ms": {},
+                    "purpose": "locate_attribute_verification",
+                    "suffix": "\n\nCandidate C semantic verdict:"
+                  }
+                ]
+              }
+            ],
+            "candidate_pool_complete": true,
+            "budget": {
+              "batch_size": 8,
+              "max_candidates": 64,
+              "max_pixels": 409600,
+              "effective_max_pixels": 409600
+            },
+            "inference_serial": true
+          }
+        },
+        "error": null,
+        "fallback": null,
+        "trace_metadata": {
+          "requirement": "SET_REQUIRED",
+          "route_reason": "set_consumer",
+          "consumer_paths": [
+            "n1 -> n2:SELECT.candidates",
+            "n1 -> n2:SELECT.candidates -> n3:COUNT.entities"
+          ],
+          "planned_backend": "LAE_DINO",
+          "actual_backend": "LAE_DINO",
+          "fallback_reason": null,
+          "target_spec": {
+            "category": "car",
+            "attributes": {
+              "color": "red"
+            }
+          },
+          "stage": "detector",
+          "category_candidate_count": 3,
+          "detector_provider": "fake_lae",
+          "activated_provider": "fake_lae",
+          "detector_metadata": {
+            "deterministic": true
+          },
+          "attributes": {
+            "policy": "vlm",
+            "target_attributes": {
+              "color": "red"
+            },
+            "verified": true,
+            "clip_similarity_is_truth": false,
+            "query": "Match the category and ALL intrinsic attributes of this LOCATE TargetSpec: {\"attributes\": {\"color\": \"red\"}, \"category\": \"car\"}",
+            "selection_type": "MULTI",
+            "purpose": "locate_attribute_verification",
+            "semantic_selection_ancestor": false,
+            "all_candidate_ids": [
+              "candidate_0001",
+              "candidate_0002",
+              "candidate_0003"
+            ],
+            "selected_candidate_ids": [
+              "candidate_0001",
+              "candidate_0003"
+            ],
+            "uncertain_candidate_ids": [],
+            "unseen_candidate_ids": [],
+            "batches": [
+              {
+                "candidate_ids": [
+                  "candidate_0001",
+                  "candidate_0002",
+                  "candidate_0003"
+                ],
+                "mapping": {
+                  "A": {
+                    "index": 0,
+                    "bbox_xyxy_global": [
+                      40.0,
+                      40.0,
+                      100.0,
+                      100.0
+                    ],
+                    "bbox_xyxy_canvas": [
+                      40.0,
+                      40.0,
+                      100.0,
+                      100.0
+                    ],
+                    "candidate_id": "candidate_0001",
+                    "label": "car",
+                    "score": 0.99,
+                    "bbox_xyxy_render": [
+                      33.80281690140845,
+                      36.33187772925764,
+                      84.50704225352112,
+                      90.82969432314411
+                    ]
+                  },
+                  "B": {
+                    "index": 1,
+                    "bbox_xyxy_global": [
+                      180.0,
+                      160.0,
+                      250.0,
+                      220.0
+                    ],
+                    "bbox_xyxy_canvas": [
+                      180.0,
+                      160.0,
+                      250.0,
+                      220.0
+                    ],
+                    "candidate_id": "candidate_0002",
+                    "label": "car",
+                    "score": 0.98,
+                    "bbox_xyxy_render": [
+                      152.11267605633802,
+                      145.32751091703057,
+                      211.26760563380282,
+                      199.82532751091702
+                    ]
+                  },
+                  "C": {
+                    "index": 2,
+                    "bbox_xyxy_global": [
+                      420.0,
+                      300.0,
+                      480.0,
+                      370.0
+                    ],
+                    "bbox_xyxy_canvas": [
+                      420.0,
+                      300.0,
+                      480.0,
+                      370.0
+                    ],
+                    "candidate_id": "candidate_0003",
+                    "label": "car",
+                    "score": 0.97,
+                    "bbox_xyxy_render": [
+                      354.92957746478874,
+                      272.48908296943233,
+                      405.6338028169014,
+                      336.0698689956332
+                    ]
+                  }
+                },
+                "visual_metadata": {
+                  "canvas_kind": "CANDIDATE_CANVAS",
+                  "canvas_bbox_xyxy_global": [
+                    0,
+                    0,
+                    568,
+                    458
+                  ],
+                  "canvas_size": [
+                    568,
+                    458
+                  ],
+                  "source_canvas_size": [
+                    568,
+                    458
+                  ],
+                  "resize_scale": 1.0,
+                  "original_image_size": [
+                    640,
+                    480
+                  ],
+                  "coordinate_transform": {
+                    "origin_global": [
+                      0,
+                      0
+                    ],
+                    "canvas_to_global": "translate_then_scale",
+                    "scale_xy": [
+                      1.0,
+                      1.0
+                    ]
+                  },
+                  "candidate_mapping": {
+                    "A": {
+                      "index": 0,
+                      "bbox_xyxy_global": [
+                        40.0,
+                        40.0,
+                        100.0,
+                        100.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        40.0,
+                        40.0,
+                        100.0,
+                        100.0
+                      ],
+                      "candidate_id": "candidate_0001",
+                      "label": "car",
+                      "score": 0.99,
+                      "bbox_xyxy_render": [
+                        33.80281690140845,
+                        36.33187772925764,
+                        84.50704225352112,
+                        90.82969432314411
+                      ]
+                    },
+                    "B": {
+                      "index": 1,
+                      "bbox_xyxy_global": [
+                        180.0,
+                        160.0,
+                        250.0,
+                        220.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        180.0,
+                        160.0,
+                        250.0,
+                        220.0
+                      ],
+                      "candidate_id": "candidate_0002",
+                      "label": "car",
+                      "score": 0.98,
+                      "bbox_xyxy_render": [
+                        152.11267605633802,
+                        145.32751091703057,
+                        211.26760563380282,
+                        199.82532751091702
+                      ]
+                    },
+                    "C": {
+                      "index": 2,
+                      "bbox_xyxy_global": [
+                        420.0,
+                        300.0,
+                        480.0,
+                        370.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        420.0,
+                        300.0,
+                        480.0,
+                        370.0
+                      ],
+                      "candidate_id": "candidate_0003",
+                      "label": "car",
+                      "score": 0.97,
+                      "bbox_xyxy_render": [
+                        354.92957746478874,
+                        272.48908296943233,
+                        405.6338028169014,
+                        336.0698689956332
+                      ]
+                    }
+                  },
+                  "role_mapping": {
+                    "candidates": [
+                      {
+                        "id": "A",
+                        "index": 0,
+                        "bbox_xyxy_global": [
+                          40.0,
+                          40.0,
+                          100.0,
+                          100.0
+                        ],
+                        "bbox_xyxy_canvas": [
+                          40.0,
+                          40.0,
+                          100.0,
+                          100.0
+                        ],
+                        "candidate_id": "candidate_0001",
+                        "label": "car",
+                        "score": 0.99
+                      },
+                      {
+                        "id": "B",
+                        "index": 1,
+                        "bbox_xyxy_global": [
+                          180.0,
+                          160.0,
+                          250.0,
+                          220.0
+                        ],
+                        "bbox_xyxy_canvas": [
+                          180.0,
+                          160.0,
+                          250.0,
+                          220.0
+                        ],
+                        "candidate_id": "candidate_0002",
+                        "label": "car",
+                        "score": 0.98
+                      },
+                      {
+                        "id": "C",
+                        "index": 2,
+                        "bbox_xyxy_global": [
+                          420.0,
+                          300.0,
+                          480.0,
+                          370.0
+                        ],
+                        "bbox_xyxy_canvas": [
+                          420.0,
+                          300.0,
+                          480.0,
+                          370.0
+                        ],
+                        "candidate_id": "candidate_0003",
+                        "label": "car",
+                        "score": 0.97
+                      }
+                    ]
+                  },
+                  "source_roles": [
+                    "CANDIDATES",
+                    "SCOPE"
+                  ],
+                  "source_types": [
+                    "EntitySet",
+                    "ImageRef"
+                  ],
+                  "visual_roles": [
+                    "CANDIDATE_CANVAS",
+                    "SCOPE"
+                  ],
+                  "visual_paths": [
+                    "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00156.png",
+                    "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\audit_scene.png"
+                  ],
+                  "selection_render_sizes": [
+                    [
+                      480,
+                      416
+                    ],
+                    [
+                      512,
+                      384
+                    ]
+                  ],
+                  "selection_render_scale_xy": [
+                    [
+                      0.8450704225352113,
+                      0.9082969432314411
+                    ],
+                    [
+                      0.8,
+                      0.8
+                    ]
+                  ],
+                  "total_render_pixels": 396288,
+                  "context_overview": true
+                },
+                "decisions": [
+                  {
+                    "label": "A",
+                    "decision": "MATCH",
+                    "scores": {
+                      "MATCH": 1.0,
+                      "NO_MATCH": -1.0,
+                      "UNCERTAIN": -1.0
+                    },
+                    "provider": "qwen3_vl:semantic",
+                    "cache_reused": true,
+                    "reasoning_text": "AUDIT MOCK reasoning",
+                    "latency_ms": {},
+                    "purpose": "locate_attribute_verification",
+                    "suffix": "\n\nCandidate A semantic verdict:"
+                  },
+                  {
+                    "label": "B",
+                    "decision": "NO_MATCH",
+                    "scores": {
+                      "MATCH": -1.0,
+                      "NO_MATCH": 1.0,
+                      "UNCERTAIN": -1.0
+                    },
+                    "provider": "qwen3_vl:semantic",
+                    "cache_reused": true,
+                    "reasoning_text": "AUDIT MOCK reasoning",
+                    "latency_ms": {},
+                    "purpose": "locate_attribute_verification",
+                    "suffix": "\n\nCandidate B semantic verdict:"
+                  },
+                  {
+                    "label": "C",
+                    "decision": "MATCH",
+                    "scores": {
+                      "MATCH": 1.0,
+                      "NO_MATCH": -1.0,
+                      "UNCERTAIN": -1.0
+                    },
+                    "provider": "qwen3_vl:semantic",
+                    "cache_reused": true,
+                    "reasoning_text": "AUDIT MOCK reasoning",
+                    "latency_ms": {},
+                    "purpose": "locate_attribute_verification",
+                    "suffix": "\n\nCandidate C semantic verdict:"
+                  }
+                ]
+              }
+            ],
+            "candidate_pool_complete": true,
+            "budget": {
+              "batch_size": 8,
+              "max_candidates": 64,
+              "max_pixels": 409600,
+              "effective_max_pixels": 409600
+            },
+            "inference_serial": true
+          },
+          "final_candidate_count": 2,
+          "candidate_pool_complete": true,
+          "final_resolution_status": "MULTIPLE_VALID"
+        }
+      },
+      {
+        "node_id": "n2",
+        "operator": "SELECT",
+        "input_refs": {
+          "candidates": "$n1"
+        },
+        "resolved_input_types": {
+          "candidates": "EntitySet"
+        },
+        "provider": "qwen3_vl_semantic_finite",
+        "latency_ms": 71.75849998020567,
+        "execution_mode": null,
+        "semantic_method": null,
+        "cache_reused": null,
+        "final_choice_fusion": false,
+        "fusion_reason": "operator_not_eligible",
+        "output_runtime_type": "SelectResult",
+        "output_summary": {
+          "type": "SelectResult",
+          "status": "OK",
+          "method": "qwen3_vl_semantic_finite",
+          "reason": null,
+          "confidence": null,
+          "selected": {
+            "type": "EntitySet",
+            "count": 1,
+            "detections": [
+              {
+                "label": "car",
+                "score": 0.99,
+                "bbox": [
+                  40.0,
+                  40.0,
+                  100.0,
+                  100.0
+                ]
+              }
+            ],
+            "provenance": {
+              "query": "cars parked beside the road",
+              "selection_type": "MULTI",
+              "purpose": "select_semantic",
+              "semantic_selection_ancestor": true,
+              "all_candidate_ids": [
+                "candidate_0001",
+                "candidate_0003"
+              ],
+              "selected_candidate_ids": [
+                "candidate_0001"
+              ],
+              "uncertain_candidate_ids": [],
+              "unseen_candidate_ids": [],
+              "batches": [
+                {
+                  "candidate_ids": [
+                    "candidate_0001",
+                    "candidate_0003"
+                  ],
+                  "mapping": {
+                    "A": {
+                      "index": 0,
+                      "bbox_xyxy_global": [
+                        40.0,
+                        40.0,
+                        100.0,
+                        100.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        40.0,
+                        40.0,
+                        100.0,
+                        100.0
+                      ],
+                      "candidate_id": "candidate_0001",
+                      "label": "car",
+                      "score": 0.99,
+                      "bbox_xyxy_render": [
+                        33.80281690140845,
+                        36.33187772925764,
+                        84.50704225352112,
+                        90.82969432314411
+                      ]
+                    },
+                    "B": {
+                      "index": 1,
+                      "bbox_xyxy_global": [
+                        420.0,
+                        300.0,
+                        480.0,
+                        370.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        420.0,
+                        300.0,
+                        480.0,
+                        370.0
+                      ],
+                      "candidate_id": "candidate_0003",
+                      "label": "car",
+                      "score": 0.97,
+                      "bbox_xyxy_render": [
+                        354.92957746478874,
+                        272.48908296943233,
+                        405.6338028169014,
+                        336.0698689956332
+                      ]
+                    }
+                  },
+                  "visual_metadata": {
+                    "canvas_kind": "CANDIDATE_CANVAS",
+                    "canvas_bbox_xyxy_global": [
+                      0,
+                      0,
+                      568,
+                      458
+                    ],
+                    "canvas_size": [
+                      568,
+                      458
+                    ],
+                    "source_canvas_size": [
+                      568,
+                      458
+                    ],
+                    "resize_scale": 1.0,
+                    "original_image_size": [
+                      640,
+                      480
+                    ],
+                    "coordinate_transform": {
+                      "origin_global": [
+                        0,
+                        0
+                      ],
+                      "canvas_to_global": "translate_then_scale",
+                      "scale_xy": [
+                        1.0,
+                        1.0
+                      ]
+                    },
+                    "candidate_mapping": {
+                      "A": {
+                        "index": 0,
+                        "bbox_xyxy_global": [
+                          40.0,
+                          40.0,
+                          100.0,
+                          100.0
+                        ],
+                        "bbox_xyxy_canvas": [
+                          40.0,
+                          40.0,
+                          100.0,
+                          100.0
+                        ],
+                        "candidate_id": "candidate_0001",
+                        "label": "car",
+                        "score": 0.99,
+                        "bbox_xyxy_render": [
+                          33.80281690140845,
+                          36.33187772925764,
+                          84.50704225352112,
+                          90.82969432314411
+                        ]
+                      },
+                      "B": {
+                        "index": 1,
+                        "bbox_xyxy_global": [
+                          420.0,
+                          300.0,
+                          480.0,
+                          370.0
+                        ],
+                        "bbox_xyxy_canvas": [
+                          420.0,
+                          300.0,
+                          480.0,
+                          370.0
+                        ],
+                        "candidate_id": "candidate_0003",
+                        "label": "car",
+                        "score": 0.97,
+                        "bbox_xyxy_render": [
+                          354.92957746478874,
+                          272.48908296943233,
+                          405.6338028169014,
+                          336.0698689956332
+                        ]
+                      }
+                    },
+                    "role_mapping": {
+                      "candidates": [
+                        {
+                          "id": "A",
+                          "index": 0,
+                          "bbox_xyxy_global": [
+                            40.0,
+                            40.0,
+                            100.0,
+                            100.0
+                          ],
+                          "bbox_xyxy_canvas": [
+                            40.0,
+                            40.0,
+                            100.0,
+                            100.0
+                          ],
+                          "candidate_id": "candidate_0001",
+                          "label": "car",
+                          "score": 0.99
+                        },
+                        {
+                          "id": "B",
+                          "index": 1,
+                          "bbox_xyxy_global": [
+                            420.0,
+                            300.0,
+                            480.0,
+                            370.0
+                          ],
+                          "bbox_xyxy_canvas": [
+                            420.0,
+                            300.0,
+                            480.0,
+                            370.0
+                          ],
+                          "candidate_id": "candidate_0003",
+                          "label": "car",
+                          "score": 0.97
+                        }
+                      ]
+                    },
+                    "source_roles": [
+                      "CANDIDATES",
+                      "SCOPE"
+                    ],
+                    "source_types": [
+                      "EntitySet",
+                      "Region"
+                    ],
+                    "visual_roles": [
+                      "CANDIDATE_CANVAS",
+                      "SCOPE"
+                    ],
+                    "visual_paths": [
+                      "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00159.png",
+                      "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00160.png"
+                    ],
+                    "selection_render_sizes": [
+                      [
+                        480,
+                        416
+                      ],
+                      [
+                        512,
+                        384
+                      ]
+                    ],
+                    "selection_render_scale_xy": [
+                      [
+                        0.8450704225352113,
+                        0.9082969432314411
+                      ],
+                      [
+                        0.8,
+                        0.8
+                      ]
+                    ],
+                    "total_render_pixels": 396288,
+                    "context_overview": true
+                  },
+                  "decisions": [
+                    {
+                      "label": "A",
+                      "decision": "MATCH",
+                      "scores": {
+                        "MATCH": 1.0,
+                        "NO_MATCH": -1.0,
+                        "UNCERTAIN": -1.0
+                      },
+                      "provider": "qwen3_vl:semantic",
+                      "cache_reused": true,
+                      "reasoning_text": "AUDIT MOCK reasoning",
+                      "latency_ms": {},
+                      "purpose": "select_semantic",
+                      "suffix": "\n\nCandidate A semantic verdict:"
+                    },
+                    {
+                      "label": "B",
+                      "decision": "NO_MATCH",
+                      "scores": {
+                        "MATCH": -1.0,
+                        "NO_MATCH": 1.0,
+                        "UNCERTAIN": -1.0
+                      },
+                      "provider": "qwen3_vl:semantic",
+                      "cache_reused": true,
+                      "reasoning_text": "AUDIT MOCK reasoning",
+                      "latency_ms": {},
+                      "purpose": "select_semantic",
+                      "suffix": "\n\nCandidate B semantic verdict:"
+                    }
+                  ]
+                }
+              ],
+              "candidate_pool_complete": true,
+              "budget": {
+                "batch_size": 8,
+                "max_candidates": 64,
+                "max_pixels": 409600,
+                "effective_max_pixels": 409600
+              },
+              "inference_serial": true
+            }
+          },
+          "provenance": {
+            "query": "cars parked beside the road",
+            "selection_type": "MULTI",
+            "purpose": "select_semantic",
+            "semantic_selection_ancestor": true,
+            "all_candidate_ids": [
+              "candidate_0001",
+              "candidate_0003"
+            ],
+            "selected_candidate_ids": [
+              "candidate_0001"
+            ],
+            "uncertain_candidate_ids": [],
+            "unseen_candidate_ids": [],
+            "batches": [
+              {
+                "candidate_ids": [
+                  "candidate_0001",
+                  "candidate_0003"
+                ],
+                "mapping": {
+                  "A": {
+                    "index": 0,
+                    "bbox_xyxy_global": [
+                      40.0,
+                      40.0,
+                      100.0,
+                      100.0
+                    ],
+                    "bbox_xyxy_canvas": [
+                      40.0,
+                      40.0,
+                      100.0,
+                      100.0
+                    ],
+                    "candidate_id": "candidate_0001",
+                    "label": "car",
+                    "score": 0.99,
+                    "bbox_xyxy_render": [
+                      33.80281690140845,
+                      36.33187772925764,
+                      84.50704225352112,
+                      90.82969432314411
+                    ]
+                  },
+                  "B": {
+                    "index": 1,
+                    "bbox_xyxy_global": [
+                      420.0,
+                      300.0,
+                      480.0,
+                      370.0
+                    ],
+                    "bbox_xyxy_canvas": [
+                      420.0,
+                      300.0,
+                      480.0,
+                      370.0
+                    ],
+                    "candidate_id": "candidate_0003",
+                    "label": "car",
+                    "score": 0.97,
+                    "bbox_xyxy_render": [
+                      354.92957746478874,
+                      272.48908296943233,
+                      405.6338028169014,
+                      336.0698689956332
+                    ]
+                  }
+                },
+                "visual_metadata": {
+                  "canvas_kind": "CANDIDATE_CANVAS",
+                  "canvas_bbox_xyxy_global": [
+                    0,
+                    0,
+                    568,
+                    458
+                  ],
+                  "canvas_size": [
+                    568,
+                    458
+                  ],
+                  "source_canvas_size": [
+                    568,
+                    458
+                  ],
+                  "resize_scale": 1.0,
+                  "original_image_size": [
+                    640,
+                    480
+                  ],
+                  "coordinate_transform": {
+                    "origin_global": [
+                      0,
+                      0
+                    ],
+                    "canvas_to_global": "translate_then_scale",
+                    "scale_xy": [
+                      1.0,
+                      1.0
+                    ]
+                  },
+                  "candidate_mapping": {
+                    "A": {
+                      "index": 0,
+                      "bbox_xyxy_global": [
+                        40.0,
+                        40.0,
+                        100.0,
+                        100.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        40.0,
+                        40.0,
+                        100.0,
+                        100.0
+                      ],
+                      "candidate_id": "candidate_0001",
+                      "label": "car",
+                      "score": 0.99,
+                      "bbox_xyxy_render": [
+                        33.80281690140845,
+                        36.33187772925764,
+                        84.50704225352112,
+                        90.82969432314411
+                      ]
+                    },
+                    "B": {
+                      "index": 1,
+                      "bbox_xyxy_global": [
+                        420.0,
+                        300.0,
+                        480.0,
+                        370.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        420.0,
+                        300.0,
+                        480.0,
+                        370.0
+                      ],
+                      "candidate_id": "candidate_0003",
+                      "label": "car",
+                      "score": 0.97,
+                      "bbox_xyxy_render": [
+                        354.92957746478874,
+                        272.48908296943233,
+                        405.6338028169014,
+                        336.0698689956332
+                      ]
+                    }
+                  },
+                  "role_mapping": {
+                    "candidates": [
+                      {
+                        "id": "A",
+                        "index": 0,
+                        "bbox_xyxy_global": [
+                          40.0,
+                          40.0,
+                          100.0,
+                          100.0
+                        ],
+                        "bbox_xyxy_canvas": [
+                          40.0,
+                          40.0,
+                          100.0,
+                          100.0
+                        ],
+                        "candidate_id": "candidate_0001",
+                        "label": "car",
+                        "score": 0.99
+                      },
+                      {
+                        "id": "B",
+                        "index": 1,
+                        "bbox_xyxy_global": [
+                          420.0,
+                          300.0,
+                          480.0,
+                          370.0
+                        ],
+                        "bbox_xyxy_canvas": [
+                          420.0,
+                          300.0,
+                          480.0,
+                          370.0
+                        ],
+                        "candidate_id": "candidate_0003",
+                        "label": "car",
+                        "score": 0.97
+                      }
+                    ]
+                  },
+                  "source_roles": [
+                    "CANDIDATES",
+                    "SCOPE"
+                  ],
+                  "source_types": [
+                    "EntitySet",
+                    "Region"
+                  ],
+                  "visual_roles": [
+                    "CANDIDATE_CANVAS",
+                    "SCOPE"
+                  ],
+                  "visual_paths": [
+                    "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00159.png",
+                    "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00160.png"
+                  ],
+                  "selection_render_sizes": [
+                    [
+                      480,
+                      416
+                    ],
+                    [
+                      512,
+                      384
+                    ]
+                  ],
+                  "selection_render_scale_xy": [
+                    [
+                      0.8450704225352113,
+                      0.9082969432314411
+                    ],
+                    [
+                      0.8,
+                      0.8
+                    ]
+                  ],
+                  "total_render_pixels": 396288,
+                  "context_overview": true
+                },
+                "decisions": [
+                  {
+                    "label": "A",
+                    "decision": "MATCH",
+                    "scores": {
+                      "MATCH": 1.0,
+                      "NO_MATCH": -1.0,
+                      "UNCERTAIN": -1.0
+                    },
+                    "provider": "qwen3_vl:semantic",
+                    "cache_reused": true,
+                    "reasoning_text": "AUDIT MOCK reasoning",
+                    "latency_ms": {},
+                    "purpose": "select_semantic",
+                    "suffix": "\n\nCandidate A semantic verdict:"
+                  },
+                  {
+                    "label": "B",
+                    "decision": "NO_MATCH",
+                    "scores": {
+                      "MATCH": -1.0,
+                      "NO_MATCH": 1.0,
+                      "UNCERTAIN": -1.0
+                    },
+                    "provider": "qwen3_vl:semantic",
+                    "cache_reused": true,
+                    "reasoning_text": "AUDIT MOCK reasoning",
+                    "latency_ms": {},
+                    "purpose": "select_semantic",
+                    "suffix": "\n\nCandidate B semantic verdict:"
+                  }
+                ]
+              }
+            ],
+            "candidate_pool_complete": true,
+            "budget": {
+              "batch_size": 8,
+              "max_candidates": 64,
+              "max_pixels": 409600,
+              "effective_max_pixels": 409600
+            },
+            "inference_serial": true
+          }
+        },
+        "telemetry": {
+          "query": "cars parked beside the road",
+          "selection_type": "MULTI",
+          "purpose": "select_semantic",
+          "semantic_selection_ancestor": true,
+          "all_candidate_ids": [
+            "candidate_0001",
+            "candidate_0003"
+          ],
+          "selected_candidate_ids": [
+            "candidate_0001"
+          ],
+          "uncertain_candidate_ids": [],
+          "unseen_candidate_ids": [],
+          "batches": [
+            {
+              "candidate_ids": [
+                "candidate_0001",
+                "candidate_0003"
+              ],
+              "mapping": {
+                "A": {
+                  "index": 0,
+                  "bbox_xyxy_global": [
+                    40.0,
+                    40.0,
+                    100.0,
+                    100.0
+                  ],
+                  "bbox_xyxy_canvas": [
+                    40.0,
+                    40.0,
+                    100.0,
+                    100.0
+                  ],
+                  "candidate_id": "candidate_0001",
+                  "label": "car",
+                  "score": 0.99,
+                  "bbox_xyxy_render": [
+                    33.80281690140845,
+                    36.33187772925764,
+                    84.50704225352112,
+                    90.82969432314411
+                  ]
+                },
+                "B": {
+                  "index": 1,
+                  "bbox_xyxy_global": [
+                    420.0,
+                    300.0,
+                    480.0,
+                    370.0
+                  ],
+                  "bbox_xyxy_canvas": [
+                    420.0,
+                    300.0,
+                    480.0,
+                    370.0
+                  ],
+                  "candidate_id": "candidate_0003",
+                  "label": "car",
+                  "score": 0.97,
+                  "bbox_xyxy_render": [
+                    354.92957746478874,
+                    272.48908296943233,
+                    405.6338028169014,
+                    336.0698689956332
+                  ]
+                }
+              },
+              "visual_metadata": {
+                "canvas_kind": "CANDIDATE_CANVAS",
+                "canvas_bbox_xyxy_global": [
+                  0,
+                  0,
+                  568,
+                  458
+                ],
+                "canvas_size": [
+                  568,
+                  458
+                ],
+                "source_canvas_size": [
+                  568,
+                  458
+                ],
+                "resize_scale": 1.0,
+                "original_image_size": [
+                  640,
+                  480
+                ],
+                "coordinate_transform": {
+                  "origin_global": [
+                    0,
+                    0
+                  ],
+                  "canvas_to_global": "translate_then_scale",
+                  "scale_xy": [
+                    1.0,
+                    1.0
+                  ]
+                },
+                "candidate_mapping": {
+                  "A": {
+                    "index": 0,
+                    "bbox_xyxy_global": [
+                      40.0,
+                      40.0,
+                      100.0,
+                      100.0
+                    ],
+                    "bbox_xyxy_canvas": [
+                      40.0,
+                      40.0,
+                      100.0,
+                      100.0
+                    ],
+                    "candidate_id": "candidate_0001",
+                    "label": "car",
+                    "score": 0.99,
+                    "bbox_xyxy_render": [
+                      33.80281690140845,
+                      36.33187772925764,
+                      84.50704225352112,
+                      90.82969432314411
+                    ]
+                  },
+                  "B": {
+                    "index": 1,
+                    "bbox_xyxy_global": [
+                      420.0,
+                      300.0,
+                      480.0,
+                      370.0
+                    ],
+                    "bbox_xyxy_canvas": [
+                      420.0,
+                      300.0,
+                      480.0,
+                      370.0
+                    ],
+                    "candidate_id": "candidate_0003",
+                    "label": "car",
+                    "score": 0.97,
+                    "bbox_xyxy_render": [
+                      354.92957746478874,
+                      272.48908296943233,
+                      405.6338028169014,
+                      336.0698689956332
+                    ]
+                  }
+                },
+                "role_mapping": {
+                  "candidates": [
+                    {
+                      "id": "A",
+                      "index": 0,
+                      "bbox_xyxy_global": [
+                        40.0,
+                        40.0,
+                        100.0,
+                        100.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        40.0,
+                        40.0,
+                        100.0,
+                        100.0
+                      ],
+                      "candidate_id": "candidate_0001",
+                      "label": "car",
+                      "score": 0.99
+                    },
+                    {
+                      "id": "B",
+                      "index": 1,
+                      "bbox_xyxy_global": [
+                        420.0,
+                        300.0,
+                        480.0,
+                        370.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        420.0,
+                        300.0,
+                        480.0,
+                        370.0
+                      ],
+                      "candidate_id": "candidate_0003",
+                      "label": "car",
+                      "score": 0.97
+                    }
+                  ]
+                },
+                "source_roles": [
+                  "CANDIDATES",
+                  "SCOPE"
+                ],
+                "source_types": [
+                  "EntitySet",
+                  "Region"
+                ],
+                "visual_roles": [
+                  "CANDIDATE_CANVAS",
+                  "SCOPE"
+                ],
+                "visual_paths": [
+                  "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00159.png",
+                  "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00160.png"
+                ],
+                "selection_render_sizes": [
+                  [
+                    480,
+                    416
+                  ],
+                  [
+                    512,
+                    384
+                  ]
+                ],
+                "selection_render_scale_xy": [
+                  [
+                    0.8450704225352113,
+                    0.9082969432314411
+                  ],
+                  [
+                    0.8,
+                    0.8
+                  ]
+                ],
+                "total_render_pixels": 396288,
+                "context_overview": true
+              },
+              "decisions": [
+                {
+                  "label": "A",
+                  "decision": "MATCH",
+                  "scores": {
+                    "MATCH": 1.0,
+                    "NO_MATCH": -1.0,
+                    "UNCERTAIN": -1.0
+                  },
+                  "provider": "qwen3_vl:semantic",
+                  "cache_reused": true,
+                  "reasoning_text": "AUDIT MOCK reasoning",
+                  "latency_ms": {},
+                  "purpose": "select_semantic",
+                  "suffix": "\n\nCandidate A semantic verdict:"
+                },
+                {
+                  "label": "B",
+                  "decision": "NO_MATCH",
+                  "scores": {
+                    "MATCH": -1.0,
+                    "NO_MATCH": 1.0,
+                    "UNCERTAIN": -1.0
+                  },
+                  "provider": "qwen3_vl:semantic",
+                  "cache_reused": true,
+                  "reasoning_text": "AUDIT MOCK reasoning",
+                  "latency_ms": {},
+                  "purpose": "select_semantic",
+                  "suffix": "\n\nCandidate B semantic verdict:"
+                }
+              ]
+            }
+          ],
+          "candidate_pool_complete": true,
+          "budget": {
+            "batch_size": 8,
+            "max_candidates": 64,
+            "max_pixels": 409600,
+            "effective_max_pixels": 409600
+          },
+          "inference_serial": true
+        },
+        "error": null,
+        "fallback": null,
+        "trace_metadata": {}
+      },
+      {
+        "node_id": "n3",
+        "operator": "COUNT",
+        "input_refs": {
+          "entities": "$n2"
+        },
+        "resolved_input_types": {
+          "entities": "SelectResult"
+        },
+        "provider": "cardinality",
+        "latency_ms": 0.055599986808374524,
+        "execution_mode": null,
+        "semantic_method": null,
+        "cache_reused": null,
+        "final_choice_fusion": false,
+        "fusion_reason": "operator_not_eligible",
+        "output_runtime_type": "ScalarInt",
+        "output_summary": {
+          "type": "ScalarInt",
+          "value": 1,
+          "provenance": {
+            "provider": "cardinality",
+            "source": "EntitySet"
+          }
+        },
+        "telemetry": {
+          "provider": "cardinality",
+          "source": "EntitySet"
+        },
+        "error": null,
+        "fallback": null,
+        "trace_metadata": {}
+      }
+    ],
+    "final_sources": [
+      "$n3"
+    ],
+    "final_question": "",
+    "choice_provider": null,
+    "choice_result": null,
+    "result": null,
+    "routing_ms": null,
+    "planner_ms": null,
+    "retriever_ms": null,
+    "detector_ms": null,
+    "counting_ms": null,
+    "semantic_vlm_ms": null,
+    "route_vlm_ms": null,
+    "choice_ms": null,
+    "postprocess_ms": null,
+    "e2e_ms": null,
+    "stage_status": {},
+    "activated_providers": [],
+    "activated_model_roles": [],
+    "activated_parameter_counts": {},
+    "resource_metrics": {},
+    "ttft_ms": "NOT_AVAILABLE_FROM_BACKEND",
+    "visual_tokens": "NOT_AVAILABLE_FROM_BACKEND",
+    "output_tokens": "NOT_AVAILABLE_FROM_BACKEND",
+    "decode_tokens_per_s": "NOT_AVAILABLE_FROM_BACKEND",
+    "telemetry": {
+      "executor": {
+        "schema_version": "1.0",
+        "scope": "taskgraph_executor",
+        "success": true,
+        "error_type": null,
+        "started_at_utc": "2026-10-09T18:54:57.861950+00:00",
+        "ended_at_utc": "2026-10-09T18:54:57.993978+00:00",
+        "timing_ms": {
+          "e2e": 130.0831999978982
+        },
+        "resources": {
+          "cpu_rss_start_mb": 553.348,
+          "cpu_rss_end_mb": 553.559,
+          "peak_cpu_rss_mb": 553.559,
+          "peak_gpu_allocated_mb": 0.0,
+          "peak_gpu_reserved_mb": 0.0
+        },
+        "measurement": {
+          "clock": "time.perf_counter",
+          "cpu_rss": "process RSS sampled during scope",
+          "cpu_sample_interval_ms": 50.0,
+          "cuda_synchronized": true,
+          "cuda_peak_stats_reset": false
+        },
+        "activated_providers": [
+          "cardinality",
+          "fake_lae",
+          "qwen3_vl_semantic_finite"
+        ],
+        "fallback_count": 0,
+        "node_count": 3
+      }
+    }
+  },
+  "result": {
+    "type": "ScalarInt",
+    "value": 1,
+    "provenance": {
+      "provider": "cardinality",
+      "source": "EntitySet"
+    }
+  },
+  "calls": [
+    {
+      "prompt": "Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n[image_2] role: SCOPE\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B/C\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: car; score: 0.99; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: car; score: 0.98; bbox_xyxy_global: [180.0, 160.0, 250.0, 220.0]\n- index: 2; label: car; score: 0.97; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\nQuestion:\nTask: SELECT_SEM_MULTI\nSelect ONLY from the existing marked candidates. Do not detect new objects, return new boxes, or replace candidates. Background landmarks in the query are context, not additional detection tasks.\nComplete query (verbatim):\nMatch the category and ALL intrinsic attributes of this LOCATE TargetSpec: {\"attributes\": {\"color\": \"red\"}, \"category\": \"car\"}\n\nEvaluate every marked candidate against the complete query. For the candidate being verified, use MATCH, NO_MATCH, or UNCERTAIN. Empty sets are valid; uncertainty is not a negative.\n\nVerify ONLY candidate A against the complete query. Reason from the supplied context; a three-state finite decision follows.",
+      "visuals": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00157.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00158.png"
+      ],
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "image",
+              "image": "<IMAGE>"
+            },
+            {
+              "type": "image",
+              "image": "<IMAGE>"
+            },
+            {
+              "type": "text",
+              "text": "Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n[image_2] role: SCOPE\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B/C\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: car; score: 0.99; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: car; score: 0.98; bbox_xyxy_global: [180.0, 160.0, 250.0, 220.0]\n- index: 2; label: car; score: 0.97; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\nQuestion:\nTask: SELECT_SEM_MULTI\nSelect ONLY from the existing marked candidates. Do not detect new objects, return new boxes, or replace candidates. Background landmarks in the query are context, not additional detection tasks.\nComplete query (verbatim):\nMatch the category and ALL intrinsic attributes of this LOCATE TargetSpec: {\"attributes\": {\"color\": \"red\"}, \"category\": \"car\"}\n\nEvaluate every marked candidate against the complete query. For the candidate being verified, use MATCH, NO_MATCH, or UNCERTAIN. Empty sets are valid; uncertainty is not a negative.\n\nVerify ONLY candidate A against the complete query. Reason from the supplied context; a three-state finite decision follows."
+            }
+          ]
+        }
+      ],
+      "terminal_candidates": [
+        "MATCH",
+        "NO_MATCH",
+        "UNCERTAIN"
+      ],
+      "suffixes": [
+        "\n\nCandidate A semantic verdict:"
+      ],
+      "purpose": null,
+      "mock": true,
+      "chat_template_rendered": "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|><|vision_start|><|image_pad|><|vision_end|>Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n[image_2] role: SCOPE\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B/C\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: car; score: 0.99; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: car; score: 0.98; bbox_xyxy_global: [180.0, 160.0, 250.0, 220.0]\n- index: 2; label: car; score: 0.97; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\nQuestion:\nTask: SELECT_SEM_MULTI\nSelect ONLY from the existing marked candidates. Do not detect new objects, return new boxes, or replace candidates. Background landmarks in the query are context, not additional detection tasks.\nComplete query (verbatim):\nMatch the category and ALL intrinsic attributes of this LOCATE TargetSpec: {\"attributes\": {\"color\": \"red\"}, \"category\": \"car\"}\n\nEvaluate every marked candidate against the complete query. For the candidate being verified, use MATCH, NO_MATCH, or UNCERTAIN. Empty sets are valid; uncertainty is not a negative.\n\nVerify ONLY candidate A against the complete query. Reason from the supplied context; a three-state finite decision follows.<|im_end|>\n<|im_start|>assistant\n"
+    },
+    {
+      "prompt": "Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n[image_2] role: SCOPE\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B/C\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: car; score: 0.99; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: car; score: 0.98; bbox_xyxy_global: [180.0, 160.0, 250.0, 220.0]\n- index: 2; label: car; score: 0.97; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\nQuestion:\nTask: SELECT_SEM_MULTI\nSelect ONLY from the existing marked candidates. Do not detect new objects, return new boxes, or replace candidates. Background landmarks in the query are context, not additional detection tasks.\nComplete query (verbatim):\nMatch the category and ALL intrinsic attributes of this LOCATE TargetSpec: {\"attributes\": {\"color\": \"red\"}, \"category\": \"car\"}\n\nEvaluate every marked candidate against the complete query. For the candidate being verified, use MATCH, NO_MATCH, or UNCERTAIN. Empty sets are valid; uncertainty is not a negative.\n\nVerify ONLY candidate B against the complete query. Reason from the supplied context; a three-state finite decision follows.",
+      "visuals": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00157.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00158.png"
+      ],
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "image",
+              "image": "<IMAGE>"
+            },
+            {
+              "type": "image",
+              "image": "<IMAGE>"
+            },
+            {
+              "type": "text",
+              "text": "Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n[image_2] role: SCOPE\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B/C\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: car; score: 0.99; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: car; score: 0.98; bbox_xyxy_global: [180.0, 160.0, 250.0, 220.0]\n- index: 2; label: car; score: 0.97; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\nQuestion:\nTask: SELECT_SEM_MULTI\nSelect ONLY from the existing marked candidates. Do not detect new objects, return new boxes, or replace candidates. Background landmarks in the query are context, not additional detection tasks.\nComplete query (verbatim):\nMatch the category and ALL intrinsic attributes of this LOCATE TargetSpec: {\"attributes\": {\"color\": \"red\"}, \"category\": \"car\"}\n\nEvaluate every marked candidate against the complete query. For the candidate being verified, use MATCH, NO_MATCH, or UNCERTAIN. Empty sets are valid; uncertainty is not a negative.\n\nVerify ONLY candidate B against the complete query. Reason from the supplied context; a three-state finite decision follows."
+            }
+          ]
+        }
+      ],
+      "terminal_candidates": [
+        "MATCH",
+        "NO_MATCH",
+        "UNCERTAIN"
+      ],
+      "suffixes": [
+        "\n\nCandidate B semantic verdict:"
+      ],
+      "purpose": null,
+      "mock": true,
+      "chat_template_rendered": "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|><|vision_start|><|image_pad|><|vision_end|>Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n[image_2] role: SCOPE\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B/C\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: car; score: 0.99; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: car; score: 0.98; bbox_xyxy_global: [180.0, 160.0, 250.0, 220.0]\n- index: 2; label: car; score: 0.97; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\nQuestion:\nTask: SELECT_SEM_MULTI\nSelect ONLY from the existing marked candidates. Do not detect new objects, return new boxes, or replace candidates. Background landmarks in the query are context, not additional detection tasks.\nComplete query (verbatim):\nMatch the category and ALL intrinsic attributes of this LOCATE TargetSpec: {\"attributes\": {\"color\": \"red\"}, \"category\": \"car\"}\n\nEvaluate every marked candidate against the complete query. For the candidate being verified, use MATCH, NO_MATCH, or UNCERTAIN. Empty sets are valid; uncertainty is not a negative.\n\nVerify ONLY candidate B against the complete query. Reason from the supplied context; a three-state finite decision follows.<|im_end|>\n<|im_start|>assistant\n"
+    },
+    {
+      "prompt": "Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n[image_2] role: SCOPE\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B/C\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: car; score: 0.99; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: car; score: 0.98; bbox_xyxy_global: [180.0, 160.0, 250.0, 220.0]\n- index: 2; label: car; score: 0.97; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\nQuestion:\nTask: SELECT_SEM_MULTI\nSelect ONLY from the existing marked candidates. Do not detect new objects, return new boxes, or replace candidates. Background landmarks in the query are context, not additional detection tasks.\nComplete query (verbatim):\nMatch the category and ALL intrinsic attributes of this LOCATE TargetSpec: {\"attributes\": {\"color\": \"red\"}, \"category\": \"car\"}\n\nEvaluate every marked candidate against the complete query. For the candidate being verified, use MATCH, NO_MATCH, or UNCERTAIN. Empty sets are valid; uncertainty is not a negative.\n\nVerify ONLY candidate C against the complete query. Reason from the supplied context; a three-state finite decision follows.",
+      "visuals": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00157.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00158.png"
+      ],
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "image",
+              "image": "<IMAGE>"
+            },
+            {
+              "type": "image",
+              "image": "<IMAGE>"
+            },
+            {
+              "type": "text",
+              "text": "Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n[image_2] role: SCOPE\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B/C\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: car; score: 0.99; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: car; score: 0.98; bbox_xyxy_global: [180.0, 160.0, 250.0, 220.0]\n- index: 2; label: car; score: 0.97; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\nQuestion:\nTask: SELECT_SEM_MULTI\nSelect ONLY from the existing marked candidates. Do not detect new objects, return new boxes, or replace candidates. Background landmarks in the query are context, not additional detection tasks.\nComplete query (verbatim):\nMatch the category and ALL intrinsic attributes of this LOCATE TargetSpec: {\"attributes\": {\"color\": \"red\"}, \"category\": \"car\"}\n\nEvaluate every marked candidate against the complete query. For the candidate being verified, use MATCH, NO_MATCH, or UNCERTAIN. Empty sets are valid; uncertainty is not a negative.\n\nVerify ONLY candidate C against the complete query. Reason from the supplied context; a three-state finite decision follows."
+            }
+          ]
+        }
+      ],
+      "terminal_candidates": [
+        "MATCH",
+        "NO_MATCH",
+        "UNCERTAIN"
+      ],
+      "suffixes": [
+        "\n\nCandidate C semantic verdict:"
+      ],
+      "purpose": null,
+      "mock": true,
+      "chat_template_rendered": "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|><|vision_start|><|image_pad|><|vision_end|>Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n[image_2] role: SCOPE\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B/C\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: car; score: 0.99; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: car; score: 0.98; bbox_xyxy_global: [180.0, 160.0, 250.0, 220.0]\n- index: 2; label: car; score: 0.97; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\nQuestion:\nTask: SELECT_SEM_MULTI\nSelect ONLY from the existing marked candidates. Do not detect new objects, return new boxes, or replace candidates. Background landmarks in the query are context, not additional detection tasks.\nComplete query (verbatim):\nMatch the category and ALL intrinsic attributes of this LOCATE TargetSpec: {\"attributes\": {\"color\": \"red\"}, \"category\": \"car\"}\n\nEvaluate every marked candidate against the complete query. For the candidate being verified, use MATCH, NO_MATCH, or UNCERTAIN. Empty sets are valid; uncertainty is not a negative.\n\nVerify ONLY candidate C against the complete query. Reason from the supplied context; a three-state finite decision follows.<|im_end|>\n<|im_start|>assistant\n"
+    },
+    {
+      "prompt": "Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n[image_2] role: SCOPE\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: car; score: 0.99; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: car; score: 0.97; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\n[SCOPE]\ntype: Region\nbbox_xyxy_global: [0.0, 0.0, 640.0, 480.0]\n\nQuestion:\nTask: SELECT_SEM_MULTI\nSelect ONLY from the existing marked candidates. Do not detect new objects, return new boxes, or replace candidates. Background landmarks in the query are context, not additional detection tasks.\nComplete query (verbatim):\ncars parked beside the road\n\nEvaluate every marked candidate against the complete query. For the candidate being verified, use MATCH, NO_MATCH, or UNCERTAIN. Empty sets are valid; uncertainty is not a negative.\n\nVerify ONLY candidate A against the complete query. Reason from the supplied context; a three-state finite decision follows.",
+      "visuals": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00161.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00162.png"
+      ],
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "image",
+              "image": "<IMAGE>"
+            },
+            {
+              "type": "image",
+              "image": "<IMAGE>"
+            },
+            {
+              "type": "text",
+              "text": "Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n[image_2] role: SCOPE\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: car; score: 0.99; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: car; score: 0.97; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\n[SCOPE]\ntype: Region\nbbox_xyxy_global: [0.0, 0.0, 640.0, 480.0]\n\nQuestion:\nTask: SELECT_SEM_MULTI\nSelect ONLY from the existing marked candidates. Do not detect new objects, return new boxes, or replace candidates. Background landmarks in the query are context, not additional detection tasks.\nComplete query (verbatim):\ncars parked beside the road\n\nEvaluate every marked candidate against the complete query. For the candidate being verified, use MATCH, NO_MATCH, or UNCERTAIN. Empty sets are valid; uncertainty is not a negative.\n\nVerify ONLY candidate A against the complete query. Reason from the supplied context; a three-state finite decision follows."
+            }
+          ]
+        }
+      ],
+      "terminal_candidates": [
+        "MATCH",
+        "NO_MATCH",
+        "UNCERTAIN"
+      ],
+      "suffixes": [
+        "\n\nCandidate A semantic verdict:"
+      ],
+      "purpose": null,
+      "mock": true,
+      "chat_template_rendered": "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|><|vision_start|><|image_pad|><|vision_end|>Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n[image_2] role: SCOPE\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: car; score: 0.99; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: car; score: 0.97; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\n[SCOPE]\ntype: Region\nbbox_xyxy_global: [0.0, 0.0, 640.0, 480.0]\n\nQuestion:\nTask: SELECT_SEM_MULTI\nSelect ONLY from the existing marked candidates. Do not detect new objects, return new boxes, or replace candidates. Background landmarks in the query are context, not additional detection tasks.\nComplete query (verbatim):\ncars parked beside the road\n\nEvaluate every marked candidate against the complete query. For the candidate being verified, use MATCH, NO_MATCH, or UNCERTAIN. Empty sets are valid; uncertainty is not a negative.\n\nVerify ONLY candidate A against the complete query. Reason from the supplied context; a three-state finite decision follows.<|im_end|>\n<|im_start|>assistant\n"
+    },
+    {
+      "prompt": "Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n[image_2] role: SCOPE\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: car; score: 0.99; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: car; score: 0.97; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\n[SCOPE]\ntype: Region\nbbox_xyxy_global: [0.0, 0.0, 640.0, 480.0]\n\nQuestion:\nTask: SELECT_SEM_MULTI\nSelect ONLY from the existing marked candidates. Do not detect new objects, return new boxes, or replace candidates. Background landmarks in the query are context, not additional detection tasks.\nComplete query (verbatim):\ncars parked beside the road\n\nEvaluate every marked candidate against the complete query. For the candidate being verified, use MATCH, NO_MATCH, or UNCERTAIN. Empty sets are valid; uncertainty is not a negative.\n\nVerify ONLY candidate B against the complete query. Reason from the supplied context; a three-state finite decision follows.",
+      "visuals": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00161.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00162.png"
+      ],
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "image",
+              "image": "<IMAGE>"
+            },
+            {
+              "type": "image",
+              "image": "<IMAGE>"
+            },
+            {
+              "type": "text",
+              "text": "Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n[image_2] role: SCOPE\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: car; score: 0.99; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: car; score: 0.97; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\n[SCOPE]\ntype: Region\nbbox_xyxy_global: [0.0, 0.0, 640.0, 480.0]\n\nQuestion:\nTask: SELECT_SEM_MULTI\nSelect ONLY from the existing marked candidates. Do not detect new objects, return new boxes, or replace candidates. Background landmarks in the query are context, not additional detection tasks.\nComplete query (verbatim):\ncars parked beside the road\n\nEvaluate every marked candidate against the complete query. For the candidate being verified, use MATCH, NO_MATCH, or UNCERTAIN. Empty sets are valid; uncertainty is not a negative.\n\nVerify ONLY candidate B against the complete query. Reason from the supplied context; a three-state finite decision follows."
+            }
+          ]
+        }
+      ],
+      "terminal_candidates": [
+        "MATCH",
+        "NO_MATCH",
+        "UNCERTAIN"
+      ],
+      "suffixes": [
+        "\n\nCandidate B semantic verdict:"
+      ],
+      "purpose": null,
+      "mock": true,
+      "chat_template_rendered": "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|><|vision_start|><|image_pad|><|vision_end|>Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n[image_2] role: SCOPE\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: car; score: 0.99; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: car; score: 0.97; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\n[SCOPE]\ntype: Region\nbbox_xyxy_global: [0.0, 0.0, 640.0, 480.0]\n\nQuestion:\nTask: SELECT_SEM_MULTI\nSelect ONLY from the existing marked candidates. Do not detect new objects, return new boxes, or replace candidates. Background landmarks in the query are context, not additional detection tasks.\nComplete query (verbatim):\ncars parked beside the road\n\nEvaluate every marked candidate against the complete query. For the candidate being verified, use MATCH, NO_MATCH, or UNCERTAIN. Empty sets are valid; uncertainty is not a negative.\n\nVerify ONLY candidate B against the complete query. Reason from the supplied context; a three-state finite decision follows.<|im_end|>\n<|im_start|>assistant\n"
+    }
+  ],
+  "provenance": "actual GraphExecutor/InputComposer/Qwen wrapper; mocked detector/model predictions; no accuracy claim"
+}

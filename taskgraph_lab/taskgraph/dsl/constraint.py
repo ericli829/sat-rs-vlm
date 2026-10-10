@@ -218,16 +218,12 @@ class CanonicalDSLPrefixGrammar:
         ref = _reference_pattern(references)
         ref_or_null = rf"(?:{ref}|null)"
         ref_or_list = rf"(?:{ref}|{_reference_list(ref)})"
-        count_ref = _reference_pattern(
-            self._count_compact_references(references, state.output_map)
-        )
+        count_ref = _reference_pattern(self._count_compact_references(references, state.output_map))
         number4 = rf"\[{JSON_NUMBER},{JSON_NUMBER},{JSON_NUMBER},{JSON_NUMBER}\]"
         image_size = rf"\[{POSITIVE_INTEGER},{POSITIVE_INTEGER}\]"
         position = _enum_pattern(RegionPosition)
         relation = _enum_pattern(SpatialRelation)
-        rank_order = _alternation(
-            (SortOrder.ASCENDING.value, SortOrder.DESCENDING.value)
-        )
+        rank_order = _alternation((SortOrder.ASCENDING.value, SortOrder.DESCENDING.value))
         ordinal_order = _alternation(
             (
                 SortOrder.TOP_TO_BOTTOM.value,
@@ -260,6 +256,7 @@ class CanonicalDSLPrefixGrammar:
             rf"FIND_MARKER\({ref},{JSON_STRING}(?:,{JSON_STRING})?\)",
             rf"LOCATE\({ref},{TARGET}\)",
             rf"SELECT_REL\({ref},{ref_or_null},{relation}\)",
+            rf"SELECT_SEM\({ref},{ref_or_null},{JSON_STRING},(?:SINGLE|MULTI)\)",
             rf"SELECT_RANK\({ref},{ref_or_null},{RANK_CRITERION_JSON},{POSITIVE_INTEGER},{rank_order}\)",
             rf"SELECT_ORD\({ref},{ref_or_null},{POSITIVE_INTEGER},{ordinal_order}\)",
             rf"SELECT_EXTREME\({ref},{ref_or_null},{extreme}\)",

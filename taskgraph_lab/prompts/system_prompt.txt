@@ -503,8 +503,22 @@ SELECT
 Inputs:
   candidates: EntitySet | Region | RegionSet
   reference optional: Entity | EntitySet | Region
+  scope optional: ImageRef | Region
 Params:
   one of:
+
+SEMANTIC:
+{
+  "mode": "SEMANTIC",
+  "query": "the building with trees to its right and grass below",
+  "selection_type": "SINGLE|MULTI"
+}
+The query is a nonempty string of at most 2048 characters, stored in params,
+never inputs. Retain the complete natural-language condition. Select only from
+existing candidates; background trees, grass and roads do not require extra
+LOCATE nodes. SINGLE may be NONE, ambiguous or unresolved; MULTI may be empty.
+LOCATE's target cannot absorb a downstream query. Optional scope is supported
+in JSON; the SELECT_SEM DSL surface explicitly rejects a separate scope role.
 
 RELATION:
 {

@@ -491,6 +491,18 @@ def test_lae_worker_applies_nms_before_final_top_k(tmp_path: Path) -> None:
         inference_detector,
     )
     assert response["bbox_scores"] == [0.9, 0.7]
+    assert response["metadata"]["candidate_count_before_top_k"] == 2
+    assert response["metadata"]["candidate_pool_complete"] is True
+    args.top_k = 1
+    limited = _predict(
+        object(),
+        {"id": "limited", "image": str(image_path), "target_phrase": "airplanes"},
+        args,
+        inference_detector,
+    )
+    assert limited["bbox_scores"] == [0.9]
+    assert limited["metadata"]["candidate_truncated"] is True
+    assert limited["metadata"]["candidate_pool_complete"] is False
 
 
 def test_lae_worker_proposal_path_is_compatible_with_python39_zip(

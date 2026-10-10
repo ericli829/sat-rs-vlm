@@ -1,0 +1,9 @@
+warning: in the working copy of 'configs/taskgraph/taskgraph_qwen_test.jsonl', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/competition_protocol_v2.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/sat_rs_vlm/competition/protocol_v2/adapter.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/sat_rs_vlm/competition/protocol_v2/server.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/sat_rs_vlm/competition/protocol_v2/service.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/sat_rs_vlm/taskgraph/executor.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/sat_rs_vlm/taskgraph/runtime.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/unit/competition/test_protocol_v2.py', LF will be replaced by CRLF the next time Git touches it
+PASS: git diff --check (CRLF allowed)

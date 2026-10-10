@@ -347,7 +347,18 @@ class LAEDinoSidecarProvider:
                 "inference_query_mode": self.inference_query_mode,
                 "source_revision": self.source_revision,
                 "client_validation": validation,
+                "candidate_truncated": bool(metadata.get("candidate_truncated"))
+                or len(response.get("bbox_list", [])) > len(boxes)
+                or (
+                    "candidate_truncated" not in metadata
+                    and len(boxes) >= int(self.config.get("top_k", 100))
+                ),
             }
+        )
+        metadata["candidate_pool_complete"] = (
+            metadata.get("candidate_pool_complete") is not False
+            and not metadata["candidate_truncated"]
+            and validation["invalid_count"] == 0
         )
         return ProposalResult(
             boxes_xyxy=boxes,

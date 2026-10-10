@@ -100,6 +100,12 @@ def _compile_select(node: Mapping[str, Any]) -> str:
     reference = _ref(inputs["reference"]) if "reference" in inputs else "null"
     prefix = [_ref(inputs["candidates"]), reference]
     mode = params["mode"]
+    if mode == "SEMANTIC":
+        if "scope" in inputs:
+            raise DSLCompileError(
+                "SELECT_SEM DSL does not encode scope; use TaskGraph JSON explicitly"
+            )
+        return _call("SELECT_SEM", *prefix, _string(params["query"]), str(params["selection_type"]))
     if mode == "RELATION":
         return _call("SELECT_REL", *prefix, str(params["relation"]))
     if mode == "RANK":
@@ -111,9 +117,7 @@ def _compile_select(node: Mapping[str, Any]) -> str:
             str(params["order"]),
         )
     if mode == "ORDINAL":
-        return _call(
-            "SELECT_ORD", *prefix, str(params["index"]), str(params["order"])
-        )
+        return _call("SELECT_ORD", *prefix, str(params["index"]), str(params["order"]))
     if mode == "EXTREME":
         return _call("SELECT_EXTREME", *prefix, str(params["direction"]))
     if mode == "SUBREGION":
@@ -203,9 +207,7 @@ def _compile_node(node: Mapping[str, Any], outputs: dict[str, set[RuntimeType]])
             _literal(params["choices"]),
         )
     if op is OperatorName.MATCH_CHOICE:
-        return _call(
-            "MATCH_CHOICE", _ref(inputs["value"]), _literal(params["choices"])
-        )
+        return _call("MATCH_CHOICE", _ref(inputs["value"]), _literal(params["choices"]))
     raise DSLCompileError(f"unsupported canonical operator {op.value}")
 
 
@@ -251,9 +253,7 @@ def compile_taskgraph_to_dsl(graph: PlannerTarget | Mapping[str, Any]) -> str:
         outputs[f"${node['id']}"] = set(OUTPUT_TYPES[op])
     final = canonical["final"]
     source = (
-        final["sources"][0]
-        if len(final["sources"]) == 1
-        else _reference_list(final["sources"])
+        final["sources"][0] if len(final["sources"]) == 1 else _reference_list(final["sources"])
     )
     if "question" in final:
         lines.append(

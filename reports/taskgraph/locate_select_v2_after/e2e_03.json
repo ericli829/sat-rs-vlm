@@ -1,0 +1,2130 @@
+{
+  "name": "03 DINO -> SELECT_SEM SINGLE",
+  "graph": {
+    "version": "taskgraph-v1.1",
+    "question": "Full final question is intentionally not used by LOCATE",
+    "question_type": "FREE_FORM",
+    "choices": null,
+    "inputs": {
+      "image0": {
+        "type": "image",
+        "uri_or_key": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\audit_scene.png"
+      }
+    },
+    "intent": "OTHER",
+    "nodes": [
+      {
+        "id": "n1",
+        "op": "LOCATE",
+        "inputs": {
+          "image": "$image0"
+        },
+        "params": {
+          "target": {
+            "category": "building",
+            "attributes": {}
+          }
+        }
+      },
+      {
+        "id": "n2",
+        "op": "SELECT",
+        "inputs": {
+          "candidates": "$n1"
+        },
+        "params": {
+          "mode": "SEMANTIC",
+          "query": "the building with trees to its right and grass below",
+          "relation": null,
+          "criterion": null,
+          "rank": null,
+          "order": null,
+          "index": null,
+          "direction": null,
+          "subregion": null,
+          "margin": null,
+          "overlap_iou_threshold": null,
+          "selection_type": "SINGLE"
+        }
+      }
+    ],
+    "final": {
+      "sources": [
+        "$n2"
+      ],
+      "question": "Where is the selected building?",
+      "answer_type": "CHOICE_SINGLE"
+    }
+  },
+  "dsl": "INTENT(OTHER)\nn1=LOCATE($image0,T(\"building\"))\nn2=SELECT_SEM($n1,null,\"the building with trees to its right and grass below\",SINGLE)\nFINAL_QUESTION($n2,CHOICE_SINGLE,\"Where is the selected building?\")",
+  "trace": {
+    "sample_id": "audit-3",
+    "execution_mode": "TASKGRAPH_UHR",
+    "input_image_paths": [],
+    "intermediate_output_paths": [],
+    "taskgraph": {
+      "version": "taskgraph-v1.1",
+      "question": "Full final question is intentionally not used by LOCATE",
+      "question_type": "FREE_FORM",
+      "choices": null,
+      "inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\audit_scene.png"
+        }
+      },
+      "intent": "OTHER",
+      "nodes": [
+        {
+          "id": "n1",
+          "op": "LOCATE",
+          "inputs": {
+            "image": "$image0"
+          },
+          "params": {
+            "target": {
+              "category": "building",
+              "attributes": {}
+            }
+          }
+        },
+        {
+          "id": "n2",
+          "op": "SELECT",
+          "inputs": {
+            "candidates": "$n1"
+          },
+          "params": {
+            "mode": "SEMANTIC",
+            "query": "the building with trees to its right and grass below",
+            "relation": null,
+            "criterion": null,
+            "rank": null,
+            "order": null,
+            "index": null,
+            "direction": null,
+            "subregion": null,
+            "margin": null,
+            "overlap_iou_threshold": null,
+            "selection_type": "SINGLE"
+          }
+        }
+      ],
+      "final": {
+        "sources": [
+          "$n2"
+        ],
+        "question": "Where is the selected building?",
+        "answer_type": "CHOICE_SINGLE"
+      }
+    },
+    "nodes": [
+      {
+        "node_id": "n1",
+        "operator": "LOCATE",
+        "input_refs": {
+          "image": "$image0"
+        },
+        "resolved_input_types": {
+          "image": "ImageRef"
+        },
+        "provider": "fake_lae",
+        "latency_ms": 0.17629997455514967,
+        "execution_mode": null,
+        "semantic_method": null,
+        "cache_reused": null,
+        "final_choice_fusion": false,
+        "fusion_reason": "operator_not_eligible",
+        "output_runtime_type": "EntitySet",
+        "output_summary": {
+          "type": "EntitySet",
+          "count": 3,
+          "detections": [
+            {
+              "label": "building",
+              "score": 0.99,
+              "bbox": [
+                40.0,
+                40.0,
+                100.0,
+                100.0
+              ]
+            },
+            {
+              "label": "building",
+              "score": 0.98,
+              "bbox": [
+                180.0,
+                160.0,
+                250.0,
+                220.0
+              ]
+            },
+            {
+              "label": "building",
+              "score": 0.97,
+              "bbox": [
+                420.0,
+                300.0,
+                480.0,
+                370.0
+              ]
+            }
+          ],
+          "provenance": {
+            "provider": "fake_lae",
+            "candidate_pool_complete": true,
+            "resolution_status": "MULTIPLE_VALID",
+            "locate_route": {
+              "requirement": "SET_REQUIRED",
+              "route_reason": "set_consumer",
+              "consumer_paths": [
+                "n1 -> n2:SELECT.candidates"
+              ],
+              "planned_backend": "LAE_DINO",
+              "actual_backend": "LAE_DINO",
+              "fallback_reason": null,
+              "target_spec": {
+                "category": "building",
+                "attributes": {}
+              },
+              "stage": "detector",
+              "category_candidate_count": 3,
+              "detector_provider": "fake_lae",
+              "activated_provider": "fake_lae",
+              "detector_metadata": {
+                "deterministic": true
+              },
+              "attributes": {
+                "policy": "not_required",
+                "verified": true
+              },
+              "final_candidate_count": 3,
+              "candidate_pool_complete": true,
+              "final_resolution_status": "MULTIPLE_VALID"
+            },
+            "category_candidate_count": 3,
+            "candidate_count_after_refinement": 3,
+            "original_target_spec": {
+              "category": "building",
+              "attributes": {}
+            },
+            "proposal_query": "building . house . home . residential",
+            "attribute_trace": {
+              "policy": "not_required",
+              "verified": true
+            }
+          }
+        },
+        "telemetry": {
+          "provider": "fake_lae",
+          "candidate_pool_complete": true,
+          "resolution_status": "MULTIPLE_VALID",
+          "locate_route": {
+            "requirement": "SET_REQUIRED",
+            "route_reason": "set_consumer",
+            "consumer_paths": [
+              "n1 -> n2:SELECT.candidates"
+            ],
+            "planned_backend": "LAE_DINO",
+            "actual_backend": "LAE_DINO",
+            "fallback_reason": null,
+            "target_spec": {
+              "category": "building",
+              "attributes": {}
+            },
+            "stage": "detector",
+            "category_candidate_count": 3,
+            "detector_provider": "fake_lae",
+            "activated_provider": "fake_lae",
+            "detector_metadata": {
+              "deterministic": true
+            },
+            "attributes": {
+              "policy": "not_required",
+              "verified": true
+            },
+            "final_candidate_count": 3,
+            "candidate_pool_complete": true,
+            "final_resolution_status": "MULTIPLE_VALID"
+          },
+          "category_candidate_count": 3,
+          "candidate_count_after_refinement": 3,
+          "original_target_spec": {
+            "category": "building",
+            "attributes": {}
+          },
+          "proposal_query": "building . house . home . residential",
+          "attribute_trace": {
+            "policy": "not_required",
+            "verified": true
+          }
+        },
+        "error": null,
+        "fallback": null,
+        "trace_metadata": {
+          "requirement": "SET_REQUIRED",
+          "route_reason": "set_consumer",
+          "consumer_paths": [
+            "n1 -> n2:SELECT.candidates"
+          ],
+          "planned_backend": "LAE_DINO",
+          "actual_backend": "LAE_DINO",
+          "fallback_reason": null,
+          "target_spec": {
+            "category": "building",
+            "attributes": {}
+          },
+          "stage": "detector",
+          "category_candidate_count": 3,
+          "detector_provider": "fake_lae",
+          "activated_provider": "fake_lae",
+          "detector_metadata": {
+            "deterministic": true
+          },
+          "attributes": {
+            "policy": "not_required",
+            "verified": true
+          },
+          "final_candidate_count": 3,
+          "candidate_pool_complete": true,
+          "final_resolution_status": "MULTIPLE_VALID"
+        }
+      },
+      {
+        "node_id": "n2",
+        "operator": "SELECT",
+        "input_refs": {
+          "candidates": "$n1"
+        },
+        "resolved_input_types": {
+          "candidates": "EntitySet"
+        },
+        "provider": "qwen3_vl_semantic_finite",
+        "latency_ms": 72.883599990746,
+        "execution_mode": null,
+        "semantic_method": null,
+        "cache_reused": null,
+        "final_choice_fusion": false,
+        "fusion_reason": "operator_not_eligible",
+        "output_runtime_type": "SelectResult",
+        "output_summary": {
+          "type": "SelectResult",
+          "status": "OK",
+          "method": "qwen3_vl_semantic_finite",
+          "reason": null,
+          "confidence": null,
+          "selected": {
+            "type": "EntitySet",
+            "count": 1,
+            "detections": [
+              {
+                "label": "building",
+                "score": 0.98,
+                "bbox": [
+                  180.0,
+                  160.0,
+                  250.0,
+                  220.0
+                ]
+              }
+            ],
+            "provenance": {
+              "query": "the building with trees to its right and grass below",
+              "selection_type": "SINGLE",
+              "purpose": "select_semantic",
+              "semantic_selection_ancestor": true,
+              "all_candidate_ids": [
+                "candidate_0001",
+                "candidate_0002",
+                "candidate_0003"
+              ],
+              "selected_candidate_ids": [
+                "candidate_0002"
+              ],
+              "uncertain_candidate_ids": [],
+              "unseen_candidate_ids": [],
+              "batches": [
+                {
+                  "candidate_ids": [
+                    "candidate_0001",
+                    "candidate_0002",
+                    "candidate_0003"
+                  ],
+                  "mapping": {
+                    "A": {
+                      "index": 0,
+                      "bbox_xyxy_global": [
+                        40.0,
+                        40.0,
+                        100.0,
+                        100.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        40.0,
+                        40.0,
+                        100.0,
+                        100.0
+                      ],
+                      "candidate_id": "candidate_0001",
+                      "label": "building",
+                      "score": 0.99,
+                      "bbox_xyxy_render": [
+                        33.80281690140845,
+                        36.33187772925764,
+                        84.50704225352112,
+                        90.82969432314411
+                      ]
+                    },
+                    "B": {
+                      "index": 1,
+                      "bbox_xyxy_global": [
+                        180.0,
+                        160.0,
+                        250.0,
+                        220.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        180.0,
+                        160.0,
+                        250.0,
+                        220.0
+                      ],
+                      "candidate_id": "candidate_0002",
+                      "label": "building",
+                      "score": 0.98,
+                      "bbox_xyxy_render": [
+                        152.11267605633802,
+                        145.32751091703057,
+                        211.26760563380282,
+                        199.82532751091702
+                      ]
+                    },
+                    "C": {
+                      "index": 2,
+                      "bbox_xyxy_global": [
+                        420.0,
+                        300.0,
+                        480.0,
+                        370.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        420.0,
+                        300.0,
+                        480.0,
+                        370.0
+                      ],
+                      "candidate_id": "candidate_0003",
+                      "label": "building",
+                      "score": 0.97,
+                      "bbox_xyxy_render": [
+                        354.92957746478874,
+                        272.48908296943233,
+                        405.6338028169014,
+                        336.0698689956332
+                      ]
+                    }
+                  },
+                  "visual_metadata": {
+                    "canvas_kind": "CANDIDATE_CANVAS",
+                    "canvas_bbox_xyxy_global": [
+                      0,
+                      0,
+                      568,
+                      458
+                    ],
+                    "canvas_size": [
+                      568,
+                      458
+                    ],
+                    "source_canvas_size": [
+                      568,
+                      458
+                    ],
+                    "resize_scale": 1.0,
+                    "original_image_size": [
+                      640,
+                      480
+                    ],
+                    "coordinate_transform": {
+                      "origin_global": [
+                        0,
+                        0
+                      ],
+                      "canvas_to_global": "translate_then_scale",
+                      "scale_xy": [
+                        1.0,
+                        1.0
+                      ]
+                    },
+                    "candidate_mapping": {
+                      "A": {
+                        "index": 0,
+                        "bbox_xyxy_global": [
+                          40.0,
+                          40.0,
+                          100.0,
+                          100.0
+                        ],
+                        "bbox_xyxy_canvas": [
+                          40.0,
+                          40.0,
+                          100.0,
+                          100.0
+                        ],
+                        "candidate_id": "candidate_0001",
+                        "label": "building",
+                        "score": 0.99,
+                        "bbox_xyxy_render": [
+                          33.80281690140845,
+                          36.33187772925764,
+                          84.50704225352112,
+                          90.82969432314411
+                        ]
+                      },
+                      "B": {
+                        "index": 1,
+                        "bbox_xyxy_global": [
+                          180.0,
+                          160.0,
+                          250.0,
+                          220.0
+                        ],
+                        "bbox_xyxy_canvas": [
+                          180.0,
+                          160.0,
+                          250.0,
+                          220.0
+                        ],
+                        "candidate_id": "candidate_0002",
+                        "label": "building",
+                        "score": 0.98,
+                        "bbox_xyxy_render": [
+                          152.11267605633802,
+                          145.32751091703057,
+                          211.26760563380282,
+                          199.82532751091702
+                        ]
+                      },
+                      "C": {
+                        "index": 2,
+                        "bbox_xyxy_global": [
+                          420.0,
+                          300.0,
+                          480.0,
+                          370.0
+                        ],
+                        "bbox_xyxy_canvas": [
+                          420.0,
+                          300.0,
+                          480.0,
+                          370.0
+                        ],
+                        "candidate_id": "candidate_0003",
+                        "label": "building",
+                        "score": 0.97,
+                        "bbox_xyxy_render": [
+                          354.92957746478874,
+                          272.48908296943233,
+                          405.6338028169014,
+                          336.0698689956332
+                        ]
+                      }
+                    },
+                    "role_mapping": {
+                      "candidates": [
+                        {
+                          "id": "A",
+                          "index": 0,
+                          "bbox_xyxy_global": [
+                            40.0,
+                            40.0,
+                            100.0,
+                            100.0
+                          ],
+                          "bbox_xyxy_canvas": [
+                            40.0,
+                            40.0,
+                            100.0,
+                            100.0
+                          ],
+                          "candidate_id": "candidate_0001",
+                          "label": "building",
+                          "score": 0.99
+                        },
+                        {
+                          "id": "B",
+                          "index": 1,
+                          "bbox_xyxy_global": [
+                            180.0,
+                            160.0,
+                            250.0,
+                            220.0
+                          ],
+                          "bbox_xyxy_canvas": [
+                            180.0,
+                            160.0,
+                            250.0,
+                            220.0
+                          ],
+                          "candidate_id": "candidate_0002",
+                          "label": "building",
+                          "score": 0.98
+                        },
+                        {
+                          "id": "C",
+                          "index": 2,
+                          "bbox_xyxy_global": [
+                            420.0,
+                            300.0,
+                            480.0,
+                            370.0
+                          ],
+                          "bbox_xyxy_canvas": [
+                            420.0,
+                            300.0,
+                            480.0,
+                            370.0
+                          ],
+                          "candidate_id": "candidate_0003",
+                          "label": "building",
+                          "score": 0.97
+                        }
+                      ]
+                    },
+                    "source_roles": [
+                      "CANDIDATES",
+                      "SCOPE"
+                    ],
+                    "source_types": [
+                      "EntitySet",
+                      "Region"
+                    ],
+                    "visual_roles": [
+                      "CANDIDATE_CANVAS",
+                      "SCOPE"
+                    ],
+                    "visual_paths": [
+                      "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00152.png",
+                      "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00153.png"
+                    ],
+                    "selection_render_sizes": [
+                      [
+                        480,
+                        416
+                      ],
+                      [
+                        512,
+                        384
+                      ]
+                    ],
+                    "selection_render_scale_xy": [
+                      [
+                        0.8450704225352113,
+                        0.9082969432314411
+                      ],
+                      [
+                        0.8,
+                        0.8
+                      ]
+                    ],
+                    "total_render_pixels": 396288,
+                    "context_overview": true
+                  },
+                  "decisions": [
+                    {
+                      "label": null,
+                      "decision": "B",
+                      "scores": {
+                        "A": -1.0,
+                        "B": 1.0,
+                        "C": -1.0,
+                        "NONE": -1.0,
+                        "AMBIGUOUS": -1.0,
+                        "UNRESOLVED": -1.0
+                      },
+                      "provider": "qwen3_vl:semantic",
+                      "cache_reused": true,
+                      "reasoning_text": "AUDIT MOCK reasoning",
+                      "latency_ms": {},
+                      "purpose": "select_semantic",
+                      "suffix": "\n\nSELECT_SEM_SINGLE decision:"
+                    }
+                  ]
+                }
+              ],
+              "candidate_pool_complete": true,
+              "budget": {
+                "batch_size": 8,
+                "max_candidates": 64,
+                "max_pixels": 409600,
+                "effective_max_pixels": 409600
+              },
+              "inference_serial": true
+            }
+          },
+          "provenance": {
+            "query": "the building with trees to its right and grass below",
+            "selection_type": "SINGLE",
+            "purpose": "select_semantic",
+            "semantic_selection_ancestor": true,
+            "all_candidate_ids": [
+              "candidate_0001",
+              "candidate_0002",
+              "candidate_0003"
+            ],
+            "selected_candidate_ids": [
+              "candidate_0002"
+            ],
+            "uncertain_candidate_ids": [],
+            "unseen_candidate_ids": [],
+            "batches": [
+              {
+                "candidate_ids": [
+                  "candidate_0001",
+                  "candidate_0002",
+                  "candidate_0003"
+                ],
+                "mapping": {
+                  "A": {
+                    "index": 0,
+                    "bbox_xyxy_global": [
+                      40.0,
+                      40.0,
+                      100.0,
+                      100.0
+                    ],
+                    "bbox_xyxy_canvas": [
+                      40.0,
+                      40.0,
+                      100.0,
+                      100.0
+                    ],
+                    "candidate_id": "candidate_0001",
+                    "label": "building",
+                    "score": 0.99,
+                    "bbox_xyxy_render": [
+                      33.80281690140845,
+                      36.33187772925764,
+                      84.50704225352112,
+                      90.82969432314411
+                    ]
+                  },
+                  "B": {
+                    "index": 1,
+                    "bbox_xyxy_global": [
+                      180.0,
+                      160.0,
+                      250.0,
+                      220.0
+                    ],
+                    "bbox_xyxy_canvas": [
+                      180.0,
+                      160.0,
+                      250.0,
+                      220.0
+                    ],
+                    "candidate_id": "candidate_0002",
+                    "label": "building",
+                    "score": 0.98,
+                    "bbox_xyxy_render": [
+                      152.11267605633802,
+                      145.32751091703057,
+                      211.26760563380282,
+                      199.82532751091702
+                    ]
+                  },
+                  "C": {
+                    "index": 2,
+                    "bbox_xyxy_global": [
+                      420.0,
+                      300.0,
+                      480.0,
+                      370.0
+                    ],
+                    "bbox_xyxy_canvas": [
+                      420.0,
+                      300.0,
+                      480.0,
+                      370.0
+                    ],
+                    "candidate_id": "candidate_0003",
+                    "label": "building",
+                    "score": 0.97,
+                    "bbox_xyxy_render": [
+                      354.92957746478874,
+                      272.48908296943233,
+                      405.6338028169014,
+                      336.0698689956332
+                    ]
+                  }
+                },
+                "visual_metadata": {
+                  "canvas_kind": "CANDIDATE_CANVAS",
+                  "canvas_bbox_xyxy_global": [
+                    0,
+                    0,
+                    568,
+                    458
+                  ],
+                  "canvas_size": [
+                    568,
+                    458
+                  ],
+                  "source_canvas_size": [
+                    568,
+                    458
+                  ],
+                  "resize_scale": 1.0,
+                  "original_image_size": [
+                    640,
+                    480
+                  ],
+                  "coordinate_transform": {
+                    "origin_global": [
+                      0,
+                      0
+                    ],
+                    "canvas_to_global": "translate_then_scale",
+                    "scale_xy": [
+                      1.0,
+                      1.0
+                    ]
+                  },
+                  "candidate_mapping": {
+                    "A": {
+                      "index": 0,
+                      "bbox_xyxy_global": [
+                        40.0,
+                        40.0,
+                        100.0,
+                        100.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        40.0,
+                        40.0,
+                        100.0,
+                        100.0
+                      ],
+                      "candidate_id": "candidate_0001",
+                      "label": "building",
+                      "score": 0.99,
+                      "bbox_xyxy_render": [
+                        33.80281690140845,
+                        36.33187772925764,
+                        84.50704225352112,
+                        90.82969432314411
+                      ]
+                    },
+                    "B": {
+                      "index": 1,
+                      "bbox_xyxy_global": [
+                        180.0,
+                        160.0,
+                        250.0,
+                        220.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        180.0,
+                        160.0,
+                        250.0,
+                        220.0
+                      ],
+                      "candidate_id": "candidate_0002",
+                      "label": "building",
+                      "score": 0.98,
+                      "bbox_xyxy_render": [
+                        152.11267605633802,
+                        145.32751091703057,
+                        211.26760563380282,
+                        199.82532751091702
+                      ]
+                    },
+                    "C": {
+                      "index": 2,
+                      "bbox_xyxy_global": [
+                        420.0,
+                        300.0,
+                        480.0,
+                        370.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        420.0,
+                        300.0,
+                        480.0,
+                        370.0
+                      ],
+                      "candidate_id": "candidate_0003",
+                      "label": "building",
+                      "score": 0.97,
+                      "bbox_xyxy_render": [
+                        354.92957746478874,
+                        272.48908296943233,
+                        405.6338028169014,
+                        336.0698689956332
+                      ]
+                    }
+                  },
+                  "role_mapping": {
+                    "candidates": [
+                      {
+                        "id": "A",
+                        "index": 0,
+                        "bbox_xyxy_global": [
+                          40.0,
+                          40.0,
+                          100.0,
+                          100.0
+                        ],
+                        "bbox_xyxy_canvas": [
+                          40.0,
+                          40.0,
+                          100.0,
+                          100.0
+                        ],
+                        "candidate_id": "candidate_0001",
+                        "label": "building",
+                        "score": 0.99
+                      },
+                      {
+                        "id": "B",
+                        "index": 1,
+                        "bbox_xyxy_global": [
+                          180.0,
+                          160.0,
+                          250.0,
+                          220.0
+                        ],
+                        "bbox_xyxy_canvas": [
+                          180.0,
+                          160.0,
+                          250.0,
+                          220.0
+                        ],
+                        "candidate_id": "candidate_0002",
+                        "label": "building",
+                        "score": 0.98
+                      },
+                      {
+                        "id": "C",
+                        "index": 2,
+                        "bbox_xyxy_global": [
+                          420.0,
+                          300.0,
+                          480.0,
+                          370.0
+                        ],
+                        "bbox_xyxy_canvas": [
+                          420.0,
+                          300.0,
+                          480.0,
+                          370.0
+                        ],
+                        "candidate_id": "candidate_0003",
+                        "label": "building",
+                        "score": 0.97
+                      }
+                    ]
+                  },
+                  "source_roles": [
+                    "CANDIDATES",
+                    "SCOPE"
+                  ],
+                  "source_types": [
+                    "EntitySet",
+                    "Region"
+                  ],
+                  "visual_roles": [
+                    "CANDIDATE_CANVAS",
+                    "SCOPE"
+                  ],
+                  "visual_paths": [
+                    "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00152.png",
+                    "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00153.png"
+                  ],
+                  "selection_render_sizes": [
+                    [
+                      480,
+                      416
+                    ],
+                    [
+                      512,
+                      384
+                    ]
+                  ],
+                  "selection_render_scale_xy": [
+                    [
+                      0.8450704225352113,
+                      0.9082969432314411
+                    ],
+                    [
+                      0.8,
+                      0.8
+                    ]
+                  ],
+                  "total_render_pixels": 396288,
+                  "context_overview": true
+                },
+                "decisions": [
+                  {
+                    "label": null,
+                    "decision": "B",
+                    "scores": {
+                      "A": -1.0,
+                      "B": 1.0,
+                      "C": -1.0,
+                      "NONE": -1.0,
+                      "AMBIGUOUS": -1.0,
+                      "UNRESOLVED": -1.0
+                    },
+                    "provider": "qwen3_vl:semantic",
+                    "cache_reused": true,
+                    "reasoning_text": "AUDIT MOCK reasoning",
+                    "latency_ms": {},
+                    "purpose": "select_semantic",
+                    "suffix": "\n\nSELECT_SEM_SINGLE decision:"
+                  }
+                ]
+              }
+            ],
+            "candidate_pool_complete": true,
+            "budget": {
+              "batch_size": 8,
+              "max_candidates": 64,
+              "max_pixels": 409600,
+              "effective_max_pixels": 409600
+            },
+            "inference_serial": true
+          }
+        },
+        "telemetry": {
+          "query": "the building with trees to its right and grass below",
+          "selection_type": "SINGLE",
+          "purpose": "select_semantic",
+          "semantic_selection_ancestor": true,
+          "all_candidate_ids": [
+            "candidate_0001",
+            "candidate_0002",
+            "candidate_0003"
+          ],
+          "selected_candidate_ids": [
+            "candidate_0002"
+          ],
+          "uncertain_candidate_ids": [],
+          "unseen_candidate_ids": [],
+          "batches": [
+            {
+              "candidate_ids": [
+                "candidate_0001",
+                "candidate_0002",
+                "candidate_0003"
+              ],
+              "mapping": {
+                "A": {
+                  "index": 0,
+                  "bbox_xyxy_global": [
+                    40.0,
+                    40.0,
+                    100.0,
+                    100.0
+                  ],
+                  "bbox_xyxy_canvas": [
+                    40.0,
+                    40.0,
+                    100.0,
+                    100.0
+                  ],
+                  "candidate_id": "candidate_0001",
+                  "label": "building",
+                  "score": 0.99,
+                  "bbox_xyxy_render": [
+                    33.80281690140845,
+                    36.33187772925764,
+                    84.50704225352112,
+                    90.82969432314411
+                  ]
+                },
+                "B": {
+                  "index": 1,
+                  "bbox_xyxy_global": [
+                    180.0,
+                    160.0,
+                    250.0,
+                    220.0
+                  ],
+                  "bbox_xyxy_canvas": [
+                    180.0,
+                    160.0,
+                    250.0,
+                    220.0
+                  ],
+                  "candidate_id": "candidate_0002",
+                  "label": "building",
+                  "score": 0.98,
+                  "bbox_xyxy_render": [
+                    152.11267605633802,
+                    145.32751091703057,
+                    211.26760563380282,
+                    199.82532751091702
+                  ]
+                },
+                "C": {
+                  "index": 2,
+                  "bbox_xyxy_global": [
+                    420.0,
+                    300.0,
+                    480.0,
+                    370.0
+                  ],
+                  "bbox_xyxy_canvas": [
+                    420.0,
+                    300.0,
+                    480.0,
+                    370.0
+                  ],
+                  "candidate_id": "candidate_0003",
+                  "label": "building",
+                  "score": 0.97,
+                  "bbox_xyxy_render": [
+                    354.92957746478874,
+                    272.48908296943233,
+                    405.6338028169014,
+                    336.0698689956332
+                  ]
+                }
+              },
+              "visual_metadata": {
+                "canvas_kind": "CANDIDATE_CANVAS",
+                "canvas_bbox_xyxy_global": [
+                  0,
+                  0,
+                  568,
+                  458
+                ],
+                "canvas_size": [
+                  568,
+                  458
+                ],
+                "source_canvas_size": [
+                  568,
+                  458
+                ],
+                "resize_scale": 1.0,
+                "original_image_size": [
+                  640,
+                  480
+                ],
+                "coordinate_transform": {
+                  "origin_global": [
+                    0,
+                    0
+                  ],
+                  "canvas_to_global": "translate_then_scale",
+                  "scale_xy": [
+                    1.0,
+                    1.0
+                  ]
+                },
+                "candidate_mapping": {
+                  "A": {
+                    "index": 0,
+                    "bbox_xyxy_global": [
+                      40.0,
+                      40.0,
+                      100.0,
+                      100.0
+                    ],
+                    "bbox_xyxy_canvas": [
+                      40.0,
+                      40.0,
+                      100.0,
+                      100.0
+                    ],
+                    "candidate_id": "candidate_0001",
+                    "label": "building",
+                    "score": 0.99,
+                    "bbox_xyxy_render": [
+                      33.80281690140845,
+                      36.33187772925764,
+                      84.50704225352112,
+                      90.82969432314411
+                    ]
+                  },
+                  "B": {
+                    "index": 1,
+                    "bbox_xyxy_global": [
+                      180.0,
+                      160.0,
+                      250.0,
+                      220.0
+                    ],
+                    "bbox_xyxy_canvas": [
+                      180.0,
+                      160.0,
+                      250.0,
+                      220.0
+                    ],
+                    "candidate_id": "candidate_0002",
+                    "label": "building",
+                    "score": 0.98,
+                    "bbox_xyxy_render": [
+                      152.11267605633802,
+                      145.32751091703057,
+                      211.26760563380282,
+                      199.82532751091702
+                    ]
+                  },
+                  "C": {
+                    "index": 2,
+                    "bbox_xyxy_global": [
+                      420.0,
+                      300.0,
+                      480.0,
+                      370.0
+                    ],
+                    "bbox_xyxy_canvas": [
+                      420.0,
+                      300.0,
+                      480.0,
+                      370.0
+                    ],
+                    "candidate_id": "candidate_0003",
+                    "label": "building",
+                    "score": 0.97,
+                    "bbox_xyxy_render": [
+                      354.92957746478874,
+                      272.48908296943233,
+                      405.6338028169014,
+                      336.0698689956332
+                    ]
+                  }
+                },
+                "role_mapping": {
+                  "candidates": [
+                    {
+                      "id": "A",
+                      "index": 0,
+                      "bbox_xyxy_global": [
+                        40.0,
+                        40.0,
+                        100.0,
+                        100.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        40.0,
+                        40.0,
+                        100.0,
+                        100.0
+                      ],
+                      "candidate_id": "candidate_0001",
+                      "label": "building",
+                      "score": 0.99
+                    },
+                    {
+                      "id": "B",
+                      "index": 1,
+                      "bbox_xyxy_global": [
+                        180.0,
+                        160.0,
+                        250.0,
+                        220.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        180.0,
+                        160.0,
+                        250.0,
+                        220.0
+                      ],
+                      "candidate_id": "candidate_0002",
+                      "label": "building",
+                      "score": 0.98
+                    },
+                    {
+                      "id": "C",
+                      "index": 2,
+                      "bbox_xyxy_global": [
+                        420.0,
+                        300.0,
+                        480.0,
+                        370.0
+                      ],
+                      "bbox_xyxy_canvas": [
+                        420.0,
+                        300.0,
+                        480.0,
+                        370.0
+                      ],
+                      "candidate_id": "candidate_0003",
+                      "label": "building",
+                      "score": 0.97
+                    }
+                  ]
+                },
+                "source_roles": [
+                  "CANDIDATES",
+                  "SCOPE"
+                ],
+                "source_types": [
+                  "EntitySet",
+                  "Region"
+                ],
+                "visual_roles": [
+                  "CANDIDATE_CANVAS",
+                  "SCOPE"
+                ],
+                "visual_paths": [
+                  "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00152.png",
+                  "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00153.png"
+                ],
+                "selection_render_sizes": [
+                  [
+                    480,
+                    416
+                  ],
+                  [
+                    512,
+                    384
+                  ]
+                ],
+                "selection_render_scale_xy": [
+                  [
+                    0.8450704225352113,
+                    0.9082969432314411
+                  ],
+                  [
+                    0.8,
+                    0.8
+                  ]
+                ],
+                "total_render_pixels": 396288,
+                "context_overview": true
+              },
+              "decisions": [
+                {
+                  "label": null,
+                  "decision": "B",
+                  "scores": {
+                    "A": -1.0,
+                    "B": 1.0,
+                    "C": -1.0,
+                    "NONE": -1.0,
+                    "AMBIGUOUS": -1.0,
+                    "UNRESOLVED": -1.0
+                  },
+                  "provider": "qwen3_vl:semantic",
+                  "cache_reused": true,
+                  "reasoning_text": "AUDIT MOCK reasoning",
+                  "latency_ms": {},
+                  "purpose": "select_semantic",
+                  "suffix": "\n\nSELECT_SEM_SINGLE decision:"
+                }
+              ]
+            }
+          ],
+          "candidate_pool_complete": true,
+          "budget": {
+            "batch_size": 8,
+            "max_candidates": 64,
+            "max_pixels": 409600,
+            "effective_max_pixels": 409600
+          },
+          "inference_serial": true
+        },
+        "error": null,
+        "fallback": null,
+        "trace_metadata": {}
+      }
+    ],
+    "final_sources": [
+      "$n2"
+    ],
+    "final_question": "Where is the selected building?",
+    "choice_provider": null,
+    "choice_result": null,
+    "result": null,
+    "routing_ms": null,
+    "planner_ms": null,
+    "retriever_ms": null,
+    "detector_ms": null,
+    "counting_ms": null,
+    "semantic_vlm_ms": null,
+    "route_vlm_ms": null,
+    "choice_ms": null,
+    "postprocess_ms": null,
+    "e2e_ms": null,
+    "stage_status": {},
+    "activated_providers": [],
+    "activated_model_roles": [],
+    "activated_parameter_counts": {},
+    "resource_metrics": {},
+    "ttft_ms": "NOT_AVAILABLE_FROM_BACKEND",
+    "visual_tokens": "NOT_AVAILABLE_FROM_BACKEND",
+    "output_tokens": "NOT_AVAILABLE_FROM_BACKEND",
+    "decode_tokens_per_s": "NOT_AVAILABLE_FROM_BACKEND",
+    "telemetry": {
+      "executor": {
+        "schema_version": "1.0",
+        "scope": "taskgraph_executor",
+        "success": true,
+        "error_type": null,
+        "started_at_utc": "2026-10-09T18:54:57.775830+00:00",
+        "ended_at_utc": "2026-10-09T18:54:57.852969+00:00",
+        "timing_ms": {
+          "e2e": 74.41839997773059
+        },
+        "resources": {
+          "cpu_rss_start_mb": 546.812,
+          "cpu_rss_end_mb": 553.062,
+          "peak_cpu_rss_mb": 553.062,
+          "peak_gpu_allocated_mb": 0.0,
+          "peak_gpu_reserved_mb": 0.0
+        },
+        "measurement": {
+          "clock": "time.perf_counter",
+          "cpu_rss": "process RSS sampled during scope",
+          "cpu_sample_interval_ms": 50.0,
+          "cuda_synchronized": true,
+          "cuda_peak_stats_reset": false
+        },
+        "activated_providers": [
+          "fake_lae",
+          "qwen3_vl_semantic_finite"
+        ],
+        "fallback_count": 0,
+        "node_count": 2
+      }
+    }
+  },
+  "result": {
+    "type": "SelectResult",
+    "status": "OK",
+    "method": "qwen3_vl_semantic_finite",
+    "reason": null,
+    "confidence": null,
+    "selected": {
+      "type": "EntitySet",
+      "count": 1,
+      "detections": [
+        {
+          "label": "building",
+          "score": 0.98,
+          "bbox": [
+            180.0,
+            160.0,
+            250.0,
+            220.0
+          ]
+        }
+      ],
+      "provenance": {
+        "query": "the building with trees to its right and grass below",
+        "selection_type": "SINGLE",
+        "purpose": "select_semantic",
+        "semantic_selection_ancestor": true,
+        "all_candidate_ids": [
+          "candidate_0001",
+          "candidate_0002",
+          "candidate_0003"
+        ],
+        "selected_candidate_ids": [
+          "candidate_0002"
+        ],
+        "uncertain_candidate_ids": [],
+        "unseen_candidate_ids": [],
+        "batches": [
+          {
+            "candidate_ids": [
+              "candidate_0001",
+              "candidate_0002",
+              "candidate_0003"
+            ],
+            "mapping": {
+              "A": {
+                "index": 0,
+                "bbox_xyxy_global": [
+                  40.0,
+                  40.0,
+                  100.0,
+                  100.0
+                ],
+                "bbox_xyxy_canvas": [
+                  40.0,
+                  40.0,
+                  100.0,
+                  100.0
+                ],
+                "candidate_id": "candidate_0001",
+                "label": "building",
+                "score": 0.99,
+                "bbox_xyxy_render": [
+                  33.80281690140845,
+                  36.33187772925764,
+                  84.50704225352112,
+                  90.82969432314411
+                ]
+              },
+              "B": {
+                "index": 1,
+                "bbox_xyxy_global": [
+                  180.0,
+                  160.0,
+                  250.0,
+                  220.0
+                ],
+                "bbox_xyxy_canvas": [
+                  180.0,
+                  160.0,
+                  250.0,
+                  220.0
+                ],
+                "candidate_id": "candidate_0002",
+                "label": "building",
+                "score": 0.98,
+                "bbox_xyxy_render": [
+                  152.11267605633802,
+                  145.32751091703057,
+                  211.26760563380282,
+                  199.82532751091702
+                ]
+              },
+              "C": {
+                "index": 2,
+                "bbox_xyxy_global": [
+                  420.0,
+                  300.0,
+                  480.0,
+                  370.0
+                ],
+                "bbox_xyxy_canvas": [
+                  420.0,
+                  300.0,
+                  480.0,
+                  370.0
+                ],
+                "candidate_id": "candidate_0003",
+                "label": "building",
+                "score": 0.97,
+                "bbox_xyxy_render": [
+                  354.92957746478874,
+                  272.48908296943233,
+                  405.6338028169014,
+                  336.0698689956332
+                ]
+              }
+            },
+            "visual_metadata": {
+              "canvas_kind": "CANDIDATE_CANVAS",
+              "canvas_bbox_xyxy_global": [
+                0,
+                0,
+                568,
+                458
+              ],
+              "canvas_size": [
+                568,
+                458
+              ],
+              "source_canvas_size": [
+                568,
+                458
+              ],
+              "resize_scale": 1.0,
+              "original_image_size": [
+                640,
+                480
+              ],
+              "coordinate_transform": {
+                "origin_global": [
+                  0,
+                  0
+                ],
+                "canvas_to_global": "translate_then_scale",
+                "scale_xy": [
+                  1.0,
+                  1.0
+                ]
+              },
+              "candidate_mapping": {
+                "A": {
+                  "index": 0,
+                  "bbox_xyxy_global": [
+                    40.0,
+                    40.0,
+                    100.0,
+                    100.0
+                  ],
+                  "bbox_xyxy_canvas": [
+                    40.0,
+                    40.0,
+                    100.0,
+                    100.0
+                  ],
+                  "candidate_id": "candidate_0001",
+                  "label": "building",
+                  "score": 0.99,
+                  "bbox_xyxy_render": [
+                    33.80281690140845,
+                    36.33187772925764,
+                    84.50704225352112,
+                    90.82969432314411
+                  ]
+                },
+                "B": {
+                  "index": 1,
+                  "bbox_xyxy_global": [
+                    180.0,
+                    160.0,
+                    250.0,
+                    220.0
+                  ],
+                  "bbox_xyxy_canvas": [
+                    180.0,
+                    160.0,
+                    250.0,
+                    220.0
+                  ],
+                  "candidate_id": "candidate_0002",
+                  "label": "building",
+                  "score": 0.98,
+                  "bbox_xyxy_render": [
+                    152.11267605633802,
+                    145.32751091703057,
+                    211.26760563380282,
+                    199.82532751091702
+                  ]
+                },
+                "C": {
+                  "index": 2,
+                  "bbox_xyxy_global": [
+                    420.0,
+                    300.0,
+                    480.0,
+                    370.0
+                  ],
+                  "bbox_xyxy_canvas": [
+                    420.0,
+                    300.0,
+                    480.0,
+                    370.0
+                  ],
+                  "candidate_id": "candidate_0003",
+                  "label": "building",
+                  "score": 0.97,
+                  "bbox_xyxy_render": [
+                    354.92957746478874,
+                    272.48908296943233,
+                    405.6338028169014,
+                    336.0698689956332
+                  ]
+                }
+              },
+              "role_mapping": {
+                "candidates": [
+                  {
+                    "id": "A",
+                    "index": 0,
+                    "bbox_xyxy_global": [
+                      40.0,
+                      40.0,
+                      100.0,
+                      100.0
+                    ],
+                    "bbox_xyxy_canvas": [
+                      40.0,
+                      40.0,
+                      100.0,
+                      100.0
+                    ],
+                    "candidate_id": "candidate_0001",
+                    "label": "building",
+                    "score": 0.99
+                  },
+                  {
+                    "id": "B",
+                    "index": 1,
+                    "bbox_xyxy_global": [
+                      180.0,
+                      160.0,
+                      250.0,
+                      220.0
+                    ],
+                    "bbox_xyxy_canvas": [
+                      180.0,
+                      160.0,
+                      250.0,
+                      220.0
+                    ],
+                    "candidate_id": "candidate_0002",
+                    "label": "building",
+                    "score": 0.98
+                  },
+                  {
+                    "id": "C",
+                    "index": 2,
+                    "bbox_xyxy_global": [
+                      420.0,
+                      300.0,
+                      480.0,
+                      370.0
+                    ],
+                    "bbox_xyxy_canvas": [
+                      420.0,
+                      300.0,
+                      480.0,
+                      370.0
+                    ],
+                    "candidate_id": "candidate_0003",
+                    "label": "building",
+                    "score": 0.97
+                  }
+                ]
+              },
+              "source_roles": [
+                "CANDIDATES",
+                "SCOPE"
+              ],
+              "source_types": [
+                "EntitySet",
+                "Region"
+              ],
+              "visual_roles": [
+                "CANDIDATE_CANVAS",
+                "SCOPE"
+              ],
+              "visual_paths": [
+                "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00152.png",
+                "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00153.png"
+              ],
+              "selection_render_sizes": [
+                [
+                  480,
+                  416
+                ],
+                [
+                  512,
+                  384
+                ]
+              ],
+              "selection_render_scale_xy": [
+                [
+                  0.8450704225352113,
+                  0.9082969432314411
+                ],
+                [
+                  0.8,
+                  0.8
+                ]
+              ],
+              "total_render_pixels": 396288,
+              "context_overview": true
+            },
+            "decisions": [
+              {
+                "label": null,
+                "decision": "B",
+                "scores": {
+                  "A": -1.0,
+                  "B": 1.0,
+                  "C": -1.0,
+                  "NONE": -1.0,
+                  "AMBIGUOUS": -1.0,
+                  "UNRESOLVED": -1.0
+                },
+                "provider": "qwen3_vl:semantic",
+                "cache_reused": true,
+                "reasoning_text": "AUDIT MOCK reasoning",
+                "latency_ms": {},
+                "purpose": "select_semantic",
+                "suffix": "\n\nSELECT_SEM_SINGLE decision:"
+              }
+            ]
+          }
+        ],
+        "candidate_pool_complete": true,
+        "budget": {
+          "batch_size": 8,
+          "max_candidates": 64,
+          "max_pixels": 409600,
+          "effective_max_pixels": 409600
+        },
+        "inference_serial": true
+      }
+    },
+    "provenance": {
+      "query": "the building with trees to its right and grass below",
+      "selection_type": "SINGLE",
+      "purpose": "select_semantic",
+      "semantic_selection_ancestor": true,
+      "all_candidate_ids": [
+        "candidate_0001",
+        "candidate_0002",
+        "candidate_0003"
+      ],
+      "selected_candidate_ids": [
+        "candidate_0002"
+      ],
+      "uncertain_candidate_ids": [],
+      "unseen_candidate_ids": [],
+      "batches": [
+        {
+          "candidate_ids": [
+            "candidate_0001",
+            "candidate_0002",
+            "candidate_0003"
+          ],
+          "mapping": {
+            "A": {
+              "index": 0,
+              "bbox_xyxy_global": [
+                40.0,
+                40.0,
+                100.0,
+                100.0
+              ],
+              "bbox_xyxy_canvas": [
+                40.0,
+                40.0,
+                100.0,
+                100.0
+              ],
+              "candidate_id": "candidate_0001",
+              "label": "building",
+              "score": 0.99,
+              "bbox_xyxy_render": [
+                33.80281690140845,
+                36.33187772925764,
+                84.50704225352112,
+                90.82969432314411
+              ]
+            },
+            "B": {
+              "index": 1,
+              "bbox_xyxy_global": [
+                180.0,
+                160.0,
+                250.0,
+                220.0
+              ],
+              "bbox_xyxy_canvas": [
+                180.0,
+                160.0,
+                250.0,
+                220.0
+              ],
+              "candidate_id": "candidate_0002",
+              "label": "building",
+              "score": 0.98,
+              "bbox_xyxy_render": [
+                152.11267605633802,
+                145.32751091703057,
+                211.26760563380282,
+                199.82532751091702
+              ]
+            },
+            "C": {
+              "index": 2,
+              "bbox_xyxy_global": [
+                420.0,
+                300.0,
+                480.0,
+                370.0
+              ],
+              "bbox_xyxy_canvas": [
+                420.0,
+                300.0,
+                480.0,
+                370.0
+              ],
+              "candidate_id": "candidate_0003",
+              "label": "building",
+              "score": 0.97,
+              "bbox_xyxy_render": [
+                354.92957746478874,
+                272.48908296943233,
+                405.6338028169014,
+                336.0698689956332
+              ]
+            }
+          },
+          "visual_metadata": {
+            "canvas_kind": "CANDIDATE_CANVAS",
+            "canvas_bbox_xyxy_global": [
+              0,
+              0,
+              568,
+              458
+            ],
+            "canvas_size": [
+              568,
+              458
+            ],
+            "source_canvas_size": [
+              568,
+              458
+            ],
+            "resize_scale": 1.0,
+            "original_image_size": [
+              640,
+              480
+            ],
+            "coordinate_transform": {
+              "origin_global": [
+                0,
+                0
+              ],
+              "canvas_to_global": "translate_then_scale",
+              "scale_xy": [
+                1.0,
+                1.0
+              ]
+            },
+            "candidate_mapping": {
+              "A": {
+                "index": 0,
+                "bbox_xyxy_global": [
+                  40.0,
+                  40.0,
+                  100.0,
+                  100.0
+                ],
+                "bbox_xyxy_canvas": [
+                  40.0,
+                  40.0,
+                  100.0,
+                  100.0
+                ],
+                "candidate_id": "candidate_0001",
+                "label": "building",
+                "score": 0.99,
+                "bbox_xyxy_render": [
+                  33.80281690140845,
+                  36.33187772925764,
+                  84.50704225352112,
+                  90.82969432314411
+                ]
+              },
+              "B": {
+                "index": 1,
+                "bbox_xyxy_global": [
+                  180.0,
+                  160.0,
+                  250.0,
+                  220.0
+                ],
+                "bbox_xyxy_canvas": [
+                  180.0,
+                  160.0,
+                  250.0,
+                  220.0
+                ],
+                "candidate_id": "candidate_0002",
+                "label": "building",
+                "score": 0.98,
+                "bbox_xyxy_render": [
+                  152.11267605633802,
+                  145.32751091703057,
+                  211.26760563380282,
+                  199.82532751091702
+                ]
+              },
+              "C": {
+                "index": 2,
+                "bbox_xyxy_global": [
+                  420.0,
+                  300.0,
+                  480.0,
+                  370.0
+                ],
+                "bbox_xyxy_canvas": [
+                  420.0,
+                  300.0,
+                  480.0,
+                  370.0
+                ],
+                "candidate_id": "candidate_0003",
+                "label": "building",
+                "score": 0.97,
+                "bbox_xyxy_render": [
+                  354.92957746478874,
+                  272.48908296943233,
+                  405.6338028169014,
+                  336.0698689956332
+                ]
+              }
+            },
+            "role_mapping": {
+              "candidates": [
+                {
+                  "id": "A",
+                  "index": 0,
+                  "bbox_xyxy_global": [
+                    40.0,
+                    40.0,
+                    100.0,
+                    100.0
+                  ],
+                  "bbox_xyxy_canvas": [
+                    40.0,
+                    40.0,
+                    100.0,
+                    100.0
+                  ],
+                  "candidate_id": "candidate_0001",
+                  "label": "building",
+                  "score": 0.99
+                },
+                {
+                  "id": "B",
+                  "index": 1,
+                  "bbox_xyxy_global": [
+                    180.0,
+                    160.0,
+                    250.0,
+                    220.0
+                  ],
+                  "bbox_xyxy_canvas": [
+                    180.0,
+                    160.0,
+                    250.0,
+                    220.0
+                  ],
+                  "candidate_id": "candidate_0002",
+                  "label": "building",
+                  "score": 0.98
+                },
+                {
+                  "id": "C",
+                  "index": 2,
+                  "bbox_xyxy_global": [
+                    420.0,
+                    300.0,
+                    480.0,
+                    370.0
+                  ],
+                  "bbox_xyxy_canvas": [
+                    420.0,
+                    300.0,
+                    480.0,
+                    370.0
+                  ],
+                  "candidate_id": "candidate_0003",
+                  "label": "building",
+                  "score": 0.97
+                }
+              ]
+            },
+            "source_roles": [
+              "CANDIDATES",
+              "SCOPE"
+            ],
+            "source_types": [
+              "EntitySet",
+              "Region"
+            ],
+            "visual_roles": [
+              "CANDIDATE_CANVAS",
+              "SCOPE"
+            ],
+            "visual_paths": [
+              "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00152.png",
+              "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00153.png"
+            ],
+            "selection_render_sizes": [
+              [
+                480,
+                416
+              ],
+              [
+                512,
+                384
+              ]
+            ],
+            "selection_render_scale_xy": [
+              [
+                0.8450704225352113,
+                0.9082969432314411
+              ],
+              [
+                0.8,
+                0.8
+              ]
+            ],
+            "total_render_pixels": 396288,
+            "context_overview": true
+          },
+          "decisions": [
+            {
+              "label": null,
+              "decision": "B",
+              "scores": {
+                "A": -1.0,
+                "B": 1.0,
+                "C": -1.0,
+                "NONE": -1.0,
+                "AMBIGUOUS": -1.0,
+                "UNRESOLVED": -1.0
+              },
+              "provider": "qwen3_vl:semantic",
+              "cache_reused": true,
+              "reasoning_text": "AUDIT MOCK reasoning",
+              "latency_ms": {},
+              "purpose": "select_semantic",
+              "suffix": "\n\nSELECT_SEM_SINGLE decision:"
+            }
+          ]
+        }
+      ],
+      "candidate_pool_complete": true,
+      "budget": {
+        "batch_size": 8,
+        "max_candidates": 64,
+        "max_pixels": 409600,
+        "effective_max_pixels": 409600
+      },
+      "inference_serial": true
+    }
+  },
+  "calls": [
+    {
+      "prompt": "Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n[image_2] role: SCOPE\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B/C\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: building; score: 0.99; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: building; score: 0.98; bbox_xyxy_global: [180.0, 160.0, 250.0, 220.0]\n- index: 2; label: building; score: 0.97; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\n[SCOPE]\ntype: Region\nbbox_xyxy_global: [0.0, 0.0, 640.0, 480.0]\n\nQuestion:\nTask: SELECT_SEM_SINGLE\nSelect ONLY from the existing marked candidates. Do not detect new objects, return new boxes, or replace candidates. Background landmarks in the query are context, not additional detection tasks.\nComplete query (verbatim):\nthe building with trees to its right and grass below\n\nChoose exactly one marked candidate only when it uniquely satisfies the complete query. Choose NONE if none matches, AMBIGUOUS if several match, UNRESOLVED if evidence is insufficient.\n\nReason about all marked candidates and the full query. A finite decision follows.",
+      "visuals": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00154.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00155.png"
+      ],
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "image",
+              "image": "<IMAGE>"
+            },
+            {
+              "type": "image",
+              "image": "<IMAGE>"
+            },
+            {
+              "type": "text",
+              "text": "Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n[image_2] role: SCOPE\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B/C\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: building; score: 0.99; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: building; score: 0.98; bbox_xyxy_global: [180.0, 160.0, 250.0, 220.0]\n- index: 2; label: building; score: 0.97; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\n[SCOPE]\ntype: Region\nbbox_xyxy_global: [0.0, 0.0, 640.0, 480.0]\n\nQuestion:\nTask: SELECT_SEM_SINGLE\nSelect ONLY from the existing marked candidates. Do not detect new objects, return new boxes, or replace candidates. Background landmarks in the query are context, not additional detection tasks.\nComplete query (verbatim):\nthe building with trees to its right and grass below\n\nChoose exactly one marked candidate only when it uniquely satisfies the complete query. Choose NONE if none matches, AMBIGUOUS if several match, UNRESOLVED if evidence is insufficient.\n\nReason about all marked candidates and the full query. A finite decision follows."
+            }
+          ]
+        }
+      ],
+      "terminal_candidates": [
+        "A",
+        "B",
+        "C",
+        "NONE",
+        "AMBIGUOUS",
+        "UNRESOLVED"
+      ],
+      "suffixes": [
+        "\n\nSELECT_SEM_SINGLE decision:"
+      ],
+      "purpose": null,
+      "mock": true,
+      "chat_template_rendered": "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|><|vision_start|><|image_pad|><|vision_end|>Visual inputs:\n[image_1] role: CANDIDATE_CANVAS\n[image_2] role: SCOPE\n\nStructured results:\n[CANVAS_ROLES]\nCANDIDATES: A/B/C\n\n[CANDIDATES]\ntype: EntitySet\nentities:\n- index: 0; label: building; score: 0.99; bbox_xyxy_global: [40.0, 40.0, 100.0, 100.0]\n- index: 1; label: building; score: 0.98; bbox_xyxy_global: [180.0, 160.0, 250.0, 220.0]\n- index: 2; label: building; score: 0.97; bbox_xyxy_global: [420.0, 300.0, 480.0, 370.0]\n\n[SCOPE]\ntype: Region\nbbox_xyxy_global: [0.0, 0.0, 640.0, 480.0]\n\nQuestion:\nTask: SELECT_SEM_SINGLE\nSelect ONLY from the existing marked candidates. Do not detect new objects, return new boxes, or replace candidates. Background landmarks in the query are context, not additional detection tasks.\nComplete query (verbatim):\nthe building with trees to its right and grass below\n\nChoose exactly one marked candidate only when it uniquely satisfies the complete query. Choose NONE if none matches, AMBIGUOUS if several match, UNRESOLVED if evidence is insufficient.\n\nReason about all marked candidates and the full query. A finite decision follows.<|im_end|>\n<|im_start|>assistant\n"
+    }
+  ],
+  "provenance": "actual GraphExecutor/InputComposer/Qwen wrapper; mocked detector/model predictions; no accuracy claim"
+}

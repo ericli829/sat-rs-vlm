@@ -1,0 +1,1417 @@
+{
+  "name": "05 VLM building reference + DINO cars -> SELECT_REL -> COUNT",
+  "graph": {
+    "version": "taskgraph-v1.1",
+    "question": "Full final question is intentionally not used by LOCATE",
+    "question_type": "FREE_FORM",
+    "choices": null,
+    "inputs": {
+      "image0": {
+        "type": "image",
+        "uri_or_key": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\audit_scene.png"
+      }
+    },
+    "intent": "OTHER",
+    "nodes": [
+      {
+        "id": "n1",
+        "op": "LOCATE",
+        "inputs": {
+          "image": "$image0"
+        },
+        "params": {
+          "target": {
+            "category": "building",
+            "attributes": {}
+          }
+        }
+      },
+      {
+        "id": "n2",
+        "op": "LOCATE",
+        "inputs": {
+          "image": "$image0"
+        },
+        "params": {
+          "target": {
+            "category": "car",
+            "attributes": {}
+          }
+        }
+      },
+      {
+        "id": "n3",
+        "op": "SELECT",
+        "inputs": {
+          "candidates": "$n2",
+          "reference": "$n1"
+        },
+        "params": {
+          "mode": "RELATION",
+          "query": null,
+          "relation": "LEFT_OF",
+          "criterion": null,
+          "rank": null,
+          "order": null,
+          "index": null,
+          "direction": null,
+          "subregion": null,
+          "margin": null,
+          "overlap_iou_threshold": null,
+          "selection_type": null
+        }
+      },
+      {
+        "id": "n4",
+        "op": "COUNT",
+        "inputs": {
+          "entities": "$n3"
+        },
+        "params": {
+          "target": {
+            "category": "car",
+            "attributes": {}
+          },
+          "entire": false
+        }
+      }
+    ],
+    "final": {
+      "sources": [
+        "$n4"
+      ],
+      "question": "",
+      "answer_type": "INTEGER"
+    }
+  },
+  "dsl": "INTENT(OTHER)\nn1=LOCATE($image0,T(\"building\"))\nn2=LOCATE($image0,T(\"car\"))\nn3=SELECT_REL($n2,$n1,LEFT_OF)\nn4=COUNT_ENTITIES($n3,T(\"car\"),false)\nFINAL($n4,INTEGER)",
+  "trace": {
+    "sample_id": "audit-5",
+    "execution_mode": "TASKGRAPH_UHR",
+    "input_image_paths": [],
+    "intermediate_output_paths": [],
+    "taskgraph": {
+      "version": "taskgraph-v1.1",
+      "question": "Full final question is intentionally not used by LOCATE",
+      "question_type": "FREE_FORM",
+      "choices": null,
+      "inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\audit_scene.png"
+        }
+      },
+      "intent": "OTHER",
+      "nodes": [
+        {
+          "id": "n1",
+          "op": "LOCATE",
+          "inputs": {
+            "image": "$image0"
+          },
+          "params": {
+            "target": {
+              "category": "building",
+              "attributes": {}
+            }
+          }
+        },
+        {
+          "id": "n2",
+          "op": "LOCATE",
+          "inputs": {
+            "image": "$image0"
+          },
+          "params": {
+            "target": {
+              "category": "car",
+              "attributes": {}
+            }
+          }
+        },
+        {
+          "id": "n3",
+          "op": "SELECT",
+          "inputs": {
+            "candidates": "$n2",
+            "reference": "$n1"
+          },
+          "params": {
+            "mode": "RELATION",
+            "query": null,
+            "relation": "LEFT_OF",
+            "criterion": null,
+            "rank": null,
+            "order": null,
+            "index": null,
+            "direction": null,
+            "subregion": null,
+            "margin": null,
+            "overlap_iou_threshold": null,
+            "selection_type": null
+          }
+        },
+        {
+          "id": "n4",
+          "op": "COUNT",
+          "inputs": {
+            "entities": "$n3"
+          },
+          "params": {
+            "target": {
+              "category": "car",
+              "attributes": {}
+            },
+            "entire": false
+          }
+        }
+      ],
+      "final": {
+        "sources": [
+          "$n4"
+        ],
+        "question": "",
+        "answer_type": "INTEGER"
+      }
+    },
+    "nodes": [
+      {
+        "node_id": "n1",
+        "operator": "LOCATE",
+        "input_refs": {
+          "image": "$image0"
+        },
+        "resolved_input_types": {
+          "image": "ImageRef"
+        },
+        "provider": "semantic_2b:referent",
+        "latency_ms": 12.489000015193596,
+        "execution_mode": null,
+        "semantic_method": null,
+        "cache_reused": null,
+        "final_choice_fusion": false,
+        "fusion_reason": "operator_not_eligible",
+        "output_runtime_type": "EntitySet",
+        "output_summary": {
+          "type": "EntitySet",
+          "count": 1,
+          "detections": [
+            {
+              "label": "building",
+              "score": null,
+              "bbox": [
+                100.0,
+                60.0,
+                200.0,
+                140.0
+              ]
+            }
+          ],
+          "provenance": {
+            "method": "vlm_single",
+            "target_spec": {
+              "category": "building",
+              "attributes": {}
+            },
+            "resolution_status": "VLM_REFERENT_RESOLVED",
+            "candidate_pool_complete": true,
+            "coordinate_system": "render_pixel_xyxy",
+            "question_used": false,
+            "visual_transform": {
+              "crop_origin_global": [
+                0,
+                0
+              ],
+              "source_crop_size": [
+                640,
+                480
+              ],
+              "render_size": [
+                640,
+                480
+              ],
+              "scale_xy": [
+                1.0,
+                1.0
+              ],
+              "scope_bbox_xyxy_global": [
+                0,
+                0,
+                640,
+                480
+              ],
+              "original_image_size": [
+                640,
+                480
+              ]
+            },
+            "provider": "qwen3_vl:semantic",
+            "raw_response": "{\"status\":\"OK\",\"bbox\":[100,60,200,140]}",
+            "provider_metadata": {
+              "model_id": "AUDIT_MOCK_NO_WEIGHTS",
+              "output_contract": "locate_single",
+              "constrained_decoding": false,
+              "allowed_output_count": 0,
+              "generation": {}
+            },
+            "bbox_xyxy_render": [
+              100,
+              60,
+              200,
+              140
+            ],
+            "bbox_xyxy_global": [
+              100.0,
+              60.0,
+              200.0,
+              140.0
+            ],
+            "latency_ms": 12.385199981508777,
+            "locate_route": {
+              "requirement": "SINGLE_TARGET",
+              "route_reason": "single_consumer",
+              "consumer_paths": [
+                "n1 -> n3:SELECT.reference"
+              ],
+              "planned_backend": "VLM_SINGLE",
+              "actual_backend": "VLM_SINGLE",
+              "fallback_reason": null,
+              "target_spec": {
+                "category": "building",
+                "attributes": {}
+              },
+              "stage": "semantic_vlm",
+              "vlm_single": {
+                "method": "vlm_single",
+                "target_spec": {
+                  "category": "building",
+                  "attributes": {}
+                },
+                "resolution_status": "VLM_REFERENT_RESOLVED",
+                "candidate_pool_complete": true,
+                "coordinate_system": "render_pixel_xyxy",
+                "question_used": false,
+                "visual_transform": {
+                  "crop_origin_global": [
+                    0,
+                    0
+                  ],
+                  "source_crop_size": [
+                    640,
+                    480
+                  ],
+                  "render_size": [
+                    640,
+                    480
+                  ],
+                  "scale_xy": [
+                    1.0,
+                    1.0
+                  ],
+                  "scope_bbox_xyxy_global": [
+                    0,
+                    0,
+                    640,
+                    480
+                  ],
+                  "original_image_size": [
+                    640,
+                    480
+                  ]
+                },
+                "provider": "qwen3_vl:semantic",
+                "raw_response": "{\"status\":\"OK\",\"bbox\":[100,60,200,140]}",
+                "provider_metadata": {
+                  "model_id": "AUDIT_MOCK_NO_WEIGHTS",
+                  "output_contract": "locate_single",
+                  "constrained_decoding": false,
+                  "allowed_output_count": 0,
+                  "generation": {}
+                },
+                "bbox_xyxy_render": [
+                  100,
+                  60,
+                  200,
+                  140
+                ],
+                "bbox_xyxy_global": [
+                  100.0,
+                  60.0,
+                  200.0,
+                  140.0
+                ],
+                "latency_ms": 12.385199981508777
+              },
+              "model_role": "semantic_2b",
+              "activated_provider": "semantic_2b:referent"
+            }
+          }
+        },
+        "telemetry": {
+          "method": "vlm_single",
+          "target_spec": {
+            "category": "building",
+            "attributes": {}
+          },
+          "resolution_status": "VLM_REFERENT_RESOLVED",
+          "candidate_pool_complete": true,
+          "coordinate_system": "render_pixel_xyxy",
+          "question_used": false,
+          "visual_transform": {
+            "crop_origin_global": [
+              0,
+              0
+            ],
+            "source_crop_size": [
+              640,
+              480
+            ],
+            "render_size": [
+              640,
+              480
+            ],
+            "scale_xy": [
+              1.0,
+              1.0
+            ],
+            "scope_bbox_xyxy_global": [
+              0,
+              0,
+              640,
+              480
+            ],
+            "original_image_size": [
+              640,
+              480
+            ]
+          },
+          "provider": "qwen3_vl:semantic",
+          "raw_response": "{\"status\":\"OK\",\"bbox\":[100,60,200,140]}",
+          "provider_metadata": {
+            "model_id": "AUDIT_MOCK_NO_WEIGHTS",
+            "output_contract": "locate_single",
+            "constrained_decoding": false,
+            "allowed_output_count": 0,
+            "generation": {}
+          },
+          "bbox_xyxy_render": [
+            100,
+            60,
+            200,
+            140
+          ],
+          "bbox_xyxy_global": [
+            100.0,
+            60.0,
+            200.0,
+            140.0
+          ],
+          "latency_ms": 12.385199981508777,
+          "locate_route": {
+            "requirement": "SINGLE_TARGET",
+            "route_reason": "single_consumer",
+            "consumer_paths": [
+              "n1 -> n3:SELECT.reference"
+            ],
+            "planned_backend": "VLM_SINGLE",
+            "actual_backend": "VLM_SINGLE",
+            "fallback_reason": null,
+            "target_spec": {
+              "category": "building",
+              "attributes": {}
+            },
+            "stage": "semantic_vlm",
+            "vlm_single": {
+              "method": "vlm_single",
+              "target_spec": {
+                "category": "building",
+                "attributes": {}
+              },
+              "resolution_status": "VLM_REFERENT_RESOLVED",
+              "candidate_pool_complete": true,
+              "coordinate_system": "render_pixel_xyxy",
+              "question_used": false,
+              "visual_transform": {
+                "crop_origin_global": [
+                  0,
+                  0
+                ],
+                "source_crop_size": [
+                  640,
+                  480
+                ],
+                "render_size": [
+                  640,
+                  480
+                ],
+                "scale_xy": [
+                  1.0,
+                  1.0
+                ],
+                "scope_bbox_xyxy_global": [
+                  0,
+                  0,
+                  640,
+                  480
+                ],
+                "original_image_size": [
+                  640,
+                  480
+                ]
+              },
+              "provider": "qwen3_vl:semantic",
+              "raw_response": "{\"status\":\"OK\",\"bbox\":[100,60,200,140]}",
+              "provider_metadata": {
+                "model_id": "AUDIT_MOCK_NO_WEIGHTS",
+                "output_contract": "locate_single",
+                "constrained_decoding": false,
+                "allowed_output_count": 0,
+                "generation": {}
+              },
+              "bbox_xyxy_render": [
+                100,
+                60,
+                200,
+                140
+              ],
+              "bbox_xyxy_global": [
+                100.0,
+                60.0,
+                200.0,
+                140.0
+              ],
+              "latency_ms": 12.385199981508777
+            },
+            "model_role": "semantic_2b",
+            "activated_provider": "semantic_2b:referent"
+          }
+        },
+        "error": null,
+        "fallback": null,
+        "trace_metadata": {
+          "requirement": "SINGLE_TARGET",
+          "route_reason": "single_consumer",
+          "consumer_paths": [
+            "n1 -> n3:SELECT.reference"
+          ],
+          "planned_backend": "VLM_SINGLE",
+          "actual_backend": "VLM_SINGLE",
+          "fallback_reason": null,
+          "target_spec": {
+            "category": "building",
+            "attributes": {}
+          },
+          "stage": "semantic_vlm",
+          "vlm_single": {
+            "method": "vlm_single",
+            "target_spec": {
+              "category": "building",
+              "attributes": {}
+            },
+            "resolution_status": "VLM_REFERENT_RESOLVED",
+            "candidate_pool_complete": true,
+            "coordinate_system": "render_pixel_xyxy",
+            "question_used": false,
+            "visual_transform": {
+              "crop_origin_global": [
+                0,
+                0
+              ],
+              "source_crop_size": [
+                640,
+                480
+              ],
+              "render_size": [
+                640,
+                480
+              ],
+              "scale_xy": [
+                1.0,
+                1.0
+              ],
+              "scope_bbox_xyxy_global": [
+                0,
+                0,
+                640,
+                480
+              ],
+              "original_image_size": [
+                640,
+                480
+              ]
+            },
+            "provider": "qwen3_vl:semantic",
+            "raw_response": "{\"status\":\"OK\",\"bbox\":[100,60,200,140]}",
+            "provider_metadata": {
+              "model_id": "AUDIT_MOCK_NO_WEIGHTS",
+              "output_contract": "locate_single",
+              "constrained_decoding": false,
+              "allowed_output_count": 0,
+              "generation": {}
+            },
+            "bbox_xyxy_render": [
+              100,
+              60,
+              200,
+              140
+            ],
+            "bbox_xyxy_global": [
+              100.0,
+              60.0,
+              200.0,
+              140.0
+            ],
+            "latency_ms": 12.385199981508777
+          },
+          "model_role": "semantic_2b",
+          "activated_provider": "semantic_2b:referent"
+        }
+      },
+      {
+        "node_id": "n2",
+        "operator": "LOCATE",
+        "input_refs": {
+          "image": "$image0"
+        },
+        "resolved_input_types": {
+          "image": "ImageRef"
+        },
+        "provider": "fake_lae",
+        "latency_ms": 0.36709997220896184,
+        "execution_mode": null,
+        "semantic_method": null,
+        "cache_reused": null,
+        "final_choice_fusion": false,
+        "fusion_reason": "operator_not_eligible",
+        "output_runtime_type": "EntitySet",
+        "output_summary": {
+          "type": "EntitySet",
+          "count": 20,
+          "detections": [
+            {
+              "label": "car",
+              "score": 0.99,
+              "bbox": [
+                0.0,
+                180.0,
+                3.0,
+                183.0
+              ]
+            },
+            {
+              "label": "car",
+              "score": 0.98,
+              "bbox": [
+                5.0,
+                180.0,
+                8.0,
+                183.0
+              ]
+            },
+            {
+              "label": "car",
+              "score": 0.97,
+              "bbox": [
+                10.0,
+                180.0,
+                13.0,
+                183.0
+              ]
+            },
+            {
+              "label": "car",
+              "score": 0.96,
+              "bbox": [
+                15.0,
+                180.0,
+                18.0,
+                183.0
+              ]
+            },
+            {
+              "label": "car",
+              "score": 0.95,
+              "bbox": [
+                20.0,
+                180.0,
+                23.0,
+                183.0
+              ]
+            },
+            {
+              "label": "car",
+              "score": 0.94,
+              "bbox": [
+                25.0,
+                180.0,
+                28.0,
+                183.0
+              ]
+            },
+            {
+              "label": "car",
+              "score": 0.9299999999999999,
+              "bbox": [
+                30.0,
+                180.0,
+                33.0,
+                183.0
+              ]
+            },
+            {
+              "label": "car",
+              "score": 0.9199999999999999,
+              "bbox": [
+                35.0,
+                180.0,
+                38.0,
+                183.0
+              ]
+            },
+            {
+              "label": "car",
+              "score": 0.91,
+              "bbox": [
+                40.0,
+                180.0,
+                43.0,
+                183.0
+              ]
+            },
+            {
+              "label": "car",
+              "score": 0.9,
+              "bbox": [
+                45.0,
+                180.0,
+                48.0,
+                183.0
+              ]
+            },
+            {
+              "label": "car",
+              "score": 0.89,
+              "bbox": [
+                300.0,
+                180.0,
+                303.0,
+                183.0
+              ]
+            },
+            {
+              "label": "car",
+              "score": 0.88,
+              "bbox": [
+                310.0,
+                180.0,
+                313.0,
+                183.0
+              ]
+            },
+            {
+              "label": "car",
+              "score": 0.87,
+              "bbox": [
+                320.0,
+                180.0,
+                323.0,
+                183.0
+              ]
+            },
+            {
+              "label": "car",
+              "score": 0.86,
+              "bbox": [
+                330.0,
+                180.0,
+                333.0,
+                183.0
+              ]
+            },
+            {
+              "label": "car",
+              "score": 0.85,
+              "bbox": [
+                340.0,
+                180.0,
+                343.0,
+                183.0
+              ]
+            },
+            {
+              "label": "car",
+              "score": 0.84,
+              "bbox": [
+                350.0,
+                180.0,
+                353.0,
+                183.0
+              ]
+            },
+            {
+              "label": "car",
+              "score": 0.83,
+              "bbox": [
+                360.0,
+                180.0,
+                363.0,
+                183.0
+              ]
+            },
+            {
+              "label": "car",
+              "score": 0.82,
+              "bbox": [
+                370.0,
+                180.0,
+                373.0,
+                183.0
+              ]
+            },
+            {
+              "label": "car",
+              "score": 0.81,
+              "bbox": [
+                380.0,
+                180.0,
+                383.0,
+                183.0
+              ]
+            },
+            {
+              "label": "car",
+              "score": 0.8,
+              "bbox": [
+                390.0,
+                180.0,
+                393.0,
+                183.0
+              ]
+            }
+          ],
+          "provenance": {
+            "provider": "fake_lae",
+            "candidate_pool_complete": true,
+            "resolution_status": "MULTIPLE_VALID",
+            "locate_route": {
+              "requirement": "SET_REQUIRED",
+              "route_reason": "set_consumer",
+              "consumer_paths": [
+                "n2 -> n3:SELECT.candidates",
+                "n2 -> n3:SELECT.candidates -> n4:COUNT.entities"
+              ],
+              "planned_backend": "LAE_DINO",
+              "actual_backend": "LAE_DINO",
+              "fallback_reason": null,
+              "target_spec": {
+                "category": "car",
+                "attributes": {}
+              },
+              "stage": "detector",
+              "category_candidate_count": 20,
+              "detector_provider": "fake_lae",
+              "activated_provider": "fake_lae",
+              "detector_metadata": {
+                "deterministic": true
+              },
+              "attributes": {
+                "policy": "not_required",
+                "verified": true
+              },
+              "final_candidate_count": 20,
+              "candidate_pool_complete": true,
+              "final_resolution_status": "MULTIPLE_VALID"
+            },
+            "category_candidate_count": 20,
+            "candidate_count_after_refinement": 20,
+            "original_target_spec": {
+              "category": "car",
+              "attributes": {}
+            },
+            "proposal_query": "car . vehicle . truck . sedan",
+            "attribute_trace": {
+              "policy": "not_required",
+              "verified": true
+            }
+          }
+        },
+        "telemetry": {
+          "provider": "fake_lae",
+          "candidate_pool_complete": true,
+          "resolution_status": "MULTIPLE_VALID",
+          "locate_route": {
+            "requirement": "SET_REQUIRED",
+            "route_reason": "set_consumer",
+            "consumer_paths": [
+              "n2 -> n3:SELECT.candidates",
+              "n2 -> n3:SELECT.candidates -> n4:COUNT.entities"
+            ],
+            "planned_backend": "LAE_DINO",
+            "actual_backend": "LAE_DINO",
+            "fallback_reason": null,
+            "target_spec": {
+              "category": "car",
+              "attributes": {}
+            },
+            "stage": "detector",
+            "category_candidate_count": 20,
+            "detector_provider": "fake_lae",
+            "activated_provider": "fake_lae",
+            "detector_metadata": {
+              "deterministic": true
+            },
+            "attributes": {
+              "policy": "not_required",
+              "verified": true
+            },
+            "final_candidate_count": 20,
+            "candidate_pool_complete": true,
+            "final_resolution_status": "MULTIPLE_VALID"
+          },
+          "category_candidate_count": 20,
+          "candidate_count_after_refinement": 20,
+          "original_target_spec": {
+            "category": "car",
+            "attributes": {}
+          },
+          "proposal_query": "car . vehicle . truck . sedan",
+          "attribute_trace": {
+            "policy": "not_required",
+            "verified": true
+          }
+        },
+        "error": null,
+        "fallback": null,
+        "trace_metadata": {
+          "requirement": "SET_REQUIRED",
+          "route_reason": "set_consumer",
+          "consumer_paths": [
+            "n2 -> n3:SELECT.candidates",
+            "n2 -> n3:SELECT.candidates -> n4:COUNT.entities"
+          ],
+          "planned_backend": "LAE_DINO",
+          "actual_backend": "LAE_DINO",
+          "fallback_reason": null,
+          "target_spec": {
+            "category": "car",
+            "attributes": {}
+          },
+          "stage": "detector",
+          "category_candidate_count": 20,
+          "detector_provider": "fake_lae",
+          "activated_provider": "fake_lae",
+          "detector_metadata": {
+            "deterministic": true
+          },
+          "attributes": {
+            "policy": "not_required",
+            "verified": true
+          },
+          "final_candidate_count": 20,
+          "candidate_pool_complete": true,
+          "final_resolution_status": "MULTIPLE_VALID"
+        }
+      },
+      {
+        "node_id": "n3",
+        "operator": "SELECT",
+        "input_refs": {
+          "candidates": "$n2",
+          "reference": "$n1"
+        },
+        "resolved_input_types": {
+          "candidates": "EntitySet",
+          "reference": "EntitySet"
+        },
+        "provider": "geometry",
+        "latency_ms": 15.062699996633455,
+        "execution_mode": null,
+        "semantic_method": null,
+        "cache_reused": null,
+        "final_choice_fusion": false,
+        "fusion_reason": "operator_not_eligible",
+        "output_runtime_type": "SelectResult",
+        "output_summary": {
+          "type": "SelectResult",
+          "status": "OK",
+          "method": "geometry",
+          "reason": null,
+          "confidence": null,
+          "selected": {
+            "type": "EntitySet",
+            "count": 10,
+            "detections": [
+              {
+                "label": "car",
+                "score": 0.99,
+                "bbox": [
+                  0.0,
+                  180.0,
+                  3.0,
+                  183.0
+                ]
+              },
+              {
+                "label": "car",
+                "score": 0.98,
+                "bbox": [
+                  5.0,
+                  180.0,
+                  8.0,
+                  183.0
+                ]
+              },
+              {
+                "label": "car",
+                "score": 0.97,
+                "bbox": [
+                  10.0,
+                  180.0,
+                  13.0,
+                  183.0
+                ]
+              },
+              {
+                "label": "car",
+                "score": 0.96,
+                "bbox": [
+                  15.0,
+                  180.0,
+                  18.0,
+                  183.0
+                ]
+              },
+              {
+                "label": "car",
+                "score": 0.95,
+                "bbox": [
+                  20.0,
+                  180.0,
+                  23.0,
+                  183.0
+                ]
+              },
+              {
+                "label": "car",
+                "score": 0.94,
+                "bbox": [
+                  25.0,
+                  180.0,
+                  28.0,
+                  183.0
+                ]
+              },
+              {
+                "label": "car",
+                "score": 0.9299999999999999,
+                "bbox": [
+                  30.0,
+                  180.0,
+                  33.0,
+                  183.0
+                ]
+              },
+              {
+                "label": "car",
+                "score": 0.9199999999999999,
+                "bbox": [
+                  35.0,
+                  180.0,
+                  38.0,
+                  183.0
+                ]
+              },
+              {
+                "label": "car",
+                "score": 0.91,
+                "bbox": [
+                  40.0,
+                  180.0,
+                  43.0,
+                  183.0
+                ]
+              },
+              {
+                "label": "car",
+                "score": 0.9,
+                "bbox": [
+                  45.0,
+                  180.0,
+                  48.0,
+                  183.0
+                ]
+              }
+            ],
+            "provenance": {
+              "select": "RELATION",
+              "mode": "RELATION",
+              "relation": "LEFT_OF",
+              "selection_type": "MULTI",
+              "coordinate_system": "bbox_xyxy_global",
+              "scope_bbox_xyxy_global": [
+                0.0,
+                0.0,
+                640.0,
+                480.0
+              ],
+              "margin_px": 9.6,
+              "overlap_iou_threshold": 0.1,
+              "all_candidate_ids": [
+                "candidate_0001",
+                "candidate_0002",
+                "candidate_0003",
+                "candidate_0004",
+                "candidate_0005",
+                "candidate_0006",
+                "candidate_0007",
+                "candidate_0008",
+                "candidate_0009",
+                "candidate_0010",
+                "candidate_0011",
+                "candidate_0012",
+                "candidate_0013",
+                "candidate_0014",
+                "candidate_0015",
+                "candidate_0016",
+                "candidate_0017",
+                "candidate_0018",
+                "candidate_0019",
+                "candidate_0020"
+              ],
+              "clear_positive_candidate_ids": [
+                "candidate_0001",
+                "candidate_0002",
+                "candidate_0003",
+                "candidate_0004",
+                "candidate_0005",
+                "candidate_0006",
+                "candidate_0007",
+                "candidate_0008",
+                "candidate_0009",
+                "candidate_0010"
+              ],
+              "grey_candidate_ids": [],
+              "clear_negative_candidate_ids": [
+                "candidate_0011",
+                "candidate_0012",
+                "candidate_0013",
+                "candidate_0014",
+                "candidate_0015",
+                "candidate_0016",
+                "candidate_0017",
+                "candidate_0018",
+                "candidate_0019",
+                "candidate_0020"
+              ]
+            }
+          },
+          "provenance": {
+            "mode": "RELATION",
+            "relation": "LEFT_OF",
+            "selection_type": "MULTI",
+            "coordinate_system": "bbox_xyxy_global",
+            "scope_bbox_xyxy_global": [
+              0.0,
+              0.0,
+              640.0,
+              480.0
+            ],
+            "margin_px": 9.6,
+            "overlap_iou_threshold": 0.1,
+            "all_candidate_ids": [
+              "candidate_0001",
+              "candidate_0002",
+              "candidate_0003",
+              "candidate_0004",
+              "candidate_0005",
+              "candidate_0006",
+              "candidate_0007",
+              "candidate_0008",
+              "candidate_0009",
+              "candidate_0010",
+              "candidate_0011",
+              "candidate_0012",
+              "candidate_0013",
+              "candidate_0014",
+              "candidate_0015",
+              "candidate_0016",
+              "candidate_0017",
+              "candidate_0018",
+              "candidate_0019",
+              "candidate_0020"
+            ],
+            "clear_positive_candidate_ids": [
+              "candidate_0001",
+              "candidate_0002",
+              "candidate_0003",
+              "candidate_0004",
+              "candidate_0005",
+              "candidate_0006",
+              "candidate_0007",
+              "candidate_0008",
+              "candidate_0009",
+              "candidate_0010"
+            ],
+            "grey_candidate_ids": [],
+            "clear_negative_candidate_ids": [
+              "candidate_0011",
+              "candidate_0012",
+              "candidate_0013",
+              "candidate_0014",
+              "candidate_0015",
+              "candidate_0016",
+              "candidate_0017",
+              "candidate_0018",
+              "candidate_0019",
+              "candidate_0020"
+            ],
+            "semantic_positive_candidate_ids": [],
+            "final_candidate_ids": [
+              "candidate_0001",
+              "candidate_0002",
+              "candidate_0003",
+              "candidate_0004",
+              "candidate_0005",
+              "candidate_0006",
+              "candidate_0007",
+              "candidate_0008",
+              "candidate_0009",
+              "candidate_0010"
+            ],
+            "candidate_ids": [
+              "candidate_0001",
+              "candidate_0002",
+              "candidate_0003",
+              "candidate_0004",
+              "candidate_0005",
+              "candidate_0006",
+              "candidate_0007",
+              "candidate_0008",
+              "candidate_0009",
+              "candidate_0010"
+            ]
+          }
+        },
+        "telemetry": {
+          "mode": "RELATION",
+          "relation": "LEFT_OF",
+          "selection_type": "MULTI",
+          "coordinate_system": "bbox_xyxy_global",
+          "scope_bbox_xyxy_global": [
+            0.0,
+            0.0,
+            640.0,
+            480.0
+          ],
+          "margin_px": 9.6,
+          "overlap_iou_threshold": 0.1,
+          "all_candidate_ids": [
+            "candidate_0001",
+            "candidate_0002",
+            "candidate_0003",
+            "candidate_0004",
+            "candidate_0005",
+            "candidate_0006",
+            "candidate_0007",
+            "candidate_0008",
+            "candidate_0009",
+            "candidate_0010",
+            "candidate_0011",
+            "candidate_0012",
+            "candidate_0013",
+            "candidate_0014",
+            "candidate_0015",
+            "candidate_0016",
+            "candidate_0017",
+            "candidate_0018",
+            "candidate_0019",
+            "candidate_0020"
+          ],
+          "clear_positive_candidate_ids": [
+            "candidate_0001",
+            "candidate_0002",
+            "candidate_0003",
+            "candidate_0004",
+            "candidate_0005",
+            "candidate_0006",
+            "candidate_0007",
+            "candidate_0008",
+            "candidate_0009",
+            "candidate_0010"
+          ],
+          "grey_candidate_ids": [],
+          "clear_negative_candidate_ids": [
+            "candidate_0011",
+            "candidate_0012",
+            "candidate_0013",
+            "candidate_0014",
+            "candidate_0015",
+            "candidate_0016",
+            "candidate_0017",
+            "candidate_0018",
+            "candidate_0019",
+            "candidate_0020"
+          ],
+          "semantic_positive_candidate_ids": [],
+          "final_candidate_ids": [
+            "candidate_0001",
+            "candidate_0002",
+            "candidate_0003",
+            "candidate_0004",
+            "candidate_0005",
+            "candidate_0006",
+            "candidate_0007",
+            "candidate_0008",
+            "candidate_0009",
+            "candidate_0010"
+          ],
+          "candidate_ids": [
+            "candidate_0001",
+            "candidate_0002",
+            "candidate_0003",
+            "candidate_0004",
+            "candidate_0005",
+            "candidate_0006",
+            "candidate_0007",
+            "candidate_0008",
+            "candidate_0009",
+            "candidate_0010"
+          ]
+        },
+        "error": null,
+        "fallback": null,
+        "trace_metadata": {}
+      },
+      {
+        "node_id": "n4",
+        "operator": "COUNT",
+        "input_refs": {
+          "entities": "$n3"
+        },
+        "resolved_input_types": {
+          "entities": "SelectResult"
+        },
+        "provider": "cardinality",
+        "latency_ms": 0.047600013203918934,
+        "execution_mode": null,
+        "semantic_method": null,
+        "cache_reused": null,
+        "final_choice_fusion": false,
+        "fusion_reason": "operator_not_eligible",
+        "output_runtime_type": "ScalarInt",
+        "output_summary": {
+          "type": "ScalarInt",
+          "value": 10,
+          "provenance": {
+            "provider": "cardinality",
+            "source": "EntitySet"
+          }
+        },
+        "telemetry": {
+          "provider": "cardinality",
+          "source": "EntitySet"
+        },
+        "error": null,
+        "fallback": null,
+        "trace_metadata": {}
+      }
+    ],
+    "final_sources": [
+      "$n4"
+    ],
+    "final_question": "",
+    "choice_provider": null,
+    "choice_result": null,
+    "result": null,
+    "routing_ms": null,
+    "planner_ms": null,
+    "retriever_ms": null,
+    "detector_ms": null,
+    "counting_ms": null,
+    "semantic_vlm_ms": null,
+    "route_vlm_ms": null,
+    "choice_ms": null,
+    "postprocess_ms": null,
+    "e2e_ms": null,
+    "stage_status": {},
+    "activated_providers": [],
+    "activated_model_roles": [],
+    "activated_parameter_counts": {},
+    "resource_metrics": {},
+    "ttft_ms": "NOT_AVAILABLE_FROM_BACKEND",
+    "visual_tokens": "NOT_AVAILABLE_FROM_BACKEND",
+    "output_tokens": "NOT_AVAILABLE_FROM_BACKEND",
+    "decode_tokens_per_s": "NOT_AVAILABLE_FROM_BACKEND",
+    "telemetry": {
+      "executor": {
+        "schema_version": "1.0",
+        "scope": "taskgraph_executor",
+        "success": true,
+        "error_type": null,
+        "started_at_utc": "2026-10-09T18:54:58.012174+00:00",
+        "ended_at_utc": "2026-10-09T18:54:58.042888+00:00",
+        "timing_ms": {
+          "e2e": 29.26909999223426
+        },
+        "resources": {
+          "cpu_rss_start_mb": 554.086,
+          "cpu_rss_end_mb": 554.172,
+          "peak_cpu_rss_mb": 554.172,
+          "peak_gpu_allocated_mb": 0.0,
+          "peak_gpu_reserved_mb": 0.0
+        },
+        "measurement": {
+          "clock": "time.perf_counter",
+          "cpu_rss": "process RSS sampled during scope",
+          "cpu_sample_interval_ms": 50.0,
+          "cuda_synchronized": true,
+          "cuda_peak_stats_reset": false
+        },
+        "activated_providers": [
+          "cardinality",
+          "fake_lae",
+          "geometry",
+          "semantic_2b:referent"
+        ],
+        "fallback_count": 0,
+        "node_count": 4
+      }
+    }
+  },
+  "result": {
+    "type": "ScalarInt",
+    "value": 10,
+    "provenance": {
+      "provider": "cardinality",
+      "source": "EntitySet"
+    }
+  },
+  "calls": [
+    {
+      "prompt": "Visual inputs:\n[image_1] role: LOCATE_SCOPE\n\nQuestion:\nTask: LOCATE_SINGLE. Localize one target object in this remote-sensing visual.\nTarget category: building\nIntrinsic attributes: {}\nActual supplied visual size: 640 x 480 pixels.\nSearch scope: the supplied image or crop, and nothing outside it.\nUse ONLY the target definition supplied to this LOCATE node. Do not solve the overall question, use downstream SELECT conditions, or invent additional landmarks.\nIf one well-supported matching object is identifiable, return exactly {\"status\":\"OK\",\"bbox\":[x1,y1,x2,y2]}.\nIf none is visible, return exactly {\"status\":\"NONE\"}.\nIf several plausible targets cannot be distinguished, return exactly {\"status\":\"AMBIGUOUS\"}.\nIf evidence is insufficient, return exactly {\"status\":\"UNRESOLVED\"}.\nThe bbox uses pixel XYXY of the ACTUAL supplied visual, top-left origin. No Markdown, prose, or extra fields.",
+      "visuals": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\locate_select_v2_after\\visuals\\visual_00163.png"
+      ],
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "image",
+              "image": "<IMAGE>"
+            },
+            {
+              "type": "text",
+              "text": "Visual inputs:\n[image_1] role: LOCATE_SCOPE\n\nQuestion:\nTask: LOCATE_SINGLE. Localize one target object in this remote-sensing visual.\nTarget category: building\nIntrinsic attributes: {}\nActual supplied visual size: 640 x 480 pixels.\nSearch scope: the supplied image or crop, and nothing outside it.\nUse ONLY the target definition supplied to this LOCATE node. Do not solve the overall question, use downstream SELECT conditions, or invent additional landmarks.\nIf one well-supported matching object is identifiable, return exactly {\"status\":\"OK\",\"bbox\":[x1,y1,x2,y2]}.\nIf none is visible, return exactly {\"status\":\"NONE\"}.\nIf several plausible targets cannot be distinguished, return exactly {\"status\":\"AMBIGUOUS\"}.\nIf evidence is insufficient, return exactly {\"status\":\"UNRESOLVED\"}.\nThe bbox uses pixel XYXY of the ACTUAL supplied visual, top-left origin. No Markdown, prose, or extra fields."
+            }
+          ]
+        }
+      ],
+      "allowed_outputs": null,
+      "suffixes": [],
+      "mock": true,
+      "chat_template_rendered": "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Visual inputs:\n[image_1] role: LOCATE_SCOPE\n\nQuestion:\nTask: LOCATE_SINGLE. Localize one target object in this remote-sensing visual.\nTarget category: building\nIntrinsic attributes: {}\nActual supplied visual size: 640 x 480 pixels.\nSearch scope: the supplied image or crop, and nothing outside it.\nUse ONLY the target definition supplied to this LOCATE node. Do not solve the overall question, use downstream SELECT conditions, or invent additional landmarks.\nIf one well-supported matching object is identifiable, return exactly {\"status\":\"OK\",\"bbox\":[x1,y1,x2,y2]}.\nIf none is visible, return exactly {\"status\":\"NONE\"}.\nIf several plausible targets cannot be distinguished, return exactly {\"status\":\"AMBIGUOUS\"}.\nIf evidence is insufficient, return exactly {\"status\":\"UNRESOLVED\"}.\nThe bbox uses pixel XYXY of the ACTUAL supplied visual, top-left origin. No Markdown, prose, or extra fields.<|im_end|>\n<|im_start|>assistant\n"
+    }
+  ],
+  "provenance": "actual GraphExecutor/InputComposer/Qwen wrapper; mocked detector/model predictions; no accuracy claim"
+}

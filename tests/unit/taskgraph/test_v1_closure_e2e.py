@@ -390,7 +390,7 @@ def test_f8_nested_bbox_to_attribute_keeps_global_coordinates(tmp_path: Path) ->
         runtime.close()
 
 
-def test_f9_semantic_region_locate_uses_retriever_then_qwen(tmp_path: Path) -> None:
+def test_f9_set_consuming_locate_uses_dino_even_for_region_category(tmp_path: Path) -> None:
     image = _image(tmp_path / "f9.png")
     graph = _graph(
         "What type of harbor is in the retrieved region?",
@@ -428,18 +428,18 @@ def test_f9_semantic_region_locate_uses_retriever_then_qwen(tmp_path: Path) -> N
     try:
         result = _run(runtime, graph, (image,))
         located = result.store.get("$n1")
-        assert located.provenance["capability"] == "region_retrieval"
-        assert located.entities[0].region.bbox_xyxy_global == (40.0, 30.0, 180.0, 160.0)
-        assert runtime.providers.detection.calls == []
+        assert located.provenance["locate_route"]["planned_backend"] == "LAE_DINO"
+        assert located.entities[0].region.bbox_xyxy_global == (1.0, 1.0, 10.0, 10.0)
+        assert len(runtime.providers.detection.calls) == 1
         assert isinstance(result.output, Label)
         assert result.output.value == "industrial"
         assert len(runtime.providers.semantic_2b.semantic_calls) == 1
-        assert result.trace.retriever_ms is not None and result.trace.retriever_ms >= 0.0
+        assert result.trace.detector_ms is not None and result.trace.detector_ms >= 0.0
         assert result.trace.semantic_vlm_ms is not None and result.trace.semantic_vlm_ms >= 0.0
-        assert result.trace.stage_status["retriever_ms"] == "executed"
+        assert result.trace.stage_status["detector_ms"] == "executed"
         assert result.trace.stage_status["semantic_vlm_ms"] == "executed"
         assert result.trace.stage_status["choice_ms"] == "not_used"
-        assert result.trace.activated_model_roles == ["retriever", "semantic_2b"]
+        assert result.trace.activated_model_roles == ["detector", "semantic_2b"]
     finally:
         runtime.close()
 

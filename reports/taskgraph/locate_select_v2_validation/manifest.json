@@ -1,0 +1,148 @@
+{
+  "date": "2026-10-10",
+  "branch": "codex/competition-protocol-v2",
+  "baseline_head": "7ee24b5",
+  "python": "C:\\Users\\Ericoneabc\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe",
+  "total_unique_passed": 617,
+  "final_failed": 0,
+  "batches": [
+    {
+      "batch": "core",
+      "passed": 135,
+      "seconds": 11.71,
+      "files": [
+        "tests/unit/taskgraph/test_locate_routing_v2.py",
+        "tests/unit/taskgraph/test_locate_select_v2.py",
+        "tests/unit/taskgraph/test_vlm_referent.py",
+        "tests/unit/taskgraph/test_locate_refinement.py",
+        "tests/unit/taskgraph/test_recall_fallback.py",
+        "tests/unit/taskgraph/test_select_system_v1.py",
+        "tests/unit/taskgraph/test_select_system_hardening.py",
+        "tests/unit/taskgraph/test_v1_closure_e2e.py",
+        "tests/unit/taskgraph/test_runtime.py"
+      ],
+      "log": "core.log",
+      "command": "& 'C:\\Users\\Ericoneabc\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe' -m pytest -q --basetemp=.tmp/v2-core-release tests/unit/taskgraph/test_locate_routing_v2.py tests/unit/taskgraph/test_locate_select_v2.py tests/unit/taskgraph/test_vlm_referent.py tests/unit/taskgraph/test_locate_refinement.py tests/unit/taskgraph/test_recall_fallback.py tests/unit/taskgraph/test_select_system_v1.py tests/unit/taskgraph/test_select_system_hardening.py tests/unit/taskgraph/test_v1_closure_e2e.py tests/unit/taskgraph/test_runtime.py",
+      "replay_note": "Use a new unique basetemp on replay to avoid Windows temp locks."
+    },
+    {
+      "batch": "lab",
+      "passed": 228,
+      "seconds": 7.87,
+      "files": [
+        "taskgraph_lab/tests/test_schema.py",
+        "taskgraph_lab/tests/test_validator.py",
+        "taskgraph_lab/tests/test_type_checker.py",
+        "taskgraph_lab/tests/test_dsl_roundtrip.py",
+        "taskgraph_lab/tests/test_dsl_invalid.py",
+        "taskgraph_lab/tests/test_dsl_constraint.py",
+        "taskgraph_lab/tests/test_dsl_integration.py",
+        "taskgraph_lab/tests/test_select_semantic_v2.py",
+        "taskgraph_lab/tests/test_prompt_operator_contract.py",
+        "taskgraph_lab/tests/test_constrained_decoding.py",
+        "taskgraph_lab/tests/test_canonicalize.py",
+        "taskgraph_lab/tests/test_adapters.py",
+        "taskgraph_lab/tests/test_v1_1.py"
+      ],
+      "log": "lab.log",
+      "command": "& 'C:\\Users\\Ericoneabc\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe' -m pytest -q --basetemp=.tmp/v2-lab-final taskgraph_lab/tests/test_schema.py taskgraph_lab/tests/test_validator.py taskgraph_lab/tests/test_type_checker.py taskgraph_lab/tests/test_dsl_roundtrip.py taskgraph_lab/tests/test_dsl_invalid.py taskgraph_lab/tests/test_dsl_constraint.py taskgraph_lab/tests/test_dsl_integration.py taskgraph_lab/tests/test_select_semantic_v2.py taskgraph_lab/tests/test_prompt_operator_contract.py taskgraph_lab/tests/test_constrained_decoding.py taskgraph_lab/tests/test_canonicalize.py taskgraph_lab/tests/test_adapters.py taskgraph_lab/tests/test_v1_1.py",
+      "replay_note": "Use a new unique basetemp on replay to avoid Windows temp locks."
+    },
+    {
+      "batch": "providers",
+      "passed": 103,
+      "seconds": 10.52,
+      "files": [
+        "tests/unit/taskgraph/test_detection_phrase.py",
+        "tests/unit/taskgraph/test_counting_integration.py",
+        "tests/unit/taskgraph/test_entity_tight_crops.py",
+        "tests/unit/taskgraph/test_hardening.py",
+        "tests/unit/taskgraph/test_semantic_decision.py",
+        "tests/unit/taskgraph/test_final_choice_fusion.py",
+        "tests/unit/taskgraph/test_executor_producer_trace.py",
+        "tests/unit/taskgraph/test_regionset_contracts.py",
+        "tests/unit/taskgraph/test_relation_regionset_contracts.py",
+        "tests/unit/taskgraph/test_route_contracts.py",
+        "tests/unit/taskgraph/test_prompt_contracts.py",
+        "tests/unit/taskgraph/test_choice.py"
+      ],
+      "log": "providers.log",
+      "command": "& 'C:\\Users\\Ericoneabc\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe' -m pytest -q --basetemp=.tmp/v2-providers-release tests/unit/taskgraph/test_detection_phrase.py tests/unit/taskgraph/test_counting_integration.py tests/unit/taskgraph/test_entity_tight_crops.py tests/unit/taskgraph/test_hardening.py tests/unit/taskgraph/test_semantic_decision.py tests/unit/taskgraph/test_final_choice_fusion.py tests/unit/taskgraph/test_executor_producer_trace.py tests/unit/taskgraph/test_regionset_contracts.py tests/unit/taskgraph/test_relation_regionset_contracts.py tests/unit/taskgraph/test_route_contracts.py tests/unit/taskgraph/test_prompt_contracts.py tests/unit/taskgraph/test_choice.py",
+      "replay_note": "Use a new unique basetemp on replay to avoid Windows temp locks."
+    },
+    {
+      "batch": "engine",
+      "passed": 41,
+      "seconds": 6.71,
+      "files": [
+        "tests/unit/test_hf_vlm_choice_cache.py",
+        "tests/unit/test_hf_vlm_engine.py",
+        "tests/unit/taskgraph/test_planner_provider.py"
+      ],
+      "log": "engine.log",
+      "command": "& 'C:\\Users\\Ericoneabc\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe' -m pytest -q --basetemp=.tmp/v2-engine-final tests/unit/test_hf_vlm_choice_cache.py tests/unit/test_hf_vlm_engine.py tests/unit/taskgraph/test_planner_provider.py",
+      "replay_note": "Use a new unique basetemp on replay to avoid Windows temp locks."
+    },
+    {
+      "batch": "remaining",
+      "passed": 58,
+      "seconds": 1.31,
+      "files": [
+        "tests/unit/taskgraph/test_answerability.py",
+        "tests/unit/taskgraph/test_capabilities.py",
+        "tests/unit/taskgraph/test_evaluation_runner.py",
+        "tests/unit/taskgraph/test_prepare_hash_memory.py",
+        "tests/unit/taskgraph/test_routing_policy.py",
+        "tests/unit/taskgraph/test_runtime_memory_hashes.py",
+        "tests/unit/taskgraph/test_runtime_memory.py",
+        "tests/unit/taskgraph/test_vrsbench_direct_vlm.py"
+      ],
+      "log": "remaining.log",
+      "command": "& 'C:\\Users\\Ericoneabc\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe' -m pytest -q --basetemp=.tmp/v2-remaining-verified tests/unit/taskgraph/test_answerability.py tests/unit/taskgraph/test_capabilities.py tests/unit/taskgraph/test_evaluation_runner.py tests/unit/taskgraph/test_prepare_hash_memory.py tests/unit/taskgraph/test_routing_policy.py tests/unit/taskgraph/test_runtime_memory_hashes.py tests/unit/taskgraph/test_runtime_memory.py tests/unit/taskgraph/test_vrsbench_direct_vlm.py",
+      "replay_note": "Use a new unique basetemp on replay to avoid Windows temp locks."
+    },
+    {
+      "batch": "producers",
+      "passed": 52,
+      "seconds": 2.1,
+      "files": [
+        "tests/unit/integrations/test_detector_providers.py",
+        "tests/unit/integrations/test_detector_parallelism.py",
+        "tests/unit/integrations/test_detector_image_transport.py",
+        "tests/unit/integrations/test_cpu_tile_prefetch.py",
+        "tests/unit/integrations/test_clip_rerank.py"
+      ],
+      "log": "producers.log",
+      "command": "& 'C:\\Users\\Ericoneabc\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe' -m pytest -q --basetemp=.tmp/v2-integrity-producers tests/unit/integrations/test_detector_providers.py tests/unit/integrations/test_detector_parallelism.py tests/unit/integrations/test_detector_image_transport.py tests/unit/integrations/test_cpu_tile_prefetch.py tests/unit/integrations/test_clip_rerank.py",
+      "replay_note": "Use a new unique basetemp on replay to avoid Windows temp locks."
+    }
+  ],
+  "extra_checks": [
+    {
+      "name": "audit",
+      "log": "audit.log"
+    },
+    {
+      "name": "lint",
+      "log": "lint.log"
+    },
+    {
+      "name": "diff_check",
+      "log": "diff_check.log"
+    },
+    {
+      "name": "audit_fixture_recheck",
+      "log": "audit_fixture_recheck.log"
+    }
+  ],
+  "audit_command": "& 'C:\\Users\\Ericoneabc\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe' -m scripts.taskgraph.audit_locate_select_prompts after",
+  "diff_command": "git -c core.whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol diff --check",
+  "scope": "All 30 unit/taskgraph files, 2 HF engine/cache files, 13 core lab files, 5 detector integration unit files. Not the full repository test suite.",
+  "real_model_experiments": false,
+  "audit_source_hashes_current": true,
+  "mock_e2e_graphs": 5,
+  "audit_capture_scenarios": 14,
+  "audit_capture_calls": 19,
+  "procedure_shortfall": "Initial pre-code audit omitted separate final choice fallback entry; supplemented after coding using unchanged choice.py and explicitly disclosed.",
+  "lint_command": "& 'C:\\Users\\Ericoneabc\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe' -m ruff check src/sat_rs_vlm/taskgraph taskgraph_lab/taskgraph src/sat_rs_vlm/integrations/detectors/lae_dino_sidecar.py src/sat_rs_vlm/integrations/detectors/tiled.py scripts/integrations/lae_dino_worker.py scripts/taskgraph/audit_locate_select_prompts.py tests/unit/taskgraph/test_locate_routing_v2.py tests/unit/taskgraph/test_locate_select_v2.py tests/unit/taskgraph/test_locate_refinement.py tests/unit/taskgraph/test_vlm_referent.py tests/unit/taskgraph/test_recall_fallback.py tests/unit/taskgraph/test_select_system_hardening.py tests/unit/taskgraph/test_v1_closure_e2e.py tests/unit/integrations/test_detector_providers.py taskgraph_lab/tests/test_select_semantic_v2.py"
+}

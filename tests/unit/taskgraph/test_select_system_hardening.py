@@ -358,7 +358,7 @@ def test_more_than_eight_candidates_never_use_unrestricted_fallback(tmp_path: Pa
         {"candidates": candidates, "reference": reference},
     )
     assert result.status is SelectStatus.UNRESOLVED
-    assert result.reason == "safe_fallback_unavailable"
+    assert result.reason == "relation_grey_candidates_exceed_visual_budget"
     assert provider.infer_calls == 0
 
 

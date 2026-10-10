@@ -22,7 +22,7 @@ class _PointerProvider:
 
     def infer(self, request: object):  # noqa: ANN001 - duck typing for the refiner
         self.requests.append(request)
-        return SimpleNamespace(text=self.message)
+        return SimpleNamespace(text=self.message, provider="semantic_2b", metadata={})
 
 
 def _make_image(tmp_path: Path) -> ImageRef:
@@ -43,7 +43,7 @@ def _target() -> TargetSpec:
 
 def test_vlm_referent_parses_bbox(tmp_path: Path) -> None:
     image = _make_image(tmp_path)
-    refiner, provider = _refiner(tmp_path, "The building is at 120 80 340 260")
+    refiner, provider = _refiner(tmp_path, '{"status":"OK","bbox":[96,72,192,144]}')
     result = refiner.vlm_referent(image, question="Where is the building?", target=_target())
 
     assert result is not None
@@ -51,7 +51,7 @@ def test_vlm_referent_parses_bbox(tmp_path: Path) -> None:
     assert isinstance(entities, EntitySet)
     assert len(entities.entities) == 1
     entity = entities.entities[0]
-    assert list(entity.region.bbox_xyxy_global) == [120.0, 80.0, 340.0, 260.0]
+    assert list(entity.region.bbox_xyxy_global) == [100.0, 75.0, 200.0, 150.0]
     assert entity.label == "building"
     assert entity.provenance.get("vlm_referent") is True
     assert entities.provenance["resolution_status"] == "VLM_REFERENT_RESOLVED"
@@ -63,19 +63,22 @@ def test_vlm_referent_rejects_garbage(tmp_path: Path) -> None:
     image = _make_image(tmp_path)
     refiner, provider = _refiner(tmp_path, "I see buildings everywhere, cannot count them.")
     result = refiner.vlm_referent(image, question="Where is the building?", target=_target())
-    assert result is None
+    assert not result.entities.entities
+    assert result.metadata["resolution_status"] == "UNRESOLVED"
     assert len(provider.requests) == 1
 
 
 def test_vlm_referent_rejects_degenerate_boxes(tmp_path: Path) -> None:
     image = _make_image(tmp_path)
     refiner, _ = _refiner(tmp_path, "0 0 0 0")
-    assert refiner.vlm_referent(image, question="Where?", target=_target()) is None
+    assert refiner.vlm_referent(image, question="Where?", target=_target()).entities.entities == ()
 
 
-def test_vlm_referent_skips_non_full_extent_region(tmp_path: Path) -> None:
+def test_vlm_referent_maps_non_full_extent_region(tmp_path: Path) -> None:
     image = _make_image(tmp_path)
     region = Region(image, (10.0, 10.0, 200.0, 150.0), {})
-    refiner, provider = _refiner(tmp_path, "120 80 340 260")
-    assert refiner.vlm_referent(region, question="Where?", target=_target()) is None
-    assert provider.requests == []
+    refiner, provider = _refiner(tmp_path, '{"status":"OK","bbox":[32,32,128,128]}')
+    result = refiner.vlm_referent(region, question="Where?", target=_target())
+    assert len(result.entities.entities) == 1
+    assert result.metadata["visual_transform"]["crop_origin_global"] == [10, 10]
+    assert len(provider.requests) == 1

@@ -10,7 +10,7 @@ FINAL_QUESTION(source-or-list,answer_type,"static residual question"). Final
 sources must be $nX references, never raw images.
 
 Allowed node surfaces are REGION, REGION_BBOX, FIND_MARKER, LOCATE with T(...),
-SELECT_REL, SELECT_RANK, SELECT_ORD, SELECT_EXTREME, SELECT_SUBREGION, GROUP,
+SELECT_REL, SELECT_SEM, SELECT_RANK, SELECT_ORD, SELECT_EXTREME, SELECT_SUBREGION, GROUP,
 COUNT, COUNT_IMAGE, COUNT_ENTITIES, ATTRIBUTE, CLASSIFY, MULTILABEL_CLASSIFY,
 MOTION, RELATION, ABS_DIFF, VLM_REASON, BUILD_ROUTE_CONTEXT, and ROUTE_REASON.
 Follow the canonical argument roles learned from the examples; use JSON strings,
@@ -32,3 +32,14 @@ CHOICE_MULTI is indeterminate multi-select: the downstream Choice VLM selects
 every applicable option and may return one or more ids. CHOICE_SINGLE permits
 exactly one id. Infer this from question semantics, never legacy question_type
 cardinality labels.
+
+For a natural-language condition over existing candidates, use
+SELECT_SEM(candidates,reference-or-null,"complete natural language query",SINGLE|MULTI).
+The string belongs to SELECT.params.query, never to inputs. Preserve the full
+condition (including surrounding trees, grass, roads, shapes, and spatial context).
+Do not create extra LOCATE nodes for background nouns solely to express this
+condition. LOCATE produces the category candidates with their intrinsic TargetSpec
+attributes; SELECT consumes the filtering condition. SINGLE may be ambiguous or
+unresolved; MULTI may select no candidates. Geometry REL/RANK/ORD/EXTREME and
+SUBREGION remain available and retain their meanings. Plan all logical steps
+explicitly; the executor chooses only physical LOCATE backends from their uses.

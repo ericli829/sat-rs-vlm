@@ -352,6 +352,13 @@ class TiledProposalProvider:
                             "base_provider": result.provider,
                             "base_model_id": result.model_id,
                             "validation": validation,
+                            "candidate_pool_complete": result.metadata.get(
+                                "candidate_pool_complete"
+                            )
+                            is not False
+                            and not result.metadata.get("candidate_truncated")
+                            and validation["invalid_count"] == 0,
+                            "candidate_truncated": bool(result.metadata.get("candidate_truncated")),
                         }
                     )
                     for local_box, score in zip(local_boxes, local_scores, strict=True):
@@ -410,6 +417,12 @@ class TiledProposalProvider:
                 "tiles": tile_records,
                 "raw_proposal_count": len(raw_boxes),
                 "deduplicated_proposal_count": len(boxes),
+                "candidate_truncated": any(tile["candidate_truncated"] for tile in tile_records)
+                or (self.global_top_k is not None and len(boxes) >= self.global_top_k),
+                "candidate_pool_complete": all(
+                    tile["candidate_pool_complete"] for tile in tile_records
+                )
+                and (self.global_top_k is None or len(boxes) < self.global_top_k),
                 "raw_proposals": raw_records,
                 "kept_raw_indices": keep,
                 "base_latency_ms": base_latency_ms,

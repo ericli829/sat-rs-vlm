@@ -58,11 +58,14 @@ from .routing import DatasetExecutionPolicy, ExecutionMode, ExecutionModeRouter
 from .runtime_memory import RuntimeMemory
 from .runtime_types import (
     Answer,
+    CandidateIntegrityError,
     ChoiceResult,
     ImageRef,
     RuntimeObject,
     ScalarInt,
+    SelectResult,
     SelectResultConsumptionError,
+    SelectStatus,
     runtime_summary,
     unwrap_select_result,
 )
@@ -75,6 +78,7 @@ from .schema import (
     parse_taskgraph,
 )
 from .semantic_decision import SemanticDecisionConfig
+from .semantic_selection import SemanticSelectionConfig
 from .store import RuntimeStore
 from .tracing import (
     SYSTEM_TELEMETRY_STAGES,
@@ -346,6 +350,7 @@ class TaskGraphRuntime:
         answerability_config: AnswerabilityConfig | None = None,
         locate_refinement_config: ReferentRefinementConfig | None = None,
         locate_max_candidates: int = 16,
+        semantic_selection_config: SemanticSelectionConfig | None = None,
         runtime_memory: RuntimeMemory | None = None,
     ) -> None:
         self.providers = providers
@@ -364,6 +369,7 @@ class TaskGraphRuntime:
             semantic_categories=semantic_categories,
             capability_classifier=capability_classifier,
             max_candidates=locate_max_candidates,
+            selection_config=semantic_selection_config,
             refiner=ReferentRefiner(
                 providers.semantic_2b,
                 self.composer,
@@ -374,7 +380,9 @@ class TaskGraphRuntime:
         counting = providers.counting or FakeCountingProvider()
         providers.counting = counting
         count = CountExecutor(counting)
-        select = SelectExecutor(providers.semantic_2b, self.choice_config)
+        select = SelectExecutor(
+            providers.semantic_2b, self.choice_config, semantic_selection_config
+        )
         semantic = SemanticExecutor(
             providers.semantic_2b,
             model_role="semantic_2b",
@@ -566,10 +574,47 @@ class TaskGraphRuntime:
         }
         evidence_fallback = False
         try:
+            for ref in graph.final.sources:
+                raw_source = store.get(ref)
+                payload = (
+                    raw_source.selected if isinstance(raw_source, SelectResult) else raw_source
+                )
+                if getattr(payload, "provenance", {}).get("candidate_pool_complete") is False:
+                    raise CandidateIntegrityError(
+                        f"final.sources[{ref}] has incomplete/unverified candidates"
+                    )
+                if (
+                    not request.defer_final_answer
+                    and getattr(payload, "provenance", {})
+                    .get("locate_route", {})
+                    .get("requirement")
+                    == "SINGLE_TARGET"
+                    and getattr(payload, "provenance", {}).get("resolution_status") == "EMPTY"
+                ):
+                    raise CandidateIntegrityError(f"final.sources[{ref}] has no located target")
+                if (
+                    isinstance(raw_source, SelectResult)
+                    and (
+                        raw_source.method == "qwen3_vl_semantic_finite"
+                        or getattr(payload, "provenance", {}).get("semantic_selection_ancestor")
+                    )
+                    and raw_source.status is not SelectStatus.OK
+                    and not (request.defer_final_answer and raw_source.status is SelectStatus.EMPTY)
+                ):
+                    raise CandidateIntegrityError(
+                        f"final.sources[{ref}] semantic selection is {raw_source.status.value}"
+                    )
             sources = tuple(
                 unwrap_select_result(
                     store.get(ref),
-                    allow_empty=False,
+                    allow_empty=(
+                        request.defer_final_answer
+                        and isinstance(store.get(ref), SelectResult)
+                        and (
+                            store.get(ref).method == "qwen3_vl_semantic_finite"
+                            or store.get(ref).selected.provenance.get("semantic_selection_ancestor")
+                        )
+                    ),
                     consumer=f"final.sources[{ref}]",
                 )
                 for ref in graph.final.sources
@@ -1468,5 +1513,8 @@ def runtime_from_config(
         answerability_config=answerability_config,
         locate_refinement_config=locate_refinement_config,
         locate_max_candidates=locate_max_candidates,
+        semantic_selection_config=SemanticSelectionConfig.from_mapping(
+            config.get("semantic_select")
+        ),
         runtime_memory=runtime_memory,
     )

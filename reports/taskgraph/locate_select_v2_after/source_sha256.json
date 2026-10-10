@@ -1,0 +1,20 @@
+{
+  "src\\sat_rs_vlm\\taskgraph\\operators.py": "1ea936db0433bfc0806de8fbf076b40db3ab3da0530db06a030a5b005b1d73cc",
+  "src\\sat_rs_vlm\\taskgraph\\referent_refinement.py": "6d966339455ab3b714af008da08ee016e78b652144267f99c552dee087c3cd03",
+  "src\\sat_rs_vlm\\taskgraph\\providers.py": "aca9b6fc4ac1937b44005f220873a2b331cc5f4d1c6edd6725f468955c4da791",
+  "src\\sat_rs_vlm\\taskgraph\\input_composer.py": "72606750c0b0580ff20ac801344f9c7d0d24ce339e6fc680c0bb33a17d9b4d2c",
+  "src\\sat_rs_vlm\\taskgraph\\semantic_decision.py": "85fd83b5b8ac86e5e8ab3a8787a869876364fe33598cdaba251849f988695ec0",
+  "src\\sat_rs_vlm\\taskgraph\\semantic_prompts.py": "8a35d3fb8858addc94c45e6c8c7c1899f1e23e65743fa20952b4c2f4673e7ebe",
+  "src\\sat_rs_vlm\\taskgraph\\execution_plan.py": "474d92dc285a3385193c0d2d34abb5635138b00cb07dece9d4ae7040eeb33dac",
+  "src\\sat_rs_vlm\\taskgraph\\schema.py": "0906d3fc0603682e0bf27325bc4b67c0323250f72f4caeab5a18dc9d602e5641",
+  "src\\sat_rs_vlm\\taskgraph\\choice.py": "02dd22e4ade7f257c0996828aafc8ae6825507b93b2422c9623bf8a4c9e0c7c1",
+  "src\\sat_rs_vlm\\taskgraph\\locate_routing.py": "a370c0a04381dce3dfaf06a84d14b9c3c21cff7ea0165fcd2538880ac270494f",
+  "src\\sat_rs_vlm\\taskgraph\\semantic_selection.py": "c56a6b12cc1b9ca73089c6061d2928b5d1529869f737c3b659a79647e04b7972",
+  "src\\sat_rs_vlm\\taskgraph\\executor.py": "32305f74986ca39a398c2d695cff97a613ab689462305030523024099114ae56",
+  "src\\sat_rs_vlm\\taskgraph\\runtime.py": "390b4878ff64775e6d31f464bcf7b454145fe36ab8ba199c4df31abf835b5718",
+  "src\\sat_rs_vlm\\taskgraph\\runtime_types.py": "fcd0353c3613aeef9c075044eda5ae92a8ce0c362f25aad96f4de8736b1e0c88",
+  "src\\sat_rs_vlm\\models\\hf_vlm_engine.py": "b769121f777441daa527cde6ae73cf7b8063a03aaf7fa1af3c40d928c64fac25",
+  "scripts/integrations/lae_dino_worker.py": "0044d81e5ce63abadd66f46c805f607f0e450d03828f367b017234af996f48f1",
+  "src/sat_rs_vlm/integrations/detectors/lae_dino_sidecar.py": "de9578ce1d2efd05f66e8604071c52aa6884efa0c5cbaf0081862b1f2eecc3de",
+  "src/sat_rs_vlm/integrations/detectors/tiled.py": "f5c99de512c44d68a23027e6ec13a962fe2fef98b60399f6f3d3f4ef917fd24e"
+}

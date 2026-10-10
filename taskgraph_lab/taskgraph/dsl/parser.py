@@ -17,6 +17,7 @@ _SURFACE_OPERATORS = {
     "FIND_MARKER",
     "LOCATE",
     "SELECT_REL",
+    "SELECT_SEM",
     "SELECT_RANK",
     "SELECT_ORD",
     "SELECT_EXTREME",
@@ -155,6 +156,7 @@ def _infer_count_role(reference: str, outputs: dict[str, set[RuntimeType]]) -> s
 
 def _select_node(call: Call) -> tuple[dict[str, Any], dict[str, Any]]:
     signatures = {
+        "SELECT_SEM": ("SEMANTIC", ("query", "selection_type")),
         "SELECT_REL": ("RELATION", ("relation",)),
         "SELECT_RANK": ("RANK", ("criterion", "rank", "order")),
         "SELECT_ORD": ("ORDINAL", ("index", "order")),
@@ -171,7 +173,7 @@ def _select_node(call: Call) -> tuple[dict[str, Any], dict[str, Any]]:
     for name, raw in zip(param_names, raw_params, strict=True):
         if name in {"rank", "index"}:
             params[name] = _integer(raw)
-        elif name == "criterion":
+        elif name in {"criterion", "query"}:
             params[name] = _string(raw)
         else:
             params[name] = _symbol(raw)

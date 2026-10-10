@@ -79,6 +79,7 @@ class RegionPosition(StringEnum):
 
 
 class SelectMode(StringEnum):
+    SEMANTIC = "SEMANTIC"
     RELATION = "RELATION"
     RANK = "RANK"
     ORDINAL = "ORDINAL"

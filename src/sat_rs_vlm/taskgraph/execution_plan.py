@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from .locate_routing import LocateExecutionHint, analyze_locate
 from .schema import AnswerType, OperatorName, TaskGraph
 
 DEFAULT_FUSION_OPERATORS = frozenset(
@@ -53,6 +54,7 @@ class NodeExecutionHint:
     options: tuple[str, ...]
     question: str
     fusion_reason: str
+    locate: LocateExecutionHint | None = None
 
 
 @dataclass(frozen=True)
@@ -108,6 +110,9 @@ class ExecutionPlan:
                 options=options if enabled else (),
                 question=graph.final.question,
                 fusion_reason=reason,
+                locate=analyze_locate(node.id, graph.nodes)
+                if node.op is OperatorName.LOCATE
+                else None,
             )
         return cls(hints)
 

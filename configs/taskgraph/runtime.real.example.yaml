@@ -48,8 +48,8 @@ providers:
     locate_detector:
       # 0.15 -> 0.05: LAE-DINO needs a low threshold for small remote-sensing
       # targets (official 0.4 finds nothing; the linked report proves 0.05
-      # scale thresholds recover small cars/buildings).  Downstream CLIP
-      # reranking and referent refinement keep precision.
+      # scale thresholds recover small cars/buildings).  Graph-routed LOCATE
+      # bypasses CLIP top-K; intrinsic attributes use the policy below.
       score_threshold: 0.05
       max_candidates: 16
       clip_rerank_top_k: 16
@@ -124,8 +124,8 @@ providers:
     count:
       # 0.10 did NOT help: at 0.05 box floor the LAE raw pool is huge
       # (21000 boxes -> fuse 11..202 vs refs 1..11), i.e. over-count.
-      # Restore 0.20 for the count-head fusion; LOCATE keeps 0.05 because
-      # CLIP reranking + max_candidates preserve precision there.
+      # Restore 0.20 for the count-head fusion; LOCATE retains its separate
+      # 0.05 category threshold and reports any sidecar candidate truncation.
       score_threshold: 0.20
       nms_iou: 0.40
       cross_scale_iou: 0.50
@@ -175,15 +175,24 @@ capability_routing:
   unresolved_policy: retriever_fallback
 
 locate_refinement:
-  # Only affects singleton-requiring LOCATE (attributes / direct final /
-  # singular consumer triggers; SELECT/GROUP/COUNT/RELATION paths are
-  # untouched).  semantic_weight 0.0 -> no VLM verification; the single
-  # highest-scoring (LAE/clip-rerank fused) candidate is pinned.
+  # LOCATE physical routing is now always derived from TaskGraph input roles.
+  # These legacy refinement switches no longer choose a singleton backend.
   enabled: true
   max_candidates: 8
   semantic_weight: 0.0
   geometry_weight: 0.25
   minimum_margin: 0.02
+  single_detector_fallback: true
+  single_max_pixels: 409600
+  single_min_box_area: 4.0
+  # Optional bounded VLM intrinsic-attribute verification after category DINO.
+  # Default when omitted is unresolved (no calibrated attribute truth).
+  attribute_policy: vlm
+
+semantic_select:
+  batch_size: 8
+  max_candidates: 64
+  max_pixels: 409600
 
 input_composer:
   save_intermediate_artifacts: false
