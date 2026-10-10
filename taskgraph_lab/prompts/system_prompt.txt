@@ -517,8 +517,10 @@ The query is a nonempty string of at most 2048 characters, stored in params,
 never inputs. Retain the complete natural-language condition. Select only from
 existing candidates; background trees, grass and roads do not require extra
 LOCATE nodes. SINGLE may be NONE, ambiguous or unresolved; MULTI may be empty.
-LOCATE's target cannot absorb a downstream query. Optional scope is supported
-in JSON; the SELECT_SEM DSL surface explicitly rejects a separate scope role.
+LOCATE's target cannot absorb a downstream query. Optional inputs.scope is an
+ImageRef or Region reference, separate from inputs.reference. Omit scope when
+no explicit visual scope is needed; Planner DSL serialization preserves it
+when present and does not add a default when absent.
 
 RELATION:
 {

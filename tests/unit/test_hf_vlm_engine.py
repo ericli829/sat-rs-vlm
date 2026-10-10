@@ -154,10 +154,14 @@ def test_engine_prefers_qwen3vl_and_uses_auto_device_map(
     )
     install_fake_modules(monkeypatch, transformers)
 
-    engine = HuggingFaceVLMEngine("local/qwen3-vl", device="auto", dtype="auto")
+    engine = HuggingFaceVLMEngine(
+        "local/qwen3-vl", device="auto", dtype="auto",
+        max_memory={"0": "4GiB", "cpu": "24GiB"},
+    )
 
     assert FakeQwenModelLoader.model_id == "local/qwen3-vl"
     assert FakeQwenModelLoader.kwargs["device_map"] == "auto"
+    assert FakeQwenModelLoader.kwargs["max_memory"] == {0: "4GiB", "cpu": "24GiB"}
     assert FakeQwenModelLoader.kwargs["dtype"] == "auto"
     assert FakeQwenModelLoader.model.to_calls == []
     assert engine.device == "cuda:0"

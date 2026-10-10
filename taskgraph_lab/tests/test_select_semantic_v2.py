@@ -72,7 +72,7 @@ def test_attribute_allows_semantic_single_but_rejects_multi():
         assert result.valid == expected
 
 
-def test_reference_roundtrips_and_scope_cannot_be_silently_dropped():
+def test_reference_and_scope_roundtrip_without_being_silently_dropped():
     target = parse_taskgraph_dsl(program(reference="$n1"))
     compiled = compile_taskgraph_to_dsl(target)
     assert parse_taskgraph_dsl(compiled).nodes[1].inputs["reference"] == "$n1"
@@ -80,8 +80,10 @@ def test_reference_roundtrips_and_scope_cannot_be_silently_dropped():
     raw["nodes"][1]["inputs"]["scope"] = "$image0"
     parsed = PlannerTarget.model_validate(raw)
     assert validate_candidate(raw, inputs={"image0": {}})[1].valid
-    with pytest.raises(ValueError, match="does not encode scope"):
-        compile_taskgraph_to_dsl(parsed)
+    restored = parse_taskgraph_dsl(compile_taskgraph_to_dsl(parsed))
+    assert restored.nodes[1].inputs == {
+        "candidates": "$n1", "reference": "$n1", "scope": "$image0"
+    }
 
 
 def test_prefix_does_not_accept_unquoted_query_or_unknown_cardinality():

@@ -9,6 +9,7 @@ import ctypes
 import gc
 import io
 import json
+import math
 import os
 import sys
 import time
@@ -227,6 +228,7 @@ def _predict(
     with Image.open(str(image_path)) as source:
         image_width, image_height = source.size
     started = time.perf_counter()
+    args = _request_options(args, request)
     # Keep detector/library diagnostics on stderr; the sidecar captures it.
     with contextlib.redirect_stdout(io.StringIO()):
         query = str(request.get("target_phrase", "")).strip().lower()
@@ -241,6 +243,40 @@ def _predict(
             text_prompt=query,
             custom_entities=True,
         )
+    return _prediction_response(result, request, args, image_width, image_height, started)
+
+
+def _request_options(args: argparse.Namespace, request: dict[str, Any]) -> argparse.Namespace:
+    """Postprocessing is request-local so LOCATE and COUNT may share one model."""
+    options = request.get("options", {})
+    allowed = {"score_threshold", "top_k", "nms_threshold"}
+    if not isinstance(options, dict) or set(options) - allowed:
+        raise ValueError("invalid detector request options")
+    current = argparse.Namespace(**vars(args))
+    for key, value in options.items():
+        setattr(current, key, value)
+    current.score_threshold = float(current.score_threshold)
+    if not math.isfinite(current.score_threshold) or not 0 <= current.score_threshold <= 1:
+        raise ValueError("score_threshold must be between 0 and 1")
+    if isinstance(current.top_k, bool) or int(current.top_k) != current.top_k or current.top_k < 1:
+        raise ValueError("top_k must be a positive integer")
+    current.top_k = int(current.top_k)
+    if current.nms_threshold is not None:
+        current.nms_threshold = float(current.nms_threshold)
+        if not math.isfinite(current.nms_threshold) or not 0 <= current.nms_threshold <= 1:
+            raise ValueError("nms_threshold must be between 0 and 1")
+    return current
+
+
+def _prediction_response(
+    result: Any,
+    request: dict[str, Any],
+    args: argparse.Namespace,
+    image_width: int,
+    image_height: int,
+    started: float,
+) -> dict[str, Any]:
+    query = str(request["target_phrase"]).strip().lower()
     boxes, scores = _extract_predictions(result)
     if len(boxes) != len(scores):
         raise ProposalError(f"LAE-DINO boxes/scores length mismatch: {len(boxes)} != {len(scores)}")
@@ -299,6 +335,126 @@ def _predict(
     }
 
 
+def _build_batch_inference(model: Any) -> Any:
+    """Build the original pipeline once; call test_step ONCE for a whole batch.
+
+    The vendored inference_detector(list) loops over singleton test_step calls.
+    Keep its pipeline, BGR/RGB policy and rescaling metadata, bypass only that loop.
+    """
+    import torch
+    from mmcv.transforms import Compose
+    from mmdet.utils import get_test_pipeline_cfg
+
+    pipeline = Compose(get_test_pipeline_cfg(model.cfg.copy()))
+
+    def infer(requests: list[dict[str, Any]]) -> list[Any]:
+        inputs, samples = [], []
+        for index, request in enumerate(requests):
+            data = pipeline(
+                dict(
+                    img_path=str(Path(request["image"]).expanduser().resolve()),
+                    img_id=index,
+                    text=str(request["target_phrase"]).strip().lower(),
+                    custom_entities=True,
+                )
+            )
+            inputs.append(data["inputs"])
+            samples.append(data["data_samples"])
+        with torch.no_grad():
+            return model.test_step(dict(inputs=inputs, data_samples=samples))
+
+    return infer
+
+
+def _is_cuda_oom(exc: Exception) -> bool:
+    # Also supports torch 1.x, which may not expose torch.cuda.OutOfMemoryError.
+    return isinstance(exc, RuntimeError) and (
+        "cuda out of memory" in str(exc).lower()
+        or "cuda error: out of memory" in str(exc).lower()
+        or type(exc).__name__ == "OutOfMemoryError"
+    )
+
+
+def _predict_batch(
+    model: Any,
+    request: dict[str, Any],
+    args: argparse.Namespace,
+    batch_inference: Any,
+) -> dict[str, Any]:
+    from PIL import Image
+
+    started = time.perf_counter()
+    items = request.get("items")
+    if not isinstance(items, list) or not items:
+        raise ValueError("predict_batch requires nonempty items")
+    dimensions, options = [], []
+    ids = []
+    for item in items:
+        required = ("id", "image", "target_phrase")
+        if not isinstance(item, dict) or any(k not in item for k in required):
+            raise ValueError("batch item requires id/image/target_phrase")
+        if not isinstance(item["id"], str) or not str(item["target_phrase"]).strip():
+            raise ValueError("batch item requires string id and nonempty target_phrase")
+        ids.append(item["id"])
+        options.append(_request_options(args, item))
+        with Image.open(str(item["image"])) as image:
+            dimensions.append(image.size)
+    if len(set(ids)) != len(ids):
+        raise ValueError("duplicate batch item ids")
+    limit = min(args.max_batch_size, getattr(args, "_safe_batch_size", args.max_batch_size))
+    chunked = int(getattr(model, "test_cfg", {}).get("chunked_size", -1)) > 0
+    if chunked:
+        limit = 1
+    offset, retries = 0, 0
+    responses = []
+    while offset < len(items):
+        chunk = items[offset : offset + limit]
+        oom = False
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                predictions = batch_inference(chunk)
+            if not isinstance(predictions, (list, tuple)) or len(predictions) != len(chunk):
+                raise ProposalError("batch forward result count mismatch")
+            current = []
+            for index, prediction in enumerate(predictions):
+                item_index = offset + index
+                width, height = dimensions[item_index]
+                response = _prediction_response(
+                    prediction, items[item_index], options[item_index], width, height, started
+                )
+                response["metadata"]["effective_batch_size"] = len(chunk)
+                current.append(response)
+        except Exception as exc:
+            if not _is_cuda_oom(exc) or args.disable_batch_oom_retry or len(chunk) == 1:
+                raise
+            oom = True
+        # Leave the exception scope (and its traceback) before freeing GPU buffers.
+        if oom:
+            predictions = None
+            current = None
+            prediction = None
+            _release_request_resources()
+            limit = max(1, len(chunk) // 2)
+            args._safe_batch_size = limit
+            retries += 1
+            continue
+        responses.extend(current)
+        predictions = current = prediction = None
+        offset += len(chunk)
+    elapsed = (time.perf_counter() - started) * 1000.0
+    for response in responses:
+        response["latency_ms"] = elapsed / len(items)
+        response["metadata"].update(
+            batch_size_requested=len(items),
+            batch_worker_ms=elapsed,
+            batch_oom_retries=retries,
+            batch_limit=limit,
+            chunked_text_serial=chunked,
+            worker_pid=os.getpid(),
+        )
+    return {"id": request["id"], "status": "ok", "results": responses, "latency_ms": elapsed}
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-root", required=True)
@@ -312,13 +468,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkpoint-training-regime", default="unspecified")
     parser.add_argument("--source-revision", default="unspecified")
     parser.add_argument("--inference-query-mode", default="target_conditioned_text_prompt")
-    return parser.parse_args()
+    parser.add_argument("--max-batch-size", type=int, default=16)
+    parser.add_argument("--disable-batch-oom-retry", action="store_true")
+    args = parser.parse_args()
+    if args.max_batch_size < 1:
+        parser.error("max-batch-size must be positive")
+    return args
 
 
 def main() -> int:
     args = parse_args()
     try:
+        load_started = time.perf_counter()
         model = _load_detector(args)
+        model_load_ms = (time.perf_counter() - load_started) * 1000.0
+        batch_inference = None
         # Import only after model initialization; custom LAE-DINO mmdet APIs can
         # expose inference_detector from different namespaces.
         try:
@@ -339,10 +503,31 @@ def main() -> int:
             request = json.loads(line)
             if not isinstance(request, dict):
                 raise ValueError("request must be an object")
-            for key in ("id", "image", "target_phrase"):
-                if key not in request:
-                    raise ValueError(f"missing request field: {key}")
-            response = _predict(model, request, args, inference_detector)
+            if "id" not in request:
+                raise ValueError("missing request field: id")
+            operation = request.get("operation", "predict")
+            if operation == "initialize":
+                response = {
+                    "id": request["id"],
+                    "status": "ok",
+                    "model_inventory": {
+                        "parameter_count": sum(p.numel() for p in model.parameters()),
+                        "model_load_ms": model_load_ms,
+                        "worker_pid": os.getpid(),
+                        "max_batch_size": args.max_batch_size,
+                    },
+                }
+            elif operation == "predict_batch":
+                if batch_inference is None:
+                    batch_inference = _build_batch_inference(model)
+                response = _predict_batch(model, request, args, batch_inference)
+            elif operation == "predict":
+                for key in ("image", "target_phrase"):
+                    if key not in request:
+                        raise ValueError(f"missing request field: {key}")
+                response = _predict(model, request, args, inference_detector)
+            else:
+                raise ValueError(f"unsupported operation: {operation}")
         except json.JSONDecodeError as exc:
             response = {"status": "failed", "failure_stage": "protocol_guard", "error": str(exc)}
         except Exception as exc:

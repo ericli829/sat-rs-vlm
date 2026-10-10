@@ -79,14 +79,12 @@ providers:
       tile_size: 1333
       overlap_ratio: 0.15
       global_nms_iou: 0.4
-      parallel_workers: auto
-      # explicit 5 (max LAE parallelism).  auto budgeting resolved only 4
-      # (25.3GB base); explicit 5 -> base 28.2GB, peak ~32GB right at the
-      # edge — occasional OOM on the heaviest samples is accepted.
-      parallel_workers: 5
-      parallel_max_workers: 5
-      parallel_worker_vram_gb: 4.0
-      parallel_vram_reserve_gb: 6.0
+      # One LAE model/context; real batched test_step, not replica workers.
+      # Increase batch_size for the target GPU; CUDA OOM retries smaller batches.
+      parallel_workers: 1
+      parallel_max_workers: 1
+      batch_size: 16
+      batch_oom_retry: true
       proposal_cache_size: 8
       base_provider: lae_dino_lae1m
       base_config:
@@ -107,6 +105,9 @@ providers:
       bert_root: ${LAE_DINO_BERT_ROOT}
       worker_python: ${LAE_DINO_PYTHON}
       stderr_log: ${LAE_DINO_STDERR_LOG}
+      # Same worker identity as LOCATE; thresholds/top-k remain request-local.
+      batch_size: 16
+      batch_oom_retry: true
       # 0.0 -> 0.25: the 0.05 box floor floods the count head (raw 1200..21000
       # boxes -> fused 27..153 on refs 1..11).  Raise the effective LAE cut
       # (max(detector.score_threshold, 0.05)) so the head sees sane pools.
@@ -144,8 +145,7 @@ providers:
     dtype: bfloat16
     local_files_only: true
     max_new_tokens: 128
-    # 640x640 vision budget: two workers keep ~27.6GB resident, so multi-image
-    # semantic steps (SELECT/RELATION) need the KV increment cut to fit 31.5GB.
+    # Retain the existing vision budget; larger detector batches do not raise it.
     max_pixels: 409600
     # Compatibility fallback only: normal SELECT uses free reasoning followed
     # by KV-cached candidate scoring; Caption/VQA remain unconstrained.

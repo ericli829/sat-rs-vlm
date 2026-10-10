@@ -101,11 +101,10 @@ def _compile_select(node: Mapping[str, Any]) -> str:
     prefix = [_ref(inputs["candidates"]), reference]
     mode = params["mode"]
     if mode == "SEMANTIC":
+        args = [*prefix, _string(params["query"]), str(params["selection_type"])]
         if "scope" in inputs:
-            raise DSLCompileError(
-                "SELECT_SEM DSL does not encode scope; use TaskGraph JSON explicitly"
-            )
-        return _call("SELECT_SEM", *prefix, _string(params["query"]), str(params["selection_type"]))
+            args.append(_ref(inputs["scope"]))
+        return _call("SELECT_SEM", *args)
     if mode == "RELATION":
         return _call("SELECT_REL", *prefix, str(params["relation"]))
     if mode == "RANK":

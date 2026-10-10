@@ -388,7 +388,7 @@ def test_lae_sidecar_reports_process_crash(tmp_path: Path) -> None:
         client.close()
 
 
-def test_lae_sidecar_uses_independent_clients_for_parallel_requests(tmp_path: Path) -> None:
+def test_lae_sidecar_serializes_requests_on_one_worker(tmp_path: Path) -> None:
     source_root = tmp_path / "source"
     source_root.mkdir()
     config = tmp_path / "config.py"
@@ -432,7 +432,9 @@ def test_lae_sidecar_uses_independent_clients_for_parallel_requests(tmp_path: Pa
                     range(4),
                 )
             )
-        assert len(provider._clients) == 2
+        assert len(provider._clients) == 1
+        assert provider.parallel_workers == 1
+        assert all(result.metadata["parallel_workers"] == 1 for result in results)
         assert all(result.boxes_xyxy == [] for result in results)
     finally:
         provider.close()

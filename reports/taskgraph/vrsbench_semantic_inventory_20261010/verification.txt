@@ -1,0 +1,1 @@
+PASS: 122 unique review samples + 10 curated entries verified against source lines; original instructions/answers unchanged; image files exist; stored raw-annotation SHA256 match. No training labels created.

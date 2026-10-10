@@ -33,6 +33,7 @@ from sat_rs_vlm.infrastructure.telemetry import (
     first_token_logits_processor,
     visual_input_telemetry,
 )
+from sat_rs_vlm.training.utils import model_input_device, move_to_device
 
 MODEL_EXTRA_MESSAGE = 'HuggingFace model dependencies are missing. Run: pip install -e ".[model]"'
 TORCH_LOAD_MESSAGE = (
@@ -110,6 +111,17 @@ class CachedChoiceEngineResult:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class CachedDecodingResult:
+    """A canonical label decoded from the original multimodal reasoning cache."""
+
+    text: str
+    generated_tokens: tuple[int, ...]
+    cache_reused: bool
+    latency_ms: dict[str, float | None]
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
 class HuggingFaceVLMEngine:
     """基于 transformers 的真实 VLM 推理引擎。
 
@@ -117,6 +129,7 @@ class HuggingFaceVLMEngine:
         model_id：HuggingFace 模型 ID 或本地模型目录。
         adapter_path：可选的本地 PEFT/LoRA adapter 目录。
         device：运行设备；auto 使用 accelerate 自动分配模型。
+        max_memory：device=auto 时限制各设备的加载显存/内存预算。
         dtype：torch dtype 名称；auto 使用模型推荐精度。
         max_new_tokens：生成最大新 token 数。
         trust_remote_code：是否信任远程模型代码。
@@ -133,6 +146,8 @@ class HuggingFaceVLMEngine:
         trust_remote_code: bool = True,
         local_files_only: bool = False,
         max_pixels: int | None = None,
+        attn_implementation: str | None = None,
+        max_memory: dict[int | str, int | str] | None = None,
     ) -> None:
         """初始化 HuggingFace 模型和处理器。
 
@@ -184,10 +199,19 @@ class HuggingFaceVLMEngine:
             "trust_remote_code": trust_remote_code,
             "local_files_only": local_files_only,
         }
+        if attn_implementation is not None:
+            model_kwargs["attn_implementation"] = attn_implementation
         torch_dtype = self._resolve_dtype(dtype)
         model_kwargs["dtype"] = torch_dtype if torch_dtype is not None else "auto"
         if device == "auto":
             model_kwargs["device_map"] = "auto"
+            if max_memory is not None:
+                model_kwargs["max_memory"] = {
+                    int(key) if isinstance(key, str) and key.isdigit() else key: value
+                    for key, value in max_memory.items()
+                }
+        elif max_memory is not None:
+            raise ValueError("max_memory is supported only when device='auto'")
 
         if adapter_path:
             try:
@@ -336,10 +360,10 @@ class HuggingFaceVLMEngine:
         return None
 
     def _restore_rope_state(self, session: CachedGenerationSession) -> None:
-        if session._rope_deltas is None:
-            return
         holder = self._rope_state_holder()
         if holder is not None:
+            # Clear stale multimodal offsets as well as restoring non-empty
+            # offsets; text-only sessions must not inherit the previous image's M-RoPE state.
             holder.rope_deltas = session._rope_deltas
 
     def _cached_position_ids(
@@ -390,6 +414,7 @@ class HuggingFaceVLMEngine:
         image_paths: list[Any],
         *,
         max_new_tokens: int | None = None,
+        encoded_inputs: Any | None = None,
     ) -> CachedReasoningResult:
         """Generate free reasoning once and retain its actual Transformers KV cache."""
 
@@ -397,16 +422,23 @@ class HuggingFaceVLMEngine:
         telemetry.start()
         telemetry.start_preprocess()
         images = [self._open_image(path) for path in image_paths]
-        apply_chat_template = getattr(self._processor, "apply_chat_template", None)
-        if apply_chat_template is None:
-            raise RuntimeError("The selected processor does not support multimodal chat templates.")
-        encoded = apply_chat_template(
-            self._build_messages(prompt, images),
-            tokenize=True,
-            add_generation_prompt=True,
-            return_dict=True,
-            return_tensors="pt",
-        )
+        if encoded_inputs is None:
+            apply_chat_template = getattr(self._processor, "apply_chat_template", None)
+            if apply_chat_template is None:
+                raise RuntimeError("The selected processor does not support multimodal chat templates.")
+            encoded = apply_chat_template(
+                self._build_messages(prompt, images),
+                tokenize=True,
+                add_generation_prompt=True,
+                return_dict=True,
+                return_tensors="pt",
+            )
+        else:
+            # Let an existing evaluation collator supply its exact tensor inputs,
+            # including its image preprocessing and chat template, unchanged.
+            encoded = move_to_device(
+                encoded_inputs, model_input_device(self._model, self._torch), self._torch
+            )
         if hasattr(encoded, "to"):
             model_device = getattr(self._model, "device", self.device)
             encoded = encoded.to(model_device)
@@ -489,6 +521,10 @@ class HuggingFaceVLMEngine:
             )
         rope_holder = self._rope_state_holder()
         rope_deltas = getattr(rope_holder, "rope_deltas", None)
+        if not images and rope_deltas is None:
+            rope_deltas = self._torch.zeros(
+                (input_ids.shape[0], 1), dtype=self._torch.long, device=input_ids.device
+            )
         clone_rope = getattr(rope_deltas, "clone", None)
         if callable(clone_rope):
             rope_deltas = clone_rope()
@@ -532,6 +568,116 @@ class HuggingFaceVLMEngine:
             },
         )
 
+    def prefill_with_cache(
+        self,
+        prompt: str,
+        image_paths: list[Any],
+        *,
+        encoded_inputs: Any | None = None,
+    ) -> CachedReasoningResult:
+        """Prefill a prompt without generating a free-form token and retain its KV.
+
+        This is used by direct structured-answer paths: the first generated token
+        is then selected by ``decode_from_cache`` from the permitted candidates.
+        """
+        telemetry = GenerationTelemetry()
+        telemetry.start()
+        telemetry.start_preprocess()
+        images = [self._open_image(path) for path in image_paths]
+        if encoded_inputs is None:
+            apply_chat_template = getattr(self._processor, "apply_chat_template", None)
+            if apply_chat_template is None:
+                raise RuntimeError("The selected processor does not support multimodal chat templates.")
+            encoded = apply_chat_template(
+                self._build_messages(prompt, images),
+                tokenize=True,
+                add_generation_prompt=True,
+                return_dict=True,
+                return_tensors="pt",
+            )
+        else:
+            encoded = move_to_device(
+                encoded_inputs, model_input_device(self._model, self._torch), self._torch
+            )
+        if hasattr(encoded, "to"):
+            model_device = getattr(self._model, "device", self.device)
+            encoded = encoded.to(model_device)
+        telemetry.finish_preprocess()
+        input_ids = encoded["input_ids"]
+        initial_prefill_tokens = int(input_ids.shape[-1])
+        started = time.perf_counter()
+        telemetry.start_generation()
+        if not images:
+            rope_holder = self._rope_state_holder()
+            if rope_holder is not None:
+                rope_holder.rope_deltas = None
+        with self._torch.inference_mode():
+            outputs = self._model(**encoded, use_cache=True, return_dict=True)
+        prefill_ms = (time.perf_counter() - started) * 1000.0
+        telemetry.finish_generation(0)
+        cache = getattr(outputs, "past_key_values", None)
+        if cache is None:
+            raise RuntimeError("prompt-only prefill requires model output past_key_values")
+        attention_mask = encoded.get("attention_mask")
+        if attention_mask is None:
+            attention_mask = self._torch.ones_like(input_ids)
+        rope_holder = self._rope_state_holder()
+        rope_deltas = getattr(rope_holder, "rope_deltas", None)
+        if not images and rope_deltas is None:
+            rope_deltas = self._torch.zeros(
+                (input_ids.shape[0], 1), dtype=self._torch.long, device=input_ids.device
+            )
+        clone_rope = getattr(rope_deltas, "clone", None)
+        if callable(clone_rope):
+            rope_deltas = clone_rope()
+        vision_config = getattr(getattr(self._model, "config", None), "vision_config", None)
+        telemetry.vision_input = visual_input_telemetry(
+            [images],
+            encoded.get("image_grid_thw"),
+            patch_size=int(getattr(vision_config, "patch_size", 16)),
+            merge_size=int(getattr(vision_config, "spatial_merge_size", 2)),
+        )
+        telemetry.start_decode()
+        telemetry.finish_decode()
+        telemetry.output_token_counts = [0]
+        self.last_generation_telemetry = telemetry.to_dict()
+        session_id = uuid.uuid4().hex
+        latency: dict[str, float | None] = {
+            "prompt_prefill_ms": prefill_ms,
+            "prompt_preprocess_ms": telemetry.to_dict()["timing_ms"]["preprocess"],
+            "reasoning_decode_ms": 0.0,
+        }
+        session = CachedGenerationSession(
+            session_id=session_id,
+            model_identity=self._model_identity,
+            model_id=self.model_id,
+            reasoning_text="",
+            initial_prefill_tokens=initial_prefill_tokens,
+            reasoning_tokens=0,
+            latency_ms=latency,
+            metadata={
+                "device": self.device,
+                "dtype": self.dtype,
+                "reasoning_generate_includes_prefill": False,
+                "prompt_prefill_only": True,
+                "peak_vram_mb": self._peak_vram_mb(),
+            },
+            _past_key_values=cache,
+            _sequence_ids=input_ids,
+            _attention_mask=attention_mask,
+            _rope_deltas=rope_deltas,
+            _release_callback=self._release_session,
+        )
+        self._active_sessions[session_id] = session
+        return CachedReasoningResult(
+            "", session, dict(latency),
+            {
+                "initial_prefill_tokens": initial_prefill_tokens,
+                "reasoning_tokens": 0,
+                **session.metadata,
+            },
+        )
+
     def _validate_session(self, session: CachedGenerationSession) -> None:
         if session.closed:
             raise RuntimeError("cached generation session is closed")
@@ -557,15 +703,69 @@ class HuggingFaceVLMEngine:
     def _continuation(prefix: str, label: str) -> str:
         return label if prefix[-1:].isspace() else " " + label
 
+    def _tokenize_constrained_candidates(
+        self, suffix: str, allowed_outputs: tuple[str, ...]
+    ) -> tuple[list[int], dict[str, tuple[int, ...]], dict[str, tuple[int, ...]], list[int], float]:
+        """Tokenize suffix and labels jointly, splitting at their shared token prefix.
+
+        Tokenizers can merge trailing whitespace in the suffix with the first
+        label token (for example, ``"Answer: " + "top_right"`` may begin the
+        label with a whitespace-prefixed token). Encoding the suffix and label
+        independently would feed a different token sequence from the complete
+        text. Append only the longest common prefix to KV and keep each label's
+        exact remaining tokens from its complete contextual tokenization.
+        """
+        started = time.perf_counter()
+        separately_tokenized_suffix = self._token_ids(suffix)
+        full_contexts = {
+            label: tuple(self._token_ids(suffix + self._continuation(suffix, label)))
+            for label in allowed_outputs
+        }
+        if len(set(full_contexts.values())) != len(full_contexts):
+            raise ValueError("allowed outputs have ambiguous contextual tokenizations")
+
+        shared_length = 0
+        for token_group in zip(separately_tokenized_suffix, *full_contexts.values()):
+            if len(set(token_group)) != 1:
+                break
+            shared_length += 1
+        # Require the shared tokens to be an actual prefix of the independently
+        # tokenized suffix. This prevents a label prefix from moving into KV
+        # when one candidate is a token prefix of all remaining candidates.
+        if shared_length == 0:
+            raise ValueError(
+                "constrained outputs do not share a tokenized suffix prefix; "
+                "cannot safely continue the cached prompt"
+            )
+
+        shared_prefix = list(separately_tokenized_suffix[:shared_length])
+        continuations = {
+            label: tuple(tokens[shared_length:])
+            for label, tokens in full_contexts.items()
+        }
+        if any(not tokens for tokens in continuations.values()):
+            raise ValueError("an allowed output is fully consumed by the shared context prefix")
+        if len(set(continuations.values())) != len(continuations):
+            raise ValueError("allowed outputs have ambiguous continuation tokenizations")
+        return (
+            shared_prefix, continuations, full_contexts, separately_tokenized_suffix,
+            (time.perf_counter() - started) * 1000.0,
+        )
+
     def _prepare_cached_prefix(
         self,
         session: CachedGenerationSession,
         suffix: str,
         *,
         fork_cache: bool,
+        suffix_token_ids: list[int] | tuple[int, ...] | None = None,
     ) -> tuple[Any, Any, Any, int, int, float, float, float]:
         tokenize_started = time.perf_counter()
-        suffix_ids = self._token_ids(suffix)
+        suffix_ids = (
+            self._token_ids(suffix)
+            if suffix_token_ids is None
+            else [int(token) for token in suffix_token_ids]
+        )
         suffix_tokenize_ms = (time.perf_counter() - tokenize_started) * 1000.0
         sequence_ids = session._sequence_ids
         if sequence_ids is None:
@@ -619,6 +819,230 @@ class HuggingFaceVLMEngine:
             cache_clone_ms,
             elapsed_ms,
         )
+
+    def _diagnostic_token(self, token_id: int) -> dict[str, Any]:
+        tokenizer = getattr(self._processor, "tokenizer", self._processor)
+        decode = getattr(tokenizer, "decode", None)
+        convert = getattr(tokenizer, "convert_ids_to_tokens", None)
+        return {
+            "token_id": token_id,
+            "text": decode([token_id], skip_special_tokens=False,
+                           clean_up_tokenization_spaces=False) if callable(decode) else str(token_id),
+            "piece": convert(token_id) if callable(convert) else str(token_id),
+        }
+
+    def _score_cached_labels_in_place(
+        self, session: CachedGenerationSession, logits: Any, cache: Any,
+        attention: Any, tokenizations: dict[str, tuple[int, ...]], eos_ids: set[int],
+    ) -> tuple[dict[str, Any], Any, float]:
+        """Score complete labels sequentially, cropping one KV cache between branches."""
+        if not callable(getattr(cache, "crop", None)):
+            raise RuntimeError("Candidate probability diagnostics require a cache.crop API; KV cloning is disabled")
+        started = time.perf_counter()
+        base_length = int(cache.get_seq_length())
+        scores: dict[str, Any] = {}
+        for label, tokens in tokenizations.items():
+            cache.crop(base_length)
+            candidate_attention = attention
+            candidate_logits = logits
+            token_log_probs = []
+            try:
+                for token_id in tokens:
+                    log_probs = self._torch.log_softmax(candidate_logits[0].float(), dim=-1)
+                    token_log_probs.append(float(log_probs[token_id].item()))
+                    token = self._torch.tensor([[token_id]], dtype=session._sequence_ids.dtype,
+                                              device=session._sequence_ids.device)
+                    candidate_attention = self._torch.cat(
+                        [candidate_attention, candidate_attention.new_ones((candidate_attention.shape[0], 1))], dim=-1
+                    )
+                    self._restore_rope_state(session)
+                    positions = self._cached_position_ids(session, candidate_attention, 1)
+                    with self._torch.inference_mode():
+                        output = self._model(input_ids=token, attention_mask=candidate_attention,
+                                             past_key_values=cache, position_ids=positions,
+                                             use_cache=True, return_dict=True)
+                    cache = output.past_key_values
+                    candidate_logits = output.logits[:, -1, :]
+                log_probs = self._torch.log_softmax(candidate_logits[0].float(), dim=-1)
+                eos_indices = self._torch.tensor(sorted(eos_ids), device=log_probs.device)
+                eos_log_prob = float(self._torch.logsumexp(log_probs.index_select(0, eos_indices), dim=0).item())
+                label_log_prob = sum(token_log_probs)
+                scores[label] = {
+                    "token_ids": list(tokens), "token_log_probabilities": token_log_probs,
+                    "label_log_probability": label_log_prob, "eos_log_probability": eos_log_prob,
+                    "terminated_log_probability": label_log_prob + eos_log_prob,
+                    "mean_token_log_probability": label_log_prob / len(tokens),
+                }
+            finally:
+                cache.crop(base_length)
+        for source, destination in (
+            ("terminated_log_probability", "normalized_terminated_probability"),
+            ("label_log_probability", "normalized_label_probability"),
+            ("mean_token_log_probability", "normalized_mean_token_score"),
+        ):
+            values = self._torch.tensor([score[source] for score in scores.values()], dtype=self._torch.float64)
+            probabilities = self._torch.softmax(values, dim=0).tolist()
+            for score, probability in zip(scores.values(), probabilities, strict=True):
+                score[destination] = float(probability)
+        return scores, cache, (time.perf_counter() - started) * 1000.0
+
+    def decode_from_cache(
+        self,
+        session: CachedGenerationSession,
+        *,
+        suffix: str,
+        allowed_outputs: tuple[str, ...],
+        record_probabilities: bool = False,
+        score_candidates: bool = False,
+    ) -> CachedDecodingResult:
+        """Greedily decode a legal label while consuming the visual KV in place.
+
+        Unlike candidate likelihood scoring, each generated token is selected
+        from the legal label prefixes. No second image encoding, text-only
+        prefill, or cache clone is performed. The consumed session is closed on
+        success or failure, since its original sequence state is no longer reusable.
+        """
+        self._validate_session(session)
+        started = time.perf_counter()
+        try:
+            if not allowed_outputs or len(set(allowed_outputs)) != len(allowed_outputs):
+                raise ValueError("allowed outputs must be non-empty and unique")
+            tokenizer = getattr(self._processor, "tokenizer", self._processor)
+            eos = getattr(tokenizer, "eos_token_id", None)
+            if eos is None:
+                eos = getattr(getattr(self._model, "generation_config", None), "eos_token_id", None)
+            eos_ids = {int(eos)} if isinstance(eos, int) else {int(value) for value in (eos or ())}
+            if not eos_ids:
+                raise ValueError("cached constrained decoding requires an EOS token")
+            (suffix_ids, tokenizations, full_context_tokenizations,
+             separately_tokenized_suffix, tokenize_ms) = (
+                self._tokenize_constrained_candidates(suffix, allowed_outputs)
+            )
+            if any(eos_ids.intersection(tokens) for tokens in tokenizations.values()):
+                raise ValueError("allowed output contains an EOS token")
+            (logits, cache, attention, _, suffix_tokens, prepare_tokenize_ms,
+             clone_ms, suffix_ms) = self._prepare_cached_prefix(
+                session, suffix, fork_cache=False, suffix_token_ids=suffix_ids
+            )
+            tokenize_ms += prepare_tokenize_ms
+            diagnostics: dict[str, Any] = {}
+            candidate_ms = 0.0
+            if record_probabilities:
+                diagnostics = {
+                    "step_probability_scope": "softmax over distinct permitted next-token IDs; shared label prefixes share a branch",
+                    "raw_probability_scope": "softmax over the full unmasked vocabulary",
+                    "candidate_probability_scope": "softmax of complete candidate log probabilities, including EOS; not accuracy confidence",
+                    "candidate_tokenization_method": "tokenize_complete_suffix_plus_output_then_split_at_longest_shared_token_prefix",
+                    "suffix_tail": suffix[-100:],
+                    "separately_tokenized_suffix_tokens": [
+                        self._diagnostic_token(t) for t in separately_tokenized_suffix[-12:]
+                    ],
+                    "shared_context_prefix_tokens": [
+                        self._diagnostic_token(t) for t in suffix_ids[-12:]
+                    ],
+                    "reasoning_tail_tokens": [self._diagnostic_token(int(t)) for t in session._sequence_ids[0, -16:].tolist()],
+                    "suffix_prefix_cache_length": int(cache.get_seq_length()),
+                    "suffix_prefix_attention_length": int(attention.shape[-1]),
+                    "candidate_tokenizations": {
+                        label: {
+                            "full_context_text": suffix + self._continuation(suffix, label),
+                            "full_context_tokens": [
+                                self._diagnostic_token(t)
+                                for t in full_context_tokenizations[label]
+                            ],
+                            "continuation_tokens_after_shared_context": [
+                                self._diagnostic_token(t) for t in tokens
+                            ],
+                            "separately_tokenized_suffix_plus_continuation_matches":
+                                full_context_tokenizations[label]
+                                == tuple(separately_tokenized_suffix)
+                                + tuple(self._token_ids(self._continuation(suffix, label))),
+                        }
+                        for label, tokens in tokenizations.items()
+                    },
+                    "steps": [],
+                }
+            if score_candidates:
+                scores, cache, candidate_ms = self._score_cached_labels_in_place(
+                    session, logits, cache, attention, tokenizations, eos_ids
+                )
+                diagnostics["candidate_scores"] = scores
+                diagnostics["candidate_cache_mode"] = "crop_to_suffix_prefix_between_candidates"
+            generated: list[int] = []
+            max_tokens = max(len(tokens) for tokens in tokenizations.values())
+            for _ in range(max_tokens + 1):
+                prefix = tuple(generated)
+                matching = {label: tokens for label, tokens in tokenizations.items()
+                            if tokens[:len(prefix)] == prefix}
+                permitted = {tokens[len(prefix)] for tokens in matching.values()
+                             if len(tokens) > len(prefix)}
+                completed = [label for label, tokens in matching.items() if tokens == prefix]
+                if completed:
+                    permitted.update(eos_ids)
+                if not permitted:
+                    raise RuntimeError("Constrained decoding reached an invalid prefix")
+                ids = self._torch.tensor(sorted(permitted), dtype=self._torch.long, device=logits.device)
+                permitted_logits = logits[0].index_select(0, ids).float()
+                next_token = int(ids[permitted_logits.argmax()].item())
+                if record_probabilities:
+                    raw = self._torch.softmax(logits[0].float(), dim=-1)
+                    log_normalizer = self._torch.logsumexp(logits[0].float(), dim=-1)
+                    normalized = self._torch.softmax(permitted_logits, dim=-1)
+                    alternatives = []
+                    for index, token_id in enumerate(ids.tolist()):
+                        alternatives.append({
+                            **self._diagnostic_token(token_id),
+                            "labels": completed if token_id in eos_ids else
+                            [label for label, tokens in matching.items()
+                             if len(tokens) > len(prefix) and tokens[len(prefix)] == token_id],
+                            "raw_probability": float(raw[token_id].item()),
+                            "raw_log_probability": float((logits[0, token_id].float() - log_normalizer).item()),
+                            "normalized_probability": float(normalized[index].item()),
+                            "logit": float(logits[0, token_id].item()),
+                        })
+                    top_probabilities, top_ids = raw.topk(min(10, raw.shape[-1]))
+                    diagnostics["steps"].append({
+                        "step": len(generated), "generated_prefix_ids": list(generated),
+                        "permitted_probability_mass": float(raw.index_select(0, ids).sum().item()),
+                        "permitted_log_probability_mass": float((self._torch.logsumexp(permitted_logits, dim=-1) - log_normalizer).item()),
+                        "selected_token_id": next_token, "alternatives": alternatives,
+                        "unconstrained_top_tokens": [
+                            {**self._diagnostic_token(token_id), "raw_probability": float(probability)}
+                            for token_id, probability in zip(top_ids.tolist(), top_probabilities.tolist(), strict=True)
+                        ],
+                    })
+                if next_token in eos_ids:
+                    if len(completed) != 1:
+                        raise RuntimeError("EOS does not terminate exactly one permitted label")
+                    return CachedDecodingResult(
+                        completed[0], tuple(generated), True,
+                        {"suffix_tokenize_ms": tokenize_ms, "cache_clone_ms": clone_ms,
+                         "suffix_prefill_ms": suffix_ms,
+                         "candidate_scoring_ms": candidate_ms,
+                         "constrained_decode_total_ms": (time.perf_counter() - started) * 1000.0},
+                        {"method": "kv_cached_prefix_constrained_greedy",
+                         "initial_prefill_tokens": session.initial_prefill_tokens,
+                         "reasoning_tokens": session.reasoning_tokens,
+                         "suffix_tokens": suffix_tokens, "visual_reprefill": False,
+                         "reasoning_cache_mode": "consume_in_place", "session_released": True,
+                         "peak_vram_mb": self._peak_vram_mb(),
+                         **({"probability_diagnostics": diagnostics} if diagnostics else {})},
+                    )
+                generated.append(next_token)
+                token = self._torch.tensor([[next_token]], dtype=session._sequence_ids.dtype,
+                                          device=session._sequence_ids.device)
+                attention = self._torch.cat([attention, attention.new_ones((attention.shape[0], 1))], dim=-1)
+                self._restore_rope_state(session)
+                positions = self._cached_position_ids(session, attention, 1)
+                with self._torch.inference_mode():
+                    output = self._model(input_ids=token, attention_mask=attention,
+                                         past_key_values=cache, position_ids=positions,
+                                         use_cache=True, return_dict=True)
+                cache = output.past_key_values
+                logits = output.logits[:, -1, :]
+            raise RuntimeError("Constrained decoding did not terminate within its label budget")
+        finally:
+            session.close()
 
     def _score_continuations(
         self,

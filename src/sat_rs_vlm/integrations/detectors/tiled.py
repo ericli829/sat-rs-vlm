@@ -8,21 +8,27 @@ import tempfile
 import threading
 import time
 from collections import OrderedDict
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from PIL import Image
 
 from .parallel import resolve_parallel_workers
 from .protocol import (
+    BatchedProposalProvider,
     ProposalError,
     ProposalProvider,
     ProposalResult,
     canonicalize_proposals,
 )
-from .tile_transport import cpu_prepared_items, save_tile_image, tile_image_format
+from .tile_transport import (
+    cpu_prepared_batches,
+    cpu_prepared_items,
+    save_tile_image,
+    tile_image_format,
+)
 
 
 def tile_starts(length: int, tile_size: int, overlap_ratio: float) -> tuple[int, ...]:
@@ -120,6 +126,12 @@ class TiledProposalProvider:
         self.parallel_max_workers = int(self.config.get("parallel_max_workers", 3))
         self.parallel_worker_vram_gb = float(self.config.get("parallel_worker_vram_gb", 4.0))
         self.parallel_vram_reserve_gb = float(self.config.get("parallel_vram_reserve_gb", 6.0))
+        self.batch_size = int(
+            self.config.get("batch_size", getattr(base_provider, "inference_batch_size", 1))
+        )
+        if self.batch_size < 1:
+            raise ProposalError("tiled detector batch_size must be positive")
+        self._uses_batches = callable(getattr(base_provider, "predict_batch", None))
         self.proposal_cache_size = int(self.config.get("proposal_cache_size", 8))
         self.tile_image_format = tile_image_format(self.config.get("tile_image_format", "bmp"))
         self.tile_prefetch = bool(self.config.get("tile_prefetch", True))
@@ -142,6 +154,8 @@ class TiledProposalProvider:
             "global_top_k": self.global_top_k,
             "parallel_workers": str(self.parallel_workers_requested),
             "parallel_max_workers": self.parallel_max_workers,
+            "batch_size": self.batch_size,
+            "batched_inference": self._uses_batches,
         }
         encoded = json.dumps(tiling_identity, sort_keys=True, separators=(",", ":"))
         self.tiling_sha256 = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -163,6 +177,8 @@ class TiledProposalProvider:
         self._proposal_cache_lock = threading.Lock()
 
     def _resolved_parallel_workers(self) -> int:
+        if self._uses_batches:
+            return 1
         if self._parallel_workers is not None:
             return self._parallel_workers
         with self._parallel_lock:
@@ -244,6 +260,7 @@ class TiledProposalProvider:
         raw_records: list[dict[str, Any]] = []
         tile_records: list[dict[str, Any]] = []
         base_latency_ms = 0.0
+        batch_count = 0
         parallel_workers = self._resolved_parallel_workers()
         with Image.open(resolved_image) as source:
             image = source.convert("RGB")
@@ -276,6 +293,11 @@ class TiledProposalProvider:
 
                 def predict_tile(
                     item: tuple[int, tuple[int, int, int, int], Path],
+                ) -> Any:
+                    return finish_tile(item, self.base_provider.predict(item[2], target_phrase))
+
+                def finish_tile(
+                    item: tuple[int, tuple[int, int, int, int], Path], result: ProposalResult
                 ) -> tuple[
                     int,
                     tuple[int, int, int, int],
@@ -284,9 +306,8 @@ class TiledProposalProvider:
                     list[float],
                     dict[str, int],
                 ]:
-                    tile_index, coordinates, tile_path = item
+                    tile_index, coordinates, _tile_path = item
                     x1, y1, x2, y2 = coordinates
-                    result = self.base_provider.predict(tile_path, target_phrase)
                     local_boxes, local_scores, validation = canonicalize_proposals(
                         result.boxes_xyxy,
                         result.scores,
@@ -306,7 +327,7 @@ class TiledProposalProvider:
                 inputs = iter(enumerate(tiles))
                 inputs_lock = threading.Lock()
 
-                def lane_inputs():
+                def lane_inputs() -> Iterator[tuple[int, tuple[int, int, int, int]]]:
                     while True:
                         with inputs_lock:
                             item = next(inputs, None)
@@ -321,7 +342,29 @@ class TiledProposalProvider:
                     ) as prepared:
                         return [predict_tile(item) for item in prepared]
 
-                if lane_count == 1:
+                tile_results: list[Any]
+                if self._uses_batches:
+                    tile_results = []
+                    batch_provider = cast(BatchedProposalProvider, self.base_provider)
+                    with cpu_prepared_batches(
+                        enumerate(tiles),
+                        prepare_tile,
+                        release_tile,
+                        batch_size=self.batch_size,
+                        prefetch=self.tile_prefetch,
+                    ) as batches:
+                        for batch in batches:
+                            results = batch_provider.predict_batch(
+                                [item[2] for item in batch], target_phrase
+                            )
+                            if len(results) != len(batch):
+                                raise ProposalError("tiled batch result count mismatch")
+                            batch_count += 1
+                            tile_results.extend(
+                                finish_tile(item, result)
+                                for item, result in zip(batch, results, strict=True)
+                            )
+                elif lane_count == 1:
                     tile_results = predict_lane(0)
                 else:
                     with ThreadPoolExecutor(
@@ -351,6 +394,8 @@ class TiledProposalProvider:
                             "base_latency_ms": result.latency_ms,
                             "base_provider": result.provider,
                             "base_model_id": result.model_id,
+                            "effective_batch_size": result.metadata.get("effective_batch_size", 1),
+                            "batch_oom_retries": result.metadata.get("batch_oom_retries", 0),
                             "validation": validation,
                             "candidate_pool_complete": result.metadata.get(
                                 "candidate_pool_complete"
@@ -406,6 +451,10 @@ class TiledProposalProvider:
                 "overlap_ratio": self.overlap_ratio,
                 "tile_image_format": self.tile_image_format,
                 "tile_prefetch": self.tile_prefetch,
+                "batch_size": self.batch_size if self._uses_batches else 1,
+                "batch_count": batch_count,
+                "batched_inference": self._uses_batches,
+                "cpu_lookahead_unit": "batch" if self._uses_batches else "tile",
                 "cpu_lookahead_per_worker": 1 if self.tile_prefetch else 0,
                 "global_nms_iou": self.global_nms_iou,
                 "parallel_workers_requested": str(self.parallel_workers_requested),

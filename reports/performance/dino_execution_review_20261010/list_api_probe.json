@@ -1,0 +1,32 @@
+{
+  "scope": "Executed unmodified vendored inference_detector function with a stub model/pipeline; no weights or real forward; verifies call structure only",
+  "source": "D:\\Desktop\\tzb-2026\\rs_detectors\\lae_dino\\source\\LAE-DINO-6b1519626e39d1f39f8ed1f38761c20f7e0e8c35\\mmdetection_lae\\mmdet\\apis\\inference.py",
+  "source_sha256": "978bcf058dfd2ff848a43dcf76424874df659b6b5a268ead96846ef16654669d",
+  "observations": [
+    {
+      "images_passed": 1,
+      "test_step_calls": 1,
+      "items_per_forward": [
+        1
+      ]
+    },
+    {
+      "images_passed": 2,
+      "test_step_calls": 2,
+      "items_per_forward": [
+        1,
+        1
+      ]
+    },
+    {
+      "images_passed": 4,
+      "test_step_calls": 4,
+      "items_per_forward": [
+        1,
+        1,
+        1,
+        1
+      ]
+    }
+  ]
+}

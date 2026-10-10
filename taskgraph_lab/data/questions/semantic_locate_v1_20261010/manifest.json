@@ -1,0 +1,44 @@
+{
+  "version": "semantic-locate-questions-v2-en",
+  "seed": 20261010,
+  "per_family": 10,
+  "question_count": 80,
+  "family_counts": {
+    "intrinsic_single": 10,
+    "context_single": 10,
+    "intrinsic_context": 10,
+    "scoped_context": 10,
+    "anchor_context": 10,
+    "semantic_multi": 10,
+    "extreme_control": 10,
+    "ordinal_control": 10
+  },
+  "language_counts": {
+    "en": 80
+  },
+  "families": {
+    "intrinsic_single": "Intrinsic target attributes",
+    "context_single": "Two contextual spatial conditions",
+    "intrinsic_context": "Target attributes and context",
+    "scoped_context": "Semantic localization within an explicit scope",
+    "anchor_context": "Explicit reference object and target context",
+    "semantic_multi": "Multiple targets satisfying contextual conditions",
+    "extreme_control": "Deterministic extreme control",
+    "ordinal_control": "Ordinal control with an explicit sorting direction"
+  },
+  "review_status": "synthetic_unlabeled_questions",
+  "images_used": false,
+  "answers_or_taskgraphs_generated": false,
+  "source": "local English templates; not extracted from real dataset annotations",
+  "generator_sha256": "2b38dc4630c2416eeef91f40e6c0bdc827972f266f123793e9451e2f93298102",
+  "files_sha256": {
+    "questions.jsonl": "5d10f60641666304352591dda039bbcf2eb4e2cfc7ef33f8eeb0eb595cb133f7",
+    "questions_en.txt": "d34e09313347a4e84c052bf17cea018a1b9633386b333c89947074da9cdabeaf"
+  },
+  "limitations": [
+    "Text checks do not establish target existence or visual ground truth.",
+    "Template families are construction tags, not gold operator labels.",
+    "Group related scenario and template variants in any future split.",
+    "This raw question pool is not NormalizedSample or ready-to-train Planner SFT."
+  ]
+}

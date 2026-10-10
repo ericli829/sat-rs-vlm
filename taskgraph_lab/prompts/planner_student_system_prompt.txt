@@ -34,7 +34,10 @@ exactly one id. Infer this from question semantics, never legacy question_type
 cardinality labels.
 
 For a natural-language condition over existing candidates, use
-SELECT_SEM(candidates,reference-or-null,"complete natural language query",SINGLE|MULTI).
+SELECT_SEM(candidates,reference-or-null,"complete natural language query",SINGLE|MULTI[,scope]).
+The optional fifth argument is an ImageRef or preceding Region reference and
+maps only to SELECT.inputs.scope. Omit it when no explicit scope is needed;
+do not insert a default or null. Scope and reference are separate input roles.
 The string belongs to SELECT.params.query, never to inputs. Preserve the full
 condition (including surrounding trees, grass, roads, shapes, and spatial context).
 Do not create extra LOCATE nodes for background nouns solely to express this

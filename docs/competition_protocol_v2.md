@@ -110,6 +110,25 @@ bbox 进入 planner/LOCATE/SELECT/全局几何路径。
 本地 LEVIR-CC SHA-256 验证确认开发集 50 张 256×256 图片字节完全匹配，组成 25 组源 A/B 时相对；
 匹配结果用于来源报告，不加入线上路由。
 
+### 运行记忆的联合哈希
+
+运行记忆现在按原图文件字节的 SHA256 和原始问题 UTF-8 文本的 SHA256 精确匹配。
+问题文本不去空格、不改大小写、不做 Unicode 归一化；哈希在补充 planner 指令前计算。
+单图记录使用 image_sha256，多图记录使用按输入顺序排列的 image_sha256s；
+图像数量和时相顺序都是键的一部分。比赛入口复用 ImagePackage 已实际校验的哈希，
+常规运行时流式计算并按文件身份缓存 128 项，不解码图片，不增加显存使用。
+
+只有图片和问题完整匹配且执行配置一致时，才复用旧表的 mode/variant。
+缺少图片哈希、未知键、无效模式或同一键对应不同 mode/variant/backend 时均回退正常路由。
+运行时不会只按 question_sha256 或 sample_id 路由；lookup(sample_id) 仅保留作旧表审阅接口。
+每个请求重新应用裁剪配置，防止 tight 变体影响后续未命中请求。
+该表仅保留既有实际运行配置，不导入答案或依据正确率选择配置。
+
+scripts/taskgraph/prepare_hash_memory.py 提供 hash-images、verify-package 和 bind-table。
+bind-table 校验问题哈希、图片路径覆盖和全部原字段，重放验证无冲突的联合键，
+列出冲突并确认它们会回退，最后原子更新旧表。图片清单保存在
+configs/taskgraph/mme_rs_image_sha256.jsonl；开发集和 MME 的来源匹配按文件字节比较。
+
 ## 错误与日志
 
 协议/约束不合法 422，资产缺失 404，校验失败 422，鉴权失败 401，
@@ -118,11 +137,15 @@ bbox 进入 planner/LOCATE/SELECT/全局几何路径。
 内部异常：ProtocolValidationError、UnsupportedConstraintError、ImageNotFoundError、
 ImageHashMismatchError、AnswerContractViolation、BBoxValidationError、RuntimeInferenceError。
 
-日志仅 request_id、item_id、约束类型、图像数、已解析尺寸、执行模式、耗时及固定 error code。
+普通日志仅 request_id、item_id、约束类型、图像数、已解析尺寸、执行模式、耗时及固定 error code。
 JSON 转义避免 ID 换行形成额外日志行。不打印 key、原始请求、完整题目、
 图像字节或堆栈/本地路径。生产关闭 Uvicorn access log；
 反向代理也不能记录 Authorization 或请求体。
 bbox/logging 配置中的安全约定必须保持开启。
+
+网页调试可使用独立的本机 offline/2B 入口，详见 [competition_local_test.md](competition_local_test.md)。
+按需开启的私有 `logging.question_capture_path` 将有效请求题干、选项及图片描述符另存 JSONL，
+默认关闭，不包含 API Key、请求头或图像字节；不要提交或公开该文件。
 
 ## 环境准备及真实部署
 

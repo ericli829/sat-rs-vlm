@@ -1,0 +1,23 @@
+{
+  "python": "C:\\Users\\Ericoneabc\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\python.exe",
+  "versions": {
+    "torch": "2.6.0+cu126",
+    "torchvision": "0.21.0+cu126",
+    "transformers": "5.13.0",
+    "accelerate": "1.14.0",
+    "numpy": "2.4.0",
+    "mmcv": null,
+    "mmengine": null,
+    "mmdet": null
+  },
+  "resolved_example_parallel_workers": 5,
+  "scope": "local metadata and example config, not active cloud deployment",
+  "source_sha256": {
+    "configs/taskgraph/runtime.real.example.yaml": "4b310a495046800d7565d6cf01092cfba392c6158f8bb3903aff29419714a517",
+    "src/sat_rs_vlm/integrations/detectors/tiled.py": "f5c99de512c44d68a23027e6ec13a962fe2fef98b60399f6f3d3f4ef917fd24e",
+    "src/sat_rs_vlm/integrations/detectors/lae_dino_sidecar.py": "de9578ce1d2efd05f66e8604071c52aa6884efa0c5cbaf0081862b1f2eecc3de",
+    "src/sat_rs_vlm/integrations/detectors/registry.py": "0083f1dc676f294ab93a2e4af803d17e8c7efda30b309e30e30a31d82f2c81ca",
+    "scripts/integrations/lae_dino_worker.py": "0044d81e5ce63abadd66f46c805f607f0e450d03828f367b017234af996f48f1",
+    "src/sat_rs_vlm/integrations/counting/detector_bridge.py": "3e04077a962b224e8481fe8e200f81f1519e6466753b7eaab66d1f38078ebaab"
+  }
+}

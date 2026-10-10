@@ -117,6 +117,10 @@ class RuntimeRequest:
     execution_mode: ExecutionMode | None = None
     defer_final_answer: bool = False
     choice_ids: tuple[str, ...] = ()
+    # Protocol adapters preserve raw text before adding planner/answer instructions.
+    memory_question: str | None = None
+    verified_image_sha256s: tuple[str, ...] = ()
+    allow_hash_memory: bool = False
 
 
 @dataclass(frozen=True)
@@ -357,6 +361,7 @@ class TaskGraphRuntime:
         self.runtime_memory = runtime_memory
         self._memory_variant_applied = False
         self.composer = composer or InputComposer()
+        self._default_entity_tight_crops = self.composer.entity_tight_crops
         self.choice_config = choice_config or ChoiceSystemConfig()
         self.semantic_decision_config = semantic_decision_config or SemanticDecisionConfig()
         self.final_choice_fusion_config = final_choice_fusion_config or FinalChoiceFusionConfig()
@@ -527,9 +532,7 @@ class TaskGraphRuntime:
             if isinstance(candidate_metadata, Mapping):
                 planner_metadata = candidate_metadata
             else:
-                generation = getattr(
-                    self.providers.planner, "last_generation_telemetry", None
-                )
+                generation = getattr(self.providers.planner, "last_generation_telemetry", None)
                 if isinstance(generation, Mapping):
                     planner_metadata = {"generation": dict(generation)}
         else:
@@ -1038,9 +1041,8 @@ class TaskGraphRuntime:
     def _apply_memory_variant(self, variant: str | None) -> None:
         """Apply the recorded variant for the current request (sequential runs)."""
         tight = variant == "tight"
-        if tight != self._memory_variant_applied:
-            self.composer.entity_tight_crops = tight
-            self._memory_variant_applied = tight
+        self.composer.entity_tight_crops = tight or self._default_entity_tight_crops
+        self._memory_variant_applied = tight
 
     def run(self, request: RuntimeRequest) -> RuntimeResult:
         torch = _provider_torch(self.providers)
@@ -1062,13 +1064,20 @@ class TaskGraphRuntime:
                     request.dataset, request.task_category
                 )
                 memory_entry = (
-                    self.runtime_memory.lookup(request.sample_id)
-                    if self.runtime_memory and request.execution_mode is None
+                    self.runtime_memory.lookup_content(
+                        request.image_paths,
+                        request.memory_question
+                        if request.memory_question is not None
+                        else request.question,
+                        verified_image_sha256s=request.verified_image_sha256s,
+                    )
+                    if self.runtime_memory
+                    and (request.allow_hash_memory or request.execution_mode is None)
                     else None
                 )
                 if memory_entry is not None:
                     mode = ExecutionMode(memory_entry.mode)
-                    self._apply_memory_variant(memory_entry.variant)
+                self._apply_memory_variant(memory_entry.variant if memory_entry else None)
                 routing_ms = (time.perf_counter() - routing_started) * 1000.0
                 if mode is ExecutionMode.DIRECT_VLM:
                     result = self._direct_vlm(request, images)
@@ -1082,10 +1091,9 @@ class TaskGraphRuntime:
                 )
                 result.trace.telemetry.update(
                     {
+                        "runtime_memory_hash_hit": memory_entry is not None,
                         "input_image_paths": list(result.trace.input_image_paths),
-                        "intermediate_output_paths": list(
-                            result.trace.intermediate_output_paths
-                        ),
+                        "intermediate_output_paths": list(result.trace.intermediate_output_paths),
                     }
                 )
                 self._finalize_trace(
@@ -1149,13 +1157,9 @@ class TaskGraphRuntime:
                     node_events = self._generation_events_from(node.output_summary)
                 generation_events.extend(node_events)
             if result.trace.telemetry.get("choice_model_called") is True:
-                generation_events.extend(
-                    self._generation_events_from(result.trace.choice_result)
-                )
+                generation_events.extend(self._generation_events_from(result.trace.choice_result))
             if not result.trace.nodes and not generation_events:
-                generation_events.extend(
-                    self._generation_events_from(result.trace.result)
-                )
+                generation_events.extend(self._generation_events_from(result.trace.result))
             result.trace.telemetry["generation_events"] = generation_events
             return result
         except Exception as exc:
@@ -1168,9 +1172,7 @@ class TaskGraphRuntime:
                 failed_trace.telemetry.update(
                     {
                         "input_image_paths": list(failed_trace.input_image_paths),
-                        "intermediate_output_paths": list(
-                            failed_trace.intermediate_output_paths
-                        ),
+                        "intermediate_output_paths": list(failed_trace.intermediate_output_paths),
                     }
                 )
             raise
@@ -1268,26 +1270,20 @@ def runtime_from_config(
     locate_detector_cfg = dict(locate_detector_value)
     locate_score_threshold_value = locate_detector_cfg.get("score_threshold")
     locate_score_threshold = (
-        float(locate_score_threshold_value)
-        if locate_score_threshold_value is not None
-        else None
+        float(locate_score_threshold_value) if locate_score_threshold_value is not None else None
     )
     locate_max_candidates = int(locate_detector_cfg.get("max_candidates", 16))
     locate_clip_rerank_top_k = int(locate_detector_cfg.get("clip_rerank_top_k", 16))
     if locate_max_candidates < 1:
         raise ValueError("providers.detection.locate_detector.max_candidates must be positive")
     if locate_clip_rerank_top_k < 1:
-        raise ValueError(
-            "providers.detection.locate_detector.clip_rerank_top_k must be positive"
-        )
+        raise ValueError("providers.detection.locate_detector.clip_rerank_top_k must be positive")
     if locate_score_threshold is not None and not 0.0 <= locate_score_threshold <= 1.0:
         raise ValueError(
             "providers.detection.locate_detector.score_threshold must be between 0 and 1"
         )
     if locate_score_threshold is not None:
-        detection_cfg = _override_nested_detector_threshold(
-            detection_cfg, locate_score_threshold
-        )
+        detection_cfg = _override_nested_detector_threshold(detection_cfg, locate_score_threshold)
     if detection_kind == "counting_system":
         raise ValueError(
             "providers.detection.kind='counting_system' is no longer supported. "

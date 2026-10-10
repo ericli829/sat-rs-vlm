@@ -1,0 +1,30 @@
+{
+  "result": "PASS",
+  "question_count": 80,
+  "family_counts": {
+    "intrinsic_single": 10,
+    "context_single": 10,
+    "intrinsic_context": 10,
+    "scoped_context": 10,
+    "anchor_context": 10,
+    "semantic_multi": 10,
+    "extreme_control": 10,
+    "ordinal_control": 10
+  },
+  "language_counts": {
+    "en": 80
+  },
+  "checks": {
+    "english_only_questions_and_language_tags": true,
+    "no_chinese_question_export": true,
+    "non_english_samples_rejected": true,
+    "unique_questions_and_ids": true,
+    "balanced_families": true,
+    "plain_text_matches_jsonl": true,
+    "sha256_matches_manifest": true,
+    "same_seed_reproducible": true,
+    "original_80_english_questions_preserved": true,
+    "additional_seed_and_batch_smoke_checks": true
+  },
+  "planner_training_or_inference_run": false
+}

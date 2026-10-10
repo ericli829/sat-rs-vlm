@@ -1,0 +1,104 @@
+{
+  "scope": "tiny randomly initialized CPU BERT; no detector/checkpoint/GPU benchmark",
+  "python": "C:\\Users\\Ericoneabc\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\python.exe",
+  "torch": "2.6.0+cu126",
+  "transformers": "5.13.0",
+  "cases": [
+    {
+      "requested_attention": "default",
+      "resolved_attention": "sdpa",
+      "batch_size": 1,
+      "mask_dimensions": 2,
+      "status": "ok",
+      "output_shape": [
+        1,
+        8,
+        32
+      ]
+    },
+    {
+      "requested_attention": "default",
+      "resolved_attention": "sdpa",
+      "batch_size": 1,
+      "mask_dimensions": 3,
+      "status": "ok",
+      "output_shape": [
+        1,
+        8,
+        32
+      ]
+    },
+    {
+      "requested_attention": "default",
+      "resolved_attention": "sdpa",
+      "batch_size": 2,
+      "mask_dimensions": 2,
+      "status": "ok",
+      "output_shape": [
+        2,
+        8,
+        32
+      ]
+    },
+    {
+      "requested_attention": "default",
+      "resolved_attention": "sdpa",
+      "batch_size": 2,
+      "mask_dimensions": 3,
+      "status": "ok",
+      "output_shape": [
+        2,
+        8,
+        32
+      ]
+    },
+    {
+      "requested_attention": "eager",
+      "resolved_attention": "eager",
+      "batch_size": 1,
+      "mask_dimensions": 2,
+      "status": "ok",
+      "output_shape": [
+        1,
+        8,
+        32
+      ]
+    },
+    {
+      "requested_attention": "eager",
+      "resolved_attention": "eager",
+      "batch_size": 1,
+      "mask_dimensions": 3,
+      "status": "ok",
+      "output_shape": [
+        1,
+        8,
+        32
+      ]
+    },
+    {
+      "requested_attention": "eager",
+      "resolved_attention": "eager",
+      "batch_size": 2,
+      "mask_dimensions": 2,
+      "status": "ok",
+      "output_shape": [
+        2,
+        8,
+        32
+      ]
+    },
+    {
+      "requested_attention": "eager",
+      "resolved_attention": "eager",
+      "batch_size": 2,
+      "mask_dimensions": 3,
+      "status": "ok",
+      "output_shape": [
+        2,
+        8,
+        32
+      ]
+    }
+  ]
+}

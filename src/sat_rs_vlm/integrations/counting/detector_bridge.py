@@ -5,10 +5,18 @@ from __future__ import annotations
 import tempfile
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
+from itertools import groupby
 from pathlib import Path
+from typing import cast
 
-from sat_rs_vlm.integrations.detectors.protocol import ProposalError, ProposalProvider
+from sat_rs_vlm.integrations.detectors.protocol import (
+    BatchedProposalProvider,
+    ProposalError,
+    ProposalProvider,
+    ProposalResult,
+)
 from sat_rs_vlm.integrations.detectors.tile_transport import (
+    cpu_prepared_batches,
     cpu_prepared_items,
     save_tile_image,
     tile_image_format,
@@ -35,7 +43,7 @@ class _PreparedTile:
 
 
 class CountingProposalDetectorBridge:
-    """Tile crop → ProposalProvider.predict → original-image XYXY Detection.
+    """Tile crop → ProposalProvider inference → original-image XYXY Detection.
 
     Counting System owns Global/Native/Fine tiling. The wrapped provider must
     be a non-tiled sidecar such as ``lae_dino_lae1m``.
@@ -53,6 +61,7 @@ class CountingProposalDetectorBridge:
         self.tile_image_format = tile_image_format(image_format)
         self.tile_prefetch = prefetch
         self.call_count = 0
+        self.batch_size = int(getattr(provider, "inference_batch_size", 1))
 
     def detect(self, request: DetectionRequest) -> DetectionResponse:
         with tempfile.TemporaryDirectory(prefix="counting_tile_") as temp_dir:
@@ -73,9 +82,9 @@ class CountingProposalDetectorBridge:
         )
 
     def detect_many(self, requests: Iterable[DetectionRequest]) -> Iterator[DetectionResponse]:
-        """Prepare one CPU/file tile ahead; run sidecar inference strictly serially."""
+        """One GPU consumer, with one CPU lookahead batch (legacy: one tile)."""
 
-        def indexed_requests():
+        def indexed_requests() -> Iterator[tuple[int, DetectionRequest]]:
             source = iter(requests)
             try:
                 yield from enumerate(source)
@@ -94,11 +103,37 @@ class CountingProposalDetectorBridge:
             def release(tile: _PreparedTile) -> None:
                 tile.path.unlink(missing_ok=True)
 
-            with cpu_prepared_items(
-                indexed_requests(), prepare, release, prefetch=self.tile_prefetch
-            ) as prepared:
-                for tile in prepared:
-                    yield self._predict_prepared(tile)
+            if callable(getattr(self._provider, "predict_batch", None)):
+                with cpu_prepared_batches(
+                    indexed_requests(),
+                    prepare,
+                    release,
+                    batch_size=self.batch_size,
+                    prefetch=self.tile_prefetch,
+                ) as batches:
+                    for batch in batches:
+                        # Keep query roles and padding shape bounded without
+                        # collecting raw requests whose source owns their images.
+                        for _, grouped in groupby(batch, key=lambda t: (t.phrase, t.local_size)):
+                            tiles = list(grouped)
+                            self.call_count += len(tiles)
+                            try:
+                                provider = cast(BatchedProposalProvider, self._provider)
+                                results = provider.predict_batch(
+                                    [tile.path for tile in tiles], tiles[0].phrase
+                                )
+                            except Exception as exc:
+                                raise RuntimeError(f"LAE sidecar batch failure: {exc}") from exc
+                            if len(results) != len(tiles):
+                                raise RuntimeError("LAE sidecar batch result count mismatch")
+                            for tile, result in zip(tiles, results, strict=True):
+                                yield self._response(tile, result)
+            else:
+                with cpu_prepared_items(
+                    indexed_requests(), prepare, release, prefetch=self.tile_prefetch
+                ) as prepared:
+                    for tile in prepared:
+                        yield self._predict_prepared(tile)
 
     def _predict_prepared(self, tile: _PreparedTile) -> DetectionResponse:
         # Retain a scalar diagnostic, never requests that own full tile images.
@@ -111,6 +146,9 @@ class CountingProposalDetectorBridge:
             raise RuntimeError(
                 f"Counting provider unavailable: LAE sidecar failure: {exc}"
             ) from exc
+        return self._response(tile, result)
+
+    def _response(self, tile: _PreparedTile, result: ProposalResult) -> DetectionResponse:
         local_w, local_h = tile.local_size
         detections: list[Detection] = []
         for box, score in zip(result.boxes_xyxy, result.scores, strict=True):

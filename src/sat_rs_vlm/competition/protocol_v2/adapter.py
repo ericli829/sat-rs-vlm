@@ -89,4 +89,7 @@ class CompetitionRequestAdapter:
             execution_mode=mode,
             defer_final_answer=True,
             target_category=target,
+            memory_question=request.question,
+            verified_image_sha256s=tuple(image.descriptor.sha256 for image in images),
+            allow_hash_memory=True,
         )

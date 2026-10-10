@@ -1,0 +1,80 @@
+Find the white elongated greenhouse in the image.
+Find the blue rectangular tennis court in the image.
+Find the gray rectangular warehouse in the image.
+Find the white elongated ship in the image.
+Find the green rectangular sports field in the image.
+Find the white circular storage tank in the image.
+Find the white rectangular vehicle in the image.
+Find the white square building in the image.
+Find the blue rectangular swimming pool in the image.
+Find the gray rectangular parking area in the image.
+Find the ship with a row of trees to its right and a paved open area above it in the image.
+Find the vehicle with a row of trees to its right and a path above it in the image.
+Find the building with a row of trees to its right and grass below it in the image.
+Find the parking area with a green space to its left and a path below it in the image.
+Find the greenhouse with a road to its right and a path below it in the image.
+Find the tennis court with a green space to its left and a wooded area above it in the image.
+Find the warehouse with a road to its left and a wooded area below it in the image.
+Find the sports field with a road to its left and a paved open area below it in the image.
+Find the swimming pool with a river to its left and a paved open area above it in the image.
+Find the storage tank with a river to its left and a paved open area above it in the image.
+Find the blue rectangular swimming pool with a green space to its right and a wooded area above it in the image.
+Find the white elongated greenhouse with a green space to its right and a wooded area below it in the image.
+Find the white circular storage tank with a row of trees to its right and a path above it in the image.
+Find the green rectangular sports field with a river to its left and a path below it in the image.
+Find the gray rectangular parking area with a river to its left and a wooded area above it in the image.
+Find the blue rectangular tennis court with a river to its right and grass above it in the image.
+Find the white rectangular vehicle with a river to its right and a paved open area above it in the image.
+Find the gray rectangular warehouse with a green space to its left and a wooded area below it in the image.
+Find the white elongated ship with a green space to its right and a paved open area above it in the image.
+Find the white square building with a row of trees to its right and grass below it in the image.
+Within the lower-right part of the image, find the ship with a river to its left and a path below it.
+Within the lower-right part of the image, find the sports field with a green space to its right and grass above it.
+Within the upper-right part of the image, find the vehicle with a row of trees to its left and a wooded area above it.
+Within the central part of the image, find the greenhouse with a green space to its right and a paved open area below it.
+Within the upper-left part of the image, find the parking area with a road to its right and grass below it.
+Within the upper-left part of the image, find the swimming pool with a river to its left and grass below it.
+Within the central part of the image, find the warehouse with a river to its left and a wooded area above it.
+Within the central part of the image, find the storage tank with a green space to its left and a paved open area below it.
+Within the lower-right part of the image, find the building with a row of trees to its right and grass below it.
+Within the central part of the image, find the tennis court with a river to its left and a paved open area above it.
+Using the topmost building in the image as the reference, find the swimming pool below it with a green space to the target's right.
+Using the topmost building in the image as the reference, find the greenhouse below it with a river to the target's right.
+Using the topmost building in the image as the reference, find the storage tank below it with a row of trees to the target's right.
+Using the topmost building in the image as the reference, find the ship below it with a road to the target's right.
+Using the topmost warehouse in the image as the reference, find the building below it with a row of trees to the target's right.
+Using the topmost building in the image as the reference, find the tennis court below it with a green space to the target's left.
+Using the topmost building in the image as the reference, find the sports field below it with a river to the target's left.
+Using the topmost building in the image as the reference, find the parking area below it with a road to the target's right.
+Using the topmost building in the image as the reference, find the vehicle below it with a green space to the target's right.
+Using the topmost building in the image as the reference, find the warehouse below it with a green space to the target's left.
+Find all ships with a road to their right and a path below them in the image.
+Find all storage tanks with a river to their left and a path below them in the image.
+Find all greenhouses with a road to their right and a path above them in the image.
+Find all tennis courts with a road to their left and a paved open area below them in the image.
+Find all sports fields with a green space to their right and a paved open area below them in the image.
+Find all warehouses with a road to their right and a path above them in the image.
+Find all buildings with a row of trees to their right and grass below them in the image.
+Find all swimming pools with a road to their left and a wooded area below them in the image.
+Find all vehicles with a green space to their left and a paved open area below them in the image.
+Find all parking areas with a river to their left and a paved open area below them in the image.
+Find the rightmost sports field in the image.
+Find the topmost building in the image.
+Find the leftmost tennis court in the image.
+Find the bottommost warehouse in the image.
+Find the rightmost storage tank in the image.
+Find the rightmost parking area in the image.
+Find the rightmost swimming pool in the image.
+Find the topmost greenhouse in the image.
+Find the rightmost vehicle in the image.
+Find the bottommost ship in the image.
+Order all tennis courts in the image from bottom to top and find the fourth one.
+Order all buildings in the image from left to right and find the third one.
+Order all sports fields in the image from top to bottom and find the fourth one.
+Order all parking areas in the image from top to bottom and find the second one.
+Order all ships in the image from top to bottom and find the fourth one.
+Order all vehicles in the image from bottom to top and find the fourth one.
+Order all greenhouses in the image from right to left and find the fourth one.
+Order all swimming pools in the image from bottom to top and find the third one.
+Order all warehouses in the image from top to bottom and find the fourth one.
+Order all storage tanks in the image from left to right and find the second one.

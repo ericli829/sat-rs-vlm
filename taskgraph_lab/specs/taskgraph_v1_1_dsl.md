@@ -29,7 +29,7 @@ n3=ATTRIBUTE($n2,"color")
 FINAL($n3,LABEL)
 ```
 
-`SELECT_SEM(candidates,reference-or-null,JSON_STRING,SINGLE|MULTI)` lowers to the
+`SELECT_SEM(candidates,reference-or-null,JSON_STRING,SINGLE|MULTI[,scope])` lowers to the
 existing SELECT operator with `mode=SEMANTIC`, `params.query` and explicit
 `params.selection_type`. The string is never an input reference. Unicode,
 escaped quotes and escaped newlines use normal JSON-string parsing/serialization.
@@ -38,11 +38,29 @@ RELATION/RANK/ORDINAL/EXTREME/SUBREGION parameters. SINGLE is permitted as an
 ATTRIBUTE source; MULTI is not an implicit singleton. MULTI may feed
 COUNT_ENTITIES with `entire=false`.
 
-An optional reference round-trips normally. Runtime JSON also supports SELECT
-scope, but the four-argument SELECT_SEM surface cannot encode it: the compiler
-raises an explicit error rather than dropping scope. Existing SELECT surfaces
-and graph meanings are retained. Prefix grammar recognizes JSON strings and the
-two cardinalities; schema/type/semantic validation still applies after parsing.
+The argument order is fixed: candidates, reference, query, selection_type, then
+optional scope. Candidates is a required existing candidate reference; the
+reference position is either a reference or null. Scope, when present, must be
+an ImageRef or Region reference and is stored in `inputs.scope`, independently
+of `inputs.reference`. It cannot be a quoted reference, list, or null. Omitting
+the fifth argument leaves `inputs.scope` absent; neither compiler nor parser
+adds a default. Both the four- and five-argument forms are canonical:
+
+```text
+SELECT_SEM($n1,null,"the building near the road",SINGLE)
+SELECT_SEM($n1,null,"the building near the road",SINGLE,$image0)
+SELECT_SEM($n1,null,"the building near the road",MULTI,$n2)
+SELECT_SEM($n1,$n3,"the building near the road",SINGLE,$n2)
+```
+
+Here `$n1` supplies candidates, `$n2` must be a preceding Region-producing node,
+and `$n3` a preceding reference-compatible node. A supplied scope is preserved
+through canonical JSON -> DSL -> JSON, including when reference is also present.
+All references retain existing dependency, input-type and topology checks.
+Existing SELECT surfaces and graph meanings are retained; their arities do not
+change. Prefix grammar recognizes JSON strings, the two cardinalities, and
+optional scope using the existing SELECT input-type signatures and caller image
+references. Full schema/type/semantic validation still applies after parsing.
 No training examples or model weights were rebuilt for this extension.
 
 The serialization version is `taskgraph-v1.1-dsl-v1`. It does not change the

@@ -1,0 +1,620 @@
+{
+  "note": "Keyword examples for manual review, not gold plans",
+  "counts": {
+    "building_context": 4554,
+    "parking_context": 1640,
+    "white_square": 1
+  },
+  "examples": {
+    "building_context": [
+      {
+        "id": "vrsbench_train_00077_0000_det_001",
+        "question": "Locate the object described as: \"The small vehicle is parked on the right side of the image near a building.\". Return its class and normalized bounding box.",
+        "answer": "{\"label\":\"vehicle\",\"bbox\":[0.74,0.29,0.77,0.35]}",
+        "source_line": 387,
+        "metadata": {
+          "dataset": "VRSBench",
+          "split": "train",
+          "source_annotation": "00077_0000.json",
+          "source_image": "00077_0000.png",
+          "source_task": "referring",
+          "object_id": 1,
+          "bbox_raw": [
+            0.74,
+            0.29,
+            0.77,
+            0.35
+          ],
+          "bbox_clipped": [
+            0.74,
+            0.29,
+            0.77,
+            0.35
+          ],
+          "coordinate_clipped": false
+        },
+        "image": "Images/Images_train/00077_0000.png"
+      },
+      {
+        "id": "vrsbench_train_00082_0000_det_000",
+        "question": "Locate the object described as: \"The tennis court located in the top-left quarter of the image, closest to the orange-roofed building and surrounded by trees to its left.\". Return its class and normalized bounding box.",
+        "answer": "{\"label\":\"tennis-court\",\"bbox\":[0.23,0.46,0.55,0.92]}",
+        "source_line": 406,
+        "metadata": {
+          "dataset": "VRSBench",
+          "split": "train",
+          "source_annotation": "00082_0000.json",
+          "source_image": "00082_0000.png",
+          "source_task": "referring",
+          "object_id": 0,
+          "bbox_raw": [
+            0.23,
+            0.46,
+            0.55,
+            0.92
+          ],
+          "bbox_clipped": [
+            0.23,
+            0.46,
+            0.55,
+            0.92
+          ],
+          "coordinate_clipped": false
+        },
+        "image": "Images/Images_train/00082_0000.png"
+      },
+      {
+        "id": "vrsbench_train_00083_0000_det_000",
+        "question": "Locate the object described as: \"The expressway service area contains several buildings and parking spaces, with a blue rooftop being the most prominent feature.\". Return its class and normalized bounding box.",
+        "answer": "{\"label\":\"expressway-service-area\",\"bbox\":[0.41,0.56,0.96,1.0]}",
+        "source_line": 413,
+        "metadata": {
+          "dataset": "VRSBench",
+          "split": "train",
+          "source_annotation": "00083_0000.json",
+          "source_image": "00083_0000.png",
+          "source_task": "referring",
+          "object_id": 0,
+          "bbox_raw": [
+            0.41,
+            0.56,
+            0.96,
+            1.24
+          ],
+          "bbox_clipped": [
+            0.41,
+            0.56,
+            0.96,
+            1.0
+          ],
+          "coordinate_clipped": true
+        },
+        "image": "Images/Images_train/00083_0000.png"
+      },
+      {
+        "id": "vrsbench_train_00212_0000_qa_002",
+        "question": "Are there vehicles near the building with a large white rooftop?",
+        "answer": "Yes",
+        "source_line": 1108,
+        "metadata": {
+          "dataset": "VRSBench",
+          "split": "train",
+          "source_annotation": "00212_0000.json",
+          "source_image": "00212_0000.png",
+          "source_task": "vqa",
+          "qa_type": "object existence",
+          "question_id": 4
+        },
+        "image": "Images/Images_train/00212_0000.png"
+      },
+      {
+        "id": "vrsbench_train_00243_0000_qa_004",
+        "question": "Does the area next to the building and track resemble a parking space?",
+        "answer": "yes",
+        "source_line": 1247,
+        "metadata": {
+          "dataset": "VRSBench",
+          "split": "train",
+          "source_annotation": "00243_0000.json",
+          "source_image": "00243_0000.png",
+          "source_task": "vqa",
+          "qa_type": "reasoning",
+          "question_id": 5
+        },
+        "image": "Images/Images_train/00243_0000.png"
+      },
+      {
+        "id": "vrsbench_train_00317_0000_qa_003",
+        "question": "Is there any infrastructure like buildings or trees around the basketball courts?",
+        "answer": "No",
+        "source_line": 1626,
+        "metadata": {
+          "dataset": "VRSBench",
+          "split": "train",
+          "source_annotation": "00317_0000.json",
+          "source_image": "00317_0000.png",
+          "source_task": "vqa",
+          "qa_type": "object existence",
+          "question_id": 4
+        },
+        "image": "Images/Images_train/00317_0000.png"
+      },
+      {
+        "id": "vrsbench_train_00342_0000_det_000",
+        "question": "Locate the object described as: \"The expressway service area can be identified by its red-roofed buildings with a blue-roofed structure centrally located within.\". Return its class and normalized bounding box.",
+        "answer": "{\"label\":\"expressway-service-area\",\"bbox\":[0.16,0.26,1.0,0.71]}",
+        "source_line": 1772,
+        "metadata": {
+          "dataset": "VRSBench",
+          "split": "train",
+          "source_annotation": "00342_0000.json",
+          "source_image": "00342_0000.png",
+          "source_task": "referring",
+          "object_id": 0,
+          "bbox_raw": [
+            0.16,
+            0.26,
+            1.39,
+            0.71
+          ],
+          "bbox_clipped": [
+            0.16,
+            0.26,
+            1.0,
+            0.71
+          ],
+          "coordinate_clipped": true
+        },
+        "image": "Images/Images_train/00342_0000.png"
+      },
+      {
+        "id": "vrsbench_train_00352_0000_qa_003",
+        "question": "Are there any buildings near the runway?",
+        "answer": "No",
+        "source_line": 1834,
+        "metadata": {
+          "dataset": "VRSBench",
+          "split": "train",
+          "source_annotation": "00352_0000.json",
+          "source_image": "00352_0000.png",
+          "source_task": "vqa",
+          "qa_type": "object existence",
+          "question_id": 4
+        },
+        "image": "Images/Images_train/00352_0000.png"
+      },
+      {
+        "id": "vrsbench_train_00355_0000_det_001",
+        "question": "Locate the object described as: \"The expressway service area encompasses a significant portion of the image, containing parking spaces and buildings.\". Return its class and normalized bounding box.",
+        "answer": "{\"label\":\"expressway-service-area\",\"bbox\":[0.22,0.08,1.0,0.82]}",
+        "source_line": 1842,
+        "metadata": {
+          "dataset": "VRSBench",
+          "split": "train",
+          "source_annotation": "00355_0000.json",
+          "source_image": "00355_0000.png",
+          "source_task": "referring",
+          "object_id": 4,
+          "bbox_raw": [
+            0.22,
+            0.08,
+            1.03,
+            0.82
+          ],
+          "bbox_clipped": [
+            0.22,
+            0.08,
+            1.0,
+            0.82
+          ],
+          "coordinate_clipped": true
+        },
+        "image": "Images/Images_train/00355_0000.png"
+      },
+      {
+        "id": "vrsbench_train_00356_0000_det_001",
+        "question": "Locate the object described as: \"The expressway service area is visible as a large section containing buildings and parking spaces, occupying a major part of the image from the left center to the right.\". Return its class and normalized bounding box.",
+        "answer": "{\"label\":\"expressway-service-area\",\"bbox\":[0.47,0.16,1.0,0.8]}",
+        "source_line": 1849,
+        "metadata": {
+          "dataset": "VRSBench",
+          "split": "train",
+          "source_annotation": "00356_0000.json",
+          "source_image": "00356_0000.png",
+          "source_task": "referring",
+          "object_id": 3,
+          "bbox_raw": [
+            0.47,
+            0.16,
+            1.23,
+            0.8
+          ],
+          "bbox_clipped": [
+            0.47,
+            0.16,
+            1.0,
+            0.8
+          ],
+          "coordinate_clipped": true
+        },
+        "image": "Images/Images_train/00356_0000.png"
+      },
+      {
+        "id": "vrsbench_train_00437_0000_qa_003",
+        "question": "Does the image show any buildings or trees?",
+        "answer": "No",
+        "source_line": 2298,
+        "metadata": {
+          "dataset": "VRSBench",
+          "split": "train",
+          "source_annotation": "00437_0000.json",
+          "source_image": "00437_0000.png",
+          "source_task": "vqa",
+          "qa_type": "object existence",
+          "question_id": 4
+        },
+        "image": "Images/Images_train/00437_0000.png"
+      },
+      {
+        "id": "vrsbench_train_00445_0000_qa_004",
+        "question": "Is there any building visible near the baseball field?",
+        "answer": "No",
+        "source_line": 2325,
+        "metadata": {
+          "dataset": "VRSBench",
+          "split": "train",
+          "source_annotation": "00445_0000.json",
+          "source_image": "00445_0000.png",
+          "source_task": "vqa",
+          "qa_type": "object existence",
+          "question_id": 5
+        },
+        "image": "Images/Images_train/00445_0000.png"
+      }
+    ],
+    "parking_context": [
+      {
+        "id": "vrsbench_train_00049_0000_det_000",
+        "question": "Locate the object described as: \"The vehicle is located towards the left side of the middle-right area of the parking lot.\". Return its class and normalized bounding box.",
+        "answer": "{\"label\":\"vehicle\",\"bbox\":[0.77,0.53,0.82,0.6]}",
+        "source_line": 249,
+        "metadata": {
+          "dataset": "VRSBench",
+          "split": "train",
+          "source_annotation": "00049_0000.json",
+          "source_image": "00049_0000.png",
+          "source_task": "referring",
+          "object_id": 0,
+          "bbox_raw": [
+            0.77,
+            0.53,
+            0.82,
+            0.6
+          ],
+          "bbox_clipped": [
+            0.77,
+            0.53,
+            0.82,
+            0.6
+          ],
+          "coordinate_clipped": false
+        },
+        "image": "Images/Images_train/00049_0000.png"
+      },
+      {
+        "id": "vrsbench_train_00049_0000_det_001",
+        "question": "Locate the object described as: \"The vehicle is situated on the far right of the middle-right area of the parking lot.\". Return its class and normalized bounding box.",
+        "answer": "{\"label\":\"vehicle\",\"bbox\":[0.87,0.51,0.95,0.58]}",
+        "source_line": 250,
+        "metadata": {
+          "dataset": "VRSBench",
+          "split": "train",
+          "source_annotation": "00049_0000.json",
+          "source_image": "00049_0000.png",
+          "source_task": "referring",
+          "object_id": 1,
+          "bbox_raw": [
+            0.87,
+            0.51,
+            0.95,
+            0.58
+          ],
+          "bbox_clipped": [
+            0.87,
+            0.51,
+            0.95,
+            0.58
+          ],
+          "coordinate_clipped": false
+        },
+        "image": "Images/Images_train/00049_0000.png"
+      },
+      {
+        "id": "vrsbench_train_00094_0000_det_001",
+        "question": "Locate the object described as: \"The vehicle located on the rightmost side of the parking lot in the bottom middle of the image.\". Return its class and normalized bounding box.",
+        "answer": "{\"label\":\"vehicle\",\"bbox\":[0.5,0.81,0.54,0.9]}",
+        "source_line": 450,
+        "metadata": {
+          "dataset": "VRSBench",
+          "split": "train",
+          "source_annotation": "00094_0000.json",
+          "source_image": "00094_0000.png",
+          "source_task": "referring",
+          "object_id": 2,
+          "bbox_raw": [
+            0.5,
+            0.81,
+            0.54,
+            0.9
+          ],
+          "bbox_clipped": [
+            0.5,
+            0.81,
+            0.54,
+            0.9
+          ],
+          "coordinate_clipped": false
+        },
+        "image": "Images/Images_train/00094_0000.png"
+      },
+      {
+        "id": "vrsbench_train_00121_0000_det_000",
+        "question": "Locate the object described as: \"The black vehicle is parked alone at the bottom-left corner of the parking lot.\". Return its class and normalized bounding box.",
+        "answer": "{\"label\":\"vehicle\",\"bbox\":[0.22,0.89,0.27,0.92]}",
+        "source_line": 614,
+        "metadata": {
+          "dataset": "VRSBench",
+          "split": "train",
+          "source_annotation": "00121_0000.json",
+          "source_image": "00121_0000.png",
+          "source_task": "referring",
+          "object_id": 0,
+          "bbox_raw": [
+            0.22,
+            0.89,
+            0.27,
+            0.92
+          ],
+          "bbox_clipped": [
+            0.22,
+            0.89,
+            0.27,
+            0.92
+          ],
+          "coordinate_clipped": false
+        },
+        "image": "Images/Images_train/00121_0000.png"
+      },
+      {
+        "id": "vrsbench_train_00142_0000_det_002",
+        "question": "Locate the object described as: \"The vehicle in the parking area on the top-right side of the image.\". Return its class and normalized bounding box.",
+        "answer": "{\"label\":\"vehicle\",\"bbox\":[0.7,0.22,0.79,0.26]}",
+        "source_line": 726,
+        "metadata": {
+          "dataset": "VRSBench",
+          "split": "train",
+          "source_annotation": "00142_0000.json",
+          "source_image": "00142_0000.png",
+          "source_task": "referring",
+          "object_id": 2,
+          "bbox_raw": [
+            0.7,
+            0.22,
+            0.79,
+            0.26
+          ],
+          "bbox_clipped": [
+            0.7,
+            0.22,
+            0.79,
+            0.26
+          ],
+          "coordinate_clipped": false
+        },
+        "image": "Images/Images_train/00142_0000.png"
+      },
+      {
+        "id": "vrsbench_train_00142_0000_det_003",
+        "question": "Locate the object described as: \"The vehicle in the parking area positioned along the right edge of the image.\". Return its class and normalized bounding box.",
+        "answer": "{\"label\":\"vehicle\",\"bbox\":[0.92,0.5,0.96,0.64]}",
+        "source_line": 727,
+        "metadata": {
+          "dataset": "VRSBench",
+          "split": "train",
+          "source_annotation": "00142_0000.json",
+          "source_image": "00142_0000.png",
+          "source_task": "referring",
+          "object_id": 8,
+          "bbox_raw": [
+            0.92,
+            0.5,
+            0.96,
+            0.64
+          ],
+          "bbox_clipped": [
+            0.92,
+            0.5,
+            0.96,
+            0.64
+          ],
+          "coordinate_clipped": false
+        },
+        "image": "Images/Images_train/00142_0000.png"
+      },
+      {
+        "id": "vrsbench_train_00259_0000_qa_001",
+        "question": "Are there parking lots visible near the stadium?",
+        "answer": "Yes",
+        "source_line": 1326,
+        "metadata": {
+          "dataset": "VRSBench",
+          "split": "train",
+          "source_annotation": "00259_0000.json",
+          "source_image": "00259_0000.png",
+          "source_task": "vqa",
+          "qa_type": "object existence",
+          "question_id": 2
+        },
+        "image": "Images/Images_train/00259_0000.png"
+      },
+      {
+        "id": "vrsbench_train_00275_0000_det_000",
+        "question": "Locate the object described as: \"The small baseball field is positioning between a grassy area and a paved parking lot.\". Return its class and normalized bounding box.",
+        "answer": "{\"label\":\"baseball-diamond\",\"bbox\":[0.03,0.23,0.37,0.6]}",
+        "source_line": 1403,
+        "metadata": {
+          "dataset": "VRSBench",
+          "split": "train",
+          "source_annotation": "00275_0000.json",
+          "source_image": "00275_0000.png",
+          "source_task": "referring",
+          "object_id": 0,
+          "bbox_raw": [
+            0.03,
+            0.23,
+            0.37,
+            0.6
+          ],
+          "bbox_clipped": [
+            0.03,
+            0.23,
+            0.37,
+            0.6
+          ],
+          "coordinate_clipped": false
+        },
+        "image": "Images/Images_train/00275_0000.png"
+      },
+      {
+        "id": "vrsbench_train_00285_0000_qa_004",
+        "question": "Is there a parking area visible near the train station?",
+        "answer": "yes",
+        "source_line": 1457,
+        "metadata": {
+          "dataset": "VRSBench",
+          "split": "train",
+          "source_annotation": "00285_0000.json",
+          "source_image": "00285_0000.png",
+          "source_task": "vqa",
+          "qa_type": "object existence",
+          "question_id": "Q5"
+        },
+        "image": "Images/Images_train/00285_0000.png"
+      },
+      {
+        "id": "vrsbench_train_00306_0000_det_000",
+        "question": "Locate the object described as: \"The vehicle parked on the right side of the parking lot, towards the middle section.\". Return its class and normalized bounding box.",
+        "answer": "{\"label\":\"vehicle\",\"bbox\":[0.76,0.41,0.91,0.47]}",
+        "source_line": 1565,
+        "metadata": {
+          "dataset": "VRSBench",
+          "split": "train",
+          "source_annotation": "00306_0000.json",
+          "source_image": "00306_0000.png",
+          "source_task": "referring",
+          "object_id": 0,
+          "bbox_raw": [
+            0.76,
+            0.41,
+            0.91,
+            0.47
+          ],
+          "bbox_clipped": [
+            0.76,
+            0.41,
+            0.91,
+            0.47
+          ],
+          "coordinate_clipped": false
+        },
+        "image": "Images/Images_train/00306_0000.png"
+      },
+      {
+        "id": "vrsbench_train_00338_0000_det_001",
+        "question": "Locate the object described as: \"The vehicle located near the top-middle of the image is the top-most parked car in the parking lot.\". Return its class and normalized bounding box.",
+        "answer": "{\"label\":\"vehicle\",\"bbox\":[0.34,0.04,0.4,0.08]}",
+        "source_line": 1743,
+        "metadata": {
+          "dataset": "VRSBench",
+          "split": "train",
+          "source_annotation": "00338_0000.json",
+          "source_image": "00338_0000.png",
+          "source_task": "referring",
+          "object_id": 5,
+          "bbox_raw": [
+            0.34,
+            0.04,
+            0.4,
+            0.08
+          ],
+          "bbox_clipped": [
+            0.34,
+            0.04,
+            0.4,
+            0.08
+          ],
+          "coordinate_clipped": false
+        },
+        "image": "Images/Images_train/00338_0000.png"
+      },
+      {
+        "id": "vrsbench_train_00343_0000_det_000",
+        "question": "Locate the object described as: \"The left-most tennis court is positioned at the bottom-left end of the parking area.\". Return its class and normalized bounding box.",
+        "answer": "{\"label\":\"tennis-court\",\"bbox\":[0.61,0.68,0.76,1.0]}",
+        "source_line": 1779,
+        "metadata": {
+          "dataset": "VRSBench",
+          "split": "train",
+          "source_annotation": "00343_0000.json",
+          "source_image": "00343_0000.png",
+          "source_task": "referring",
+          "object_id": 0,
+          "bbox_raw": [
+            0.61,
+            0.68,
+            0.76,
+            1.02
+          ],
+          "bbox_clipped": [
+            0.61,
+            0.68,
+            0.76,
+            1.0
+          ],
+          "coordinate_clipped": true
+        },
+        "image": "Images/Images_train/00343_0000.png"
+      }
+    ],
+    "white_square": [
+      {
+        "id": "vrsbench_train_P2793_0002_det_000",
+        "question": "Locate the object described as: \"The white roof vehicle located on the top-right side of the large square building.\". Return its class and normalized bounding box.",
+        "answer": "{\"label\":\"vehicle\",\"bbox\":[0.77,0.07,0.8,0.13]}",
+        "source_line": 120456,
+        "metadata": {
+          "dataset": "VRSBench",
+          "split": "train",
+          "source_annotation": "P2793_0002.json",
+          "source_image": "P2793_0002.png",
+          "source_task": "referring",
+          "object_id": 0,
+          "bbox_raw": [
+            0.77,
+            0.07,
+            0.8,
+            0.13
+          ],
+          "bbox_clipped": [
+            0.77,
+            0.07,
+            0.8,
+            0.13
+          ],
+          "coordinate_clipped": false
+        },
+        "image": "Images/Images_train/P2793_0002.png"
+      }
+    ]
+  }
+}

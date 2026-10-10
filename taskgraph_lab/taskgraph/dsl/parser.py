@@ -164,11 +164,15 @@ def _select_node(call: Call) -> tuple[dict[str, Any], dict[str, Any]]:
         "SELECT_SUBREGION": ("SUBREGION", ("subregion",)),
     }
     mode, param_names = signatures[call.name]
-    args = _positional(call, 2 + len(param_names))
+    required = 2 + len(param_names)
+    maximum = required + 1 if mode == "SEMANTIC" else required
+    args = _positional(call, required, maximum)
     inputs = {"candidates": _reference(args[0])}
     if args[1] is not None:
         inputs["reference"] = _reference(args[1])
-    raw_params = args[2:]
+    if len(args) > required:
+        inputs["scope"] = _reference(args[-1])
+    raw_params = args[2:required]
     params: dict[str, Any] = {"mode": mode}
     for name, raw in zip(param_names, raw_params, strict=True):
         if name in {"rank", "index"}:

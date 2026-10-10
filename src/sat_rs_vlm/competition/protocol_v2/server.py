@@ -21,6 +21,7 @@ from sat_rs_vlm.configuration.environment import expand_environment
 from .errors import ProtocolError, ProtocolValidationError
 from .image_package import ImagePackage
 from .models import parse_request
+from .question_capture import QuestionCapture
 from .service import CompetitionService
 
 logger = logging.getLogger("sat_rs_vlm.competition")
@@ -32,6 +33,7 @@ def create_app(
     service: CompetitionService | None = None,
     api_key: str | None = None,
     timeout_seconds: float | None = None,
+    question_capture_path: str | Path | None = None,
 ) -> FastAPI:
     config_file = Path(
         config_path or os.environ.get("COMPETITION_CONFIG", "configs/competition/protocol_v2.yaml")
@@ -71,6 +73,8 @@ def create_app(
             raise ValueError("Competition request timeout must be in (0, 120]")
         app.state.lock = asyncio.Lock()
         app.state.inflight = None
+        capture_path = question_capture_path or config.get("logging", {}).get("question_capture_path")
+        app.state.question_capture = QuestionCapture(capture_path) if capture_path else None
         try:
             if config.get("server", {}).get("preload", False):
                 seen = set()
@@ -83,7 +87,11 @@ def create_app(
             if app.state.inflight is not None:
                 # A timed-out CUDA job remains serialized until it actually finishes.
                 await asyncio.gather(app.state.inflight, return_exceptions=True)
-            active_service.close()
+            try:
+                active_service.close()
+            finally:
+                if app.state.question_capture is not None:
+                    app.state.question_capture.close()
 
     app = FastAPI(
         title="Competition Protocol 2.0",
@@ -140,6 +148,12 @@ def create_app(
             parsed = parse_request(await request.json())
         except (ValueError, UnicodeError) as exc:
             raise ProtocolValidationError() from exc
+        if app.state.question_capture is not None:
+            try:
+                app.state.question_capture.record(parsed)
+            except OSError:
+                # Capture failure must not expose the request or break inference.
+                logger.error("question_capture_write_failed")
         if app.state.lock.locked():
             return JSONResponse(
                 {"error": {"code": "busy", "message": "Inference is busy."}}, status_code=503

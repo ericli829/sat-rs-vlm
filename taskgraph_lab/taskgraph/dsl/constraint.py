@@ -23,6 +23,7 @@ from taskgraph_lab.taskgraph.enums import (
     IntentLabel,
     OperatorName,
     RegionPosition,
+    RuntimeType,
     SortOrder,
     SpatialRelation,
     SubregionType,
@@ -103,6 +104,19 @@ def _reference_pattern(references: Iterable[str]) -> str:
 
 def _reference_list(reference: str) -> str:
     return rf"\[{reference}(?:,{reference})*\]"
+
+
+def _select_reference_pattern(role: str, references: tuple[str, ...], outputs: dict) -> str:
+    allowed = SIGNATURES[OperatorName.SELECT][role]
+    return _reference_pattern(
+        reference
+        for reference in references
+        if allowed.intersection(
+            {RuntimeType.IMAGE_REF}
+            if reference.startswith("$image")
+            else outputs.get(reference, set())
+        )
+    )
 
 
 def _node_surface(line: str) -> str:
@@ -219,6 +233,10 @@ class CanonicalDSLPrefixGrammar:
         ref_or_null = rf"(?:{ref}|null)"
         ref_or_list = rf"(?:{ref}|{_reference_list(ref)})"
         count_ref = _reference_pattern(self._count_compact_references(references, state.output_map))
+        select_refs = {
+            role: _select_reference_pattern(role, references, state.output_map)
+            for role in SIGNATURES[OperatorName.SELECT]
+        }
         number4 = rf"\[{JSON_NUMBER},{JSON_NUMBER},{JSON_NUMBER},{JSON_NUMBER}\]"
         image_size = rf"\[{POSITIVE_INTEGER},{POSITIVE_INTEGER}\]"
         position = _enum_pattern(RegionPosition)
@@ -256,7 +274,8 @@ class CanonicalDSLPrefixGrammar:
             rf"FIND_MARKER\({ref},{JSON_STRING}(?:,{JSON_STRING})?\)",
             rf"LOCATE\({ref},{TARGET}\)",
             rf"SELECT_REL\({ref},{ref_or_null},{relation}\)",
-            rf"SELECT_SEM\({ref},{ref_or_null},{JSON_STRING},(?:SINGLE|MULTI)\)",
+            rf"SELECT_SEM\({select_refs['candidates']},(?:{select_refs['reference']}|null),"
+            rf"{JSON_STRING},(?:SINGLE|MULTI)(?:,{select_refs['scope']})?\)",
             rf"SELECT_RANK\({ref},{ref_or_null},{RANK_CRITERION_JSON},{POSITIVE_INTEGER},{rank_order}\)",
             rf"SELECT_ORD\({ref},{ref_or_null},{POSITIVE_INTEGER},{ordinal_order}\)",
             rf"SELECT_EXTREME\({ref},{ref_or_null},{extreme}\)",

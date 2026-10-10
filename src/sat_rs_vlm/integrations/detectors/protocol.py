@@ -28,6 +28,15 @@ class ProposalProvider(Protocol):
         """Release a long-lived provider process/model when applicable."""
 
 
+class BatchedProposalProvider(ProposalProvider, Protocol):
+    """Optional batch interface; results correspond to input images in order."""
+
+    inference_batch_size: int
+
+    def predict_batch(self, image_paths: list[Path], target_phrase: str) -> list[ProposalResult]:
+        """Return every input's proposals or raise; never silently omit an image."""
+
+
 def _file_sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:

@@ -1,0 +1,80 @@
+{"id": "synthetic_locate_7815937f00922e14_en", "question": "Find the white elongated greenhouse in the image.", "language": "en", "family": "intrinsic_single"}
+{"id": "synthetic_locate_984bedef57962b6a_en", "question": "Find the blue rectangular tennis court in the image.", "language": "en", "family": "intrinsic_single"}
+{"id": "synthetic_locate_8988fbb9178a52f9_en", "question": "Find the gray rectangular warehouse in the image.", "language": "en", "family": "intrinsic_single"}
+{"id": "synthetic_locate_49afe62077a24279_en", "question": "Find the white elongated ship in the image.", "language": "en", "family": "intrinsic_single"}
+{"id": "synthetic_locate_e9c607792f4141c7_en", "question": "Find the green rectangular sports field in the image.", "language": "en", "family": "intrinsic_single"}
+{"id": "synthetic_locate_1a4d9f1e13d0e600_en", "question": "Find the white circular storage tank in the image.", "language": "en", "family": "intrinsic_single"}
+{"id": "synthetic_locate_32d6fda15ae3212f_en", "question": "Find the white rectangular vehicle in the image.", "language": "en", "family": "intrinsic_single"}
+{"id": "synthetic_locate_2f1638a3fb81ebb3_en", "question": "Find the white square building in the image.", "language": "en", "family": "intrinsic_single"}
+{"id": "synthetic_locate_c67ba56634a7cf3f_en", "question": "Find the blue rectangular swimming pool in the image.", "language": "en", "family": "intrinsic_single"}
+{"id": "synthetic_locate_bb0403497cf699b1_en", "question": "Find the gray rectangular parking area in the image.", "language": "en", "family": "intrinsic_single"}
+{"id": "synthetic_locate_7108fe1b20138084_en", "question": "Find the ship with a row of trees to its right and a paved open area above it in the image.", "language": "en", "family": "context_single"}
+{"id": "synthetic_locate_27db4a4b10b6c8b6_en", "question": "Find the vehicle with a row of trees to its right and a path above it in the image.", "language": "en", "family": "context_single"}
+{"id": "synthetic_locate_b8260e3b65ae520b_en", "question": "Find the building with a row of trees to its right and grass below it in the image.", "language": "en", "family": "context_single"}
+{"id": "synthetic_locate_de1caf7e89250bca_en", "question": "Find the parking area with a green space to its left and a path below it in the image.", "language": "en", "family": "context_single"}
+{"id": "synthetic_locate_f2c5ae5f5fc54ba8_en", "question": "Find the greenhouse with a road to its right and a path below it in the image.", "language": "en", "family": "context_single"}
+{"id": "synthetic_locate_9df8840177cc376e_en", "question": "Find the tennis court with a green space to its left and a wooded area above it in the image.", "language": "en", "family": "context_single"}
+{"id": "synthetic_locate_f3b6e6cf75517026_en", "question": "Find the warehouse with a road to its left and a wooded area below it in the image.", "language": "en", "family": "context_single"}
+{"id": "synthetic_locate_58a894b89a27d03a_en", "question": "Find the sports field with a road to its left and a paved open area below it in the image.", "language": "en", "family": "context_single"}
+{"id": "synthetic_locate_8dd84a87e3d3e364_en", "question": "Find the swimming pool with a river to its left and a paved open area above it in the image.", "language": "en", "family": "context_single"}
+{"id": "synthetic_locate_78951e5e4eec0047_en", "question": "Find the storage tank with a river to its left and a paved open area above it in the image.", "language": "en", "family": "context_single"}
+{"id": "synthetic_locate_eb14f519c1605734_en", "question": "Find the blue rectangular swimming pool with a green space to its right and a wooded area above it in the image.", "language": "en", "family": "intrinsic_context"}
+{"id": "synthetic_locate_0b5fbc118f5a6988_en", "question": "Find the white elongated greenhouse with a green space to its right and a wooded area below it in the image.", "language": "en", "family": "intrinsic_context"}
+{"id": "synthetic_locate_b9c31b8fef428a9f_en", "question": "Find the white circular storage tank with a row of trees to its right and a path above it in the image.", "language": "en", "family": "intrinsic_context"}
+{"id": "synthetic_locate_11970218628725a1_en", "question": "Find the green rectangular sports field with a river to its left and a path below it in the image.", "language": "en", "family": "intrinsic_context"}
+{"id": "synthetic_locate_7127143492f24fa7_en", "question": "Find the gray rectangular parking area with a river to its left and a wooded area above it in the image.", "language": "en", "family": "intrinsic_context"}
+{"id": "synthetic_locate_b61e5da63ab23cd0_en", "question": "Find the blue rectangular tennis court with a river to its right and grass above it in the image.", "language": "en", "family": "intrinsic_context"}
+{"id": "synthetic_locate_3bcd57ecc62737e2_en", "question": "Find the white rectangular vehicle with a river to its right and a paved open area above it in the image.", "language": "en", "family": "intrinsic_context"}
+{"id": "synthetic_locate_324f7a834ae090b6_en", "question": "Find the gray rectangular warehouse with a green space to its left and a wooded area below it in the image.", "language": "en", "family": "intrinsic_context"}
+{"id": "synthetic_locate_f118a10af0fe5ff2_en", "question": "Find the white elongated ship with a green space to its right and a paved open area above it in the image.", "language": "en", "family": "intrinsic_context"}
+{"id": "synthetic_locate_8f0e953a8b76aee2_en", "question": "Find the white square building with a row of trees to its right and grass below it in the image.", "language": "en", "family": "intrinsic_context"}
+{"id": "synthetic_locate_e8de088779605891_en", "question": "Within the lower-right part of the image, find the ship with a river to its left and a path below it.", "language": "en", "family": "scoped_context"}
+{"id": "synthetic_locate_4eea9aae35af6c48_en", "question": "Within the lower-right part of the image, find the sports field with a green space to its right and grass above it.", "language": "en", "family": "scoped_context"}
+{"id": "synthetic_locate_d3d420bf40a2e1e3_en", "question": "Within the upper-right part of the image, find the vehicle with a row of trees to its left and a wooded area above it.", "language": "en", "family": "scoped_context"}
+{"id": "synthetic_locate_a34088e48ac544e4_en", "question": "Within the central part of the image, find the greenhouse with a green space to its right and a paved open area below it.", "language": "en", "family": "scoped_context"}
+{"id": "synthetic_locate_a822f5b4e2f276e1_en", "question": "Within the upper-left part of the image, find the parking area with a road to its right and grass below it.", "language": "en", "family": "scoped_context"}
+{"id": "synthetic_locate_990b3c7fa7ca56e5_en", "question": "Within the upper-left part of the image, find the swimming pool with a river to its left and grass below it.", "language": "en", "family": "scoped_context"}
+{"id": "synthetic_locate_9cd73dd057269d18_en", "question": "Within the central part of the image, find the warehouse with a river to its left and a wooded area above it.", "language": "en", "family": "scoped_context"}
+{"id": "synthetic_locate_7331437dc537ea25_en", "question": "Within the central part of the image, find the storage tank with a green space to its left and a paved open area below it.", "language": "en", "family": "scoped_context"}
+{"id": "synthetic_locate_864514d514fc8f3f_en", "question": "Within the lower-right part of the image, find the building with a row of trees to its right and grass below it.", "language": "en", "family": "scoped_context"}
+{"id": "synthetic_locate_f819f78c04af91ea_en", "question": "Within the central part of the image, find the tennis court with a river to its left and a paved open area above it.", "language": "en", "family": "scoped_context"}
+{"id": "synthetic_locate_7bb95b0a8fca6594_en", "question": "Using the topmost building in the image as the reference, find the swimming pool below it with a green space to the target's right.", "language": "en", "family": "anchor_context"}
+{"id": "synthetic_locate_1d3ec72871bc903e_en", "question": "Using the topmost building in the image as the reference, find the greenhouse below it with a river to the target's right.", "language": "en", "family": "anchor_context"}
+{"id": "synthetic_locate_b6ab2662abe17bf7_en", "question": "Using the topmost building in the image as the reference, find the storage tank below it with a row of trees to the target's right.", "language": "en", "family": "anchor_context"}
+{"id": "synthetic_locate_8c536aa54ba03e28_en", "question": "Using the topmost building in the image as the reference, find the ship below it with a road to the target's right.", "language": "en", "family": "anchor_context"}
+{"id": "synthetic_locate_675c841110e25e16_en", "question": "Using the topmost warehouse in the image as the reference, find the building below it with a row of trees to the target's right.", "language": "en", "family": "anchor_context"}
+{"id": "synthetic_locate_376547d3e0b3d1ea_en", "question": "Using the topmost building in the image as the reference, find the tennis court below it with a green space to the target's left.", "language": "en", "family": "anchor_context"}
+{"id": "synthetic_locate_84f0ba974a1bf859_en", "question": "Using the topmost building in the image as the reference, find the sports field below it with a river to the target's left.", "language": "en", "family": "anchor_context"}
+{"id": "synthetic_locate_cf872170b8738b95_en", "question": "Using the topmost building in the image as the reference, find the parking area below it with a road to the target's right.", "language": "en", "family": "anchor_context"}
+{"id": "synthetic_locate_fff18728fe58166a_en", "question": "Using the topmost building in the image as the reference, find the vehicle below it with a green space to the target's right.", "language": "en", "family": "anchor_context"}
+{"id": "synthetic_locate_e04740769da4c1b4_en", "question": "Using the topmost building in the image as the reference, find the warehouse below it with a green space to the target's left.", "language": "en", "family": "anchor_context"}
+{"id": "synthetic_locate_ce54dc71d9e8b47d_en", "question": "Find all ships with a road to their right and a path below them in the image.", "language": "en", "family": "semantic_multi"}
+{"id": "synthetic_locate_57f1bc68c6a8519c_en", "question": "Find all storage tanks with a river to their left and a path below them in the image.", "language": "en", "family": "semantic_multi"}
+{"id": "synthetic_locate_48d0ed2876bf54cb_en", "question": "Find all greenhouses with a road to their right and a path above them in the image.", "language": "en", "family": "semantic_multi"}
+{"id": "synthetic_locate_3a4b59bdf3f8e839_en", "question": "Find all tennis courts with a road to their left and a paved open area below them in the image.", "language": "en", "family": "semantic_multi"}
+{"id": "synthetic_locate_4335bc5c38031249_en", "question": "Find all sports fields with a green space to their right and a paved open area below them in the image.", "language": "en", "family": "semantic_multi"}
+{"id": "synthetic_locate_ac1731b983278e81_en", "question": "Find all warehouses with a road to their right and a path above them in the image.", "language": "en", "family": "semantic_multi"}
+{"id": "synthetic_locate_210773c9ced6d749_en", "question": "Find all buildings with a row of trees to their right and grass below them in the image.", "language": "en", "family": "semantic_multi"}
+{"id": "synthetic_locate_d672dc3c9336639b_en", "question": "Find all swimming pools with a road to their left and a wooded area below them in the image.", "language": "en", "family": "semantic_multi"}
+{"id": "synthetic_locate_ef68c18bab89222a_en", "question": "Find all vehicles with a green space to their left and a paved open area below them in the image.", "language": "en", "family": "semantic_multi"}
+{"id": "synthetic_locate_4626058feb38fe3f_en", "question": "Find all parking areas with a river to their left and a paved open area below them in the image.", "language": "en", "family": "semantic_multi"}
+{"id": "synthetic_locate_05aa77bdf17df511_en", "question": "Find the rightmost sports field in the image.", "language": "en", "family": "extreme_control"}
+{"id": "synthetic_locate_40e3bc06f4946b8a_en", "question": "Find the topmost building in the image.", "language": "en", "family": "extreme_control"}
+{"id": "synthetic_locate_2fcc5da1ecf8c70e_en", "question": "Find the leftmost tennis court in the image.", "language": "en", "family": "extreme_control"}
+{"id": "synthetic_locate_de4abe905705a061_en", "question": "Find the bottommost warehouse in the image.", "language": "en", "family": "extreme_control"}
+{"id": "synthetic_locate_381431d4b48f708a_en", "question": "Find the rightmost storage tank in the image.", "language": "en", "family": "extreme_control"}
+{"id": "synthetic_locate_65f9cb5b180c723b_en", "question": "Find the rightmost parking area in the image.", "language": "en", "family": "extreme_control"}
+{"id": "synthetic_locate_0279d44e4c0f4b1a_en", "question": "Find the rightmost swimming pool in the image.", "language": "en", "family": "extreme_control"}
+{"id": "synthetic_locate_68724746aeb0f7d3_en", "question": "Find the topmost greenhouse in the image.", "language": "en", "family": "extreme_control"}
+{"id": "synthetic_locate_f6ce6a9a6671a2ba_en", "question": "Find the rightmost vehicle in the image.", "language": "en", "family": "extreme_control"}
+{"id": "synthetic_locate_a0cbcd596b3c5d89_en", "question": "Find the bottommost ship in the image.", "language": "en", "family": "extreme_control"}
+{"id": "synthetic_locate_d50603dc1d384589_en", "question": "Order all tennis courts in the image from bottom to top and find the fourth one.", "language": "en", "family": "ordinal_control"}
+{"id": "synthetic_locate_144e96b77faf80c4_en", "question": "Order all buildings in the image from left to right and find the third one.", "language": "en", "family": "ordinal_control"}
+{"id": "synthetic_locate_75f503f9a3c86e83_en", "question": "Order all sports fields in the image from top to bottom and find the fourth one.", "language": "en", "family": "ordinal_control"}
+{"id": "synthetic_locate_aad65d6a8a661f3e_en", "question": "Order all parking areas in the image from top to bottom and find the second one.", "language": "en", "family": "ordinal_control"}
+{"id": "synthetic_locate_68637fb277e20b01_en", "question": "Order all ships in the image from top to bottom and find the fourth one.", "language": "en", "family": "ordinal_control"}
+{"id": "synthetic_locate_ddf3bb5b96445364_en", "question": "Order all vehicles in the image from bottom to top and find the fourth one.", "language": "en", "family": "ordinal_control"}
+{"id": "synthetic_locate_4b6ce3d48e3e9958_en", "question": "Order all greenhouses in the image from right to left and find the fourth one.", "language": "en", "family": "ordinal_control"}
+{"id": "synthetic_locate_335d5d1f5c7dd43e_en", "question": "Order all swimming pools in the image from bottom to top and find the third one.", "language": "en", "family": "ordinal_control"}
+{"id": "synthetic_locate_e3786599af8b71ea_en", "question": "Order all warehouses in the image from top to bottom and find the fourth one.", "language": "en", "family": "ordinal_control"}
+{"id": "synthetic_locate_ad64b2a22b8b5623_en", "question": "Order all storage tanks in the image from left to right and find the second one.", "language": "en", "family": "ordinal_control"}

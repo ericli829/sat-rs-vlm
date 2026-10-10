@@ -39,6 +39,7 @@ from sat_rs_vlm.competition.protocol_v2.smoke import (
 from sat_rs_vlm.taskgraph.choice import ChoiceRequest
 from sat_rs_vlm.taskgraph.providers import ChoiceScoringRequest, FixturePlannerProvider
 from sat_rs_vlm.taskgraph.routing import ExecutionMode
+from sat_rs_vlm.taskgraph.runtime_memory import RuntimeMemory, hash_question
 from sat_rs_vlm.taskgraph.runtime_types import (
     Answer,
     Boolean,
@@ -76,6 +77,36 @@ def service(package):
 def test_parse_contracts(requests, kind):
     request = parse_request(requests[kind])
     assert AnswerContract.from_request(request).kind == kind
+
+
+def test_online_joint_hash_overrides_adapter_route_using_raw_question(service, requests, tmp_path):
+    request = parse_request(requests["short_text"])
+    image = service.package.resolve_all(request.images)[0]
+    path = tmp_path / "memory.jsonl"
+    path.write_text(json.dumps({
+        "sample_id": "historical-id", "mode": "DIRECT_VLM",
+        "image_sha256": image.descriptor.sha256,
+        "question_sha256": hash_question(request.question),
+    }) + "\n", encoding="utf-8")
+    service.runtime.runtime_memory = RuntimeMemory(path)
+    service.predict(request)
+    assert service.last_trace.telemetry["runtime_memory_hash_hit"] is True
+    assert service.last_diagnostics["execution_mode"] == "DIRECT_VLM"
+
+
+@pytest.mark.parametrize("kind", ["bbox", "integer"])
+def test_adapter_preserves_raw_question_before_appending_instructions(package, requests, kind):
+    payload = copy.deepcopy(requests[kind])
+    if kind == "integer":
+        payload["question"] = "How many ships are left of the airport?"
+    request = parse_request(payload)
+    images = package.resolve_all(request.images)
+    adapted = CompetitionRequestAdapter().adapt(
+        request, images, AnswerContract.from_request(request)
+    )
+    assert adapted.question != request.question
+    assert adapted.memory_question == request.question
+    assert adapted.verified_image_sha256s == tuple(image.descriptor.sha256 for image in images)
 
 
 @pytest.mark.parametrize(

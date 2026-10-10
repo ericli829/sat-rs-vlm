@@ -75,3 +75,15 @@ explicit config path; it never guesses a config and never downloads weights.
 Run `scripts/integrations/lae_dino_worker.py` only with `LAE_DINO_PYTHON` from
 this isolated environment. The main `rs-vlm` process communicates with it
 through JSONL and never imports MMDetection.
+
+The sidecar accepts `initialize`, legacy single-image requests, and
+`operation: predict_batch` with an `items` list. A batch uses one `model.test_step`
+over the original configured test pipeline, rather than the vendored API's serial
+list loop. `--max-batch-size` defaults to 16; CUDA OOM retries smaller batches unless
+`--disable-batch-oom-retry` is set. The worker retains Python 3.9 compatibility.
+No dependency versions or environment installation steps changed for batching.
+
+Main-process LOCATE and COUNT providers share an identical worker identity, with
+threshold/top-k/NMS sent per request. Configure the same `batch_size` and
+`batch_oom_retry` for both paths; old `parallel_workers` settings no longer create
+LAE model replicas. See `docs/taskgraph_runtime.md` for CPU/disk limits and traces.

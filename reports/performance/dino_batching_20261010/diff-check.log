@@ -1,0 +1,13 @@
+warning: in the working copy of 'configs/locator/uhr_hierarchical.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'configs/taskgraph/runtime.real.example.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/taskgraph_runtime.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'environments/lae_dino/README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/integrations/lae_dino_worker.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/sat_rs_vlm/integrations/counting/detector_bridge.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/sat_rs_vlm/integrations/detectors/lae_dino_sidecar.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/sat_rs_vlm/integrations/detectors/protocol.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/sat_rs_vlm/integrations/detectors/registry.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/sat_rs_vlm/integrations/detectors/tile_transport.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/sat_rs_vlm/integrations/detectors/tiled.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/unit/integrations/test_cpu_tile_prefetch.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/unit/integrations/test_detector_providers.py', LF will be replaced by CRLF the next time Git touches it

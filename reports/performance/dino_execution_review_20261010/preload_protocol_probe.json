@@ -1,0 +1,15 @@
+{
+  "scope": "Actual worker main with stub loader/predictor; no models/dependencies loaded",
+  "responses": [
+    {
+      "id": "initialize-probe",
+      "status": "failed",
+      "failure_stage": "proposal_generation",
+      "error": "missing request field: image"
+    },
+    {
+      "id": "prediction-probe",
+      "status": "ok"
+    }
+  ]
+}

@@ -131,6 +131,7 @@ class CompetitionService:
         }
         try:
             result = self.runtime.run(adapted)
+            self.last_diagnostics["execution_mode"] = result.execution_mode.value
             self.last_trace = result.trace
             originals = tuple(ImageRef(str(x.path), x.width, x.height) for x in images)
             value = self.resolver.resolve(

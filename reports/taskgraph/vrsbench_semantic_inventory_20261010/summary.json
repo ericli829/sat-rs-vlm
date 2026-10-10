@@ -1,0 +1,248 @@
+{
+  "source_root": "F:\\VIT-data\\VRSBench",
+  "splits": {
+    "train": {
+      "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\data\\processed\\rs_train.jsonl",
+      "source_sha256": "07ec7149a84dd034bae7815d08a6f596ba427ab48eb74fff1132c85fd8628d70",
+      "rows": 142390,
+      "unique_images": 20262,
+      "task_counts": {
+        "captioning": 20264,
+        "detection": 36313,
+        "scene_classification": 6639,
+        "vqa": 63746,
+        "counting": 15428
+      },
+      "qa_types": {
+        "scene type": 6639,
+        "object existence": 16739,
+        "object quantity": 15428,
+        "object category": 9368,
+        "object position": 17289,
+        "object direction": 1546,
+        "object shape": 2480,
+        "object color": 6768,
+        "reasoning": 2038,
+        "image": 3499,
+        "object size": 2295,
+        "rural or urban": 1724
+      },
+      "heuristic_counts": {
+        "referring": {
+          "absolute_position": 21589,
+          "size": 14623,
+          "relation": 7794,
+          "extreme": 6824,
+          "multiple_relation_mentions": 548,
+          "shape": 1015,
+          "background_relation": 1823,
+          "compound_background_candidate": 826,
+          "background": 5323,
+          "color": 2940,
+          "ordinal": 95
+        },
+        "qa": {
+          "absolute_position": 6083,
+          "relation": 5859,
+          "background_relation": 1523,
+          "background": 9685,
+          "size": 11444,
+          "extreme": 4370,
+          "ordinal": 128,
+          "color": 930,
+          "shape": 208,
+          "relational_count_candidate": 166,
+          "multiple_relation_mentions": 35,
+          "compound_background_candidate": 16
+        }
+      },
+      "referring_labels": {
+        "expressway-toll-station": 190,
+        "vehicle": 13045,
+        "trainstation": 208,
+        "chimney": 186,
+        "storage-tank": 1157,
+        "ship": 3949,
+        "airplane": 4224,
+        "ground-track-field": 761,
+        "dam": 130,
+        "expressway-service-area": 242,
+        "stadium": 170,
+        "airport": 225,
+        "baseball-diamond": 1052,
+        "tennis-court": 2430,
+        "golffield": 108,
+        "bridge": 2467,
+        "basketball-court": 563,
+        "windmill": 393,
+        "harbor": 2530,
+        "overpass": 362,
+        "helicopter": 104,
+        "soccer-ball-field": 329,
+        "swimming-pool": 820,
+        "roundabout": 533,
+        "container-crane": 90,
+        "helipad": 45
+      },
+      "quality_flags": {
+        "converted_bbox_clipped": 7393,
+        "raw_bbox_outside_unit_square": 7393,
+        "converted_bbox_nonpositive_area": 20
+      },
+      "duplicate_caption_images": {
+        "02725_0000.png": 2,
+        "P2708_0016.png": 2
+      }
+    },
+    "val": {
+      "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\data\\processed\\rs_val.jsonl",
+      "source_sha256": "a88de18f1f45cd93d8f7499e3f940ec18b58bc71c57b7d91c5cb35ea3569293e",
+      "rows": 62918,
+      "unique_images": 9350,
+      "task_counts": {
+        "captioning": 9350,
+        "detection": 16159,
+        "vqa": 27838,
+        "scene_classification": 3197,
+        "counting": 6374
+      },
+      "qa_types": {
+        "object category": 5434,
+        "object position": 5828,
+        "scene type": 3197,
+        "object existence": 7789,
+        "object direction": 477,
+        "object shape": 1423,
+        "object quantity": 6374,
+        "object color": 3550,
+        "image": 1129,
+        "object size": 1011,
+        "reasoning": 902,
+        "rural or urban": 295
+      },
+      "heuristic_counts": {
+        "referring": {
+          "absolute_position": 9446,
+          "color": 1384,
+          "size": 4808,
+          "shape": 538,
+          "relation": 2688,
+          "extreme": 1980,
+          "background": 1654,
+          "background_relation": 517,
+          "compound_background_candidate": 181,
+          "multiple_relation_mentions": 135,
+          "ordinal": 45
+        },
+        "qa": {
+          "extreme": 1440,
+          "background": 4106,
+          "relation": 2668,
+          "size": 3244,
+          "relational_count_candidate": 94,
+          "absolute_position": 2810,
+          "color": 427,
+          "shape": 97,
+          "background_relation": 697,
+          "multiple_relation_mentions": 19,
+          "ordinal": 35,
+          "compound_background_candidate": 9
+        }
+      },
+      "referring_labels": {
+        "windmill": 529,
+        "bridge": 846,
+        "basketball-court": 345,
+        "vehicle": 4545,
+        "overpass": 419,
+        "stadium": 248,
+        "ground-track-field": 446,
+        "trainstation": 216,
+        "expressway-toll-station": 170,
+        "tennis-court": 1132,
+        "storage-tank": 766,
+        "expressway-service-area": 234,
+        "baseball-diamond": 712,
+        "golffield": 121,
+        "airplane": 1461,
+        "chimney": 170,
+        "airport": 195,
+        "ship": 1687,
+        "harbor": 1090,
+        "dam": 146,
+        "soccer-ball-field": 148,
+        "swimming-pool": 269,
+        "roundabout": 195,
+        "helicopter": 56,
+        "container-crane": 12,
+        "helipad": 1
+      },
+      "quality_flags": {
+        "converted_bbox_clipped": 4399,
+        "raw_bbox_outside_unit_square": 4399,
+        "converted_bbox_nonpositive_area": 6
+      },
+      "duplicate_caption_images": {}
+    }
+  },
+  "heuristic_patterns": {
+    "background": "\\b(?:trees?|grass|green area|green land|vegetation|forest|roads?|river|water|parking (?:area|lot)|runway)\\b",
+    "relation": "\\b(?:to (?:the )?(?:left|right) of|(?:above|below|behind|beside|between|near|next to|adjacent to|surrounded by|in front of|closest to|nearest to|bordered by))\\b",
+    "color": "\\b(?:white|black|red|green|blue|gray|grey|yellow|brown|dark|bright|silver|orange)\\b",
+    "shape": "\\b(?:square|rectangular|rectangle|circular|round|triangular|triangle|oval|l-shaped|u-shaped)\\b",
+    "size": "\\b(?:small|large|big|tiny|long|short)\\b",
+    "extreme": "\\b(?:left[- ]?most|right[- ]?most|top[- ]?most|bottom[- ]?most|uppermost|lowermost|largest|smallest)\\b",
+    "ordinal": "\\b(?:second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\\b",
+    "absolute_position": "\\b(?:top[- ](?:left|right)|bottom[- ](?:left|right)|upper[- ](?:left|right)|lower[- ](?:left|right)|center|centre|corner|middle)\\b"
+  },
+  "scope": "Full scan of the existing converted train/val JSONL; keyword flags are overlapping review hints, not gold TaskGraphs. Selected examples are cross-checked against original per-image annotations.",
+  "image_name_overlap": 0,
+  "parent_prefix_overlap": 0,
+  "parent_prefix_overlap_note": "Filename-prefix heuristic for related tiles, not verified geographic deduplication.",
+  "review_candidate_count": 122,
+  "planner_coverage": [
+    {
+      "file": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\taskgraph_lab\\data\\planner_sft_hard_augmented_v1_20260901_173936\\train.jsonl",
+      "datasets": {
+        "MME_RealWorld_RS": 1373,
+        "XLRS_Bench": 1442
+      },
+      "select_sem_targets": 0,
+      "system_rows_mentioning_select_sem": 0
+    },
+    {
+      "file": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\taskgraph_lab\\data\\planner_sft_hard_curriculum_v1\\train.jsonl",
+      "datasets": {
+        "MME_RealWorld_RS": 1904,
+        "XLRS_Bench": 2030
+      },
+      "select_sem_targets": 0,
+      "system_rows_mentioning_select_sem": 0
+    },
+    {
+      "file": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\taskgraph_lab\\data\\planner_sft_new2701\\train.jsonl",
+      "datasets": {
+        "MME_RealWorld_RS": 1354,
+        "XLRS_Bench": 1347
+      },
+      "select_sem_targets": 0,
+      "system_rows_mentioning_select_sem": 0
+    },
+    {
+      "file": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\taskgraph_lab\\data\\planner_sft_v1\\train.jsonl",
+      "datasets": {
+        "MME_RealWorld_RS": 80,
+        "XLRS_Bench": 113
+      },
+      "select_sem_targets": 0,
+      "system_rows_mentioning_select_sem": 0
+    }
+  ],
+  "review_image_sizes": {
+    "512x512": 122
+  },
+  "review_by_split": {
+    "train": 61,
+    "val": 61
+  }
+}

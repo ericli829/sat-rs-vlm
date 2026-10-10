@@ -43,6 +43,8 @@ def create_proposal_provider(name: str, config: Mapping[str, Any]) -> ProposalPr
             "parallel_max_workers",
             "parallel_worker_vram_gb",
             "parallel_vram_reserve_gb",
+            "batch_size",
+            "batch_oom_retry",
         ):
             if key in normalized_config:
                 base_config.setdefault(key, normalized_config[key])

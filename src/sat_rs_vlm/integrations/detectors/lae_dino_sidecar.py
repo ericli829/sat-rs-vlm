@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import queue
 import subprocess
 import sys
 import tempfile
@@ -14,7 +13,6 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from .parallel import resolve_parallel_workers
 from .protocol import (
     ProposalError,
     ProposalResult,
@@ -105,6 +103,9 @@ class _LAESidecarClient:
         nms = self.config.get("nms_threshold")
         if nms not in (None, "", "null"):
             self.command.extend(("--nms-threshold", str(nms)))
+        self.command.extend(("--max-batch-size", str(self.config.get("batch_size", 16))))
+        if not self.config.get("batch_oom_retry", True):
+            self.command.append("--disable-batch-oom-retry")
         self.environment = os.environ.copy()
         # The pinned LAE runtime runs Python 3.8 + torch 1.x: new allocator
         # options (e.g. expandable_segments) are unrecognized there and break
@@ -205,13 +206,49 @@ class _LAESidecarClient:
         self.model_inventory = dict(inventory)
         return dict(self.model_inventory)
 
-    def request(self, image_path: Path, target_phrase: str) -> dict[str, Any]:
-        request = {
+    def request(
+        self, image_path: Path, target_phrase: str, *, options: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        request: dict[str, Any] = {
             "id": uuid.uuid4().hex,
             "image": str(Path(image_path).expanduser().resolve()),
             "target_phrase": target_phrase.strip().lower(),
         }
+        if options is not None:
+            request["options"] = options
         return self._exchange(request)
+
+    def request_batch(
+        self, image_paths: list[Path], target_phrase: str, *, options: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        if not image_paths:
+            return []
+        items: list[dict[str, Any]] = [
+            {
+                "id": uuid.uuid4().hex,
+                "image": str(Path(path).expanduser().resolve()),
+                "target_phrase": target_phrase.strip().lower(),
+                "options": options,
+            }
+            for path in image_paths
+        ]
+        response = self._exchange(
+            {"id": uuid.uuid4().hex, "operation": "predict_batch", "items": items}
+        )
+        results = response.get("results")
+        if not isinstance(results, list) or len(results) != len(items):
+            raise SidecarProtocolError("batch response result count mismatch")
+        mapped = {}
+        for result in results:
+            if not isinstance(result, dict) or result.get("status") != "ok":
+                raise SidecarProtocolError("batch response contains failed or invalid item")
+            item_id = result.get("id")
+            if not isinstance(item_id, str) or item_id in mapped:
+                raise SidecarProtocolError("batch response contains invalid or duplicate item id")
+            mapped[item_id] = result
+        if set(mapped) != {item["id"] for item in items}:
+            raise SidecarProtocolError("batch response item id mismatch")
+        return [mapped[item["id"]] for item in items]
 
     def close(self) -> None:
         if self.process is None:
@@ -238,6 +275,17 @@ class _LAESidecarClient:
         self.process = None
 
 
+class _SharedWorker:
+    def __init__(self, client: _LAESidecarClient) -> None:
+        self.client = client
+        self.lock = threading.Lock()
+        self.owners = 0
+
+
+_SHARED_WORKERS: dict[tuple[Any, ...], _SharedWorker] = {}
+_SHARED_WORKERS_LOCK = threading.Lock()
+
+
 class LAEDinoSidecarProvider:
     """Provider facade shared by LAE-1M, DIOR-FT, and DOTA-FT checkpoints."""
 
@@ -245,12 +293,13 @@ class LAEDinoSidecarProvider:
         self.provider_name = provider_name
         self.config = dict(config)
         self.parallel_workers_requested = self.config.get("parallel_workers", 1)
-        self.parallel_max_workers = int(self.config.get("parallel_max_workers", 3))
-        self.parallel_worker_vram_gb = float(self.config.get("parallel_worker_vram_gb", 4.0))
-        self.parallel_vram_reserve_gb = float(self.config.get("parallel_vram_reserve_gb", 6.0))
+        self.parallel_workers = 1
+        self.inference_batch_size = int(self.config.get("batch_size", 16))
+        if self.inference_batch_size < 1:
+            raise ProposalError("LAE-DINO batch_size must be positive")
         self._clients: list[_LAESidecarClient] = []
-        self._available_clients: queue.Queue[_LAESidecarClient] | None = None
-        self._pool_lock = threading.Lock()
+        self._session: _SharedWorker | None = None
+        self._closed = False
         self._client = _LAESidecarClient(self.config)
         self.model_id = str(self._client.checkpoint)
         self.source_revision = str(
@@ -274,50 +323,78 @@ class LAEDinoSidecarProvider:
             "source_revision": self.source_revision,
             "inference_query_mode": self.inference_query_mode,
         }
+        # Share only the exact model/runtime identity. Postprocessing is sent
+        # with every request, so LOCATE .05 and counting .25 never share policy.
+        command = []
+        args = iter(self._client.command)
+        for arg in args:
+            if arg in {"--score-threshold", "--top-k", "--nms-threshold"}:
+                next(args)
+            else:
+                command.append(arg)
+        self._session_key = (
+            *command,
+            self._client.worker_script.stat().st_mtime_ns,
+            json.dumps(
+                {k: self.model_identity[k] for k in ("checkpoint", "config", "bert")},
+                sort_keys=True,
+            ),
+        )
 
-    def _client_config(self, worker_index: int, worker_count: int) -> dict[str, Any]:
-        config = dict(self.config)
-        stderr_log = config.get("stderr_log")
-        if stderr_log and worker_count > 1:
-            path = Path(str(stderr_log)).expanduser()
-            config["stderr_log"] = str(
-                path.with_name(f"{path.stem}.worker{worker_index}{path.suffix}")
-            )
-        return config
+    def _worker_session(self) -> _SharedWorker:
+        with _SHARED_WORKERS_LOCK:
+            if self._closed:
+                raise ProposalError("LAE-DINO provider is closed")
+            if self._session is None:
+                session = _SHARED_WORKERS.get(self._session_key)
+                if session is None:
+                    session = _SharedWorker(self._client)
+                    _SHARED_WORKERS[self._session_key] = session
+                session.owners += 1
+                self._session = session
+                self._client = session.client
+                self._clients = [session.client]
+            return self._session
 
-    def _ensure_client_pool(self) -> queue.Queue[_LAESidecarClient]:
-        if self._available_clients is not None:
-            return self._available_clients
-        with self._pool_lock:
-            if self._available_clients is not None:
-                return self._available_clients
-            worker_count = resolve_parallel_workers(
-                self.parallel_workers_requested,
-                max_workers=self.parallel_max_workers,
-                worker_vram_gb=self.parallel_worker_vram_gb,
-                vram_reserve_gb=self.parallel_vram_reserve_gb,
-            )
-            clients = [self._client]
-            clients.extend(
-                _LAESidecarClient(self._client_config(index, worker_count))
-                for index in range(1, worker_count)
-            )
-            available_clients: queue.Queue[_LAESidecarClient] = queue.Queue(maxsize=worker_count)
-            for client in clients:
-                available_clients.put_nowait(client)
-            self._clients = clients
-            self._available_clients = available_clients
-            self.parallel_workers = worker_count
-            return available_clients
+    def _options(self) -> dict[str, Any]:
+        nms = self.config.get("nms_threshold")
+        nms_threshold = None
+        if nms is not None and nms not in ("", "null"):
+            nms_threshold = float(nms)
+        return {
+            "score_threshold": float(self.config.get("score_threshold", 0.3)),
+            "top_k": int(self.config.get("top_k", 100)),
+            "nms_threshold": nms_threshold,
+        }
 
     def predict(self, image_path: Path, target_phrase: str) -> ProposalResult:
-        clients = self._ensure_client_pool()
-        client = clients.get()
-        stderr_path = str(client.stderr_path)
-        try:
-            response = client.request(image_path, target_phrase)
-        finally:
-            clients.put(client)
+        session = self._worker_session()
+        with session.lock:
+            if self._closed:
+                raise ProposalError("LAE-DINO provider is closed")
+            response = session.client.request(image_path, target_phrase, options=self._options())
+        return self._result(response, target_phrase)
+
+    def predict_batch(self, image_paths: list[Path], target_phrase: str) -> list[ProposalResult]:
+        if not image_paths:
+            return []
+        session = self._worker_session()
+        responses = []
+        with session.lock:
+            if self._closed:
+                raise ProposalError("LAE-DINO provider is closed")
+            for start in range(0, len(image_paths), self.inference_batch_size):
+                responses.extend(
+                    session.client.request_batch(
+                        image_paths[start : start + self.inference_batch_size],
+                        target_phrase,
+                        options=self._options(),
+                    )
+                )
+        return [self._result(response, target_phrase) for response in responses]
+
+    def _result(self, response: dict[str, Any], target_phrase: str) -> ProposalResult:
+        stderr_path = str(self._client.stderr_path)
         metadata = dict(response.get("metadata", {}))
         try:
             image_width = int(metadata["image_width"])
@@ -347,6 +424,9 @@ class LAEDinoSidecarProvider:
                 "inference_query_mode": self.inference_query_mode,
                 "source_revision": self.source_revision,
                 "client_validation": validation,
+                "parallel_workers": 1,
+                "parallel_workers_requested": str(self.parallel_workers_requested),
+                "batch_size_configured": self.inference_batch_size,
                 "candidate_truncated": bool(metadata.get("candidate_truncated"))
                 or len(response.get("bbox_list", [])) > len(boxes)
                 or (
@@ -370,7 +450,11 @@ class LAEDinoSidecarProvider:
         )
 
     def preload(self) -> None:
-        self._client.initialize()
+        session = self._worker_session()
+        with session.lock:
+            if self._closed:
+                raise ProposalError("LAE-DINO provider is closed")
+            session.client.initialize()
 
     @property
     def telemetry_parameter_count(self) -> int | None:
@@ -393,8 +477,17 @@ class LAEDinoSidecarProvider:
         return paths
 
     def close(self) -> None:
-        clients = self._clients or [self._client]
-        for client in clients:
-            client.close()
-        self._clients = []
-        self._available_clients = None
+        close_session = None
+        with _SHARED_WORKERS_LOCK:
+            if self._closed:
+                return
+            self._closed = True
+            if self._session is not None:
+                self._session.owners -= 1
+                if self._session.owners == 0:
+                    close_session = self._session
+                    _SHARED_WORKERS.pop(self._session_key, None)
+            self._clients = []
+        if close_session is not None:
+            with close_session.lock:
+                close_session.client.close()

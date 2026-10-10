@@ -159,8 +159,9 @@ def test_count_bridge_prefetch_keeps_inference_serial_and_preserves_coordinates(
 
 
 @pytest.mark.parametrize("inference_error", [False, True])
+@pytest.mark.parametrize("batched", [False, True])
 def test_count_executor_drives_prefetch_and_closes_owned_images(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, inference_error: bool
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, inference_error: bool, batched: bool
 ) -> None:
     from counting_system import executor
 
@@ -174,6 +175,7 @@ def test_count_executor_drives_prefetch_and_closes_owned_images(
     second_crop = threading.Event()
     crops = []
     transported_paths = []
+    batch_calls = []
     original_crop = executor.crop_tile
 
     def crop_tile(*args):
@@ -194,6 +196,14 @@ def test_count_executor_drives_prefetch_and_closes_owned_images(
 
         def close(self):
             pass
+
+    if batched:
+        def predict_batch(self, paths, phrase):
+            batch_calls.append(len(paths))
+            return [self.predict(path, phrase) for path in paths]
+
+        Provider.predict_batch = predict_batch
+        Provider.inference_batch_size = 16
 
     monkeypatch.setattr(executor, "crop_tile", crop_tile)
     bridge = detector_bridge.CountingProposalDetectorBridge(Provider())
@@ -221,6 +231,7 @@ def test_count_executor_drives_prefetch_and_closes_owned_images(
             )
             assert result.count == 4
             assert result.metadata["detector_calls"] == 4
+            assert batch_calls == ([4] if batched else [])
     finally:
         provider.close()
     assert all(not path.exists() for path in transported_paths)
