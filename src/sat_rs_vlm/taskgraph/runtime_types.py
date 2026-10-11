@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
 from typing import Any, TypeAlias
@@ -229,6 +229,46 @@ class SelectResultConsumptionError(ValueError):
 
 class CandidateIntegrityError(RuntimeError):
     """Incomplete physical evidence must not trigger whole-image answer fallback."""
+
+
+def unique_bbox_evidence(value: RuntimeObject) -> Entity | Region:
+    """Enforce the BBOX final cardinality without inventing a target or union box."""
+
+    inherited: dict[str, Any] = {}
+
+    def resolved(item: RuntimeObject) -> None:
+        provenance = getattr(item, "provenance", {})
+        if (
+            provenance.get("candidate_pool_complete") is False
+            or provenance.get("candidate_truncated") is True
+            or provenance.get("resolution_status")
+            in {"EMPTY", "PARTIAL", "UNRESOLVED", "AMBIGUOUS", "ERROR"}
+        ):
+            raise CandidateIntegrityError("BBOX final refuses incomplete or unresolved evidence")
+        inherited.update(provenance)
+
+    resolved(value)
+    if isinstance(value, SelectResult):
+        value = unwrap_select_result(value, allow_empty=False, consumer="BBOX final")
+        resolved(value)
+    if isinstance(value, EntitySet):
+        if len(value.entities) != 1:
+            raise CandidateIntegrityError(
+                f"BBOX final requires exactly one target, got {len(value.entities)}"
+            )
+        value = value.entities[0]
+    elif isinstance(value, RegionSet):
+        if len(value.regions) != 1:
+            raise CandidateIntegrityError(
+                f"BBOX final requires exactly one target, got {len(value.regions)}"
+            )
+        value = value.regions[0]
+    resolved(value)
+    if isinstance(value, Entity):
+        resolved(value.region)
+    elif not isinstance(value, Region):
+        raise CandidateIntegrityError("BBOX final requires a unique Entity or Region")
+    return replace(value, provenance=inherited)
 
 
 def _select_failure_context(value: SelectResult) -> str:

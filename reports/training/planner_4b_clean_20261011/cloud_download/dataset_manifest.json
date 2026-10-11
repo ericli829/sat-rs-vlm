@@ -1,0 +1,27 @@
+{
+  "version": "planner-quality-clean-v1",
+  "source": "reports/taskgraph/planner_quality_clean_v1",
+  "source_sha256": "2c0c28788421dbf9cb3a866b25e21db430c656d7aabbe61effa6204838e0d49c",
+  "population_count": 5613,
+  "training_population_count": 5613,
+  "target_format": "dsl",
+  "planner_dsl_version": "taskgraph-v1.1-dsl-v1",
+  "prompt_version": "taskgraph-v1.1-strict-batch-contract-v3",
+  "splits": {
+    "train": {
+      "path": "taskgraph_lab/data/planner_quality_clean_v1/train.jsonl",
+      "sha256": "2c0c28788421dbf9cb3a866b25e21db430c656d7aabbe61effa6204838e0d49c",
+      "count": 5613
+    },
+    "validation": {
+      "path": "taskgraph_lab/data/planner_quality_clean_v1/validation.jsonl",
+      "sha256": "51349d78e23906fdfc12953c2dabfc5f29110542e9b6f6a762cf62fe28b0b7aa",
+      "count": 200
+    },
+    "test": {
+      "path": "taskgraph_lab/data/planner_quality_clean_v1/test.jsonl",
+      "sha256": "63190bf6f6cbb1d9699765ad0199df9ddf3b14466be363a0beca0ff48ec092e0",
+      "count": 152
+    }
+  }
+}

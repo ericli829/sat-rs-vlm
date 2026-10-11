@@ -1,0 +1,26 @@
+{
+  "status": "complete",
+  "checks_passed": true,
+  "test_count": 624,
+  "train_rows": 5613,
+  "choice_rows": 3813,
+  "encoding": {
+    "valid": true,
+    "rows": 5613,
+    "input_sha256": "2c0c28788421dbf9cb3a866b25e21db430c656d7aabbe61effa6204838e0d49c",
+    "full_tokens_max": 1472,
+    "assistant_tokens_max": 223,
+    "over_seq_1088_count": 433,
+    "over_seq_1536_count": 0,
+    "over_output_512_count": 0,
+    "recommended_max_seq_length": 1536,
+    "recommended_max_new_tokens": 512,
+    "collator_checked_count": 64,
+    "collator_assistant_only_mask_exact": true,
+    "model_weights_loaded": false,
+    "all_rows_full_token_suffix_checked": true,
+    "training_configuration_modified": false
+  },
+  "integrity": true,
+  "report": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\taskgraph\\planner_quality_clean_v1\\implementation_report.md"
+}

@@ -1,0 +1,1915 @@
+{
+  "count": 286,
+  "valid": 286,
+  "results": [
+    {
+      "id": "mme_rs_perception_remote_sensing_color_0067",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_0073",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_0177",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_0189",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_0195",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_0204",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_0225",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_0231",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_0351",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_0695",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_0836",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_0842",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_1062",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_1101",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_1478",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_1535",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_1587",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_1859",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_1976",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_2106",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_2148",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_2334",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_2367",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_2436",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_2445",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_2477",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_2584",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_2629",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_2661",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_2682",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_2688",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_2820",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_3068",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": [
+        {
+          "code": "query_adds_condition",
+          "detail": "Semantic query introduces modifiers not stated by the question.",
+          "node": "n2",
+          "terms": [
+            "horizontal"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_3110",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_3158",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_3173",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_3197",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_3289",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_3457",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_3571",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_3586",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0002",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0005",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0008",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0014",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0038",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0080",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": [
+        {
+          "code": "count_unit_unclear",
+          "detail": "Question counts grouped units, but label appears to count individual objects."
+        }
+      ]
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0086",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0113",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0139",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0172",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0178",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0205",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0214",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0265",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0268",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0298",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0304",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0370",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0403",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0429",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0450",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0656",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0691",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0703",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0729",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0858",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0870",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0921",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_0988",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1027",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1039",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1072",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1126",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1152",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1163",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1181",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1190",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1219",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1264",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1294",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1303",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1315",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1324",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1336",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1372",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1387",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1411",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1435",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1449",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1455",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1476",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1488",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1539",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1554",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1588",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1642",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1648",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1669",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1690",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": [
+        {
+          "code": "count_unit_unclear",
+          "detail": "Question counts grouped units, but label appears to count individual objects."
+        }
+      ]
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1693",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1762",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1804",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1807",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1810",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1816",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1887",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1984",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1987",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2035",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2077",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2083",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2092",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2107",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2182",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2221",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2245",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2272",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2368",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2449",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2505",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2520",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2523",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2582",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2585",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2591",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2600",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2668",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2671",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2677",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2683",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2689",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2710",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2722",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2746",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2752",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2779",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2794",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2833",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2857",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2887",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2896",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2956",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_3132",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_3159",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_3219",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_3228",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_3296",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_3337",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_3351",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_3357",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_3366",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_3369",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_3378",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_3437",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_3455",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_3461",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_3485",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_3593",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_3656",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_3659",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_3662",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_3665",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_3671",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_3677",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_3680",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_3683",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_position_0371",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_position_0552",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_position_0617",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_position_0962",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_position_0989",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_position_1103",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_position_1194",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_position_1885",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_position_2390",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_position_2592",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_position_2672",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_position_2906",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_position_3364",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_position_3468",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_position_3657",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_position_3738",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_3128",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_0503",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_3083",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_2507",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_0521",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_1023",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_1683",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_0264",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_0123",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_1800",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_3074",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_0270",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_2376",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2680",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1452",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1249",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_position_1787",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_position_1322",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_position_2705",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_position_1918",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_position_0907",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_2560",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_position_3537",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_1827",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": [
+        {
+          "code": "condition_not_in_graph",
+          "detail": "Question modifiers/background not represented in contributing nodes; may be omitted or deferred to final VLM.",
+          "terms": [
+            "roof"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_1989",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_2370",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_position_3606",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_0414",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_1602",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_0216",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2487",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_1701",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": [
+        {
+          "code": "condition_not_in_graph",
+          "detail": "Question modifiers/background not represented in contributing nodes; may be omitted or deferred to final VLM.",
+          "terms": [
+            "roof"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_position_2986",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000226",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000231",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000249",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000264",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000269",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000272",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000280",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000304",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000308",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000314",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000316",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000327",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000332",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": [
+        {
+          "code": "unlicensed_target_attribute",
+          "detail": "Candidate prefilter has attributes not stated in the question.",
+          "node": "n3",
+          "terms": [
+            "roof"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "xlrs_000335",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000341",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000351",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000361",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000365",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000374",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000381",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000409",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000413",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000426",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": [
+        {
+          "code": "unlicensed_target_attribute",
+          "detail": "Candidate prefilter has attributes not stated in the question.",
+          "node": "n5",
+          "terms": [
+            "roof"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "xlrs_000435",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000452",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000455",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000463",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000464",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000470",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000472",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000475",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000476",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000479",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000485",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000533",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": [
+        {
+          "code": "unlicensed_target_attribute",
+          "detail": "Candidate prefilter has attributes not stated in the question.",
+          "node": "n2",
+          "terms": [
+            "roof"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "xlrs_000535",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": [
+        {
+          "code": "group_members_not_groups",
+          "detail": "GROUP returns original members with group_id metadata; geometric SELECT orders members, not group extents. Requires a reviewed planning label.",
+          "node": "n3"
+        }
+      ]
+    },
+    {
+      "id": "xlrs_000537",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000567",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000577",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": [
+        {
+          "code": "unlicensed_target_attribute",
+          "detail": "Candidate prefilter has attributes not stated in the question.",
+          "node": "n2",
+          "terms": [
+            "roof"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "xlrs_000588",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000591",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000605",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000610",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000630",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000636",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000638",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000645",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000679",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000689",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000691",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": [
+        {
+          "code": "unlicensed_target_attribute",
+          "detail": "Candidate prefilter has attributes not stated in the question.",
+          "node": "n2",
+          "terms": [
+            "roof"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "xlrs_000777",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000791",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": [
+        {
+          "code": "group_members_not_groups",
+          "detail": "GROUP returns original members with group_id metadata; geometric SELECT orders members, not group extents. Requires a reviewed planning label.",
+          "node": "n4"
+        }
+      ]
+    },
+    {
+      "id": "xlrs_000814",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000834",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000840",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_000851",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": [
+        {
+          "code": "group_members_not_groups",
+          "detail": "GROUP returns original members with group_id metadata; geometric SELECT orders members, not group extents. Requires a reviewed planning label.",
+          "node": "n4"
+        }
+      ]
+    },
+    {
+      "id": "xlrs_002010",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": [
+        {
+          "code": "condition_not_in_graph",
+          "detail": "Question modifiers/background not represented in contributing nodes; may be omitted or deferred to final VLM.",
+          "terms": [
+            "shortest"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "xlrs_002033",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": [
+        {
+          "code": "group_members_not_groups",
+          "detail": "GROUP returns original members with group_id metadata; geometric SELECT orders members, not group extents. Requires a reviewed planning label.",
+          "node": "n4"
+        },
+        {
+          "code": "condition_not_in_graph",
+          "detail": "Question modifiers/background not represented in contributing nodes; may be omitted or deferred to final VLM.",
+          "terms": [
+            "shortest"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "xlrs_002036",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": [
+        {
+          "code": "condition_not_in_graph",
+          "detail": "Question modifiers/background not represented in contributing nodes; may be omitted or deferred to final VLM.",
+          "terms": [
+            "driving",
+            "shortest"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "xlrs_002038",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": [
+        {
+          "code": "condition_not_in_graph",
+          "detail": "Question modifiers/background not represented in contributing nodes; may be omitted or deferred to final VLM.",
+          "terms": [
+            "shortest"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "xlrs_002039",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_002041",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_002053",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": [
+        {
+          "code": "condition_not_in_graph",
+          "detail": "Question modifiers/background not represented in contributing nodes; may be omitted or deferred to final VLM.",
+          "terms": [
+            "shortest"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "xlrs_002055",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": [
+        {
+          "code": "condition_not_in_graph",
+          "detail": "Question modifiers/background not represented in contributing nodes; may be omitted or deferred to final VLM.",
+          "terms": [
+            "driving",
+            "shortest"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "xlrs_002059",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_002062",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_002064",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": []
+    },
+    {
+      "id": "xlrs_002066",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": [
+        {
+          "code": "group_members_not_groups",
+          "detail": "GROUP returns original members with group_id metadata; geometric SELECT orders members, not group extents. Requires a reviewed planning label.",
+          "node": "n4"
+        },
+        {
+          "code": "condition_not_in_graph",
+          "detail": "Question modifiers/background not represented in contributing nodes; may be omitted or deferred to final VLM.",
+          "terms": [
+            "shortest"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "xlrs_002069",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": [
+        {
+          "code": "group_members_not_groups",
+          "detail": "GROUP returns original members with group_id metadata; geometric SELECT orders members, not group extents. Requires a reviewed planning label.",
+          "node": "n4"
+        },
+        {
+          "code": "condition_not_in_graph",
+          "detail": "Question modifiers/background not represented in contributing nodes; may be omitted or deferred to final VLM.",
+          "terms": [
+            "shortest"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "xlrs_002075",
+      "valid": true,
+      "detail": null,
+      "remaining_flags": [
+        {
+          "code": "group_members_not_groups",
+          "detail": "GROUP returns original members with group_id metadata; geometric SELECT orders members, not group extents. Requires a reviewed planning label.",
+          "node": "n4"
+        },
+        {
+          "code": "condition_not_in_graph",
+          "detail": "Question modifiers/background not represented in contributing nodes; may be omitted or deferred to final VLM.",
+          "terms": [
+            "shortest"
+          ]
+        }
+      ]
+    }
+  ],
+  "human_review_not_complete_visual_gold": true
+}

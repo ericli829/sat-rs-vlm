@@ -63,9 +63,11 @@ optional scope using the existing SELECT input-type signatures and caller image
 references. Full schema/type/semantic validation still applies after parsing.
 No training examples or model weights were rebuilt for this extension.
 
-The serialization version is `taskgraph-v1.1-dsl-v1`. It does not change the
-TaskGraph semantic schema or the Teacher prompt version
-`taskgraph-v1.1-residual-final`.
+The serialization version is `taskgraph-v1.1-dsl-v1`; the semantic schema remains
+`taskgraph-v1.1`. Additive enum extensions retain these versions and are recorded
+in dataset metadata together with the current prompt version and prompt digest.
+The BBOX extension identifier is `planner-bbox-final-v1`; reproducible synthetic
+exports also record SHA256 digests of the actual schema, DSL, and prompt files.
 
 ## 2. Round-trip invariants
 
@@ -240,6 +242,7 @@ Structured final:
 ```text
 FINAL($n5,CHOICE_SINGLE)
 FINAL([$n1,$n2],CHOICE_MULTI)
+FINAL($n1,BBOX)
 ```
 
 Residual question final:
@@ -252,6 +255,34 @@ These lower directly to canonical `final.sources`, optional `final.question`,
 and `final.answer_type`. The compiler/parser does not decide whether a question
 is semantically appropriate. The existing residual-final validator retains
 that responsibility.
+
+### Unique bounding-box final
+
+```text
+n1=LOCATE($image0,T("warehouse",color="white",shape="rectangular"))
+FINAL($n1,BBOX)
+```
+
+`BBOX` is a localization output contract, not a multiple-choice surrogate. It
+requires exactly one existing node source and does not need a residual question
+or a final VLM answer. Accepted source producers are LOCATE, REGION,
+REGION_BBOX, SELECT_RANK, SELECT_ORD, SELECT_EXTREME, SELECT_SUBREGION, and
+SELECT_SEM with SINGLE. Set-valued SELECT_REL/SELECT_SEM MULTI, GROUP,
+nonvisual values, and multiple final sources are rejected by the type checker.
+
+LOCATE retains its general static EntitySet type; a terminal LOCATE uses the
+existing single-target execution route. BBOX runtime must still prove exactly
+one resolved Entity/Region, reject empty/multiple/unresolved evidence, and
+preserve the original image identity and coordinates. It never treats an
+arbitrary candidate set as a unique box. The Planner emits no pixel answer
+values: the competition answer layer converts the unique region evidence to
+the original-image pixel_xyxy array.
+
+The prefix grammar obtains answer symbols from the shared AnswerType enum and
+therefore accepts BBOX (including every partial prefix). Its responsibilities
+remain canonical syntax and backward-only references; full cardinality/type
+validation is performed after parsing, as for other answer types. Other final
+types retain their existing residual-question and choice contracts.
 
 ## 9. Examples
 

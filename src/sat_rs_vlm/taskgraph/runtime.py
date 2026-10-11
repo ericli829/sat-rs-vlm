@@ -67,6 +67,7 @@ from .runtime_types import (
     SelectResultConsumptionError,
     SelectStatus,
     runtime_summary,
+    unique_bbox_evidence,
     unwrap_select_result,
 )
 from .schema import (
@@ -622,6 +623,10 @@ class TaskGraphRuntime:
                 )
                 for ref in graph.final.sources
             )
+            if graph.final.answer_type is AnswerType.BBOX:
+                if len(sources) != 1:
+                    raise CandidateIntegrityError("BBOX final requires exactly one visual source")
+                sources = (unique_bbox_evidence(store.get(graph.final.sources[0])),)
             if not sources and choice_requested and images:
                 # Detector/graph evidence is empty: answer the residual question
                 # directly from the input images so the Choice VLM can still

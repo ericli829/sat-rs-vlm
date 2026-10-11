@@ -1,0 +1,384 @@
+{
+  "count": 18,
+  "source_sha256": "fec2f0c4f7dbe5b996973bd22c2b2c9831598d222792961823b4b87f08ced9ad",
+  "checks": [
+    {
+      "sample_id": "mme_rs_perception_remote_sensing_color_0297",
+      "question": "What color is the roof of the larger building on the right side of the wider road in the lower left corner of the picture?",
+      "old_dsl": "INTENT(ATTRIBUTE_QUERY)\nn1=REGION($image0,BOTTOM_LEFT)\nn2=LOCATE($n1,T(\"road\"))\nn3=SELECT_RANK($n2,null,\"width\",1,DESCENDING)\nn4=LOCATE($n1,T(\"building\"))\nn5=SELECT_REL($n4,$n3,RIGHT_OF)\nn6=SELECT_RANK($n5,null,\"size\",1,DESCENDING)\nn7=ATTRIBUTE($n6,\"color\",\"roof\")\nFINAL($n7,CHOICE_SINGLE)",
+      "dsl": "INTENT(ATTRIBUTE_QUERY)\nn1=REGION($image0,BOTTOM_LEFT)\nn2=LOCATE($n1,T(\"road\"))\nn3=SELECT_SEM($n2,null,\"the wider road in the lower left corner of the picture\",SINGLE,$n1)\nn4=LOCATE($n1,T(\"building\"))\nn5=SELECT_REL($n4,$n3,RIGHT_OF)\nn6=SELECT_RANK($n5,null,\"bbox_area\",1,DESCENDING)\nn7=ATTRIBUTE($n6,\"color\",\"roof\")\nFINAL($n7,CHOICE_SINGLE)",
+      "trace": {
+        "node_id": "n3",
+        "previous_params": {
+          "mode": "RANK",
+          "criterion": "width",
+          "rank": 1,
+          "order": "DESCENDING"
+        },
+        "new_query": "the wider road in the lower left corner of the picture",
+        "scope": "$n1",
+        "reference": null
+      },
+      "lab_valid": true,
+      "canonical_roundtrip": true,
+      "production_bridge_valid": true,
+      "production_node_count": 7
+    },
+    {
+      "sample_id": "mme_rs_perception_remote_sensing_color_1356",
+      "question": "What color is the tallest building on the left side of the center of the picture?",
+      "old_dsl": "INTENT(ATTRIBUTE_QUERY)\nn1=REGION($image0,CENTER_LEFT)\nn2=LOCATE($n1,T(\"building\"))\nn3=SELECT_RANK($n2,null,\"height\",1,DESCENDING)\nn4=ATTRIBUTE($n3,\"color\")\nFINAL($n4,CHOICE_SINGLE)",
+      "dsl": "INTENT(ATTRIBUTE_QUERY)\nn1=REGION($image0,CENTER_LEFT)\nn2=LOCATE($n1,T(\"building\"))\nn3=SELECT_SEM($n2,null,\"the tallest building on the left side of the center of the picture\",SINGLE,$n1)\nn4=ATTRIBUTE($n3,\"color\")\nFINAL($n4,CHOICE_SINGLE)",
+      "trace": {
+        "node_id": "n3",
+        "previous_params": {
+          "mode": "RANK",
+          "criterion": "height",
+          "rank": 1,
+          "order": "DESCENDING"
+        },
+        "new_query": "the tallest building on the left side of the center of the picture",
+        "scope": "$n1",
+        "reference": null
+      },
+      "lab_valid": true,
+      "canonical_roundtrip": true,
+      "production_bridge_valid": true,
+      "production_node_count": 4
+    },
+    {
+      "sample_id": "mme_rs_perception_remote_sensing_color_1629",
+      "question": "What color is the tallest building in the middle at the top of this picture?",
+      "old_dsl": "INTENT(ATTRIBUTE_QUERY)\nn1=REGION($image0,TOP_CENTER)\nn2=LOCATE($n1,T(\"building\"))\nn3=SELECT_RANK($n2,null,\"height\",1,DESCENDING)\nn4=ATTRIBUTE($n3,\"color\")\nFINAL($n4,CHOICE_SINGLE)",
+      "dsl": "INTENT(ATTRIBUTE_QUERY)\nn1=REGION($image0,TOP_CENTER)\nn2=LOCATE($n1,T(\"building\"))\nn3=SELECT_SEM($n2,null,\"the tallest building in the middle at the top of the picture\",SINGLE,$n1)\nn4=ATTRIBUTE($n3,\"color\")\nFINAL($n4,CHOICE_SINGLE)",
+      "trace": {
+        "node_id": "n3",
+        "previous_params": {
+          "mode": "RANK",
+          "criterion": "height",
+          "rank": 1,
+          "order": "DESCENDING"
+        },
+        "new_query": "the tallest building in the middle at the top of the picture",
+        "scope": "$n1",
+        "reference": null
+      },
+      "lab_valid": true,
+      "canonical_roundtrip": true,
+      "production_bridge_valid": true,
+      "production_node_count": 4
+    },
+    {
+      "sample_id": "mme_rs_perception_remote_sensing_count_0253",
+      "question": "How many lanes are there in the widest area of the road in the upper right corner of the picture?",
+      "old_dsl": "INTENT(RELATIONAL_COUNT)\nn1=REGION($image0,TOP_RIGHT)\nn2=LOCATE($n1,T(\"road\"))\nn3=SELECT_RANK($n2,null,\"width\",1,DESCENDING)\nn4=LOCATE($image0,T(\"lane\"))\nn5=SELECT_REL($n4,$n3,INSIDE)\nn6=COUNT_ENTITIES($n5,T(\"lane\"),false)\nFINAL($n6,CHOICE_SINGLE)",
+      "dsl": "INTENT(RELATIONAL_COUNT)\nn1=REGION($image0,TOP_RIGHT)\nn2=LOCATE($n1,T(\"road section\"))\nn3=SELECT_SEM($n2,null,\"the widest section of the road in the upper right corner of the picture\",SINGLE,$n1)\nn4=LOCATE($image0,T(\"lane\"))\nn5=SELECT_REL($n4,$n3,INSIDE)\nn6=COUNT_ENTITIES($n5,T(\"lane\"),false)\nFINAL($n6,CHOICE_SINGLE)",
+      "trace": {
+        "special_review": "count_0253",
+        "old_node_count": 6,
+        "new_node_count": 6
+      },
+      "lab_valid": true,
+      "canonical_roundtrip": true,
+      "production_bridge_valid": true,
+      "production_node_count": 6
+    },
+    {
+      "sample_id": "mme_rs_perception_remote_sensing_color_0306",
+      "question": "What color is the fifth docked ship in the river in the upper left area of the picture, counted from bottom left to top left?",
+      "old_dsl": "INTENT(ATTRIBUTE_QUERY)\nn1=REGION($image0,TOP_LEFT)\nn2=LOCATE($n1,T(\"ship\",state=\"docked\"))\nn3=SELECT_RANK($n2,null,\"distance from bottom-left corner\",5,ASCENDING)\nn4=ATTRIBUTE($n3,\"color\")\nFINAL($n4,CHOICE_SINGLE)",
+      "dsl": "INTENT(ATTRIBUTE_QUERY)\nn1=REGION($image0,TOP_LEFT)\nn2=LOCATE($n1,T(\"ship\",state=\"docked\"))\nn3=SELECT_SEM($n2,null,\"docked ships in the river in the upper left area of the picture\",MULTI,$n1)\nn4=SELECT_ORD($n3,null,5,BOTTOM_TO_TOP)\nn5=ATTRIBUTE($n4,\"color\")\nFINAL($n5,CHOICE_SINGLE)",
+      "trace": {
+        "special_review": "color_0306",
+        "old_node_count": 4,
+        "new_node_count": 5
+      },
+      "lab_valid": true,
+      "canonical_roundtrip": true,
+      "production_bridge_valid": true,
+      "production_node_count": 5
+    },
+    {
+      "sample_id": "mme_rs_perception_remote_sensing_color_0315",
+      "question": "What color is the exterior wall of the higher building in the upper right corner of the picture?",
+      "old_dsl": "INTENT(ATTRIBUTE_QUERY)\nn1=REGION($image0,TOP_RIGHT)\nn2=LOCATE($n1,T(\"building\"))\nn3=SELECT_RANK($n2,null,\"height\",1,DESCENDING)\nn4=ATTRIBUTE($n3,\"color\",\"exterior wall\")\nFINAL($n4,CHOICE_SINGLE)",
+      "dsl": "INTENT(ATTRIBUTE_QUERY)\nn1=REGION($image0,TOP_RIGHT)\nn2=LOCATE($n1,T(\"building\"))\nn3=SELECT_SEM($n2,null,\"the higher building in the upper right corner of the picture\",SINGLE,$n1)\nn4=ATTRIBUTE($n3,\"color\",\"exterior wall\")\nFINAL($n4,CHOICE_SINGLE)",
+      "trace": {
+        "node_id": "n3",
+        "previous_params": {
+          "mode": "RANK",
+          "criterion": "height",
+          "rank": 1,
+          "order": "DESCENDING"
+        },
+        "new_query": "the higher building in the upper right corner of the picture",
+        "scope": "$n1",
+        "reference": null
+      },
+      "lab_valid": true,
+      "canonical_roundtrip": true,
+      "production_bridge_valid": true,
+      "production_node_count": 4
+    },
+    {
+      "sample_id": "mme_rs_perception_remote_sensing_color_1671",
+      "question": "What color is the top of the taller cylindrical building in the middle of the left side of the picture?",
+      "old_dsl": "INTENT(ATTRIBUTE_QUERY)\nn1=REGION($image0,CENTER_LEFT)\nn2=LOCATE($n1,T(\"building\",shape=\"cylindrical\"))\nn3=SELECT_RANK($n2,null,\"height\",1,DESCENDING)\nFINAL_QUESTION($n3,CHOICE_SINGLE,\"What color is the top of the selected building?\")",
+      "dsl": "INTENT(ATTRIBUTE_QUERY)\nn1=REGION($image0,CENTER_LEFT)\nn2=LOCATE($n1,T(\"building\",shape=\"cylindrical\"))\nn3=SELECT_SEM($n2,null,\"the taller cylindrical building in the middle of the left side of the picture\",SINGLE,$n1)\nFINAL_QUESTION($n3,CHOICE_SINGLE,\"What color is the top of the selected building?\")",
+      "trace": {
+        "node_id": "n3",
+        "previous_params": {
+          "mode": "RANK",
+          "criterion": "height",
+          "rank": 1,
+          "order": "DESCENDING"
+        },
+        "new_query": "the taller cylindrical building in the middle of the left side of the picture",
+        "scope": "$n1",
+        "reference": null
+      },
+      "lab_valid": true,
+      "canonical_roundtrip": true,
+      "production_bridge_valid": true,
+      "production_node_count": 3
+    },
+    {
+      "sample_id": "mme_rs_perception_remote_sensing_color_1740",
+      "question": "What color is the nearest vehicle in the lower left corner of the distant traffic roundabout on the gray road in the bottom right corner of the picture?",
+      "old_dsl": "INTENT(ATTRIBUTE_QUERY)\nn1=REGION($image0,BOTTOM_RIGHT)\nn2=LOCATE($n1,T(\"road\",color=\"gray\"))\nn3=LOCATE($n1,T(\"traffic roundabout\"))\nn4=SELECT_REL($n3,$n2,NEAR)\nn5=LOCATE($n1,T(\"vehicle\"))\nn6=SELECT_REL($n5,$n4,LOWER_LEFT_OF)\nn7=SELECT_RANK($n6,null,\"distance to lower left corner of roundabout\",1,ASCENDING)\nn8=ATTRIBUTE($n7,\"color\")\nFINAL($n8,CHOICE_SINGLE)",
+      "dsl": "INTENT(ATTRIBUTE_QUERY)\nn1=REGION($image0,BOTTOM_RIGHT)\nn2=LOCATE($n1,T(\"road\",color=\"gray\"))\nn3=LOCATE($n1,T(\"traffic roundabout\"))\nn4=SELECT_REL($n3,$n2,NEAR)\nn5=LOCATE($n1,T(\"vehicle\"))\nn6=SELECT_REL($n5,$n4,LOWER_LEFT_OF)\nn7=SELECT_SEM($n6,$n4,\"the vehicle nearest to the lower left corner of the distant traffic roundabout on the gray road in the bottom right corner of the picture\",SINGLE,$image0)\nn8=ATTRIBUTE($n7,\"color\")\nFINAL($n8,CHOICE_SINGLE)",
+      "trace": {
+        "node_id": "n7",
+        "previous_params": {
+          "mode": "RANK",
+          "criterion": "distance to lower left corner of roundabout",
+          "rank": 1,
+          "order": "ASCENDING"
+        },
+        "new_query": "the vehicle nearest to the lower left corner of the distant traffic roundabout on the gray road in the bottom right corner of the picture",
+        "scope": "$image0",
+        "reference": "$n4"
+      },
+      "lab_valid": true,
+      "canonical_roundtrip": true,
+      "production_bridge_valid": true,
+      "production_node_count": 8
+    },
+    {
+      "sample_id": "mme_rs_perception_remote_sensing_color_2590",
+      "question": "What color is the glass of the tallest building in the upper left corner of the picture?",
+      "old_dsl": "INTENT(ATTRIBUTE_QUERY)\nn1=REGION($image0,TOP_LEFT)\nn2=LOCATE($n1,T(\"building\"))\nn3=SELECT_RANK($n2,null,\"height\",1,DESCENDING)\nn4=ATTRIBUTE($n3,\"color\",\"glass\")\nFINAL($n4,CHOICE_SINGLE)",
+      "dsl": "INTENT(ATTRIBUTE_QUERY)\nn1=REGION($image0,TOP_LEFT)\nn2=LOCATE($n1,T(\"building\"))\nn3=SELECT_SEM($n2,null,\"the tallest building in the upper left corner of the picture\",SINGLE,$n1)\nn4=ATTRIBUTE($n3,\"color\",\"glass\")\nFINAL($n4,CHOICE_SINGLE)",
+      "trace": {
+        "node_id": "n3",
+        "previous_params": {
+          "mode": "RANK",
+          "criterion": "height",
+          "rank": 1,
+          "order": "DESCENDING"
+        },
+        "new_query": "the tallest building in the upper left corner of the picture",
+        "scope": "$n1",
+        "reference": null
+      },
+      "lab_valid": true,
+      "canonical_roundtrip": true,
+      "production_bridge_valid": true,
+      "production_node_count": 4
+    },
+    {
+      "sample_id": "mme_rs_perception_remote_sensing_count_0175",
+      "question": "How many attic buildings are there in the building directly below the railway in the picture?",
+      "old_dsl": "INTENT(RELATIONAL_COUNT)\nn1=LOCATE($image0,T(\"railway\"))\nn2=LOCATE($image0,T(\"building\"))\nn3=SELECT_REL($n2,$n1,BELOW)\nn4=SELECT_RANK($n3,null,\"distance to railway\",1,ASCENDING)\nn5=LOCATE($image0,T(\"building\",has_part=\"attic\"))\nn6=SELECT_REL($n5,$n4,INSIDE)\nn7=COUNT_ENTITIES($n6,T(\"building\",has_part=\"attic\"),false)\nFINAL($n7,CHOICE_SINGLE)",
+      "dsl": "INTENT(RELATIONAL_COUNT)\nn1=LOCATE($image0,T(\"railway\"))\nn2=LOCATE($image0,T(\"building\"))\nn3=SELECT_REL($n2,$n1,BELOW)\nn4=SELECT_SEM($n3,$n1,\"the building directly below the railway in the picture\",SINGLE,$image0)\nn5=LOCATE($image0,T(\"building\",has_part=\"attic\"))\nn6=SELECT_REL($n5,$n4,INSIDE)\nn7=COUNT_ENTITIES($n6,T(\"building\",has_part=\"attic\"),false)\nFINAL($n7,CHOICE_SINGLE)",
+      "trace": {
+        "node_id": "n4",
+        "previous_params": {
+          "mode": "RANK",
+          "criterion": "distance to railway",
+          "rank": 1,
+          "order": "ASCENDING"
+        },
+        "new_query": "the building directly below the railway in the picture",
+        "scope": "$image0",
+        "reference": "$n1"
+      },
+      "lab_valid": true,
+      "canonical_roundtrip": true,
+      "production_bridge_valid": true,
+      "production_node_count": 7
+    },
+    {
+      "sample_id": "mme_rs_perception_remote_sensing_count_0181",
+      "question": "How many white cars are parked in front of the tallest building in the upper left area of the picture?",
+      "old_dsl": "INTENT(RELATIONAL_COUNT)\nn1=REGION($image0,TOP_LEFT)\nn2=LOCATE($n1,T(\"building\"))\nn3=SELECT_RANK($n2,null,\"height\",1,DESCENDING)\nn4=LOCATE($image0,T(\"car\",color=\"white\"))\nn5=SELECT_REL($n4,$n3,IN_FRONT_OF)\nn6=COUNT_ENTITIES($n5,T(\"car\",color=\"white\"),false)\nFINAL($n6,CHOICE_SINGLE)",
+      "dsl": "INTENT(RELATIONAL_COUNT)\nn1=REGION($image0,TOP_LEFT)\nn2=LOCATE($n1,T(\"building\"))\nn3=SELECT_SEM($n2,null,\"the tallest building in the upper left area of the picture\",SINGLE,$n1)\nn4=LOCATE($image0,T(\"car\",color=\"white\"))\nn5=SELECT_REL($n4,$n3,IN_FRONT_OF)\nn6=COUNT_ENTITIES($n5,T(\"car\",color=\"white\"),false)\nFINAL($n6,CHOICE_SINGLE)",
+      "trace": {
+        "node_id": "n3",
+        "previous_params": {
+          "mode": "RANK",
+          "criterion": "height",
+          "rank": 1,
+          "order": "DESCENDING"
+        },
+        "new_query": "the tallest building in the upper left area of the picture",
+        "scope": "$n1",
+        "reference": null
+      },
+      "lab_valid": true,
+      "canonical_roundtrip": true,
+      "production_bridge_valid": true,
+      "production_node_count": 6
+    },
+    {
+      "sample_id": "mme_rs_perception_remote_sensing_count_0235",
+      "question": "How many red cars are parked on the wider longitudinal road in the center area of the picture?",
+      "old_dsl": "INTENT(RELATIONAL_COUNT)\nn1=REGION($image0,CENTER)\nn2=LOCATE($n1,T(\"road\",shape=\"longitudinal\"))\nn3=SELECT_RANK($n2,null,\"width\",1,DESCENDING)\nn4=LOCATE($image0,T(\"car\",color=\"red\"))\nn5=SELECT_REL($n4,$n3,INSIDE)\nn6=COUNT_ENTITIES($n5,T(\"car\",color=\"red\"),false)\nFINAL($n6,CHOICE_SINGLE)",
+      "dsl": "INTENT(RELATIONAL_COUNT)\nn1=REGION($image0,CENTER)\nn2=LOCATE($n1,T(\"road\",shape=\"longitudinal\"))\nn3=SELECT_SEM($n2,null,\"the wider longitudinal road in the center area of the picture\",SINGLE,$n1)\nn4=LOCATE($image0,T(\"car\",color=\"red\"))\nn5=SELECT_REL($n4,$n3,INSIDE)\nn6=COUNT_ENTITIES($n5,T(\"car\",color=\"red\"),false)\nFINAL($n6,CHOICE_SINGLE)",
+      "trace": {
+        "node_id": "n3",
+        "previous_params": {
+          "mode": "RANK",
+          "criterion": "width",
+          "rank": 1,
+          "order": "DESCENDING"
+        },
+        "new_query": "the wider longitudinal road in the center area of the picture",
+        "scope": "$n1",
+        "reference": null
+      },
+      "lab_valid": true,
+      "canonical_roundtrip": true,
+      "production_bridge_valid": true,
+      "production_node_count": 6
+    },
+    {
+      "sample_id": "mme_rs_perception_remote_sensing_count_0241",
+      "question": "How many lanes are there on the widest horizontal road in the picture?",
+      "old_dsl": "INTENT(RELATIONAL_COUNT)\nn1=LOCATE($image0,T(\"road\",shape=\"horizontal\"))\nn2=SELECT_RANK($n1,null,\"width\",1,DESCENDING)\nn3=LOCATE($image0,T(\"lane\"))\nn4=SELECT_REL($n3,$n2,INSIDE)\nn5=COUNT_ENTITIES($n4,T(\"lane\"),false)\nFINAL($n5,CHOICE_SINGLE)",
+      "dsl": "INTENT(RELATIONAL_COUNT)\nn1=LOCATE($image0,T(\"road\",shape=\"horizontal\"))\nn2=SELECT_SEM($n1,null,\"the widest horizontal road in the picture\",SINGLE,$image0)\nn3=LOCATE($image0,T(\"lane\"))\nn4=SELECT_REL($n3,$n2,INSIDE)\nn5=COUNT_ENTITIES($n4,T(\"lane\"),false)\nFINAL($n5,CHOICE_SINGLE)",
+      "trace": {
+        "node_id": "n2",
+        "previous_params": {
+          "mode": "RANK",
+          "criterion": "width",
+          "rank": 1,
+          "order": "DESCENDING"
+        },
+        "new_query": "the widest horizontal road in the picture",
+        "scope": "$image0",
+        "reference": null
+      },
+      "lab_valid": true,
+      "canonical_roundtrip": true,
+      "production_bridge_valid": true,
+      "production_node_count": 5
+    },
+    {
+      "sample_id": "mme_rs_perception_remote_sensing_count_0256",
+      "question": "How many lanes are there in the widest area of the widest road in the picture?",
+      "old_dsl": "INTENT(RELATIONAL_COUNT)\nn1=LOCATE($image0,T(\"road\"))\nn2=SELECT_RANK($n1,null,\"width\",1,DESCENDING)\nn3=SELECT_SUBREGION($n2,null,INSIDE)\nn4=COUNT_IMAGE($n3,T(\"lane\"),false)\nFINAL($n4,CHOICE_SINGLE)",
+      "dsl": "INTENT(RELATIONAL_COUNT)\nn1=LOCATE($image0,T(\"road\"))\nn2=SELECT_SEM($n1,null,\"the widest road in the picture\",SINGLE,$image0)\nn3=SELECT_SUBREGION($n2,null,INSIDE)\nn4=LOCATE($n3,T(\"road section\"))\nn5=SELECT_SEM($n4,null,\"the widest section within the selected widest road\",SINGLE,$n3)\nn6=SELECT_SUBREGION($n5,null,INSIDE)\nn7=COUNT_IMAGE($n6,T(\"lane\"),false)\nFINAL($n7,CHOICE_SINGLE)",
+      "trace": {
+        "special_review": "count_0256",
+        "old_node_count": 4,
+        "new_node_count": 7
+      },
+      "lab_valid": true,
+      "canonical_roundtrip": true,
+      "production_bridge_valid": true,
+      "production_node_count": 7
+    },
+    {
+      "sample_id": "mme_rs_perception_remote_sensing_count_0334",
+      "question": "How many red cars are there in the parking lot on the right side of the taller building in the left edge area of the picture?",
+      "old_dsl": "INTENT(RELATIONAL_COUNT)\nn1=REGION($image0,LEFT)\nn2=LOCATE($n1,T(\"building\"))\nn3=SELECT_RANK($n2,null,\"height\",1,DESCENDING)\nn4=LOCATE($image0,T(\"parking lot\"))\nn5=SELECT_REL($n4,$n3,RIGHT_OF)\nn6=LOCATE($image0,T(\"car\",color=\"red\"))\nn7=SELECT_REL($n6,$n5,INSIDE)\nn8=COUNT_ENTITIES($n7,T(\"car\",color=\"red\"),false)\nFINAL($n8,CHOICE_SINGLE)",
+      "dsl": "INTENT(RELATIONAL_COUNT)\nn1=REGION($image0,LEFT)\nn2=LOCATE($n1,T(\"building\"))\nn3=SELECT_SEM($n2,null,\"the taller building in the left edge area of the picture\",SINGLE,$n1)\nn4=LOCATE($image0,T(\"parking lot\"))\nn5=SELECT_REL($n4,$n3,RIGHT_OF)\nn6=LOCATE($image0,T(\"car\",color=\"red\"))\nn7=SELECT_REL($n6,$n5,INSIDE)\nn8=COUNT_ENTITIES($n7,T(\"car\",color=\"red\"),false)\nFINAL($n8,CHOICE_SINGLE)",
+      "trace": {
+        "node_id": "n3",
+        "previous_params": {
+          "mode": "RANK",
+          "criterion": "height",
+          "rank": 1,
+          "order": "DESCENDING"
+        },
+        "new_query": "the taller building in the left edge area of the picture",
+        "scope": "$n1",
+        "reference": null
+      },
+      "lab_valid": true,
+      "canonical_roundtrip": true,
+      "production_bridge_valid": true,
+      "production_node_count": 8
+    },
+    {
+      "sample_id": "mme_rs_perception_remote_sensing_count_1063",
+      "question": "How many ships are there in the widest waterway at the bottom of this picture?",
+      "old_dsl": "INTENT(RELATIONAL_COUNT)\nn1=REGION($image0,BOTTOM)\nn2=LOCATE($n1,T(\"waterway\"))\nn3=SELECT_RANK($n2,null,\"width\",1,DESCENDING)\nn4=LOCATE($image0,T(\"ship\"))\nn5=SELECT_REL($n4,$n3,INSIDE)\nn6=COUNT_ENTITIES($n5,T(\"ship\"),false)\nFINAL($n6,CHOICE_SINGLE)",
+      "dsl": "INTENT(RELATIONAL_COUNT)\nn1=REGION($image0,BOTTOM)\nn2=LOCATE($n1,T(\"waterway\"))\nn3=SELECT_SEM($n2,null,\"the widest waterway at the bottom of the picture\",SINGLE,$n1)\nn4=LOCATE($image0,T(\"ship\"))\nn5=SELECT_REL($n4,$n3,INSIDE)\nn6=COUNT_ENTITIES($n5,T(\"ship\"),false)\nFINAL($n6,CHOICE_SINGLE)",
+      "trace": {
+        "node_id": "n3",
+        "previous_params": {
+          "mode": "RANK",
+          "criterion": "width",
+          "rank": 1,
+          "order": "DESCENDING"
+        },
+        "new_query": "the widest waterway at the bottom of the picture",
+        "scope": "$n1",
+        "reference": null
+      },
+      "lab_valid": true,
+      "canonical_roundtrip": true,
+      "production_bridge_valid": true,
+      "production_node_count": 6
+    },
+    {
+      "sample_id": "mme_rs_perception_remote_sensing_position_0218",
+      "question": "What is the highest building located in the picture?",
+      "old_dsl": "INTENT(OTHER)\nn1=LOCATE($image0,T(\"building\"))\nn2=SELECT_RANK($n1,null,\"height\",1,DESCENDING)\nFINAL_QUESTION($n2,CHOICE_SINGLE,\"Which option describes the location of the selected building?\")",
+      "dsl": "INTENT(OTHER)\nn1=LOCATE($image0,T(\"building\"))\nn2=SELECT_SEM($n1,null,\"the highest building in the picture\",SINGLE,$image0)\nFINAL_QUESTION($n2,CHOICE_SINGLE,\"Which option describes the location of the selected building?\")",
+      "trace": {
+        "node_id": "n2",
+        "previous_params": {
+          "mode": "RANK",
+          "criterion": "height",
+          "rank": 1,
+          "order": "DESCENDING"
+        },
+        "new_query": "the highest building in the picture",
+        "scope": "$image0",
+        "reference": null
+      },
+      "lab_valid": true,
+      "canonical_roundtrip": true,
+      "production_bridge_valid": true,
+      "production_node_count": 2
+    },
+    {
+      "sample_id": "mme_rs_perception_remote_sensing_count_2848",
+      "question": "How many streetlights are there on the wider road at the bottom left of the river in the upper right corner of the picture?",
+      "old_dsl": "INTENT(RELATIONAL_COUNT)\nn1=LOCATE($image0,T(\"river\"))\nn2=LOCATE($image0,T(\"road\"))\nn3=SELECT_REL($n2,$n1,LOWER_LEFT_OF)\nn4=SELECT_RANK($n3,null,\"width\",1,DESCENDING)\nn5=LOCATE($image0,T(\"streetlight\"))\nn6=SELECT_REL($n5,$n4,INSIDE)\nn7=COUNT_ENTITIES($n6,T(\"streetlight\"),false)\nFINAL($n7,CHOICE_SINGLE)",
+      "dsl": "INTENT(RELATIONAL_COUNT)\nn1=LOCATE($image0,T(\"river\"))\nn2=LOCATE($image0,T(\"road\"))\nn3=SELECT_REL($n2,$n1,LOWER_LEFT_OF)\nn4=SELECT_SEM($n3,$n1,\"the wider road at the bottom left of the river in the upper right corner of the picture\",SINGLE,$image0)\nn5=LOCATE($image0,T(\"streetlight\"))\nn6=SELECT_REL($n5,$n4,INSIDE)\nn7=COUNT_ENTITIES($n6,T(\"streetlight\"),false)\nFINAL($n7,CHOICE_SINGLE)",
+      "trace": {
+        "node_id": "n4",
+        "previous_params": {
+          "mode": "RANK",
+          "criterion": "width",
+          "rank": 1,
+          "order": "DESCENDING"
+        },
+        "new_query": "the wider road at the bottom left of the river in the upper right corner of the picture",
+        "scope": "$image0",
+        "reference": "$n1"
+      },
+      "lab_valid": true,
+      "canonical_roundtrip": true,
+      "production_bridge_valid": true,
+      "production_node_count": 7
+    }
+  ],
+  "visual_validation": false,
+  "ground_truth_read": false,
+  "api_calls": 0
+}

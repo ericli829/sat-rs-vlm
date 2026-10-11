@@ -1,0 +1,8 @@
+{
+  "rows": 80,
+  "valid_english_nonempty_unique": true,
+  "source_sha256": "5d10f60641666304352591dda039bbcf2eb4e2cfc7ef33f8eeb0eb595cb133f7",
+  "no_gold_dsl": true,
+  "included_in_training": false,
+  "scope": "Text-only question audit, not visual feasibility or answer accuracy."
+}

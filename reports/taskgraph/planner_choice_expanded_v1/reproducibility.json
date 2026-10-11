@@ -1,0 +1,23 @@
+{
+  "valid": true,
+  "reproduced_modules": [
+    "codex_choice_bbox",
+    "codex_choice_legacy",
+    "codex_choice_mme_a",
+    "codex_choice_mme_b",
+    "codex_choice_xlrs",
+    "codex_choice_rank_mme",
+    "codex_choice_rank_xlrs"
+  ],
+  "plan_hashes_match_export": {
+    "legacy_rank_mme.jsonl": true,
+    "legacy_rank_xlrs.jsonl": true,
+    "legacy_revisions.jsonl": true,
+    "mme_a.jsonl": true,
+    "mme_b.jsonl": true,
+    "xlrs.jsonl": true,
+    "xlrs_bbox.jsonl": true,
+    "xlrs_pending.jsonl": true
+  },
+  "elapsed_seconds": 7.077885000006063
+}

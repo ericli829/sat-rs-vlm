@@ -1,0 +1,209 @@
+{
+  "experiment_id": "change-region-b09061ac924b46c0bcbfa76f43ce1ff5",
+  "exported_at": "2026-10-09T08:57:50.449Z",
+  "grid_note": "Experimental assumption: equal 3x3 cells; select the center of the dominant structural change cluster. The official interface does not define the boundaries or the primary-change tie-break rule.",
+  "review": {
+    "RSU_D_0033": {
+      "region": "right"
+    },
+    "RSU_D_0058": {
+      "region": "right"
+    },
+    "RSU_D_0064": {
+      "region": "top_left"
+    },
+    "RSU_D_0071": {
+      "region": "top_left"
+    },
+    "RSU_D_0073": {
+      "region": "left"
+    },
+    "RSU_D_0097": {
+      "region": "right"
+    },
+    "RSU_D_0131": {
+      "region": "bottom"
+    },
+    "RSU_D_0139": {
+      "region": "top_left"
+    },
+    "RSU_D_0141": {
+      "region": "top_right"
+    },
+    "RSU_D_0142": {
+      "region": "left"
+    },
+    "RSU_D_0145": {
+      "region": "unclear"
+    },
+    "RSU_D_0147": {
+      "region": "unclear"
+    },
+    "RSU_D_0148": {
+      "region": "right"
+    },
+    "RSU_D_0175": {
+      "region": "left"
+    },
+    "RSU_D_0179": {
+      "region": "top_right"
+    },
+    "RSU_D_0206": {
+      "region": "left"
+    },
+    "RSU_D_0224": {
+      "region": "bottom"
+    },
+    "RSU_D_0233": {
+      "region": "top"
+    },
+    "RSU_D_0252": {
+      "region": "top"
+    },
+    "RSU_D_0255": {
+      "region": "top_right"
+    },
+    "RSU_D_0277": {
+      "region": "left"
+    },
+    "RSU_D_0279": {
+      "region": "left"
+    },
+    "RSU_D_0282": {
+      "region": "top"
+    },
+    "RSU_D_0329": {
+      "region": "bottom_left"
+    },
+    "RSU_D_0362": {
+      "region": "bottom"
+    }
+  },
+  "cases": [
+    {
+      "item_id": "RSU_D_0033",
+      "baseline_region": "right",
+      "guided_region": null
+    },
+    {
+      "item_id": "RSU_D_0058",
+      "baseline_region": "right",
+      "guided_region": "right"
+    },
+    {
+      "item_id": "RSU_D_0064",
+      "baseline_region": "left",
+      "guided_region": "top_left"
+    },
+    {
+      "item_id": "RSU_D_0071",
+      "baseline_region": "right",
+      "guided_region": "top_left"
+    },
+    {
+      "item_id": "RSU_D_0073",
+      "baseline_region": "bottom",
+      "guided_region": "bottom"
+    },
+    {
+      "item_id": "RSU_D_0097",
+      "baseline_region": "right",
+      "guided_region": null
+    },
+    {
+      "item_id": "RSU_D_0131",
+      "baseline_region": "bottom",
+      "guided_region": null
+    },
+    {
+      "item_id": "RSU_D_0139",
+      "baseline_region": "right",
+      "guided_region": "top_left"
+    },
+    {
+      "item_id": "RSU_D_0141",
+      "baseline_region": "right",
+      "guided_region": null
+    },
+    {
+      "item_id": "RSU_D_0142",
+      "baseline_region": "left",
+      "guided_region": "left"
+    },
+    {
+      "item_id": "RSU_D_0145",
+      "baseline_region": "bottom_left",
+      "guided_region": "top_left"
+    },
+    {
+      "item_id": "RSU_D_0147",
+      "baseline_region": "left",
+      "guided_region": "bottom_left"
+    },
+    {
+      "item_id": "RSU_D_0148",
+      "baseline_region": "right",
+      "guided_region": "center"
+    },
+    {
+      "item_id": "RSU_D_0175",
+      "baseline_region": "bottom_left",
+      "guided_region": "left"
+    },
+    {
+      "item_id": "RSU_D_0179",
+      "baseline_region": "top",
+      "guided_region": "top_right"
+    },
+    {
+      "item_id": "RSU_D_0206",
+      "baseline_region": "left",
+      "guided_region": "bottom_right"
+    },
+    {
+      "item_id": "RSU_D_0224",
+      "baseline_region": "bottom",
+      "guided_region": "bottom_left"
+    },
+    {
+      "item_id": "RSU_D_0233",
+      "baseline_region": "right",
+      "guided_region": "top_left"
+    },
+    {
+      "item_id": "RSU_D_0252",
+      "baseline_region": "top",
+      "guided_region": "top_right"
+    },
+    {
+      "item_id": "RSU_D_0255",
+      "baseline_region": "right",
+      "guided_region": null
+    },
+    {
+      "item_id": "RSU_D_0277",
+      "baseline_region": "left",
+      "guided_region": null
+    },
+    {
+      "item_id": "RSU_D_0279",
+      "baseline_region": "bottom",
+      "guided_region": "left"
+    },
+    {
+      "item_id": "RSU_D_0282",
+      "baseline_region": "top",
+      "guided_region": null
+    },
+    {
+      "item_id": "RSU_D_0329",
+      "baseline_region": "bottom",
+      "guided_region": null
+    },
+    {
+      "item_id": "RSU_D_0362",
+      "baseline_region": "bottom",
+      "guided_region": "bottom"
+    }
+  ]
+}

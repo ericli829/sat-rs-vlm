@@ -1,0 +1,183 @@
+{
+  "evaluator": "batched raw greedy generation; same prompt, token limits, and strict validator metrics as evaluate_qwen3vl_planner.py with recovery/RAG/constrained decoding off",
+  "adapter": "/root/autodl-fs/data/sat-rs-vlm-training/planner_4b_clean_20261011/output/training",
+  "adapter_sha256": "d7169cce768dcd01e86f1c2fd2847f7fddf85e45f9d61db3e23180a97211a4e6",
+  "base_model": "/root/autodl-tmp/models/Qwen3-VL-4B-Instruct",
+  "validation_file": "/root/autodl-fs/data/sat-rs-vlm-training/planner_4b_clean_20261011/workspace/taskgraph_lab/data/planner_quality_clean_v1/validation.jsonl",
+  "validation_sha256": "51349d78e23906fdfc12953c2dabfc5f29110542e9b6f6a762cf62fe28b0b7aa",
+  "sample_count": 200,
+  "requested_batch_size": 4,
+  "max_prompt_tokens": 1536,
+  "max_new_tokens": 512,
+  "elapsed_seconds": 231.65383638069034,
+  "metrics": {
+    "sample_count": 200,
+    "counts": {
+      "nonempty": 200,
+      "text_exact": 173,
+      "surface_grammar_valid": 197,
+      "dsl_parse_valid": 198,
+      "schema_valid": 198,
+      "graph_valid": 198,
+      "type_valid": 198,
+      "semantic_valid": 197,
+      "graph_runtime_valid": 197,
+      "runtime_valid": 197,
+      "canonical_exact": 173,
+      "canonical_dsl_exact": 173,
+      "intent_exact": 198,
+      "operator_sequence_exact": 197,
+      "node_count_exact": 198,
+      "final_answer_type_exact": 181,
+      "final_question_presence_exact": 182
+    },
+    "rates": {
+      "nonempty": 1.0,
+      "text_exact": 0.865,
+      "surface_grammar_valid": 0.985,
+      "dsl_parse_valid": 0.99,
+      "schema_valid": 0.99,
+      "graph_valid": 0.99,
+      "type_valid": 0.99,
+      "semantic_valid": 0.985,
+      "graph_runtime_valid": 0.985,
+      "runtime_valid": 0.985,
+      "canonical_exact": 0.865,
+      "canonical_dsl_exact": 0.865,
+      "intent_exact": 0.99,
+      "operator_sequence_exact": 0.985,
+      "node_count_exact": 0.99,
+      "final_answer_type_exact": 0.905,
+      "final_question_presence_exact": 0.91
+    },
+    "per_intent": {
+      "OTHER": {
+        "count": 200,
+        "counts": {
+          "nonempty": 200,
+          "text_exact": 173,
+          "surface_grammar_valid": 197,
+          "dsl_parse_valid": 198,
+          "schema_valid": 198,
+          "graph_valid": 198,
+          "type_valid": 198,
+          "semantic_valid": 197,
+          "graph_runtime_valid": 197,
+          "runtime_valid": 197,
+          "canonical_exact": 173,
+          "canonical_dsl_exact": 173,
+          "intent_exact": 198,
+          "operator_sequence_exact": 197,
+          "node_count_exact": 198,
+          "final_answer_type_exact": 181,
+          "final_question_presence_exact": 182
+        },
+        "rates": {
+          "nonempty": 1.0,
+          "text_exact": 0.865,
+          "surface_grammar_valid": 0.985,
+          "dsl_parse_valid": 0.99,
+          "schema_valid": 0.99,
+          "graph_valid": 0.99,
+          "type_valid": 0.99,
+          "semantic_valid": 0.985,
+          "graph_runtime_valid": 0.985,
+          "runtime_valid": 0.985,
+          "canonical_exact": 0.865,
+          "canonical_dsl_exact": 0.865,
+          "intent_exact": 0.99,
+          "operator_sequence_exact": 0.985,
+          "node_count_exact": 0.99,
+          "final_answer_type_exact": 0.905,
+          "final_question_presence_exact": 0.91
+        },
+        "relational_metrics": {
+          "relation_direction_accuracy": {
+            "applicable_count": 0,
+            "correct_count": 0,
+            "rate": null
+          },
+          "reference_attachment_accuracy": {
+            "applicable_count": 0,
+            "correct_count": 0,
+            "rate": null
+          },
+          "select_rel_vs_relation_accuracy": {
+            "applicable_count": 0,
+            "correct_count": 0,
+            "rate": null
+          },
+          "count_filtered_source_accuracy": {
+            "applicable_count": 0,
+            "correct_count": 0,
+            "rate": null
+          },
+          "count_scope_entire_accuracy": {
+            "applicable_count": 0,
+            "correct_count": 0,
+            "rate": null
+          }
+        },
+        "surface_grammar_valid": 197,
+        "dsl_parse_valid": 198,
+        "graph_runtime_valid": 197,
+        "runtime_valid": 197,
+        "canonical_exact": 173
+      }
+    },
+    "parse_error_types": {
+      "DSLParseError": 2
+    },
+    "validation_error_codes": {
+      "original_choices_copied_into_target": 1
+    },
+    "mean_latency_seconds": null,
+    "p50_latency_seconds": null,
+    "p95_latency_seconds": null,
+    "p50_total_planner_latency_seconds": null,
+    "p95_total_planner_latency_seconds": null,
+    "mean_total_planner_latency_seconds": null,
+    "mean_retrieval_latency_ms": null,
+    "p95_retrieval_latency_ms": null,
+    "mean_prompt_tokens": null,
+    "total_prompt_tokens": 0,
+    "mean_generated_tokens": null,
+    "total_generated_tokens": 0,
+    "mean_generation_attempts": null,
+    "rag_used_count": 0,
+    "planner_failed_count": 0,
+    "termination_reason_counts": {},
+    "constraint_failure_counts": {},
+    "grammar_dead_end_count": 0,
+    "max_token_truncation_count": 0,
+    "relational_metrics": {
+      "relation_direction_accuracy": {
+        "applicable_count": 0,
+        "correct_count": 0,
+        "rate": null
+      },
+      "reference_attachment_accuracy": {
+        "applicable_count": 0,
+        "correct_count": 0,
+        "rate": null
+      },
+      "select_rel_vs_relation_accuracy": {
+        "applicable_count": 0,
+        "correct_count": 0,
+        "rate": null
+      },
+      "count_filtered_source_accuracy": {
+        "applicable_count": 0,
+        "correct_count": 0,
+        "rate": null
+      },
+      "count_scope_entire_accuracy": {
+        "applicable_count": 0,
+        "correct_count": 0,
+        "rate": null
+      },
+      "dead_node_rate": null,
+      "mean_first_broken_relation_chain_depth": null
+    }
+  }
+}

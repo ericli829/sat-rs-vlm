@@ -1,0 +1,9 @@
+{
+  "run_id": "planner_4b_clean_20261011",
+  "adapter_expected_sha256": "d7169cce768dcd01e86f1c2fd2847f7fddf85e45f9d61db3e23180a97211a4e6",
+  "adapter_size_bytes": 132195448,
+  "validation_samples": 200,
+  "validation_sha256": "51349d78e23906fdfc12953c2dabfc5f29110542e9b6f6a762cf62fe28b0b7aa",
+  "training_data_manifest_sha256": "85c19b074700085c8dd058384869fd55f3105a454a9f30de819f0ee311bd4e78",
+  "training_population": 5613
+}

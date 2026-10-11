@@ -1,0 +1,31 @@
+{
+  "valid": true,
+  "files": [
+    {
+      "file": "train.jsonl",
+      "rows": 5613,
+      "valid": true,
+      "sha256": "2c0c28788421dbf9cb3a866b25e21db430c656d7aabbe61effa6204838e0d49c"
+    },
+    {
+      "file": "test.jsonl",
+      "rows": 152,
+      "valid": true,
+      "sha256": "63190bf6f6cbb1d9699765ad0199df9ddf3b14466be363a0beca0ff48ec092e0"
+    },
+    {
+      "file": "validation.jsonl",
+      "rows": 200,
+      "valid": true,
+      "sha256": "51349d78e23906fdfc12953c2dabfc5f29110542e9b6f6a762cf62fe28b0b7aa"
+    }
+  ],
+  "model_weights_loaded": false,
+  "checks": [
+    "parser",
+    "question-aware validator",
+    "canonical roundtrip",
+    "constrained decoder complete program",
+    "actual production bridge"
+  ]
+}

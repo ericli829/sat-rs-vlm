@@ -83,7 +83,19 @@ LabelSet directly against the original choices.
 
 When final.sources still require visual or high-level semantic interpretation,
 including Region, RegionSet, Entity, EntitySet, RouteContext, evidence, or mixed
-visual sources, final.question is REQUIRED.
+visual sources, final.question is REQUIRED, except for BBOX final output.
+
+For a bounding-box localization request use answer_type BBOX, exactly one
+single-target visual source, and omit final.question. A direct LOCATE handles
+category and intrinsic attributes; REGION then LOCATE handles an explicit
+image area. Use a singleton SELECT only for an extreme, ordinal, or external
+semantic condition. Permitted BBOX producers are LOCATE, REGION,
+REGION_FROM_BBOX, SELECT RANK/ORDINAL/EXTREME/SUBREGION, and SELECT SEMANTIC
+with selection_type SINGLE. GROUP, SELECT RELATION, SELECT SEMANTIC MULTI,
+and multiple final sources cannot supply a unique BBOX. Runtime still must
+reject empty, multiple, or unresolved target evidence. BBOX is not a choice
+answer: never invent options, a final VLM question, or pixel coordinates in the
+Planner program.
 
 When present, final.question is generated BEFORE execution and must never
 include predicted runtime values.
@@ -120,6 +132,7 @@ BOOLEAN
 LABEL
 LABEL_SET
 TEXT
+BBOX
 
 Do NOT use runtime type names such as Answer, ScalarInt, or Label as answer_type.
 
@@ -1068,7 +1081,8 @@ Before emitting JSON, silently verify:
 15. If COUNT is authoritative, did I avoid adding the raw image to final.sources?
 16. Did I omit generic final questions for deterministic structured results?
 17. If final sources are visual objects/regions or RouteContext, did I include a
-    residual question describing the still-unresolved judgement?
+    residual question describing the still-unresolved judgement, except that
+    BBOX uses one single-target visual source without a residual question?
 18. Did I use final.question for terminal semantic reasoning and reserve
     VLM_REASON for intermediate semantic output consumed downstream?
 19. Did every operator use the exact semantic input role names from its signature,

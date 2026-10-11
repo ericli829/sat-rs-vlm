@@ -1,0 +1,33 @@
+{
+  "purpose": "2B ChangeChat 3x3 grid-first A/B preparation; no training launched",
+  "local_branch": "codex/competition-protocol-v2",
+  "local_head": "12104c2",
+  "changechat_source_path": "F:\\VIT-data\\changechat-105k\\changechat_105k_train.json",
+  "changechat_source_bytes": 48836849,
+  "changechat_source_sha256": "8c7296031d3b9648d8a6d2870d4a28f31e9ca31ce270df2f18a3a3b71851abe3",
+  "changechat_gzip_bytes": 1945428,
+  "changechat_gzip_sha256": "17d4cefabb697549a52e11d2518c906349814337dc97e9a809e21628e24bef56",
+  "route_a": {
+    "source_path": "D:\\Desktop\\tzb-2026\\results\\outputs\\autodl_lora_4090_bs16_gc_20260804_095914\\checkpoints",
+    "base_model": "Qwen3-VL-2B-Instruct",
+    "purpose": "VRSBench-only adapter before LEVIR-CC replay",
+    "adapter_config_sha256": "3438252d47f7eee54eaaacae5b26752312b703e5c7aabb93c3c8fa5f1c7fd781",
+    "adapter_model_sha256": "a4efe8b4e2e69b83e1d4d0cdf0bc9c0dba7c0881b758d16a3db4637790147b36",
+    "adapter_model_bytes": 69788264
+  },
+  "route_b": {
+    "source_path": "D:\\Desktop\\tzb-2026\\results\\levir_train\\vrsbench_levircc_replay_formal\\round_2_adapter",
+    "base_model": "Qwen3-VL-2B-Instruct",
+    "adapter_model_sha256": "73d8aea1fdce41ebc36f6d8ca9af1b6032fcaf3f7f32be590456c37a2af30d01",
+    "cloud_already_present": true
+  },
+  "remote_root": "/root/autodl-fs/data/sat-rs-vlm-training/changechat_grid_ab_20261011",
+  "remote_base_model": "/root/autodl-tmp/models/Qwen3-VL-2B-Instruct",
+  "remote_image_root": "/root/autodl-tmp/datasets",
+  "planned_exposure_mix": {
+    "changechat_grid": 0.7,
+    "changechat_aux": 0.2,
+    "vrsbench_replay": 0.1
+  },
+  "training_launch_authorized": false
+}

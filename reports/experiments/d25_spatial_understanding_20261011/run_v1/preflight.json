@@ -1,0 +1,177 @@
+{
+  "passed": true,
+  "script_sha256": "a8416c0c7b8efcb8136a32511fbe2dafff602cbccc4dafea8a7f17db4469a8ca",
+  "mapper_self_test": {
+    "case_count": 15,
+    "passed": true,
+    "cases": {
+      "upper-left quadrant": "top_left",
+      "top center area": "top",
+      "upper right": "top_right",
+      "middle-left": "left",
+      "in the center": "center",
+      "middle right": "right",
+      "lower left": "bottom_left",
+      "bottom-center cell": "bottom",
+      "lower-right quadrant": "bottom_right",
+      "left side": null,
+      "upper portion": null,
+      "left of center": null,
+      "upper-left to lower-right": null,
+      "upper-left and center": null,
+      "upper half center": null
+    },
+    "ambiguous_directions_are_not_forced": true
+  },
+  "tokenizer_validation": {
+    "label_token_ids": {
+      "top_left": [
+        3481,
+        9579
+      ],
+      "top": [
+        3481
+      ],
+      "top_right": [
+        3481,
+        10539
+      ],
+      "left": [
+        2359
+      ],
+      "center": [
+        3057
+      ],
+      "right": [
+        1291
+      ],
+      "bottom_left": [
+        14860,
+        9579
+      ],
+      "bottom": [
+        14860
+      ],
+      "bottom_right": [
+        14860,
+        10539
+      ]
+    },
+    "equal_length_paths": {
+      "top_left": [
+        3481,
+        9579
+      ],
+      "top": [
+        3481,
+        151645
+      ],
+      "top_right": [
+        3481,
+        10539
+      ],
+      "left": [
+        2359,
+        151645
+      ],
+      "center": [
+        3057,
+        151645
+      ],
+      "right": [
+        1291,
+        151645
+      ],
+      "bottom_left": [
+        14860,
+        9579
+      ],
+      "bottom": [
+        14860,
+        151645
+      ],
+      "bottom_right": [
+        14860,
+        10539
+      ]
+    },
+    "prefix_mask_self_test": "passed",
+    "leading_space_blocked": true
+  },
+  "actual_processor_inputs": {
+    "A_original": {
+      "input_tokens": 200,
+      "image_grid_thw": [
+        [
+          1,
+          16,
+          16
+        ],
+        [
+          1,
+          16,
+          16
+        ]
+      ],
+      "actual_chat_prompt": "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|><|vision_start|><|image_pad|><|vision_end|>Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:<|im_end|>\n<|im_start|>assistant\n",
+      "actual_chat_prompt_sha256": "009c35e62705524c1e0d0e6cf68a75958208ef4e7203241254b1cf6bda9f62cd"
+    },
+    "B_visual_grid": {
+      "input_tokens": 282,
+      "image_grid_thw": [
+        [
+          1,
+          16,
+          16
+        ],
+        [
+          1,
+          16,
+          16
+        ]
+      ],
+      "actual_chat_prompt": "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|><|vision_start|><|image_pad|><|vision_end|>Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:<|im_end|>\n<|im_start|>assistant\n",
+      "actual_chat_prompt_sha256": "3fd96eabeda1b329f91953c4ddc44051cda6f46d6f3ae0f96f6ed9e9c6438976"
+    },
+    "C_describe_map": {
+      "input_tokens": 281,
+      "image_grid_thw": [
+        [
+          1,
+          16,
+          16
+        ],
+        [
+          1,
+          16,
+          16
+        ]
+      ],
+      "actual_chat_prompt": "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|><|vision_start|><|image_pad|><|vision_end|>Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.<|im_end|>\n<|im_start|>assistant\n",
+      "actual_chat_prompt_sha256": "ff0171adbc74dcbc967659b36a61cc1cdb29f6e82d1a0160362382e2f54f712a"
+    },
+    "D_grid_describe_map": {
+      "input_tokens": 295,
+      "image_grid_thw": [
+        [
+          1,
+          16,
+          16
+        ],
+        [
+          1,
+          16,
+          16
+        ]
+      ],
+      "actual_chat_prompt": "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|><|vision_start|><|image_pad|><|vision_end|>Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.<|im_end|>\n<|im_start|>assistant\n",
+      "actual_chat_prompt_sha256": "09f6412a8b5c9c4d85e8b6ffe0c15ca75849d17accc1c18236adc8c6f3cdd8cd"
+    }
+  },
+  "visual_count": 50,
+  "shared_source_messages_unchanged": true,
+  "gpu": {
+    "cuda_available": true,
+    "free_mib": 7106.0
+  }
+}

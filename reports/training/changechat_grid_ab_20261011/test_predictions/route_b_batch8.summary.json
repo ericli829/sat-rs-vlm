@@ -1,0 +1,57 @@
+{
+  "route": "route_b_batch8",
+  "adapter": "/root/autodl-fs/data/sat-rs-vlm-training/changechat_grid_ab_20261011/runs/route_b_batch8",
+  "base_model": "/root/autodl-tmp/models/Qwen3-VL-2B-Instruct",
+  "validation_file": "/root/autodl-fs/data/sat-rs-vlm-training/changechat_grid_ab_20261011/data/grid_dev.jsonl",
+  "samples": 666,
+  "batch_size": 2,
+  "max_new_tokens": 128,
+  "elapsed_seconds": 611.2956596873701,
+  "metrics": {
+    "samples": 666,
+    "roads": {
+      "exact_match": 0.6681681681681682,
+      "exact_correct": 445,
+      "cell_precision_micro": 0.5626911314984709,
+      "cell_recall_micro": 0.773109243697479,
+      "cell_f1_micro": 0.6513274336283186,
+      "target_cells": 952,
+      "predicted_cells": 1308
+    },
+    "buildings": {
+      "exact_match": 0.6471471471471472,
+      "exact_correct": 431,
+      "cell_precision_micro": 0.7007601935038009,
+      "cell_recall_micro": 0.8478260869565217,
+      "cell_f1_micro": 0.7673098751418842,
+      "target_cells": 1196,
+      "predicted_cells": 1447
+    },
+    "both_classes_exact_match": {
+      "correct": 353,
+      "rate": 0.53003003003003
+    },
+    "parse_valid": {
+      "count": 666,
+      "rate": 1.0
+    },
+    "by_label_stratum": {
+      "both_empty": {
+        "count": 352,
+        "both_classes_exact_match": 0.9715909090909091
+      },
+      "roads_only": {
+        "count": 42,
+        "both_classes_exact_match": 0.11904761904761904
+      },
+      "buildings_only": {
+        "count": 95,
+        "both_classes_exact_match": 0.031578947368421054
+      },
+      "both_nonempty": {
+        "count": 177,
+        "both_classes_exact_match": 0.01694915254237288
+      }
+    }
+  }
+}

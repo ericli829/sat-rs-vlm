@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "unique_samples": 5613,
+  "per_device_batch_size": 2,
+  "gradient_accumulation_steps": 8,
+  "world_size": 1,
+  "effective_batch_size": 16,
+  "steps_per_epoch": 351,
+  "resolved_max_steps": null,
+  "expected_effective_epochs": 1.0,
+  "expected_sample_exposures": 5613,
+  "source": "num_train_epochs"
+}

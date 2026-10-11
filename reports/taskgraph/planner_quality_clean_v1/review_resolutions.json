@@ -1,0 +1,23 @@
+{
+  "reviewer": "root independent source/Unicode verification",
+  "decisions": [
+    {
+      "id": "mme_rs_perception_remote_sensing_count_2692",
+      "action": "dismiss_manual_finding",
+      "reason": "Original candidate-level SEM explicitly keeps the bottom row condition and authoritative COUNT. The reviewer found no specific semantic error; do not quarantine a correct runtime-compatible plan merely because GROUP cannot replace it.",
+      "question_sha256": "accbf1f19f697af13bd91a734f7d08e3fc1cae34e62e8d6030c79fe9c17678e7"
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_1242",
+      "action": "dismiss_manual_finding",
+      "reason": "The source ends in a valid fullwidth question mark U+FF1F, not a replacement character. The airplane color referent is complete; punctuation alone is not a semantic defect.",
+      "question_sha256": "a136ca02f257fdcbc156b6d295df6612fe224239ea8d6a2a0685467feee2a798"
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_1224",
+      "action": "replace_manual_reason",
+      "reason": "The fullwidth question mark is valid. Review is retained only because building on the left roof of the football field has unclear attachment, not because of encoding.",
+      "question_sha256": "c31415cbf7d6844d5b2d923f21ccd3e9c2e447262bca6336f9bf24bdbbe6a45d"
+    }
+  ]
+}

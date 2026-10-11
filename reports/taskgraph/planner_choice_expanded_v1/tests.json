@@ -1,0 +1,10 @@
+{
+  "final_command": "python -m pytest -q --basetemp <fresh-temp-path> taskgraph_lab/tests tests/unit/taskgraph/test_planner_provider.py tests/unit/taskgraph/test_locate_select_v2.py tests/unit/taskgraph/test_locate_routing_v2.py",
+  "interpreter": "C:\\Users\\Ericoneabc\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe",
+  "passed": 606,
+  "failed": 0,
+  "skipped": 0,
+  "elapsed_seconds": 16.61,
+  "ruff": "passed",
+  "initial_environment_issue": "An earlier production test attempt used the pre-existing .tmp/pytest and failed with WinError 5; re-run with a fresh unique temporary directory passed."
+}

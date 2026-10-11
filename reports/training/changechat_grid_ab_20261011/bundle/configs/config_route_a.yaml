@@ -1,0 +1,92 @@
+model:
+  model_id: null
+  processor_id: null
+  model_dir: /root/autodl-tmp/models/Qwen3-VL-2B-Instruct
+  processor_dir: /root/autodl-tmp/models/Qwen3-VL-2B-Instruct
+  trust_remote_code: true
+  local_files_only: true
+  torch_dtype: bfloat16
+  attn_implementation: sdpa
+  device_map: auto
+
+data:
+  train_file: /root/autodl-fs/data/sat-rs-vlm-training/changechat_grid_ab_20261011/data/train.jsonl
+  val_file: /root/autodl-fs/data/sat-rs-vlm-training/changechat_grid_ab_20261011/data/grid_dev.jsonl
+  image_root: /root/autodl-tmp/datasets
+  max_seq_length: 1024
+  max_train_samples: null
+  max_eval_samples: null
+  skip_bad_samples: false
+  data_composition: full
+  sampling_mode: uniform
+  task_sampling_weights: {}
+
+training:
+  output_dir: /root/autodl-fs/data/sat-rs-vlm-training/changechat_grid_ab_20261011/runs/route_a
+  method: lora
+  freeze_vision_encoder: true
+  freeze_projector: true
+  num_train_epochs: 1
+  max_steps: null
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 16
+  learning_rate: 1.0e-5
+  weight_decay: 0.01
+  warmup_ratio: 0.03
+  lr_scheduler_type: cosine
+  logging_steps: 20
+  save_steps: 268
+  eval_steps: 268
+  save_total_limit: 2
+  bf16: true
+  fp16: false
+  gradient_checkpointing: true
+  dataloader_num_workers: 4
+  dataloader_pin_memory: true
+  dataloader_persistent_workers: true
+  max_grad_norm: 1.0
+  seed: 42
+  resume_from_checkpoint: null
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+  initial_adapter_dir: /root/autodl-fs/data/sat-rs-vlm-training/changechat_grid_ab_20261011/adapters/route_a
+
+qlora:
+  load_in_4bit: false
+  bnb_4bit_quant_type: nf4
+  bnb_4bit_compute_dtype: bfloat16
+  bnb_4bit_use_double_quant: true
+
+loss:
+  mode: task_weighted
+  task_weights:
+    captioning: 1.0
+    detection: 1.0
+    counting: 1.0
+    scene_classification: 1.0
+    vqa: 1.0
+    change_detection: 1.0
+  unknown_task_weight: 1.0
+  strict_task_metadata: true
+
+evaluation:
+  do_eval: true
+  predict_with_generate: true
+  max_new_tokens: 128
+  num_beams: 1
+
+logging:
+  report_to: none
+  experiment_name: qwen3vl_2b_changechat_grid_route_a

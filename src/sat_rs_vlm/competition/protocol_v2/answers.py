@@ -12,15 +12,16 @@ from sat_rs_vlm.taskgraph.providers import SemanticVLMProvider, VLMRequest
 from sat_rs_vlm.taskgraph.runtime_types import (
     Answer,
     Boolean,
+    CandidateIntegrityError,
     Entity,
-    EntitySet,
     ImageRef,
     Label,
     LabelSet,
     Region,
-    RegionSet,
     ScalarInt,
     SelectResult,
+    SelectResultConsumptionError,
+    unique_bbox_evidence,
     unwrap_select_result,
 )
 from sat_rs_vlm.taskgraph.semantic_decision import SemanticDecisionLayer
@@ -98,7 +99,13 @@ class AnswerResolver:
         original_images: tuple[ImageRef, ...],
     ) -> object:
         self.last_bbox_conversion = None
-        sources = _sources(evidence)
+        # BBOX must inspect every wrapper's state before materializing its one
+        # target; the other contracts retain their existing SELECT policy.
+        sources = (
+            (evidence if isinstance(evidence, tuple) else (evidence,))
+            if contract.kind == "bbox"
+            else _sources(evidence)
+        )
         if not sources:
             raise AnswerContractViolation()
         if contract.kind == "single_choice":
@@ -150,6 +157,11 @@ class AnswerResolver:
             if len(sources) != 1:
                 raise BBoxValidationError()
             source = sources[0]
+            if not isinstance(source, Answer):
+                try:
+                    source = unique_bbox_evidence(source)
+                except (CandidateIntegrityError, SelectResultConsumptionError) as exc:
+                    raise BBoxValidationError("Bbox requires one resolved target") from exc
             if getattr(source, "provenance", {}).get("resolution_status") in {
                 "UNRESOLVED",
                 "AMBIGUOUS",
@@ -157,10 +169,6 @@ class AnswerResolver:
             }:
                 raise BBoxValidationError("Unresolved bbox evidence")
             provenance = dict(getattr(source, "provenance", {}))
-            if isinstance(source, EntitySet) and len(source.entities) == 1:
-                source = source.entities[0]
-            if isinstance(source, RegionSet) and len(source.regions) == 1:
-                source = source.regions[0]
             if isinstance(source, Entity):
                 provenance.update(source.provenance)
                 source = source.region
@@ -190,6 +198,10 @@ class AnswerResolver:
                 if not matching:
                     raise BBoxValidationError("Bbox belongs to a different image")
                 image = matching[0]
+                if (source.image.width is not None and source.image.width != image.width) or (
+                    source.image.height is not None and source.image.height != image.height
+                ):
+                    raise BBoxValidationError("Bbox source dimensions disagree with the original")
                 box = source.bbox_xyxy_global
                 space = declared_space(provenance, default="pixel_xyxy")
             else:

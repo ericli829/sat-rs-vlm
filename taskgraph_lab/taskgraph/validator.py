@@ -360,7 +360,11 @@ def _semantic_issues(
                 )
             )
 
-    if BBOX_HINT.search(question) and OperatorName.REGION_FROM_BBOX not in ops:
+    if (
+        BBOX_HINT.search(question)
+        and target.final.answer_type is not AnswerType.BBOX
+        and OperatorName.REGION_FROM_BBOX not in ops
+    ):
         warnings.append(
             ValidationIssue(
                 stage="semantic",
@@ -508,7 +512,11 @@ def _semantic_issues(
 
     final_runtime_types = {ref: inferred.get(ref, set()) for ref in target.final.sources}
     combined_final_types = set().union(*final_runtime_types.values(), set())
-    if combined_final_types.intersection(VISUAL_RUNTIME_TYPES) and final_question is None:
+    if (
+        combined_final_types.intersection(VISUAL_RUNTIME_TYPES)
+        and final_question is None
+        and target.final.answer_type is not AnswerType.BBOX
+    ):
         errors.append(
             ValidationIssue(
                 stage="semantic",

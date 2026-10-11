@@ -1,0 +1,115 @@
+{
+  "written": 425,
+  "pending": [],
+  "rules": {
+    "mme_reviewed_target_S_v1": 101,
+    "mme_reviewed_target_LARGEST_ROOF_v1": 1,
+    "mme_reviewed_target_intrinsic_v1": 202,
+    "mme_reviewed_target_M_v1": 75,
+    "mme_reviewed_target_TOP_ROAD_v1": 2,
+    "mme_reviewed_target_LARGER_ADJACENT_v1": 1,
+    "mme_reviewed_target_R_DESC_AROUND_v1": 1,
+    "mme_reviewed_target_NEXT_TO_v1": 4,
+    "mme_reviewed_target_AROUND_v1": 2,
+    "mme_reviewed_target_E_LEFTMOST_v1": 2,
+    "mme_reviewed_target_LARGEST_ROAD_v1": 1,
+    "mme_count_intrinsic_region_v1": 17,
+    "mme_reviewed_target_R_DESC_v1": 7,
+    "mme_reviewed_target_E_RIGHTMOST_v1": 1,
+    "mme_reviewed_target_ROW_ROAD_v1": 1,
+    "mme_reviewed_target_LEFTMOST_ROAD_v1": 1,
+    "mme_reviewed_target_GROUP_CLUSTER_v1": 1,
+    "mme_reviewed_target_LARGEST_RIVER_v1": 1,
+    "mme_reviewed_target_R_ASC_v1": 2,
+    "mme_reviewed_target_INSIDE_v1": 1,
+    "mme_count_group_ordinal_v1": 1
+  },
+  "operator_counts": {
+    "REGION": 171,
+    "LOCATE": 408,
+    "SELECT": 214,
+    "ATTRIBUTE": 147,
+    "COUNT": 54,
+    "GROUP": 3
+  },
+  "semantic_node_count": 184,
+  "final_counts": {
+    "CHOICE_SINGLE": 423,
+    "CHOICE_MULTI": 2
+  },
+  "source_sha256": "163b3e08838ec8bf34c1a65135566fa767a19ec53b5cfbb3f8c2c222adee60a7",
+  "review_method": "All 425 source questions read, per-row category/attributes/region/select specifications reviewed; no answer index, source answers, image loading or external API.",
+  "checks": [
+    "parse",
+    "question-aware validate_candidate",
+    "canonical JSON/DSL/JSON roundtrip"
+  ],
+  "corrected_initial_failures": {
+    "count": 25,
+    "reason": "Only SELECT_SEM permits a scope positional argument; removed invalid scope positions on the legacy SELECT modes."
+  },
+  "second_review": {
+    "reference_region_corrections": {
+      "7": "upper-right position attaches to the basketball-court reference",
+      "11": "upper-left building is a reference; surrounding parasols may extend outside its crop",
+      "14": "upper-right bridge/river is the reference for the nearby flag",
+      "21": "lower-right is relative to the larger ship stopping area, not the whole image",
+      "25": "upper-left grassland is the reference for the nearby windmill",
+      "30": "lower-left red ship is the reference for the adjacent buildings",
+      "31": "left-side ship is the reference for the adjacent truck",
+      "32": "left-side buildings are the references for the intervening flowers/trees",
+      "35": "upper-right red-roofed buildings are references for the coastal structure",
+      "39": "upper-right water is context for the nearby tennis court",
+      "45": "upper-left intersection is a reference; the car is above it",
+      "47": "upper-left intersection and crossing describe the reference context",
+      "49": "lower-left football field is the reference for the neighboring ride",
+      "52": "upper-right orange car is a reference for the neighboring car",
+      "55": "top-right roundabout is the reference for neighboring cars",
+      "59": "upper-edge sports stadium is the reference for the neighboring square",
+      "60": "bottom-right pale-blue area is the reference for the neighboring house",
+      "62": "upper-right zebra crossing is a reference for the neighboring car",
+      "67": "lower-left roundabout is the reference for the nearby crane",
+      "68": "upper-left circular water is a reference; surrounding buildings may cross the crop",
+      "73": "upper-left IMAX building is the reference for the container in front of its door",
+      "78": "central white roof is the reference for the neighboring boats",
+      "84": "lower-left basketball court is the reference for the nearby parked car",
+      "85": "upper-right crossing is the reference for the neighboring van",
+      "89": "bottom-left blue object is the reference for the neighboring car",
+      "92": "central white building is the reference for the neighboring board",
+      "95": "far-right building is the reference for nearby ships",
+      "96": "upper-right brown floor is the reference for the neighboring boat",
+      "101": "upper-right white building is the reference for the neighboring building",
+      "139": "far-left is relative to the water area, not the whole image",
+      "151": "lower-right court is the reference for the neighboring recreation facility",
+      "178": "left-side white barrel building is the reference; letters are above it",
+      "183": "right-side white building is the reference; pipeline is outside it",
+      "235": "upper-left bridge is the reference; ships are to its left",
+      "294": "central circular structures are the references; buildings are above them",
+      "360": "upper-left building is the reference; parking line is in front of it",
+      "374": "upper-right gray building is a reference; fencing is outside it"
+    },
+    "group_operators_restored": [
+      160,
+      177
+    ],
+    "condition_loss_fixed": {
+      "21": "preserve lower-right position relative to stopping area in semantic query",
+      "83": "preserve fill part",
+      "316": "preserve ground/background part",
+      "396": "remove leftover interrogative wrapper without dropping tallest condition"
+    },
+    "tallest_not_bbox_area": [
+      375,
+      396,
+      420
+    ],
+    "intrinsic_external_boundary_fix": {
+      "341": "white wake removed from intrinsic has_part; preserved in semantic query"
+    }
+  },
+  "limitations": [
+    "No model execution or visual answer validation",
+    "A legal graph is not evidence of visual accuracy",
+    "Ambiguous source text is flagged in per-row review notes"
+  ]
+}

@@ -1,0 +1,223 @@
+[
+  {
+    "question": "How many cars are in the parking lot at the top left of the picture?",
+    "id": "mme_rs_perception_remote_sensing_count_1152",
+    "split": "choice_train",
+    "changes": [
+      {
+        "code": "restore_count_conditions",
+        "detail": "Copy the complete counted referent into SELECT_SEM MULTI before authoritative COUNT; remove premature crop.",
+        "query": "the cars in the parking lot at the top left of the picture"
+      },
+      {
+        "code": "reviewed_semantic_repair",
+        "detail": "Per-question reviewed correction.",
+        "reviews": [
+          {
+            "id": "mme_rs_perception_remote_sensing_count_1152",
+            "severity": "error",
+            "reason": "仅 REGION 方位裁剪后直接 COUNT，同一区域内的目标没有按题目所说停车场/道路/海岸/围栏水域/草地或同类并列条件进一步限制；粗方位不等于所指具体区域，程序语义会扩大计数集合。",
+            "question": "How many cars are in the parking lot at the top left of the picture?",
+            "choices": [
+              "(A) 11",
+              "(B) 10",
+              "(C) 56",
+              "(D) 99",
+              "(E) This image doesn't feature the count."
+            ],
+            "old_dsl": "INTENT(SIMPLE_COUNT)\nn1=REGION($image0,TOP_LEFT)\nn2=COUNT($n1,T(\"car\"),false)\nFINAL($n2,CHOICE_SINGLE)",
+            "review_scope": "text-only logical plan; no images or source answers read",
+            "families": [
+              "coarse_region_replaces_specific_scope"
+            ],
+            "corrected_dsl": "INTENT(RELATIONAL_COUNT)\nn1=LOCATE($image0,T(\"car\"))\nn2=SELECT_SEM($n1,null,\"all cars are in the parking lot at the top left of the picture\",MULTI,$image0)\nn3=COUNT_ENTITIES($n2,T(\"car\"),false)\nFINAL($n3,CHOICE_SINGLE)",
+            "corrected_static_validation": {
+              "lab_parser_validator_type_checker": "passed",
+              "canonical_roundtrip": "passed",
+              "production_bridge_grammar_and_answer_audit": "root release gate must rerun",
+              "real_model_accuracy": "not evaluated"
+            },
+            "review_file": "reports\\taskgraph\\planner_quality_clean_v1\\mme_semantic_review.json"
+          }
+        ]
+      },
+      {
+        "code": "system_prompt_alignment",
+        "detail": "Use one current system contract for old/new labels, including SELECT_SEM."
+      }
+    ],
+    "findings": [],
+    "before_dsl": "INTENT(SIMPLE_COUNT)\nn1=REGION($image0,TOP_LEFT)\nn2=COUNT($n1,T(\"car\"),false)\nFINAL($n2,CHOICE_SINGLE)",
+    "after_dsl": "INTENT(RELATIONAL_COUNT)\nn1=LOCATE($image0,T(\"car\"))\nn2=SELECT_SEM($n1,null,\"all cars are in the parking lot at the top left of the picture\",MULTI,$image0)\nn3=COUNT_ENTITIES($n2,T(\"car\"),false)\nFINAL($n3,CHOICE_SINGLE)",
+    "status": "retained"
+  },
+  {
+    "question": "How many boats are docked in the water on the top right?",
+    "id": "mme_rs_perception_remote_sensing_count_0113",
+    "split": "choice_train",
+    "changes": [
+      {
+        "code": "reviewed_semantic_repair",
+        "detail": "Per-question reviewed correction.",
+        "reviews": [
+          {
+            "id": "mme_rs_perception_remote_sensing_count_0113",
+            "severity": "error",
+            "reason": "COUNT.entities 直接返回候选集合长度，不消费 params.target 的颜色/状态；当前候选来源未施加 COUNT 独有的属性，因而会把不满足条件的目标计入。",
+            "question": "How many boats are docked in the water on the top right?",
+            "choices": [
+              "(A) 8",
+              "(B) 1",
+              "(C) 2",
+              "(D) 3",
+              "(E) This image doesn't feature the count."
+            ],
+            "old_dsl": "INTENT(RELATIONAL_COUNT)\nn1=REGION($image0,TOP_RIGHT)\nn2=LOCATE($n1,T(\"water\"))\nn3=LOCATE($n1,T(\"boat\"))\nn4=SELECT_REL($n3,$n2,INSIDE)\nn5=COUNT_ENTITIES($n4,T(\"boat\",state=\"docked\"),false)\nFINAL($n5,CHOICE_SINGLE)",
+            "review_scope": "text-only logical plan; no images or source answers read",
+            "families": [
+              "count_target_not_consumed"
+            ],
+            "corrected_dsl": "INTENT(RELATIONAL_COUNT)\nn1=LOCATE($image0,T(\"boat\"))\nn2=SELECT_SEM($n1,null,\"all boats are docked in the water on the top right\",MULTI,$image0)\nn3=COUNT_ENTITIES($n2,T(\"boat\"),false)\nFINAL($n3,CHOICE_SINGLE)",
+            "corrected_static_validation": {
+              "lab_parser_validator_type_checker": "passed",
+              "canonical_roundtrip": "passed",
+              "production_bridge_grammar_and_answer_audit": "root release gate must rerun",
+              "real_model_accuracy": "not evaluated"
+            },
+            "review_file": "reports\\taskgraph\\planner_quality_clean_v1\\mme_semantic_review.json"
+          }
+        ]
+      },
+      {
+        "code": "system_prompt_alignment",
+        "detail": "Use one current system contract for old/new labels, including SELECT_SEM."
+      }
+    ],
+    "findings": [],
+    "before_dsl": "INTENT(RELATIONAL_COUNT)\nn1=REGION($image0,TOP_RIGHT)\nn2=LOCATE($n1,T(\"water\"))\nn3=LOCATE($n1,T(\"boat\"))\nn4=SELECT_REL($n3,$n2,INSIDE)\nn5=COUNT_ENTITIES($n4,T(\"boat\",state=\"docked\"),false)\nFINAL($n5,CHOICE_SINGLE)",
+    "after_dsl": "INTENT(RELATIONAL_COUNT)\nn1=LOCATE($image0,T(\"boat\"))\nn2=SELECT_SEM($n1,null,\"all boats are docked in the water on the top right\",MULTI,$image0)\nn3=COUNT_ENTITIES($n2,T(\"boat\"),false)\nFINAL($n3,CHOICE_SINGLE)",
+    "status": "retained"
+  },
+  {
+    "question": "How many ships are there in the second row of docks from the left?",
+    "id": "mme_rs_perception_remote_sensing_count_2487",
+    "split": "choice_train",
+    "changes": [
+      {
+        "code": "reviewed_semantic_repair",
+        "detail": "Per-question reviewed correction.",
+        "reviews": [
+          {
+            "id": "mme_rs_perception_remote_sensing_count_2487",
+            "severity": "error",
+            "category": "group_runtime_contract",
+            "reason": "生产 GROUP(COLUMN) 返回带 group_id 的原 dock 实体，SELECT_ORD(...,2,LEFT_TO_RIGHT) 实际选第二个 dock，不是第二排 docks；随后 COUNT_IMAGE 因而在单 dock 区域计数。改为船候选级 SEM 完整行序描述，再 COUNT_ENTITIES，保留“第二排码头从左”的题意且不修改运行时。",
+            "question": "How many ships are there in the second row of docks from the left?",
+            "original_dsl": "n1=LOCATE($image0,T(\"dock\"))\nn2=GROUP($n1,COLUMN)\nn3=SELECT_ORD($n2,null,2,LEFT_TO_RIGHT)\nn4=SELECT_SUBREGION($n3,null,INSIDE)\nn5=COUNT_IMAGE($n4,T(\"ship\"),false)\nFINAL($n5,CHOICE_SINGLE)",
+            "corrected_dsl": "INTENT(RELATIONAL_COUNT)\nn1=LOCATE($image0,T(\"ship\"))\nn2=SELECT_SEM($n1,null,\"ships in the second row of docks from the left\",MULTI,$image0)\nn3=COUNT_ENTITIES($n2,T(\"ship\"),false)\nFINAL($n3,CHOICE_SINGLE)",
+            "corrected_dsl_validation": {
+              "parser": true,
+              "question_aware_validator": true,
+              "canonical_roundtrip": true,
+              "production_bridge": true,
+              "production_node_count": 3
+            },
+            "review_file": "reports\\taskgraph\\planner_quality_clean_v1\\new_mme_synthetic_review.json"
+          }
+        ]
+      }
+    ],
+    "findings": [],
+    "before_dsl": "n1=LOCATE($image0,T(\"dock\"))\nn2=GROUP($n1,COLUMN)\nn3=SELECT_ORD($n2,null,2,LEFT_TO_RIGHT)\nn4=SELECT_SUBREGION($n3,null,INSIDE)\nn5=COUNT_IMAGE($n4,T(\"ship\"),false)\nFINAL($n5,CHOICE_SINGLE)",
+    "after_dsl": "INTENT(RELATIONAL_COUNT)\nn1=LOCATE($image0,T(\"ship\"))\nn2=SELECT_SEM($n1,null,\"ships in the second row of docks from the left\",MULTI,$image0)\nn3=COUNT_ENTITIES($n2,T(\"ship\"),false)\nFINAL($n3,CHOICE_SINGLE)",
+    "status": "retained"
+  },
+  {
+    "question": "What color is the van on the street between the two rows of buildings in the bottom left corner of the picture?",
+    "id": "mme_rs_perception_remote_sensing_color_3128",
+    "split": "choice_train",
+    "changes": [
+      {
+        "code": "reviewed_semantic_repair",
+        "detail": "Per-question reviewed correction.",
+        "reviews": [
+          {
+            "id": "mme_rs_perception_remote_sensing_color_3128",
+            "severity": "error",
+            "category": "condition_omission",
+            "reason": "遗漏 on the street between the two rows of buildings；通用颜色残余问题不能恢复该限定。",
+            "question": "What color is the van on the street between the two rows of buildings in the bottom left corner of the picture?",
+            "original_dsl": "INTENT(OTHER)\nn1=REGION($image0,BOTTOM_LEFT)\nn2=LOCATE($n1,T(\"van\"))\nFINAL_QUESTION($n2,CHOICE_SINGLE,\"What color or colors are visible on the selected object or objects?\")",
+            "corrected_dsl": "INTENT(OTHER)\nn1=LOCATE($image0,T(\"van\"))\nn2=SELECT_SEM($n1,null,\"the van on the street between the two rows of buildings in the bottom left corner of the picture\",SINGLE,$image0)\nn3=ATTRIBUTE($n2,\"color\")\nFINAL($n3,CHOICE_SINGLE)",
+            "corrected_dsl_validation": {
+              "parser": true,
+              "question_aware_validator": true,
+              "canonical_roundtrip": true,
+              "production_bridge": true,
+              "production_node_count": 3
+            },
+            "review_file": "reports\\taskgraph\\planner_quality_clean_v1\\new_mme_synthetic_review.json"
+          }
+        ]
+      }
+    ],
+    "findings": [],
+    "before_dsl": "INTENT(OTHER)\nn1=REGION($image0,BOTTOM_LEFT)\nn2=LOCATE($n1,T(\"van\"))\nFINAL_QUESTION($n2,CHOICE_SINGLE,\"What color or colors are visible on the selected object or objects?\")",
+    "after_dsl": "INTENT(OTHER)\nn1=LOCATE($image0,T(\"van\"))\nn2=SELECT_SEM($n1,null,\"the van on the street between the two rows of buildings in the bottom left corner of the picture\",SINGLE,$image0)\nn3=ATTRIBUTE($n2,\"color\")\nFINAL($n3,CHOICE_SINGLE)",
+    "status": "retained"
+  },
+  {
+    "question": "What is the shortest route from the road to the right of the longest blue rectangular building, located slightly above the center of the image, to the intersection above the nearest lake to the top left corner of the building?",
+    "id": "xlrs_002010",
+    "split": "choice_train",
+    "changes": [
+      {
+        "code": "reviewed_semantic_repair",
+        "detail": "Per-question reviewed correction.",
+        "reviews": [
+          {
+            "id": "xlrs_002010",
+            "sample_id": "xlrs_002010",
+            "origin": "baseline",
+            "severity": "error",
+            "risk_level": "high",
+            "issue_codes": [
+              "nearest_replaced_by_near",
+              "reference_corner_condition_omitted"
+            ],
+            "question": "What is the shortest route from the road to the right of the longest blue rectangular building, located slightly above the center of the image, to the intersection above the nearest lake to the top left corner of the building?",
+            "original_dsl": "INTENT(ROUTE_PLANNING)\nn1=LOCATE($image0,T(\"building\",color=\"blue\",shape=\"rectangular\"))\nn2=SELECT_SEM($n1,null,\"the longest blue rectangular building located slightly above the center of the image\",SINGLE,$image0)\nn3=LOCATE($image0,T(\"road\"))\nn4=SELECT_REL($n3,$n2,RIGHT_OF)\nn5=LOCATE($image0,T(\"lake\"))\nn6=SELECT_REL($n5,$n2,NEAR)\nn7=LOCATE($image0,T(\"intersection\"))\nn8=SELECT_REL($n7,$n6,ABOVE)\nn9=BUILD_ROUTE_CONTEXT($image0,$n4,$n8)\nFINAL_QUESTION($n9,CHOICE_SINGLE,\"Which option describes the shortest route between the selected start and goal?\")",
+            "old_dsl": "INTENT(ROUTE_PLANNING)\nn1=LOCATE($image0,T(\"building\",color=\"blue\",shape=\"rectangular\"))\nn2=SELECT_SEM($n1,null,\"the longest blue rectangular building located slightly above the center of the image\",SINGLE,$image0)\nn3=LOCATE($image0,T(\"road\"))\nn4=SELECT_REL($n3,$n2,RIGHT_OF)\nn5=LOCATE($image0,T(\"lake\"))\nn6=SELECT_REL($n5,$n2,NEAR)\nn7=LOCATE($image0,T(\"intersection\"))\nn8=SELECT_REL($n7,$n6,ABOVE)\nn9=BUILD_ROUTE_CONTEXT($image0,$n4,$n8)\nFINAL_QUESTION($n9,CHOICE_SINGLE,\"Which option describes the shortest route between the selected start and goal?\")",
+            "reason": "NEAR 只测试邻近，不能表达 nearest，更遗漏 building 的 top-left corner 距离参照。",
+            "evidence": "NEAR 只测试邻近，不能表达 nearest，更遗漏 building 的 top-left corner 距离参照。",
+            "disposition": "correct",
+            "corrected_dsl": "INTENT(ROUTE_PLANNING)\nn1=LOCATE($image0,T(\"building\",color=\"blue\",shape=\"rectangular\"))\nn2=SELECT_SEM($n1,null,\"the longest blue rectangular building located slightly above the center of the image\",SINGLE,$image0)\nn3=LOCATE($image0,T(\"road\"))\nn4=SELECT_REL($n3,$n2,RIGHT_OF)\nn5=LOCATE($image0,T(\"lake\"))\nn6=SELECT_SEM($n5,$n2,\"the lake nearest to the top-left corner of the referenced longest blue rectangular building\",SINGLE,$image0)\nn7=LOCATE($image0,T(\"intersection\"))\nn8=SELECT_REL($n7,$n6,ABOVE)\nn9=BUILD_ROUTE_CONTEXT($image0,$n4,$n8)\nFINAL_QUESTION($n9,CHOICE_SINGLE,\"Which option describes the shortest route between the selected start and goal?\")",
+            "validation": {
+              "lab_original_question_inputs_type": true,
+              "canonical_roundtrip": true,
+              "constraint_complete": true,
+              "production_bridge": true,
+              "authoritative_count_preserved": true,
+              "route_context_preserved": true,
+              "answer_format_preserved": true,
+              "real_model_or_image_accuracy": "not_tested"
+            },
+            "review_file": "reports\\taskgraph\\planner_quality_clean_v1\\xlrs_semantic_review.json"
+          }
+        ]
+      }
+    ],
+    "findings": [
+      {
+        "code": "condition_not_in_graph",
+        "detail": "Question modifiers/background not represented in contributing nodes; may be omitted or deferred to final VLM.",
+        "terms": [
+          "shortest"
+        ]
+      }
+    ],
+    "before_dsl": "INTENT(ROUTE_PLANNING)\nn1=LOCATE($image0,T(\"building\",color=\"blue\",shape=\"rectangular\"))\nn2=SELECT_SEM($n1,null,\"the longest blue rectangular building located slightly above the center of the image\",SINGLE,$image0)\nn3=LOCATE($image0,T(\"road\"))\nn4=SELECT_REL($n3,$n2,RIGHT_OF)\nn5=LOCATE($image0,T(\"lake\"))\nn6=SELECT_REL($n5,$n2,NEAR)\nn7=LOCATE($image0,T(\"intersection\"))\nn8=SELECT_REL($n7,$n6,ABOVE)\nn9=BUILD_ROUTE_CONTEXT($image0,$n4,$n8)\nFINAL_QUESTION($n9,CHOICE_SINGLE,\"Which option describes the shortest route between the selected start and goal?\")",
+    "after_dsl": "INTENT(ROUTE_PLANNING)\nn1=LOCATE($image0,T(\"building\",color=\"blue\",shape=\"rectangular\"))\nn2=SELECT_SEM($n1,null,\"the longest blue rectangular building located slightly above the center of the image\",SINGLE,$image0)\nn3=LOCATE($image0,T(\"road\"))\nn4=SELECT_REL($n3,$n2,RIGHT_OF)\nn5=LOCATE($image0,T(\"lake\"))\nn6=SELECT_SEM($n5,$n2,\"the lake nearest to the top-left corner of the referenced longest blue rectangular building\",SINGLE,$image0)\nn7=LOCATE($image0,T(\"intersection\"))\nn8=SELECT_REL($n7,$n6,ABOVE)\nn9=BUILD_ROUTE_CONTEXT($image0,$n4,$n8)\nFINAL_QUESTION($n9,CHOICE_SINGLE,\"Which option describes the shortest route between the selected start and goal?\")",
+    "status": "quarantined"
+  }
+]

@@ -1,0 +1,706 @@
+{
+  "spatial_diagnostics_clear23": {
+    "A_original": {
+      "row_correct": 14,
+      "column_correct": 18,
+      "count": 23,
+      "fixed_transform_hits": {
+        "identity": 11,
+        "horizontal_mirror": 4,
+        "vertical_mirror": 1,
+        "rotate_180": 0,
+        "rotate_90": 0,
+        "rotate_270": 0,
+        "transpose": 2,
+        "anti_transpose": 4
+      }
+    },
+    "B_visual_grid": {
+      "row_correct": 16,
+      "column_correct": 17,
+      "count": 23,
+      "fixed_transform_hits": {
+        "identity": 12,
+        "horizontal_mirror": 2,
+        "vertical_mirror": 3,
+        "rotate_180": 0,
+        "rotate_90": 0,
+        "rotate_270": 0,
+        "transpose": 3,
+        "anti_transpose": 4
+      }
+    }
+  },
+  "prose_recovery_diagnostic": {
+    "C_describe_map": {
+      "note": "Post-run, label-independent diagnostic; does not replace frozen strict-field results.",
+      "clear_hits": 0,
+      "clear_count": 23,
+      "resolved_all25": 2,
+      "reason_counts": {
+        "negative_or_uncertain_change_statement": 21,
+        "one_unique_cell_phrase": 2,
+        "no_specific_3x3_phrase": 2
+      },
+      "entries": [
+        {
+          "id": "RSU_D_0033",
+          "reviewed_region": "right",
+          "raw_output": "There is no change in the scene.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0058",
+          "reviewed_region": "right",
+          "raw_output": "There is no change.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0064",
+          "reviewed_region": "top_left",
+          "raw_output": "There is no change.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0071",
+          "reviewed_region": "top_left",
+          "raw_output": "There is no change.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0073",
+          "reviewed_region": "left",
+          "raw_output": "Houses appear in the lower-left corner.",
+          "mapping": {
+            "status": "mapped",
+            "location_text": "Houses appear in the lower-left corner",
+            "matched_phrases": [
+              {
+                "region": "bottom_left",
+                "phrase": "lower left",
+                "start": 21,
+                "end": 31
+              }
+            ],
+            "candidates": [
+              "bottom_left"
+            ],
+            "mapped_region": "bottom_left",
+            "reason": "one_unique_cell_phrase",
+            "source": "whole_prose_diagnostic"
+          }
+        },
+        {
+          "id": "RSU_D_0097",
+          "reviewed_region": "right",
+          "raw_output": "Buildings appear in the upper-left corner.",
+          "mapping": {
+            "status": "mapped",
+            "location_text": "Buildings appear in the upper-left corner",
+            "matched_phrases": [
+              {
+                "region": "top_left",
+                "phrase": "upper left",
+                "start": 24,
+                "end": 34
+              }
+            ],
+            "candidates": [
+              "top_left"
+            ],
+            "mapped_region": "top_left",
+            "reason": "one_unique_cell_phrase",
+            "source": "whole_prose_diagnostic"
+          }
+        },
+        {
+          "id": "RSU_D_0131",
+          "reviewed_region": "bottom",
+          "raw_output": "Houses and a road appear in the lower part of the scene.",
+          "mapping": {
+            "status": "unresolved",
+            "location_text": "Houses and a road appear in the lower part of the scene",
+            "matched_phrases": [],
+            "candidates": [],
+            "mapped_region": null,
+            "reason": "no_specific_3x3_phrase",
+            "source": "whole_prose_diagnostic"
+          }
+        },
+        {
+          "id": "RSU_D_0139",
+          "reviewed_region": "top_left",
+          "raw_output": "There is no change in the scene.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0141",
+          "reviewed_region": "top_right",
+          "raw_output": "There is no change in the scene.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0142",
+          "reviewed_region": "left",
+          "raw_output": "There is no change in the scene.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0145",
+          "reviewed_region": "unclear",
+          "raw_output": "There is no change.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0147",
+          "reviewed_region": "unclear",
+          "raw_output": "There is no change in the scene.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0148",
+          "reviewed_region": "right",
+          "raw_output": "There is no change in the scene.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0175",
+          "reviewed_region": "left",
+          "raw_output": "There is no change.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0179",
+          "reviewed_region": "top_right",
+          "raw_output": "There is no difference.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0206",
+          "reviewed_region": "left",
+          "raw_output": "There is no change.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0224",
+          "reviewed_region": "bottom",
+          "raw_output": "There is no change.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0233",
+          "reviewed_region": "top",
+          "raw_output": "There is no change in the scene.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0252",
+          "reviewed_region": "top",
+          "raw_output": "There is no change.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0255",
+          "reviewed_region": "top_right",
+          "raw_output": "There is no change.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0277",
+          "reviewed_region": "left",
+          "raw_output": "There is no change in the scene.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0279",
+          "reviewed_region": "left",
+          "raw_output": "There is no difference.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0282",
+          "reviewed_region": "top",
+          "raw_output": "There is no change in the scene.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0329",
+          "reviewed_region": "bottom_left",
+          "raw_output": "There is no change.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0362",
+          "reviewed_region": "bottom",
+          "raw_output": "Houses appear at the bottom of the scene.",
+          "mapping": {
+            "status": "unresolved",
+            "location_text": "Houses appear at the bottom of the scene",
+            "matched_phrases": [],
+            "candidates": [],
+            "mapped_region": null,
+            "reason": "no_specific_3x3_phrase",
+            "source": "whole_prose_diagnostic"
+          }
+        }
+      ]
+    },
+    "D_grid_describe_map": {
+      "note": "Post-run, label-independent diagnostic; does not replace frozen strict-field results.",
+      "clear_hits": 4,
+      "clear_count": 23,
+      "resolved_all25": 6,
+      "reason_counts": {
+        "negative_or_uncertain_change_statement": 15,
+        "no_specific_3x3_phrase": 4,
+        "one_unique_cell_phrase": 6
+      },
+      "entries": [
+        {
+          "id": "RSU_D_0033",
+          "reviewed_region": "right",
+          "raw_output": "There is no change.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0058",
+          "reviewed_region": "right",
+          "raw_output": "A parking lot and a building appear on the right side of the scene.",
+          "mapping": {
+            "status": "unresolved",
+            "location_text": "A parking lot and a building appear on the right side of the scene",
+            "matched_phrases": [],
+            "candidates": [],
+            "mapped_region": null,
+            "reason": "no_specific_3x3_phrase",
+            "source": "whole_prose_diagnostic"
+          }
+        },
+        {
+          "id": "RSU_D_0064",
+          "reviewed_region": "top_left",
+          "raw_output": "A building appears in the upper-left corner of the scene.",
+          "mapping": {
+            "status": "mapped",
+            "location_text": "A building appears in the upper-left corner of the scene",
+            "matched_phrases": [
+              {
+                "region": "top_left",
+                "phrase": "upper left",
+                "start": 26,
+                "end": 36
+              }
+            ],
+            "candidates": [
+              "top_left"
+            ],
+            "mapped_region": "top_left",
+            "reason": "one_unique_cell_phrase",
+            "source": "whole_prose_diagnostic"
+          }
+        },
+        {
+          "id": "RSU_D_0071",
+          "reviewed_region": "top_left",
+          "raw_output": "A road appears in the upper-right corner of the scene.",
+          "mapping": {
+            "status": "mapped",
+            "location_text": "A road appears in the upper-right corner of the scene",
+            "matched_phrases": [
+              {
+                "region": "top_right",
+                "phrase": "upper right",
+                "start": 22,
+                "end": 33
+              }
+            ],
+            "candidates": [
+              "top_right"
+            ],
+            "mapped_region": "top_right",
+            "reason": "one_unique_cell_phrase",
+            "source": "whole_prose_diagnostic"
+          }
+        },
+        {
+          "id": "RSU_D_0073",
+          "reviewed_region": "left",
+          "raw_output": "There is no change.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0097",
+          "reviewed_region": "right",
+          "raw_output": "New buildings appear in the upper-left corner of the scene.",
+          "mapping": {
+            "status": "mapped",
+            "location_text": "New buildings appear in the upper-left corner of the scene",
+            "matched_phrases": [
+              {
+                "region": "top_left",
+                "phrase": "upper left",
+                "start": 28,
+                "end": 38
+              }
+            ],
+            "candidates": [
+              "top_left"
+            ],
+            "mapped_region": "top_left",
+            "reason": "one_unique_cell_phrase",
+            "source": "whole_prose_diagnostic"
+          }
+        },
+        {
+          "id": "RSU_D_0131",
+          "reviewed_region": "bottom",
+          "raw_output": "Houses and a road appear in the lower part of the scene.",
+          "mapping": {
+            "status": "unresolved",
+            "location_text": "Houses and a road appear in the lower part of the scene",
+            "matched_phrases": [],
+            "candidates": [],
+            "mapped_region": null,
+            "reason": "no_specific_3x3_phrase",
+            "source": "whole_prose_diagnostic"
+          }
+        },
+        {
+          "id": "RSU_D_0139",
+          "reviewed_region": "top_left",
+          "raw_output": "A building appears in the upper-left corner of the scene.",
+          "mapping": {
+            "status": "mapped",
+            "location_text": "A building appears in the upper-left corner of the scene",
+            "matched_phrases": [
+              {
+                "region": "top_left",
+                "phrase": "upper left",
+                "start": 26,
+                "end": 36
+              }
+            ],
+            "candidates": [
+              "top_left"
+            ],
+            "mapped_region": "top_left",
+            "reason": "one_unique_cell_phrase",
+            "source": "whole_prose_diagnostic"
+          }
+        },
+        {
+          "id": "RSU_D_0141",
+          "reviewed_region": "top_right",
+          "raw_output": "There is no change.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0142",
+          "reviewed_region": "left",
+          "raw_output": "There is no change.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0145",
+          "reviewed_region": "unclear",
+          "raw_output": "There is no difference.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0147",
+          "reviewed_region": "unclear",
+          "raw_output": "There is no change.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0148",
+          "reviewed_region": "right",
+          "raw_output": "A row of houses appears in the upper part of the scene.",
+          "mapping": {
+            "status": "unresolved",
+            "location_text": "A row of houses appears in the upper part of the scene",
+            "matched_phrases": [],
+            "candidates": [],
+            "mapped_region": null,
+            "reason": "no_specific_3x3_phrase",
+            "source": "whole_prose_diagnostic"
+          }
+        },
+        {
+          "id": "RSU_D_0175",
+          "reviewed_region": "left",
+          "raw_output": "There is no change.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0179",
+          "reviewed_region": "top_right",
+          "raw_output": "There is no difference.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0206",
+          "reviewed_region": "left",
+          "raw_output": "There is no change.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0224",
+          "reviewed_region": "bottom",
+          "raw_output": "There is no difference.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0233",
+          "reviewed_region": "top",
+          "raw_output": "There is no change.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0252",
+          "reviewed_region": "top",
+          "raw_output": "There is no change.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0255",
+          "reviewed_region": "top_right",
+          "raw_output": "A building appears in the upper-right corner of the scene.",
+          "mapping": {
+            "status": "mapped",
+            "location_text": "A building appears in the upper-right corner of the scene",
+            "matched_phrases": [
+              {
+                "region": "top_right",
+                "phrase": "upper right",
+                "start": 26,
+                "end": 37
+              }
+            ],
+            "candidates": [
+              "top_right"
+            ],
+            "mapped_region": "top_right",
+            "reason": "one_unique_cell_phrase",
+            "source": "whole_prose_diagnostic"
+          }
+        },
+        {
+          "id": "RSU_D_0277",
+          "reviewed_region": "left",
+          "raw_output": "There is no difference.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0279",
+          "reviewed_region": "left",
+          "raw_output": "There is no difference.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0282",
+          "reviewed_region": "top",
+          "raw_output": "There is no change.",
+          "mapping": {
+            "status": "unresolved",
+            "mapped_region": null,
+            "reason": "negative_or_uncertain_change_statement"
+          }
+        },
+        {
+          "id": "RSU_D_0329",
+          "reviewed_region": "bottom_left",
+          "raw_output": "A road appears in the lower-left corner of the scene.",
+          "mapping": {
+            "status": "mapped",
+            "location_text": "A road appears in the lower-left corner of the scene",
+            "matched_phrases": [
+              {
+                "region": "bottom_left",
+                "phrase": "lower left",
+                "start": 22,
+                "end": 32
+              }
+            ],
+            "candidates": [
+              "bottom_left"
+            ],
+            "mapped_region": "bottom_left",
+            "reason": "one_unique_cell_phrase",
+            "source": "whole_prose_diagnostic"
+          }
+        },
+        {
+          "id": "RSU_D_0362",
+          "reviewed_region": "bottom",
+          "raw_output": "Houses are built at the bottom of the scene.",
+          "mapping": {
+            "status": "unresolved",
+            "location_text": "Houses are built at the bottom of the scene",
+            "matched_phrases": [],
+            "candidates": [],
+            "mapped_region": null,
+            "reason": "no_specific_3x3_phrase",
+            "source": "whole_prose_diagnostic"
+          }
+        }
+      ]
+    }
+  },
+  "A_B_exact_mcnemar": {
+    "improved": 4,
+    "worsened": 3,
+    "two_sided_p": 1.0
+  },
+  "guardrails": "No model calls, no changed prompts, no altered predictions, no label-fitted mapping.",
+  "source_predictions_sha256": "5ced13c882cfca98a0ada5da9923e0c7a021f07620cfa9eeeec0a49c6b9aff62",
+  "contact_sheets": [
+    "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\review_sheets\\review_01.png",
+    "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\review_sheets\\review_02.png",
+    "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\review_sheets\\review_03.png",
+    "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\review_sheets\\review_04.png",
+    "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\review_sheets\\review_05.png",
+    "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\review_sheets\\review_06.png",
+    "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\review_sheets\\review_07.png"
+  ]
+}

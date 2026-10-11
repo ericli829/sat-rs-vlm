@@ -1,0 +1,210 @@
+{
+  "generator_version": "planner-synthetic-locate-v1",
+  "source": "synthetic_programmatic_plan",
+  "config": {
+    "generator_version": "planner-synthetic-locate-v1",
+    "seed": 20261010,
+    "count": 2000,
+    "validation_fraction": 0.1,
+    "ratios": {
+      "category": 0.45,
+      "intrinsic": 0.25,
+      "region": 0.15,
+      "extreme": 0.05,
+      "ordinal": 0.05,
+      "semantic": 0.05
+    },
+    "max_output_tokens": 512,
+    "max_sequence_length": 1088,
+    "symbolic_image": "synthetic/image0.png",
+    "symbolic_image_size": 4096
+  },
+  "population_count": 2000,
+  "target_format": "dsl",
+  "planner_dsl_version": "taskgraph-v1.1-dsl-v1",
+  "prompt_version": "taskgraph-v1.1-strict-batch-contract-v3",
+  "extension_version": "planner-bbox-final-v1",
+  "split_categories": {
+    "train": [
+      "ship",
+      "cargo ship",
+      "chimney",
+      "helipad",
+      "oil tank",
+      "bridge",
+      "water tower",
+      "railway station",
+      "train",
+      "sports field",
+      "tennis court",
+      "greenhouse",
+      "stadium",
+      "antenna",
+      "building",
+      "vehicle",
+      "fishing boat",
+      "car",
+      "storage tank",
+      "truck",
+      "dock",
+      "container",
+      "tower",
+      "parking area",
+      "airplane",
+      "wind turbine",
+      "silo",
+      "football field",
+      "swimming pool",
+      "bus"
+    ],
+    "validation": [
+      "transmission tower",
+      "warehouse",
+      "yacht",
+      "residential building",
+      "solar panel",
+      "roundabout",
+      "industrial building",
+      "basketball court",
+      "hangar",
+      "runway"
+    ]
+  },
+  "statistics": {
+    "total": 2000,
+    "split_counts": {
+      "train": 1800,
+      "validation": 200
+    },
+    "families": {
+      "category": 900,
+      "semantic": 100,
+      "region": 300,
+      "intrinsic": 500,
+      "ordinal": 100,
+      "extreme": 100
+    },
+    "categories": {
+      "airplane": 57,
+      "antenna": 66,
+      "basketball court": 22,
+      "bridge": 55,
+      "building": 63,
+      "bus": 58,
+      "car": 53,
+      "cargo ship": 66,
+      "chimney": 70,
+      "container": 62,
+      "dock": 46,
+      "fishing boat": 57,
+      "football field": 55,
+      "greenhouse": 55,
+      "hangar": 23,
+      "helipad": 67,
+      "industrial building": 15,
+      "oil tank": 67,
+      "parking area": 59,
+      "railway station": 62,
+      "residential building": 24,
+      "roundabout": 15,
+      "runway": 18,
+      "ship": 58,
+      "silo": 61,
+      "solar panel": 18,
+      "sports field": 58,
+      "stadium": 70,
+      "storage tank": 60,
+      "swimming pool": 66,
+      "tennis court": 52,
+      "tower": 45,
+      "train": 56,
+      "transmission tower": 15,
+      "truck": 60,
+      "vehicle": 63,
+      "warehouse": 25,
+      "water tower": 74,
+      "wind turbine": 59,
+      "yacht": 25
+    },
+    "attributes": {
+      "color": 186,
+      "has_part": 48,
+      "shape": 144,
+      "size": 91,
+      "state": 32,
+      "pattern": 8
+    },
+    "operators": {
+      "LOCATE": 2000,
+      "SELECT": 300,
+      "REGION": 300
+    },
+    "select_modes": {
+      "SEMANTIC": 100,
+      "ORDINAL": 100,
+      "EXTREME": 100
+    },
+    "node_counts": {
+      "1": 1400,
+      "2": 600
+    },
+    "final_types": {
+      "BBOX": 2000
+    },
+    "one_node_locate_count": 1400,
+    "one_node_locate_fraction": 0.7,
+    "validation_pass_counts": {
+      "schema": 2000,
+      "validator": 2000,
+      "type_checker": 2000,
+      "canonical_roundtrip": 2000,
+      "constraint_grammar": 2000,
+      "production_input": 2000,
+      "structured_semantics": 2000,
+      "minimal_path": 2000,
+      "bbox_static_source": 2000
+    },
+    "exact_text_duplicates": 0,
+    "cross_split_exact_text": 0,
+    "cross_split_categories": 0,
+    "cross_split_template_families": 0,
+    "cross_split_near_template_skeletons": 0,
+    "within_split_reused_skeleton_rows": 1935,
+    "dsl_characters_mean": 77.819,
+    "dsl_characters_max": 168,
+    "structural_split": "Graph skeletons repeat intentionally; category, action-template families, and available spatial rule values are held out. One-node LOCATE has no further structural variant to hold out."
+  },
+  "old_80_questions_excluded": 80,
+  "old_80_exact_overlap": 0,
+  "old_80_sha256": "5d10f60641666304352591dda039bbcf2eb4e2cfc7ef33f8eeb0eb595cb133f7",
+  "source_file_sha256": {
+    "taskgraph_lab/taskgraph/schema.py": "92774f42428793976a7929f0349a280178ab9a86511afcd3be2b1e862436ddda",
+    "taskgraph_lab/taskgraph/enums.py": "e64830f2f7e27b2899232d3c99958c9dbfd6ef1ef2e7c9e11a222db4cf749796",
+    "taskgraph_lab/taskgraph/type_checker.py": "266c09b218b29fe0f2a476e2e3c4b79ce4c9bae5de49fc7c6156a3275bd4058f",
+    "taskgraph_lab/taskgraph/validator.py": "7cb5ef49b55682af35bc9c402b6589c547f537c43e0aec8efbaf0ebe07d9428a",
+    "taskgraph_lab/taskgraph/dsl/compiler.py": "b2c1f5a86ce4d530aea636f33cb413815f4d3d7433f1d7378d240781762a9230",
+    "taskgraph_lab/taskgraph/dsl/parser.py": "afb660ef09a8c73016c50a0cb268442c1d0fe260ffbce0e51576d49bbedc6fe5",
+    "taskgraph_lab/taskgraph/dsl/constraint.py": "46e6f5a6f958068473d46311c1d46ebc298407a34bc14733055b0a6d651bd627",
+    "taskgraph_lab/prompts/planner_student_system_prompt.txt": "c70dc835cf931ab8e6221d5ad533e1e0cff19f87176a0ff7a4dc43c13a957ed6",
+    "src/sat_rs_vlm/competition/protocol_v2/adapter.py": "5011836f27a896dd6e18f2b60012b1dfb7e294af069a93d9c3afeacb6d226e44",
+    "src/sat_rs_vlm/competition/protocol_v2/answers.py": "28c5bb2296811d6967448a9b2b515adbae02c1e5e2795a5dcf3e1c08b80bd017",
+    "src/sat_rs_vlm/taskgraph/schema.py": "b47d8ada46d24536b71a429911d3f737190472712c91360e49343d58b46001a9",
+    "src/sat_rs_vlm/taskgraph/runtime_types.py": "b4d3d445c3eb5bfca34f8174c318b397158fecb36e2d60d444c5c0b179ac5565",
+    "src/sat_rs_vlm/taskgraph/providers.py": "aca9b6fc4ac1937b44005f220873a2b331cc5f4d1c6edd6725f468955c4da791"
+  },
+  "generator_sha256": "95230076c9ecb58f2e72fc10df4e7b2d0cf002a40a49d33e35a12bfd63002a48",
+  "files": {
+    "synthetic_samples.jsonl": {
+      "sha256": "f0f0c257337bd9ed18d95c1480c79a075117f668874af68db6145fc64949770d"
+    },
+    "train.jsonl": {
+      "sha256": "d736cb7073d2ae9818539b29f419722187a87dbc847c5d37c48031f1280d7582"
+    },
+    "validation.jsonl": {
+      "sha256": "5ca482e8095de695773e0132d69f9a0444a9caba856fa443fbd6a47f78f6aaa4"
+    }
+  },
+  "visual_answer_verified": false,
+  "model_inference_executed": false,
+  "training_started": false
+}

@@ -1,0 +1,215 @@
+{
+  "experiment_id": "change-region-b09061ac924b46c0bcbfa76f43ce1ff5",
+  "test_group": "赛事请求 D 组：双时相主要变化区域",
+  "base_model": "Qwen3-VL-2B-Instruct",
+  "lora_route": "route_b_stage2_batch8",
+  "execution": "云端 NVIDIA GeForce RTX 4080 SUPER；BF16；batch size 4",
+  "sample_count": 25,
+  "format_valid_count": 25,
+  "format_valid_rate": 1.0,
+  "inference_seconds": 2.950653038918972,
+  "model_load_seconds": 5.839463047683239,
+  "review_clear_count": 23,
+  "exact_region_hits": 10,
+  "exact_accuracy_clear": 0.43478260869565216,
+  "strict_hits_in_all_25": 10,
+  "strict_accuracy_all_25": 0.4,
+  "unclear_count": 2,
+  "unclear_ids": [
+    "RSU_D_0145",
+    "RSU_D_0147"
+  ],
+  "row_matches_of_clear": 14,
+  "row_match_rate_clear": 0.6086956521739131,
+  "column_matches_of_clear": 17,
+  "column_match_rate_clear": 0.7391304347826086,
+  "prediction_distribution": {
+    "bottom_left": 9,
+    "top_left": 7,
+    "top_right": 3,
+    "bottom": 2,
+    "right": 1,
+    "bottom_right": 3
+  },
+  "human_review_note": "Experimental assumption: equal 3x3 cells; select the center of the dominant structural change cluster. The official interface does not define the boundaries or the primary-change tie-break rule.",
+  "interpretation": "人工审核的实验性参考，不是官方金标；官方边界及主变化判定规则未明确。",
+  "prediction_sha256": "f5ecb12c6c45e50e58c4c76a7ea45775dd0d4d092f1c9acdb92e0cf6316c1506",
+  "human_review_sha256": "76507bccf9b5ac7808ec0472ea3dd51db2eb9c90d3047b02000b3cd7e46d4424",
+  "records": [
+    {
+      "item_id": "RSU_D_0033",
+      "reviewed_region": "right",
+      "predicted_region": "bottom_right",
+      "result": "未命中",
+      "format_valid": true
+    },
+    {
+      "item_id": "RSU_D_0058",
+      "reviewed_region": "right",
+      "predicted_region": "right",
+      "result": "命中",
+      "format_valid": true
+    },
+    {
+      "item_id": "RSU_D_0064",
+      "reviewed_region": "top_left",
+      "predicted_region": "top_left",
+      "result": "命中",
+      "format_valid": true
+    },
+    {
+      "item_id": "RSU_D_0071",
+      "reviewed_region": "top_left",
+      "predicted_region": "top_left",
+      "result": "命中",
+      "format_valid": true
+    },
+    {
+      "item_id": "RSU_D_0073",
+      "reviewed_region": "left",
+      "predicted_region": "bottom_left",
+      "result": "未命中",
+      "format_valid": true
+    },
+    {
+      "item_id": "RSU_D_0097",
+      "reviewed_region": "right",
+      "predicted_region": "bottom_left",
+      "result": "未命中",
+      "format_valid": true
+    },
+    {
+      "item_id": "RSU_D_0131",
+      "reviewed_region": "bottom",
+      "predicted_region": "bottom",
+      "result": "命中",
+      "format_valid": true
+    },
+    {
+      "item_id": "RSU_D_0139",
+      "reviewed_region": "top_left",
+      "predicted_region": "top_left",
+      "result": "命中",
+      "format_valid": true
+    },
+    {
+      "item_id": "RSU_D_0141",
+      "reviewed_region": "top_right",
+      "predicted_region": "top_right",
+      "result": "命中",
+      "format_valid": true
+    },
+    {
+      "item_id": "RSU_D_0142",
+      "reviewed_region": "left",
+      "predicted_region": "bottom_left",
+      "result": "未命中",
+      "format_valid": true
+    },
+    {
+      "item_id": "RSU_D_0145",
+      "reviewed_region": "unclear",
+      "predicted_region": "bottom_right",
+      "result": "审核不明确；不计入明确样本准确率",
+      "format_valid": true
+    },
+    {
+      "item_id": "RSU_D_0147",
+      "reviewed_region": "unclear",
+      "predicted_region": "bottom_right",
+      "result": "审核不明确；不计入明确样本准确率",
+      "format_valid": true
+    },
+    {
+      "item_id": "RSU_D_0148",
+      "reviewed_region": "right",
+      "predicted_region": "top_left",
+      "result": "未命中",
+      "format_valid": true
+    },
+    {
+      "item_id": "RSU_D_0175",
+      "reviewed_region": "left",
+      "predicted_region": "bottom_left",
+      "result": "未命中",
+      "format_valid": true
+    },
+    {
+      "item_id": "RSU_D_0179",
+      "reviewed_region": "top_right",
+      "predicted_region": "top_right",
+      "result": "命中",
+      "format_valid": true
+    },
+    {
+      "item_id": "RSU_D_0206",
+      "reviewed_region": "left",
+      "predicted_region": "bottom_left",
+      "result": "未命中",
+      "format_valid": true
+    },
+    {
+      "item_id": "RSU_D_0224",
+      "reviewed_region": "bottom",
+      "predicted_region": "bottom_left",
+      "result": "未命中",
+      "format_valid": true
+    },
+    {
+      "item_id": "RSU_D_0233",
+      "reviewed_region": "top",
+      "predicted_region": "top_left",
+      "result": "未命中",
+      "format_valid": true
+    },
+    {
+      "item_id": "RSU_D_0252",
+      "reviewed_region": "top",
+      "predicted_region": "top_left",
+      "result": "未命中",
+      "format_valid": true
+    },
+    {
+      "item_id": "RSU_D_0255",
+      "reviewed_region": "top_right",
+      "predicted_region": "top_right",
+      "result": "命中",
+      "format_valid": true
+    },
+    {
+      "item_id": "RSU_D_0277",
+      "reviewed_region": "left",
+      "predicted_region": "bottom_left",
+      "result": "未命中",
+      "format_valid": true
+    },
+    {
+      "item_id": "RSU_D_0279",
+      "reviewed_region": "left",
+      "predicted_region": "bottom_left",
+      "result": "未命中",
+      "format_valid": true
+    },
+    {
+      "item_id": "RSU_D_0282",
+      "reviewed_region": "top",
+      "predicted_region": "top_left",
+      "result": "未命中",
+      "format_valid": true
+    },
+    {
+      "item_id": "RSU_D_0329",
+      "reviewed_region": "bottom_left",
+      "predicted_region": "bottom_left",
+      "result": "命中",
+      "format_valid": true
+    },
+    {
+      "item_id": "RSU_D_0362",
+      "reviewed_region": "bottom",
+      "predicted_region": "bottom",
+      "result": "命中",
+      "format_valid": true
+    }
+  ]
+}

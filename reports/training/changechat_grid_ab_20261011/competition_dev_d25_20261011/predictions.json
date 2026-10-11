@@ -1,0 +1,726 @@
+{
+  "summary": {
+    "route": "route_b_stage2_batch8",
+    "adapter": "/root/autodl-fs/data/sat-rs-vlm-training/changechat_grid_ab_20261011/runs/route_b_stage2_batch8",
+    "base_model": "/root/autodl-tmp/models/Qwen3-VL-2B-Instruct",
+    "input": "/root/autodl-fs/data/sat-rs-vlm-training/changechat_grid_ab_20261011/competition_dev_d25_20261011/requests_d25.jsonl",
+    "samples": 25,
+    "batch_size": 4,
+    "load_seconds": 5.839463047683239,
+    "inference_seconds": 2.950653038918972,
+    "valid_single_region_count": 25,
+    "valid_single_region_rate": 1.0,
+    "prediction_distribution": {
+      "bottom_right": 3,
+      "right": 1,
+      "top_left": 7,
+      "bottom_left": 9,
+      "bottom": 2,
+      "top_right": 3
+    },
+    "gold_labels_available": false,
+    "accuracy_computed": false
+  },
+  "predictions": [
+    {
+      "id": "RSU_D_0033",
+      "prediction": "bottom_right",
+      "format_valid": true,
+      "normalized_if_valid": "bottom_right",
+      "question": "Which region of the image pair contains the primary change?\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right. Images are ordered BEFORE then AFTER.",
+      "metadata": {
+        "request_id": "71a825834f9f4fffb47ba0c53b34fc79:RSU_D_0033:1",
+        "item_id": "RSU_D_0033",
+        "response_constraint": {
+          "type": "enum",
+          "values": [
+            "bottom",
+            "bottom_left",
+            "bottom_right",
+            "center",
+            "left",
+            "right",
+            "top",
+            "top_left",
+            "top_right"
+          ],
+          "case_insensitive": true,
+          "question_form": "change_region"
+        },
+        "original_question": "Which region of the image pair contains the primary change?"
+      }
+    },
+    {
+      "id": "RSU_D_0058",
+      "prediction": "right",
+      "format_valid": true,
+      "normalized_if_valid": "right",
+      "question": "Which region of the image pair contains the primary change?\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right. Images are ordered BEFORE then AFTER.",
+      "metadata": {
+        "request_id": "71a825834f9f4fffb47ba0c53b34fc79:RSU_D_0058:1",
+        "item_id": "RSU_D_0058",
+        "response_constraint": {
+          "type": "enum",
+          "values": [
+            "bottom",
+            "bottom_left",
+            "bottom_right",
+            "center",
+            "left",
+            "right",
+            "top",
+            "top_left",
+            "top_right"
+          ],
+          "case_insensitive": true,
+          "question_form": "change_region"
+        },
+        "original_question": "Which region of the image pair contains the primary change?"
+      }
+    },
+    {
+      "id": "RSU_D_0064",
+      "prediction": "top_left",
+      "format_valid": true,
+      "normalized_if_valid": "top_left",
+      "question": "Which region of the image pair contains the primary change?\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right. Images are ordered BEFORE then AFTER.",
+      "metadata": {
+        "request_id": "71a825834f9f4fffb47ba0c53b34fc79:RSU_D_0064:1",
+        "item_id": "RSU_D_0064",
+        "response_constraint": {
+          "type": "enum",
+          "values": [
+            "bottom",
+            "bottom_left",
+            "bottom_right",
+            "center",
+            "left",
+            "right",
+            "top",
+            "top_left",
+            "top_right"
+          ],
+          "case_insensitive": true,
+          "question_form": "change_region"
+        },
+        "original_question": "Which region of the image pair contains the primary change?"
+      }
+    },
+    {
+      "id": "RSU_D_0071",
+      "prediction": "top_left",
+      "format_valid": true,
+      "normalized_if_valid": "top_left",
+      "question": "Which region of the image pair contains the primary change?\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right. Images are ordered BEFORE then AFTER.",
+      "metadata": {
+        "request_id": "71a825834f9f4fffb47ba0c53b34fc79:RSU_D_0071:1",
+        "item_id": "RSU_D_0071",
+        "response_constraint": {
+          "type": "enum",
+          "values": [
+            "bottom",
+            "bottom_left",
+            "bottom_right",
+            "center",
+            "left",
+            "right",
+            "top",
+            "top_left",
+            "top_right"
+          ],
+          "case_insensitive": true,
+          "question_form": "change_region"
+        },
+        "original_question": "Which region of the image pair contains the primary change?"
+      }
+    },
+    {
+      "id": "RSU_D_0073",
+      "prediction": "bottom_left",
+      "format_valid": true,
+      "normalized_if_valid": "bottom_left",
+      "question": "Which region of the image pair contains the primary change?\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right. Images are ordered BEFORE then AFTER.",
+      "metadata": {
+        "request_id": "71a825834f9f4fffb47ba0c53b34fc79:RSU_D_0073:1",
+        "item_id": "RSU_D_0073",
+        "response_constraint": {
+          "type": "enum",
+          "values": [
+            "bottom",
+            "bottom_left",
+            "bottom_right",
+            "center",
+            "left",
+            "right",
+            "top",
+            "top_left",
+            "top_right"
+          ],
+          "case_insensitive": true,
+          "question_form": "change_region"
+        },
+        "original_question": "Which region of the image pair contains the primary change?"
+      }
+    },
+    {
+      "id": "RSU_D_0097",
+      "prediction": "bottom_left",
+      "format_valid": true,
+      "normalized_if_valid": "bottom_left",
+      "question": "Which region of the image pair contains the primary change?\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right. Images are ordered BEFORE then AFTER.",
+      "metadata": {
+        "request_id": "71a825834f9f4fffb47ba0c53b34fc79:RSU_D_0097:1",
+        "item_id": "RSU_D_0097",
+        "response_constraint": {
+          "type": "enum",
+          "values": [
+            "bottom",
+            "bottom_left",
+            "bottom_right",
+            "center",
+            "left",
+            "right",
+            "top",
+            "top_left",
+            "top_right"
+          ],
+          "case_insensitive": true,
+          "question_form": "change_region"
+        },
+        "original_question": "Which region of the image pair contains the primary change?"
+      }
+    },
+    {
+      "id": "RSU_D_0131",
+      "prediction": "bottom",
+      "format_valid": true,
+      "normalized_if_valid": "bottom",
+      "question": "Which region of the image pair contains the primary change?\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right. Images are ordered BEFORE then AFTER.",
+      "metadata": {
+        "request_id": "71a825834f9f4fffb47ba0c53b34fc79:RSU_D_0131:1",
+        "item_id": "RSU_D_0131",
+        "response_constraint": {
+          "type": "enum",
+          "values": [
+            "bottom",
+            "bottom_left",
+            "bottom_right",
+            "center",
+            "left",
+            "right",
+            "top",
+            "top_left",
+            "top_right"
+          ],
+          "case_insensitive": true,
+          "question_form": "change_region"
+        },
+        "original_question": "Which region of the image pair contains the primary change?"
+      }
+    },
+    {
+      "id": "RSU_D_0139",
+      "prediction": "top_left",
+      "format_valid": true,
+      "normalized_if_valid": "top_left",
+      "question": "Which region of the image pair contains the primary change?\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right. Images are ordered BEFORE then AFTER.",
+      "metadata": {
+        "request_id": "71a825834f9f4fffb47ba0c53b34fc79:RSU_D_0139:1",
+        "item_id": "RSU_D_0139",
+        "response_constraint": {
+          "type": "enum",
+          "values": [
+            "bottom",
+            "bottom_left",
+            "bottom_right",
+            "center",
+            "left",
+            "right",
+            "top",
+            "top_left",
+            "top_right"
+          ],
+          "case_insensitive": true,
+          "question_form": "change_region"
+        },
+        "original_question": "Which region of the image pair contains the primary change?"
+      }
+    },
+    {
+      "id": "RSU_D_0141",
+      "prediction": "top_right",
+      "format_valid": true,
+      "normalized_if_valid": "top_right",
+      "question": "Which region of the image pair contains the primary change?\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right. Images are ordered BEFORE then AFTER.",
+      "metadata": {
+        "request_id": "71a825834f9f4fffb47ba0c53b34fc79:RSU_D_0141:1",
+        "item_id": "RSU_D_0141",
+        "response_constraint": {
+          "type": "enum",
+          "values": [
+            "bottom",
+            "bottom_left",
+            "bottom_right",
+            "center",
+            "left",
+            "right",
+            "top",
+            "top_left",
+            "top_right"
+          ],
+          "case_insensitive": true,
+          "question_form": "change_region"
+        },
+        "original_question": "Which region of the image pair contains the primary change?"
+      }
+    },
+    {
+      "id": "RSU_D_0142",
+      "prediction": "bottom_left",
+      "format_valid": true,
+      "normalized_if_valid": "bottom_left",
+      "question": "Which region of the image pair contains the primary change?\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right. Images are ordered BEFORE then AFTER.",
+      "metadata": {
+        "request_id": "71a825834f9f4fffb47ba0c53b34fc79:RSU_D_0142:1",
+        "item_id": "RSU_D_0142",
+        "response_constraint": {
+          "type": "enum",
+          "values": [
+            "bottom",
+            "bottom_left",
+            "bottom_right",
+            "center",
+            "left",
+            "right",
+            "top",
+            "top_left",
+            "top_right"
+          ],
+          "case_insensitive": true,
+          "question_form": "change_region"
+        },
+        "original_question": "Which region of the image pair contains the primary change?"
+      }
+    },
+    {
+      "id": "RSU_D_0145",
+      "prediction": "bottom_right",
+      "format_valid": true,
+      "normalized_if_valid": "bottom_right",
+      "question": "Which region of the image pair contains the primary change?\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right. Images are ordered BEFORE then AFTER.",
+      "metadata": {
+        "request_id": "71a825834f9f4fffb47ba0c53b34fc79:RSU_D_0145:1",
+        "item_id": "RSU_D_0145",
+        "response_constraint": {
+          "type": "enum",
+          "values": [
+            "bottom",
+            "bottom_left",
+            "bottom_right",
+            "center",
+            "left",
+            "right",
+            "top",
+            "top_left",
+            "top_right"
+          ],
+          "case_insensitive": true,
+          "question_form": "change_region"
+        },
+        "original_question": "Which region of the image pair contains the primary change?"
+      }
+    },
+    {
+      "id": "RSU_D_0147",
+      "prediction": "bottom_right",
+      "format_valid": true,
+      "normalized_if_valid": "bottom_right",
+      "question": "Which region of the image pair contains the primary change?\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right. Images are ordered BEFORE then AFTER.",
+      "metadata": {
+        "request_id": "71a825834f9f4fffb47ba0c53b34fc79:RSU_D_0147:1",
+        "item_id": "RSU_D_0147",
+        "response_constraint": {
+          "type": "enum",
+          "values": [
+            "bottom",
+            "bottom_left",
+            "bottom_right",
+            "center",
+            "left",
+            "right",
+            "top",
+            "top_left",
+            "top_right"
+          ],
+          "case_insensitive": true,
+          "question_form": "change_region"
+        },
+        "original_question": "Which region of the image pair contains the primary change?"
+      }
+    },
+    {
+      "id": "RSU_D_0148",
+      "prediction": "top_left",
+      "format_valid": true,
+      "normalized_if_valid": "top_left",
+      "question": "Which region of the image pair contains the primary change?\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right. Images are ordered BEFORE then AFTER.",
+      "metadata": {
+        "request_id": "71a825834f9f4fffb47ba0c53b34fc79:RSU_D_0148:1",
+        "item_id": "RSU_D_0148",
+        "response_constraint": {
+          "type": "enum",
+          "values": [
+            "bottom",
+            "bottom_left",
+            "bottom_right",
+            "center",
+            "left",
+            "right",
+            "top",
+            "top_left",
+            "top_right"
+          ],
+          "case_insensitive": true,
+          "question_form": "change_region"
+        },
+        "original_question": "Which region of the image pair contains the primary change?"
+      }
+    },
+    {
+      "id": "RSU_D_0175",
+      "prediction": "bottom_left",
+      "format_valid": true,
+      "normalized_if_valid": "bottom_left",
+      "question": "Which region of the image pair contains the primary change?\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right. Images are ordered BEFORE then AFTER.",
+      "metadata": {
+        "request_id": "71a825834f9f4fffb47ba0c53b34fc79:RSU_D_0175:1",
+        "item_id": "RSU_D_0175",
+        "response_constraint": {
+          "type": "enum",
+          "values": [
+            "bottom",
+            "bottom_left",
+            "bottom_right",
+            "center",
+            "left",
+            "right",
+            "top",
+            "top_left",
+            "top_right"
+          ],
+          "case_insensitive": true,
+          "question_form": "change_region"
+        },
+        "original_question": "Which region of the image pair contains the primary change?"
+      }
+    },
+    {
+      "id": "RSU_D_0179",
+      "prediction": "top_right",
+      "format_valid": true,
+      "normalized_if_valid": "top_right",
+      "question": "Which region of the image pair contains the primary change?\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right. Images are ordered BEFORE then AFTER.",
+      "metadata": {
+        "request_id": "71a825834f9f4fffb47ba0c53b34fc79:RSU_D_0179:1",
+        "item_id": "RSU_D_0179",
+        "response_constraint": {
+          "type": "enum",
+          "values": [
+            "bottom",
+            "bottom_left",
+            "bottom_right",
+            "center",
+            "left",
+            "right",
+            "top",
+            "top_left",
+            "top_right"
+          ],
+          "case_insensitive": true,
+          "question_form": "change_region"
+        },
+        "original_question": "Which region of the image pair contains the primary change?"
+      }
+    },
+    {
+      "id": "RSU_D_0206",
+      "prediction": "bottom_left",
+      "format_valid": true,
+      "normalized_if_valid": "bottom_left",
+      "question": "Which region of the image pair contains the primary change?\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right. Images are ordered BEFORE then AFTER.",
+      "metadata": {
+        "request_id": "71a825834f9f4fffb47ba0c53b34fc79:RSU_D_0206:1",
+        "item_id": "RSU_D_0206",
+        "response_constraint": {
+          "type": "enum",
+          "values": [
+            "bottom",
+            "bottom_left",
+            "bottom_right",
+            "center",
+            "left",
+            "right",
+            "top",
+            "top_left",
+            "top_right"
+          ],
+          "case_insensitive": true,
+          "question_form": "change_region"
+        },
+        "original_question": "Which region of the image pair contains the primary change?"
+      }
+    },
+    {
+      "id": "RSU_D_0224",
+      "prediction": "bottom_left",
+      "format_valid": true,
+      "normalized_if_valid": "bottom_left",
+      "question": "Which region of the image pair contains the primary change?\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right. Images are ordered BEFORE then AFTER.",
+      "metadata": {
+        "request_id": "71a825834f9f4fffb47ba0c53b34fc79:RSU_D_0224:1",
+        "item_id": "RSU_D_0224",
+        "response_constraint": {
+          "type": "enum",
+          "values": [
+            "bottom",
+            "bottom_left",
+            "bottom_right",
+            "center",
+            "left",
+            "right",
+            "top",
+            "top_left",
+            "top_right"
+          ],
+          "case_insensitive": true,
+          "question_form": "change_region"
+        },
+        "original_question": "Which region of the image pair contains the primary change?"
+      }
+    },
+    {
+      "id": "RSU_D_0233",
+      "prediction": "top_left",
+      "format_valid": true,
+      "normalized_if_valid": "top_left",
+      "question": "Which region of the image pair contains the primary change?\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right. Images are ordered BEFORE then AFTER.",
+      "metadata": {
+        "request_id": "71a825834f9f4fffb47ba0c53b34fc79:RSU_D_0233:1",
+        "item_id": "RSU_D_0233",
+        "response_constraint": {
+          "type": "enum",
+          "values": [
+            "bottom",
+            "bottom_left",
+            "bottom_right",
+            "center",
+            "left",
+            "right",
+            "top",
+            "top_left",
+            "top_right"
+          ],
+          "case_insensitive": true,
+          "question_form": "change_region"
+        },
+        "original_question": "Which region of the image pair contains the primary change?"
+      }
+    },
+    {
+      "id": "RSU_D_0252",
+      "prediction": "top_left",
+      "format_valid": true,
+      "normalized_if_valid": "top_left",
+      "question": "Which region of the image pair contains the primary change?\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right. Images are ordered BEFORE then AFTER.",
+      "metadata": {
+        "request_id": "71a825834f9f4fffb47ba0c53b34fc79:RSU_D_0252:1",
+        "item_id": "RSU_D_0252",
+        "response_constraint": {
+          "type": "enum",
+          "values": [
+            "bottom",
+            "bottom_left",
+            "bottom_right",
+            "center",
+            "left",
+            "right",
+            "top",
+            "top_left",
+            "top_right"
+          ],
+          "case_insensitive": true,
+          "question_form": "change_region"
+        },
+        "original_question": "Which region of the image pair contains the primary change?"
+      }
+    },
+    {
+      "id": "RSU_D_0255",
+      "prediction": "top_right",
+      "format_valid": true,
+      "normalized_if_valid": "top_right",
+      "question": "Which region of the image pair contains the primary change?\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right. Images are ordered BEFORE then AFTER.",
+      "metadata": {
+        "request_id": "71a825834f9f4fffb47ba0c53b34fc79:RSU_D_0255:1",
+        "item_id": "RSU_D_0255",
+        "response_constraint": {
+          "type": "enum",
+          "values": [
+            "bottom",
+            "bottom_left",
+            "bottom_right",
+            "center",
+            "left",
+            "right",
+            "top",
+            "top_left",
+            "top_right"
+          ],
+          "case_insensitive": true,
+          "question_form": "change_region"
+        },
+        "original_question": "Which region of the image pair contains the primary change?"
+      }
+    },
+    {
+      "id": "RSU_D_0277",
+      "prediction": "bottom_left",
+      "format_valid": true,
+      "normalized_if_valid": "bottom_left",
+      "question": "Which region of the image pair contains the primary change?\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right. Images are ordered BEFORE then AFTER.",
+      "metadata": {
+        "request_id": "71a825834f9f4fffb47ba0c53b34fc79:RSU_D_0277:1",
+        "item_id": "RSU_D_0277",
+        "response_constraint": {
+          "type": "enum",
+          "values": [
+            "bottom",
+            "bottom_left",
+            "bottom_right",
+            "center",
+            "left",
+            "right",
+            "top",
+            "top_left",
+            "top_right"
+          ],
+          "case_insensitive": true,
+          "question_form": "change_region"
+        },
+        "original_question": "Which region of the image pair contains the primary change?"
+      }
+    },
+    {
+      "id": "RSU_D_0279",
+      "prediction": "bottom_left",
+      "format_valid": true,
+      "normalized_if_valid": "bottom_left",
+      "question": "Which region of the image pair contains the primary change?\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right. Images are ordered BEFORE then AFTER.",
+      "metadata": {
+        "request_id": "71a825834f9f4fffb47ba0c53b34fc79:RSU_D_0279:1",
+        "item_id": "RSU_D_0279",
+        "response_constraint": {
+          "type": "enum",
+          "values": [
+            "bottom",
+            "bottom_left",
+            "bottom_right",
+            "center",
+            "left",
+            "right",
+            "top",
+            "top_left",
+            "top_right"
+          ],
+          "case_insensitive": true,
+          "question_form": "change_region"
+        },
+        "original_question": "Which region of the image pair contains the primary change?"
+      }
+    },
+    {
+      "id": "RSU_D_0282",
+      "prediction": "top_left",
+      "format_valid": true,
+      "normalized_if_valid": "top_left",
+      "question": "Which region of the image pair contains the primary change?\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right. Images are ordered BEFORE then AFTER.",
+      "metadata": {
+        "request_id": "71a825834f9f4fffb47ba0c53b34fc79:RSU_D_0282:1",
+        "item_id": "RSU_D_0282",
+        "response_constraint": {
+          "type": "enum",
+          "values": [
+            "bottom",
+            "bottom_left",
+            "bottom_right",
+            "center",
+            "left",
+            "right",
+            "top",
+            "top_left",
+            "top_right"
+          ],
+          "case_insensitive": true,
+          "question_form": "change_region"
+        },
+        "original_question": "Which region of the image pair contains the primary change?"
+      }
+    },
+    {
+      "id": "RSU_D_0329",
+      "prediction": "bottom_left",
+      "format_valid": true,
+      "normalized_if_valid": "bottom_left",
+      "question": "Which region of the image pair contains the primary change?\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right. Images are ordered BEFORE then AFTER.",
+      "metadata": {
+        "request_id": "71a825834f9f4fffb47ba0c53b34fc79:RSU_D_0329:1",
+        "item_id": "RSU_D_0329",
+        "response_constraint": {
+          "type": "enum",
+          "values": [
+            "bottom",
+            "bottom_left",
+            "bottom_right",
+            "center",
+            "left",
+            "right",
+            "top",
+            "top_left",
+            "top_right"
+          ],
+          "case_insensitive": true,
+          "question_form": "change_region"
+        },
+        "original_question": "Which region of the image pair contains the primary change?"
+      }
+    },
+    {
+      "id": "RSU_D_0362",
+      "prediction": "bottom",
+      "format_valid": true,
+      "normalized_if_valid": "bottom",
+      "question": "Which region of the image pair contains the primary change?\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right. Images are ordered BEFORE then AFTER.",
+      "metadata": {
+        "request_id": "71a825834f9f4fffb47ba0c53b34fc79:RSU_D_0362:1",
+        "item_id": "RSU_D_0362",
+        "response_constraint": {
+          "type": "enum",
+          "values": [
+            "bottom",
+            "bottom_left",
+            "bottom_right",
+            "center",
+            "left",
+            "right",
+            "top",
+            "top_left",
+            "top_right"
+          ],
+          "case_insensitive": true,
+          "question_form": "change_region"
+        },
+        "original_question": "Which region of the image pair contains the primary change?"
+      }
+    }
+  ]
+}

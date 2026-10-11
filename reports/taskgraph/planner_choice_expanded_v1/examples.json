@@ -1,0 +1,71 @@
+[
+  {
+    "title": "MME：单体语义筛选后读取属性",
+    "sample_id": "mme_rs_perception_remote_sensing_color_2922",
+    "question": "What color is the roof with a special color in the top right corner of the picture?",
+    "inputs": {
+      "image0": {
+        "type": "image",
+        "uri_or_key": "remote_sensing/dota_v2_dota_v2_dota_v2_P7972.png"
+      }
+    },
+    "dsl": "n1=REGION($image0,TOP_RIGHT)\nn2=LOCATE($n1,T(\"roof\"))\nn3=SELECT_SEM($n2,null,\"the roof with a special color in the top right corner of the picture\",SINGLE,$n1)\nn4=ATTRIBUTE($n3,\"color\")\nFINAL($n4,CHOICE_SINGLE)",
+    "production_valid": true
+  },
+  {
+    "title": "MME：候选集合语义筛选后计数",
+    "sample_id": "mme_rs_perception_remote_sensing_count_2815",
+    "question": "How many cars are parking beside the circular greenland in the upper left area of this picture?",
+    "inputs": {
+      "image0": {
+        "type": "image",
+        "uri_or_key": "remote_sensing/dota_v2_dota_v2_dota_v2_P7733.png"
+      }
+    },
+    "dsl": "INTENT(RELATIONAL_COUNT)\nn1=LOCATE($image0,T(\"car\"))\nn2=SELECT_SEM($n1,null,\"cars parking beside the circular greenland in the upper left area of this picture\",MULTI,$image0)\nn3=COUNT_ENTITIES($n2,T(\"car\"),false)\nFINAL($n3,CHOICE_SINGLE)",
+    "production_valid": true
+  },
+  {
+    "title": "XLRS：语义定位与专用空间比较",
+    "sample_id": "xlrs_000612",
+    "question": "In the image, what is the orientation of the gray square building with a pointed roof in the town in the lower right corner relative to the white building with a pointed roof next to the trees?",
+    "inputs": {
+      "image0": {
+        "type": "image",
+        "uri_or_key": "HRSCD/2006/35-2006-0350-6770-LA93.tif"
+      }
+    },
+    "dsl": "n1=LOCATE($image0,T(\"building\",color=\"gray\",has_part=\"pointed roof\",shape=\"square\"))\nn2=SELECT_SEM($n1,null,\"the gray square building with a pointed roof in the town in the lower right corner\",SINGLE,$image0)\nn3=LOCATE($image0,T(\"building\",color=\"white\",has_part=\"pointed roof\"))\nn4=SELECT_SEM($n3,null,\"the white building with a pointed roof next to the trees\",SINGLE,$image0)\nn5=RELATION($n2,$n4)\nFINAL($n5,CHOICE_SINGLE)",
+    "production_valid": true
+  },
+  {
+    "title": "XLRS：给定参考框的属性任务",
+    "sample_id": "xlrs_001590",
+    "question": "Determine the color of the object within the given reference bounding box in the satellite image. Image resolution: 10000 x 10000. Bounding box: [4106, 3314, 4324, 3606].",
+    "inputs": {
+      "image0": {
+        "type": "image",
+        "uri_or_key": "HRSCD/2006/35-2006-0345-6800-LA93.tif"
+      }
+    },
+    "dsl": "INTENT(ATTRIBUTE_QUERY)\nn1=REGION_BBOX($image0,[4106.0,3314.0,4324.0,3606.0],[10000,10000])\nn2=ATTRIBUTE($n1,\"color\")\nFINAL($n2,CHOICE_SINGLE)",
+    "production_valid": true
+  },
+  {
+    "title": "XLRS：独立双图的计数差",
+    "sample_id": "xlrs_001929",
+    "question": "In the areas marked by red circles in the images, how many differences are there between the cars in the two pictures?",
+    "inputs": {
+      "image0": {
+        "type": "image",
+        "uri_or_key": "HRSCD-4/35-2006-0350-6800-LA93-changing1.tif"
+      },
+      "image1": {
+        "type": "image",
+        "uri_or_key": "HRSCD-4/35-2012-0350-6800-LA93-0M50-E080-changing2.tif"
+      }
+    },
+    "dsl": "n1=FIND_MARKER($image0,\"circle\",\"red\")\nn2=COUNT($n1,T(\"car\"),true)\nn3=FIND_MARKER($image1,\"circle\",\"red\")\nn4=COUNT($n3,T(\"car\"),true)\nn5=ABS_DIFF($n2,$n4)\nFINAL($n5,CHOICE_SINGLE)",
+    "production_valid": true
+  }
+]

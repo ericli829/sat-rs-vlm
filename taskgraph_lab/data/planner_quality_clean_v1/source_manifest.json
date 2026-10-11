@@ -1,0 +1,123 @@
+{
+  "version": "planner-quality-clean-v1",
+  "source_sha256": {
+    "taskgraph_lab\\data\\planner_choice_expanded_v1\\train.jsonl": "67d2fd13520b023e4159f08f2548d1df660c3d4b83dfea531487f6c49d88a55e",
+    "taskgraph_lab\\data\\planner_choice_expanded_v1\\test.jsonl": "6e4b9b15c3809faa6b67b9264bbc44c7589e64e77de5eaabf5e3be22291f7571",
+    "taskgraph_lab\\data\\planner_synthetic_locate_v1\\train.jsonl": "d736cb7073d2ae9818539b29f419722187a87dbc847c5d37c48031f1280d7582",
+    "taskgraph_lab\\data\\planner_synthetic_locate_v1\\validation.jsonl": "5ca482e8095de695773e0132d69f9a0444a9caba856fa443fbd6a47f78f6aaa4"
+  },
+  "sources": {
+    "choice_train": "taskgraph_lab\\data\\planner_choice_expanded_v1\\train.jsonl",
+    "choice_test": "taskgraph_lab\\data\\planner_choice_expanded_v1\\test.jsonl",
+    "locate_train": "taskgraph_lab\\data\\planner_synthetic_locate_v1\\train.jsonl",
+    "locate_validation": "taskgraph_lab\\data\\planner_synthetic_locate_v1\\validation.jsonl"
+  },
+  "total_unique_source_rows": 6717,
+  "history": [
+    {
+      "path": "taskgraph_lab\\data\\planner_choice_expanded_v1\\test.jsonl",
+      "rows": 217,
+      "unique_source_ids": 217,
+      "canonical_sources_covered": 217,
+      "outside_sources": []
+    },
+    {
+      "path": "taskgraph_lab\\data\\planner_choice_expanded_v1\\train.jsonl",
+      "rows": 4500,
+      "unique_source_ids": 4500,
+      "canonical_sources_covered": 4500,
+      "outside_sources": []
+    },
+    {
+      "path": "taskgraph_lab\\data\\planner_locate_mix_v1\\test.jsonl",
+      "rows": 217,
+      "unique_source_ids": 217,
+      "canonical_sources_covered": 217,
+      "outside_sources": []
+    },
+    {
+      "path": "taskgraph_lab\\data\\planner_locate_mix_v1\\train.jsonl",
+      "rows": 4918,
+      "unique_source_ids": 3799,
+      "canonical_sources_covered": 3799,
+      "outside_sources": []
+    },
+    {
+      "path": "taskgraph_lab\\data\\planner_locate_mix_v1\\validation.jsonl",
+      "rows": 200,
+      "unique_source_ids": 200,
+      "canonical_sources_covered": 200,
+      "outside_sources": []
+    },
+    {
+      "path": "taskgraph_lab\\data\\planner_sft_hard_augmented_v1_20260901_173936\\test.jsonl",
+      "rows": 217,
+      "unique_source_ids": 217,
+      "canonical_sources_covered": 217,
+      "outside_sources": []
+    },
+    {
+      "path": "taskgraph_lab\\data\\planner_sft_hard_augmented_v1_20260901_173936\\train.jsonl",
+      "rows": 2815,
+      "unique_source_ids": 2815,
+      "canonical_sources_covered": 2815,
+      "outside_sources": []
+    },
+    {
+      "path": "taskgraph_lab\\data\\planner_sft_hard_curriculum_v1\\test.jsonl",
+      "rows": 217,
+      "unique_source_ids": 217,
+      "canonical_sources_covered": 217,
+      "outside_sources": []
+    },
+    {
+      "path": "taskgraph_lab\\data\\planner_sft_hard_curriculum_v1\\train.jsonl",
+      "rows": 3934,
+      "unique_source_ids": 2815,
+      "canonical_sources_covered": 2815,
+      "outside_sources": []
+    },
+    {
+      "path": "taskgraph_lab\\data\\planner_sft_new2701\\test.jsonl",
+      "rows": 217,
+      "unique_source_ids": 217,
+      "canonical_sources_covered": 217,
+      "outside_sources": []
+    },
+    {
+      "path": "taskgraph_lab\\data\\planner_sft_new2701\\train.jsonl",
+      "rows": 2701,
+      "unique_source_ids": 2701,
+      "canonical_sources_covered": 2701,
+      "outside_sources": []
+    },
+    {
+      "path": "taskgraph_lab\\data\\planner_sft_v1\\train.jsonl",
+      "rows": 193,
+      "unique_source_ids": 193,
+      "canonical_sources_covered": 193,
+      "outside_sources": []
+    },
+    {
+      "path": "taskgraph_lab\\data\\planner_sft_v1\\validation.jsonl",
+      "rows": 24,
+      "unique_source_ids": 24,
+      "canonical_sources_covered": 24,
+      "outside_sources": []
+    },
+    {
+      "path": "taskgraph_lab\\data\\planner_synthetic_locate_v1\\train.jsonl",
+      "rows": 1800,
+      "unique_source_ids": 1800,
+      "canonical_sources_covered": 1800,
+      "outside_sources": []
+    },
+    {
+      "path": "taskgraph_lab\\data\\planner_synthetic_locate_v1\\validation.jsonl",
+      "rows": 200,
+      "unique_source_ids": 200,
+      "canonical_sources_covered": 200,
+      "outside_sources": []
+    }
+  ]
+}

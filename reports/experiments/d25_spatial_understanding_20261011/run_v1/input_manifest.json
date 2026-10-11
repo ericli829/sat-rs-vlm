@@ -1,0 +1,1302 @@
+{
+  "experiment": "qwen3vl2b_d25_spatial_understanding_direction_bias",
+  "arms": [
+    "A_original",
+    "B_visual_grid",
+    "C_describe_map",
+    "D_grid_describe_map"
+  ],
+  "sample_count": 25,
+  "input_images_per_sample": 2,
+  "position_number_mapping": {
+    "1": "top_left",
+    "2": "top",
+    "3": "top_right",
+    "4": "left",
+    "5": "center",
+    "6": "right",
+    "7": "bottom_left",
+    "8": "bottom",
+    "9": "bottom_right"
+  },
+  "grid_annotation": "Original dimensions are preserved. Thin translucent lines and small digits near cell corners minimize occlusion; no opaque badges or added image panels.",
+  "image_root": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011",
+  "samples": [
+    {
+      "id": "RSU_D_0033",
+      "question": "Which region of the image pair contains the primary change?",
+      "reviewed_region": "right",
+      "image_paths_original": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\fb50f13d8dded4461475fe1b3175453f",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\adae277bd04ff3c3ed69bac0c37c09ab"
+      ],
+      "image_paths_grid": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0033_before_grid.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0033_after_grid.png"
+      ],
+      "grid_visual_metadata": [
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\fb50f13d8dded4461475fe1b3175453f",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0033_before_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        },
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\adae277bd04ff3c3ed69bac0c37c09ab",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0033_after_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        }
+      ],
+      "prompts": {
+        "A_original": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "B_visual_grid": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "C_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.",
+        "D_grid_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label."
+      }
+    },
+    {
+      "id": "RSU_D_0058",
+      "question": "Which region of the image pair contains the primary change?",
+      "reviewed_region": "right",
+      "image_paths_original": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\2521fba536db6b611460b9279b7cd2b7",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\c0a281a810b27237ed909d1696e0c33e"
+      ],
+      "image_paths_grid": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0058_before_grid.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0058_after_grid.png"
+      ],
+      "grid_visual_metadata": [
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\2521fba536db6b611460b9279b7cd2b7",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0058_before_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        },
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\c0a281a810b27237ed909d1696e0c33e",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0058_after_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        }
+      ],
+      "prompts": {
+        "A_original": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "B_visual_grid": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "C_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.",
+        "D_grid_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label."
+      }
+    },
+    {
+      "id": "RSU_D_0064",
+      "question": "Which region of the image pair contains the primary change?",
+      "reviewed_region": "top_left",
+      "image_paths_original": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\63f4343b5e3ffb373defe01e3cdf7376",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\6b6d858771dec04fb806e4801b80a0cd"
+      ],
+      "image_paths_grid": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0064_before_grid.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0064_after_grid.png"
+      ],
+      "grid_visual_metadata": [
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\63f4343b5e3ffb373defe01e3cdf7376",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0064_before_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        },
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\6b6d858771dec04fb806e4801b80a0cd",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0064_after_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        }
+      ],
+      "prompts": {
+        "A_original": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "B_visual_grid": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "C_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.",
+        "D_grid_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label."
+      }
+    },
+    {
+      "id": "RSU_D_0071",
+      "question": "Which region of the image pair contains the primary change?",
+      "reviewed_region": "top_left",
+      "image_paths_original": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\0f91d9622cdbf1c0c49a25334e86a217",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\82221ffdf2829fdb4035da9ceacae39b"
+      ],
+      "image_paths_grid": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0071_before_grid.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0071_after_grid.png"
+      ],
+      "grid_visual_metadata": [
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\0f91d9622cdbf1c0c49a25334e86a217",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0071_before_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        },
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\82221ffdf2829fdb4035da9ceacae39b",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0071_after_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        }
+      ],
+      "prompts": {
+        "A_original": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "B_visual_grid": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "C_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.",
+        "D_grid_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label."
+      }
+    },
+    {
+      "id": "RSU_D_0073",
+      "question": "Which region of the image pair contains the primary change?",
+      "reviewed_region": "left",
+      "image_paths_original": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\537202949b66fa764da9dd9bd3d6ad50",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\5f16902e25c12500c965bbc3bb1ce49b"
+      ],
+      "image_paths_grid": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0073_before_grid.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0073_after_grid.png"
+      ],
+      "grid_visual_metadata": [
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\537202949b66fa764da9dd9bd3d6ad50",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0073_before_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        },
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\5f16902e25c12500c965bbc3bb1ce49b",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0073_after_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        }
+      ],
+      "prompts": {
+        "A_original": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "B_visual_grid": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "C_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.",
+        "D_grid_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label."
+      }
+    },
+    {
+      "id": "RSU_D_0097",
+      "question": "Which region of the image pair contains the primary change?",
+      "reviewed_region": "right",
+      "image_paths_original": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\a8d4c5287d0fe38850103ba47a23a4db",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\da340f92134af8a7ad810e066a578324"
+      ],
+      "image_paths_grid": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0097_before_grid.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0097_after_grid.png"
+      ],
+      "grid_visual_metadata": [
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\a8d4c5287d0fe38850103ba47a23a4db",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0097_before_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        },
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\da340f92134af8a7ad810e066a578324",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0097_after_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        }
+      ],
+      "prompts": {
+        "A_original": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "B_visual_grid": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "C_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.",
+        "D_grid_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label."
+      }
+    },
+    {
+      "id": "RSU_D_0131",
+      "question": "Which region of the image pair contains the primary change?",
+      "reviewed_region": "bottom",
+      "image_paths_original": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\f1912fd7c2e3fb9278d362ec5ff1ac4d",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\d066d44aa71d4657760462a037292b3f"
+      ],
+      "image_paths_grid": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0131_before_grid.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0131_after_grid.png"
+      ],
+      "grid_visual_metadata": [
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\f1912fd7c2e3fb9278d362ec5ff1ac4d",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0131_before_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        },
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\d066d44aa71d4657760462a037292b3f",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0131_after_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        }
+      ],
+      "prompts": {
+        "A_original": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "B_visual_grid": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "C_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.",
+        "D_grid_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label."
+      }
+    },
+    {
+      "id": "RSU_D_0139",
+      "question": "Which region of the image pair contains the primary change?",
+      "reviewed_region": "top_left",
+      "image_paths_original": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\9848d0ecb9c92455c3760c882a241429",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\f00a1ea63c53c702c0ac67d2fac86edb"
+      ],
+      "image_paths_grid": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0139_before_grid.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0139_after_grid.png"
+      ],
+      "grid_visual_metadata": [
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\9848d0ecb9c92455c3760c882a241429",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0139_before_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        },
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\f00a1ea63c53c702c0ac67d2fac86edb",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0139_after_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        }
+      ],
+      "prompts": {
+        "A_original": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "B_visual_grid": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "C_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.",
+        "D_grid_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label."
+      }
+    },
+    {
+      "id": "RSU_D_0141",
+      "question": "Which region of the image pair contains the primary change?",
+      "reviewed_region": "top_right",
+      "image_paths_original": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\e6f9b12bfc67bac5489293fb42724ddb",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\05a3e9e36fe24531ab2ab0079fdd8bbe"
+      ],
+      "image_paths_grid": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0141_before_grid.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0141_after_grid.png"
+      ],
+      "grid_visual_metadata": [
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\e6f9b12bfc67bac5489293fb42724ddb",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0141_before_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        },
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\05a3e9e36fe24531ab2ab0079fdd8bbe",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0141_after_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        }
+      ],
+      "prompts": {
+        "A_original": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "B_visual_grid": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "C_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.",
+        "D_grid_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label."
+      }
+    },
+    {
+      "id": "RSU_D_0142",
+      "question": "Which region of the image pair contains the primary change?",
+      "reviewed_region": "left",
+      "image_paths_original": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\b229311536d0a59c1cf2884dac7620a7",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\dff9c15947623c7521c4d0243f6572a9"
+      ],
+      "image_paths_grid": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0142_before_grid.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0142_after_grid.png"
+      ],
+      "grid_visual_metadata": [
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\b229311536d0a59c1cf2884dac7620a7",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0142_before_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        },
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\dff9c15947623c7521c4d0243f6572a9",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0142_after_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        }
+      ],
+      "prompts": {
+        "A_original": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "B_visual_grid": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "C_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.",
+        "D_grid_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label."
+      }
+    },
+    {
+      "id": "RSU_D_0145",
+      "question": "Which region of the image pair contains the primary change?",
+      "reviewed_region": "unclear",
+      "image_paths_original": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\41d51e19d31d64fec3e6d0c8cd568f81",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\ef0d4a16fe08f07d3f746c995287b44d"
+      ],
+      "image_paths_grid": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0145_before_grid.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0145_after_grid.png"
+      ],
+      "grid_visual_metadata": [
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\41d51e19d31d64fec3e6d0c8cd568f81",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0145_before_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        },
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\ef0d4a16fe08f07d3f746c995287b44d",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0145_after_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        }
+      ],
+      "prompts": {
+        "A_original": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "B_visual_grid": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "C_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.",
+        "D_grid_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label."
+      }
+    },
+    {
+      "id": "RSU_D_0147",
+      "question": "Which region of the image pair contains the primary change?",
+      "reviewed_region": "unclear",
+      "image_paths_original": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\aa5c26b3f06a2beada91b008f0cfdee4",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\87e6361ccbefa69d29e46b96b51444f3"
+      ],
+      "image_paths_grid": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0147_before_grid.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0147_after_grid.png"
+      ],
+      "grid_visual_metadata": [
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\aa5c26b3f06a2beada91b008f0cfdee4",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0147_before_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        },
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\87e6361ccbefa69d29e46b96b51444f3",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0147_after_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        }
+      ],
+      "prompts": {
+        "A_original": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "B_visual_grid": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "C_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.",
+        "D_grid_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label."
+      }
+    },
+    {
+      "id": "RSU_D_0148",
+      "question": "Which region of the image pair contains the primary change?",
+      "reviewed_region": "right",
+      "image_paths_original": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\9574b910244e867e3e7c0c84703d0c78",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\84a35cf96bee8869a73bc17133f5f571"
+      ],
+      "image_paths_grid": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0148_before_grid.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0148_after_grid.png"
+      ],
+      "grid_visual_metadata": [
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\9574b910244e867e3e7c0c84703d0c78",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0148_before_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        },
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\84a35cf96bee8869a73bc17133f5f571",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0148_after_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        }
+      ],
+      "prompts": {
+        "A_original": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "B_visual_grid": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "C_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.",
+        "D_grid_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label."
+      }
+    },
+    {
+      "id": "RSU_D_0175",
+      "question": "Which region of the image pair contains the primary change?",
+      "reviewed_region": "left",
+      "image_paths_original": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\9d9c2f854c9fe0f9dc45adc9c0b8536c",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\7587aa00c7376211bccb975138ff6e68"
+      ],
+      "image_paths_grid": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0175_before_grid.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0175_after_grid.png"
+      ],
+      "grid_visual_metadata": [
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\9d9c2f854c9fe0f9dc45adc9c0b8536c",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0175_before_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        },
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\7587aa00c7376211bccb975138ff6e68",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0175_after_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        }
+      ],
+      "prompts": {
+        "A_original": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "B_visual_grid": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "C_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.",
+        "D_grid_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label."
+      }
+    },
+    {
+      "id": "RSU_D_0179",
+      "question": "Which region of the image pair contains the primary change?",
+      "reviewed_region": "top_right",
+      "image_paths_original": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\c13fd4e0e368dd5114642834fd87e306",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\58adef3567487ceaa2bb1bc49bd2a0cb"
+      ],
+      "image_paths_grid": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0179_before_grid.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0179_after_grid.png"
+      ],
+      "grid_visual_metadata": [
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\c13fd4e0e368dd5114642834fd87e306",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0179_before_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        },
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\58adef3567487ceaa2bb1bc49bd2a0cb",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0179_after_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        }
+      ],
+      "prompts": {
+        "A_original": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "B_visual_grid": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "C_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.",
+        "D_grid_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label."
+      }
+    },
+    {
+      "id": "RSU_D_0206",
+      "question": "Which region of the image pair contains the primary change?",
+      "reviewed_region": "left",
+      "image_paths_original": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\9593b5b3aca4515a604ef9ea70fee424",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\126152bcc16afb218df7aae46a370d75"
+      ],
+      "image_paths_grid": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0206_before_grid.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0206_after_grid.png"
+      ],
+      "grid_visual_metadata": [
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\9593b5b3aca4515a604ef9ea70fee424",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0206_before_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        },
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\126152bcc16afb218df7aae46a370d75",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0206_after_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        }
+      ],
+      "prompts": {
+        "A_original": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "B_visual_grid": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "C_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.",
+        "D_grid_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label."
+      }
+    },
+    {
+      "id": "RSU_D_0224",
+      "question": "Which region of the image pair contains the primary change?",
+      "reviewed_region": "bottom",
+      "image_paths_original": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\493121735f7fef141264fa5458775af3",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\397722d4b2cc7c82c2a525bde1a4d426"
+      ],
+      "image_paths_grid": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0224_before_grid.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0224_after_grid.png"
+      ],
+      "grid_visual_metadata": [
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\493121735f7fef141264fa5458775af3",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0224_before_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        },
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\397722d4b2cc7c82c2a525bde1a4d426",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0224_after_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        }
+      ],
+      "prompts": {
+        "A_original": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "B_visual_grid": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "C_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.",
+        "D_grid_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label."
+      }
+    },
+    {
+      "id": "RSU_D_0233",
+      "question": "Which region of the image pair contains the primary change?",
+      "reviewed_region": "top",
+      "image_paths_original": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\2e2ff5b1660309a95e4cb58fcf1bf6f6",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\2042e986619a5b0e2913abd5a1437e9b"
+      ],
+      "image_paths_grid": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0233_before_grid.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0233_after_grid.png"
+      ],
+      "grid_visual_metadata": [
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\2e2ff5b1660309a95e4cb58fcf1bf6f6",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0233_before_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        },
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\2042e986619a5b0e2913abd5a1437e9b",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0233_after_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        }
+      ],
+      "prompts": {
+        "A_original": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "B_visual_grid": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "C_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.",
+        "D_grid_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label."
+      }
+    },
+    {
+      "id": "RSU_D_0252",
+      "question": "Which region of the image pair contains the primary change?",
+      "reviewed_region": "top",
+      "image_paths_original": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\b9b43624a8de33cc6916bed872d515bd",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\df1d160a6094c3ab0d0f79f89bd45f93"
+      ],
+      "image_paths_grid": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0252_before_grid.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0252_after_grid.png"
+      ],
+      "grid_visual_metadata": [
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\b9b43624a8de33cc6916bed872d515bd",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0252_before_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        },
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\df1d160a6094c3ab0d0f79f89bd45f93",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0252_after_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        }
+      ],
+      "prompts": {
+        "A_original": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "B_visual_grid": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "C_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.",
+        "D_grid_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label."
+      }
+    },
+    {
+      "id": "RSU_D_0255",
+      "question": "Which region of the image pair contains the primary change?",
+      "reviewed_region": "top_right",
+      "image_paths_original": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\e725f4e5806ea9ce94afa2e9f6f8bcf0",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\fab3299b560903d7a1e73c27515403d1"
+      ],
+      "image_paths_grid": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0255_before_grid.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0255_after_grid.png"
+      ],
+      "grid_visual_metadata": [
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\e725f4e5806ea9ce94afa2e9f6f8bcf0",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0255_before_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        },
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\fab3299b560903d7a1e73c27515403d1",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0255_after_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        }
+      ],
+      "prompts": {
+        "A_original": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "B_visual_grid": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "C_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.",
+        "D_grid_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label."
+      }
+    },
+    {
+      "id": "RSU_D_0277",
+      "question": "Which region of the image pair contains the primary change?",
+      "reviewed_region": "left",
+      "image_paths_original": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\7025baa657ce600dd667154b1bc067a5",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\a80511dee75d6ea068769b874ff43779"
+      ],
+      "image_paths_grid": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0277_before_grid.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0277_after_grid.png"
+      ],
+      "grid_visual_metadata": [
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\7025baa657ce600dd667154b1bc067a5",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0277_before_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        },
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\a80511dee75d6ea068769b874ff43779",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0277_after_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        }
+      ],
+      "prompts": {
+        "A_original": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "B_visual_grid": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "C_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.",
+        "D_grid_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label."
+      }
+    },
+    {
+      "id": "RSU_D_0279",
+      "question": "Which region of the image pair contains the primary change?",
+      "reviewed_region": "left",
+      "image_paths_original": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\bba72e840e3a8369c8a46606ba4aad10",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\f0597c5c9da70905942ed3db0df56a58"
+      ],
+      "image_paths_grid": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0279_before_grid.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0279_after_grid.png"
+      ],
+      "grid_visual_metadata": [
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\bba72e840e3a8369c8a46606ba4aad10",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0279_before_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        },
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\f0597c5c9da70905942ed3db0df56a58",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0279_after_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        }
+      ],
+      "prompts": {
+        "A_original": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "B_visual_grid": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "C_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.",
+        "D_grid_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label."
+      }
+    },
+    {
+      "id": "RSU_D_0282",
+      "question": "Which region of the image pair contains the primary change?",
+      "reviewed_region": "top",
+      "image_paths_original": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\0b62871ad4eaa73dad39151d6aa793cc",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\1587c233878916c560a6803c3b2677fa"
+      ],
+      "image_paths_grid": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0282_before_grid.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0282_after_grid.png"
+      ],
+      "grid_visual_metadata": [
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\0b62871ad4eaa73dad39151d6aa793cc",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0282_before_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        },
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\1587c233878916c560a6803c3b2677fa",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0282_after_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        }
+      ],
+      "prompts": {
+        "A_original": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "B_visual_grid": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "C_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.",
+        "D_grid_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label."
+      }
+    },
+    {
+      "id": "RSU_D_0329",
+      "question": "Which region of the image pair contains the primary change?",
+      "reviewed_region": "bottom_left",
+      "image_paths_original": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\de143dfa2532cc2e2fe64cc83caa417d",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\ff39fc6e70e8d45df7f2e09142f1cb31"
+      ],
+      "image_paths_grid": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0329_before_grid.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0329_after_grid.png"
+      ],
+      "grid_visual_metadata": [
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\de143dfa2532cc2e2fe64cc83caa417d",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0329_before_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        },
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\ff39fc6e70e8d45df7f2e09142f1cb31",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0329_after_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        }
+      ],
+      "prompts": {
+        "A_original": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "B_visual_grid": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "C_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.",
+        "D_grid_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label."
+      }
+    },
+    {
+      "id": "RSU_D_0362",
+      "question": "Which region of the image pair contains the primary change?",
+      "reviewed_region": "bottom",
+      "image_paths_original": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\b00bf814c4fd85cf25726d8d3b16c469",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\18336e5e61243731bb7bce186a94fd5b"
+      ],
+      "image_paths_grid": [
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0362_before_grid.png",
+        "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0362_after_grid.png"
+      ],
+      "grid_visual_metadata": [
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\b00bf814c4fd85cf25726d8d3b16c469",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0362_before_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        },
+        {
+          "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\training\\changechat_grid_ab_20261011\\competition_dev_d25_20261011\\assets\\18336e5e61243731bb7bce186a94fd5b",
+          "grid_image": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\reports\\experiments\\d25_spatial_understanding_20261011\\run_v1\\visual_inputs\\RSU_D_0362_after_grid.png",
+          "source_size": [
+            256,
+            256
+          ],
+          "grid_size": [
+            256,
+            256
+          ],
+          "grid_line_width_px": 1,
+          "digit_placement": "small upper-left cell corners",
+          "overlay_touched_pixel_fraction": 0.0247650146484375
+        }
+      ],
+      "prompts": {
+        "A_original": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "B_visual_grid": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers: 1=top_left, 2=top, 3=top_right; 4=left, 5=center, 6=right; 7=bottom_left, 8=bottom, 9=bottom_right.\nUse the grid as a visual aid; do not let the key replace inspection of the image changes.\nAnswer with exactly one label from: bottom, bottom_left, bottom_right, center, left, right, top, top_left, top_right.\nAnswer:",
+        "C_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nMentally divide each image into equal thirds by row and column; no grid is drawn on these images.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label.",
+        "D_grid_describe_map": "Which region of the image pair contains the primary change?\nThe two images are ordered BEFORE then AFTER.\nChoose the single cell containing the primary change.\nBoth images have the same thin 3x3 grid lines and small cell numbers. Use them as a visual aid, but report the location in words, not as a number.\nDescribe the main visible change briefly, then give one specific location in natural language.\nUse this exact two-line format:\nChange: <what visibly changed>\nLocation: <one specific position such as upper-left, upper-center, upper-right, middle-left, center, middle-right, lower-left, lower-center, or lower-right>.\nIf the location cannot be assigned to one specific cell, write Location: UNCLEAR. Do not output a final grid label."
+      }
+    }
+  ],
+  "review_note": "23 explicit and 2 unclear human-reviewed reference labels; not official gold labels."
+}

@@ -1,0 +1,123 @@
+{
+  "valid": true,
+  "count": 2000,
+  "all_prefixes_checked": true,
+  "prefixes_checked": 157638,
+  "unique_prefixes_checked": 19969,
+  "checks": {
+    "bbox_static_source": true,
+    "canonical_roundtrip": true,
+    "constraint_grammar": true,
+    "minimal_path": true,
+    "production_input": true,
+    "schema": true,
+    "structured_semantics": true,
+    "type_checker": true,
+    "validator": true,
+    "visual_answer_verified": false
+  },
+  "statistics": {
+    "total": 2000,
+    "split_counts": {
+      "train": 1800,
+      "validation": 200
+    },
+    "families": {
+      "category": 900,
+      "semantic": 100,
+      "region": 300,
+      "intrinsic": 500,
+      "ordinal": 100,
+      "extreme": 100
+    },
+    "categories": {
+      "airplane": 57,
+      "antenna": 66,
+      "basketball court": 22,
+      "bridge": 55,
+      "building": 63,
+      "bus": 58,
+      "car": 53,
+      "cargo ship": 66,
+      "chimney": 70,
+      "container": 62,
+      "dock": 46,
+      "fishing boat": 57,
+      "football field": 55,
+      "greenhouse": 55,
+      "hangar": 23,
+      "helipad": 67,
+      "industrial building": 15,
+      "oil tank": 67,
+      "parking area": 59,
+      "railway station": 62,
+      "residential building": 24,
+      "roundabout": 15,
+      "runway": 18,
+      "ship": 58,
+      "silo": 61,
+      "solar panel": 18,
+      "sports field": 58,
+      "stadium": 70,
+      "storage tank": 60,
+      "swimming pool": 66,
+      "tennis court": 52,
+      "tower": 45,
+      "train": 56,
+      "transmission tower": 15,
+      "truck": 60,
+      "vehicle": 63,
+      "warehouse": 25,
+      "water tower": 74,
+      "wind turbine": 59,
+      "yacht": 25
+    },
+    "attributes": {
+      "color": 186,
+      "has_part": 48,
+      "shape": 144,
+      "size": 91,
+      "state": 32,
+      "pattern": 8
+    },
+    "operators": {
+      "LOCATE": 2000,
+      "SELECT": 300,
+      "REGION": 300
+    },
+    "select_modes": {
+      "SEMANTIC": 100,
+      "ORDINAL": 100,
+      "EXTREME": 100
+    },
+    "node_counts": {
+      "1": 1400,
+      "2": 600
+    },
+    "final_types": {
+      "BBOX": 2000
+    },
+    "one_node_locate_count": 1400,
+    "one_node_locate_fraction": 0.7,
+    "validation_pass_counts": {
+      "bbox_static_source": 2000,
+      "canonical_roundtrip": 2000,
+      "constraint_grammar": 2000,
+      "minimal_path": 2000,
+      "production_input": 2000,
+      "schema": 2000,
+      "structured_semantics": 2000,
+      "type_checker": 2000,
+      "validator": 2000
+    },
+    "exact_text_duplicates": 0,
+    "cross_split_exact_text": 0,
+    "cross_split_categories": 0,
+    "cross_split_template_families": 0,
+    "cross_split_near_template_skeletons": 0,
+    "within_split_reused_skeleton_rows": 1935,
+    "dsl_characters_mean": 77.819,
+    "dsl_characters_max": 168,
+    "structural_split": "Graph skeletons repeat intentionally; category, action-template families, and available spatial rule values are held out. One-node LOCATE has no further structural variant to hold out."
+  }
+}

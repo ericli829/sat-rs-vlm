@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .enums import AnswerType, OperatorName, RuntimeType
-from .schema import PlannerTarget
+from .schema import GraphNode, PlannerTarget
 
 TypeSet = set[RuntimeType]
 
@@ -124,6 +124,7 @@ FINAL_TYPES: dict[AnswerType, TypeSet] = {
     AnswerType.LABEL: {RuntimeType.LABEL},
     AnswerType.LABEL_SET: {RuntimeType.LABEL_SET},
     AnswerType.TEXT: {RuntimeType.TEXT, RuntimeType.ANSWER},
+    AnswerType.BBOX: {RuntimeType.ENTITY, RuntimeType.REGION},
 }
 
 
@@ -148,6 +149,30 @@ VISUAL_ONLY_INPUTS = {
 }
 
 SINGLETON_SELECT_MODES = {"RANK", "ORDINAL", "EXTREME", "SUBREGION"}
+
+
+def is_bbox_source(node: GraphNode | None) -> bool:
+    """Whether a producer has a single-target bbox contract.
+
+    LOCATE keeps its general EntitySet static type: a terminal LOCATE uses the
+    existing single-target route, and runtime still must prove exactly one
+    valid Entity/Region. Set-valued filtering and grouping cannot claim this
+    contract merely because their output type union also contains Entity.
+    """
+    if node is None:
+        return False
+    op = node.op
+    if op in {OperatorName.LOCATE, OperatorName.REGION, OperatorName.REGION_FROM_BBOX}:
+        return True
+    if op is not OperatorName.SELECT:
+        return False
+    params = node.params
+    mode = params.get("mode")
+    mode = str(getattr(mode, "value", mode)).upper()
+    return mode in SINGLETON_SELECT_MODES or (
+        mode == "SEMANTIC" and params.get("selection_type") == "SINGLE"
+    )
+
 
 # A SELECT result is not a raw visual scope except for SUBREGION, which always
 # yields exactly one Region (a valid ImageRef/Region visual scope).
@@ -241,6 +266,18 @@ def check_types(target: PlannerTarget, input_names: set[str]) -> TypeCheckResult
     final_types = set().union(
         *(result.inferred.get(ref, set()) for ref in target.final.sources), set()
     )
+    if target.final.answer_type is AnswerType.BBOX:
+        if len(target.final.sources) != 1 or not all(
+            is_bbox_source(nodes_by_ref.get(ref)) for ref in target.final.sources
+        ):
+            result.errors.append(
+                TypeIssue(
+                    "bbox_requires_single_visual_source",
+                    "BBOX requires one single-target LOCATE, Region, or singleton SELECT "
+                    "source; arbitrary EntitySet/RegionSet sources are not permitted",
+                )
+            )
+        return result
     is_choice = target.final.answer_type in {
         AnswerType.CHOICE_SINGLE,
         AnswerType.CHOICE_MULTI,

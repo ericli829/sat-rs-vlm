@@ -40,6 +40,7 @@ class AnswerType(StringEnum):
     LABEL = "LABEL"
     LABEL_SET = "LABEL_SET"
     TEXT = "TEXT"
+    BBOX = "BBOX"
 
 
 class OperatorName(StringEnum):

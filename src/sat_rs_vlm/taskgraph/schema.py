@@ -50,6 +50,7 @@ class AnswerType(StringEnum):
     LABEL = "LABEL"
     LABEL_SET = "LABEL_SET"
     TEXT = "TEXT"
+    BBOX = "BBOX"
 
 
 class OperatorName(StringEnum):
@@ -526,6 +527,26 @@ class TaskGraph(StrictModel):
         missing_final = [ref for ref in self.final.sources if ref[1:] not in ids]
         if missing_final:
             raise ValueError(f"unknown final refs: {missing_final}")
+        if self.final.answer_type is AnswerType.BBOX:
+            if len(self.final.sources) != 1:
+                raise ValueError("BBOX final requires exactly one visual source")
+            source = next(node for node in self.nodes if node.id == self.final.sources[0][1:])
+            singleton_source = source.op in {
+                OperatorName.LOCATE,
+                OperatorName.REGION,
+                OperatorName.REGION_FROM_BBOX,
+            } or (
+                source.op is OperatorName.SELECT
+                and (
+                    source.params["mode"] in {"RANK", "ORDINAL", "EXTREME", "SUBREGION"}
+                    or (
+                        source.params["mode"] == "SEMANTIC"
+                        and source.params.get("selection_type") == "SINGLE"
+                    )
+                )
+            )
+            if not singleton_source:
+                raise ValueError("BBOX final requires LOCATE, Region, or singleton SELECT evidence")
         count_final = any(
             node.id in {ref[1:] for ref in self.final.sources} and node.op is OperatorName.COUNT
             for node in self.nodes

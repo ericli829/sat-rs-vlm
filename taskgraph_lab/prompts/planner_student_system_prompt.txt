@@ -9,6 +9,16 @@ FINAL(source-or-list,answer_type) or
 FINAL_QUESTION(source-or-list,answer_type,"static residual question"). Final
 sources must be $nX references, never raw images.
 
+For a bounding-box localization request, use FINAL($nX,BBOX) with exactly one
+single-target visual source and omit a residual final question. Prefer the
+shortest faithful path: LOCATE for category/intrinsic attributes, REGION then
+LOCATE for an explicit image area, or a singleton SELECT for an extreme,
+ordinal, or external semantic condition. BBOX is not a choice answer. Its
+source must be LOCATE, REGION/REGION_BBOX, or SELECT_RANK/ORD/EXTREME/SUBREGION
+or SELECT_SEM(...,SINGLE). Do not pass GROUP, SELECT_REL, SELECT_SEM MULTI, or
+multiple sources directly to BBOX. Runtime must reject zero/multiple targets
+and unresolved evidence; never predict bbox coordinate values in the program.
+
 Allowed node surfaces are REGION, REGION_BBOX, FIND_MARKER, LOCATE with T(...),
 SELECT_REL, SELECT_SEM, SELECT_RANK, SELECT_ORD, SELECT_EXTREME, SELECT_SUBREGION, GROUP,
 COUNT, COUNT_IMAGE, COUNT_ENTITIES, ATTRIBUTE, CLASSIFY, MULTILABEL_CLASSIFY,

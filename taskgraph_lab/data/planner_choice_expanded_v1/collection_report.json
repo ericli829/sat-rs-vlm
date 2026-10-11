@@ -1,0 +1,2245 @@
+{
+  "version": "planner-choice-expansion-v1",
+  "source": "codex_subagent_choice_plan",
+  "review_scope": "text-only logical plan; no visual answer verification",
+  "valid": true,
+  "validate_only": false,
+  "target_count": 4500,
+  "base_count": 2815,
+  "selected_new_count": 1685,
+  "received_new_plan_count": 1685,
+  "accepted_new_count": 1685,
+  "revision_count": 176,
+  "missing_new_ids": [],
+  "blocking_errors": [],
+  "semantic_select": {
+    "nodes": 989,
+    "MULTI": 345,
+    "explicit_scope": 989,
+    "SINGLE": 644,
+    "explicit_reference": 97
+  },
+  "input_normalizations": {
+    "xlrs_001920": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0340-6805-LA93-changing1.png:HRSCD-4/35-2012-0340-6805-LA93-0M50-E080-changing2.png"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0340-6805-LA93-changing1.png"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2012-0340-6805-LA93-0M50-E080-changing2.png"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001921": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0350-6780-LA93-changing3.png:HRSCD-5/35-2012-0350-6780-LA93-0M50-E080-changing4.png"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0350-6780-LA93-changing3.png"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2012-0350-6780-LA93-0M50-E080-changing4.png"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001924": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0340-6800-LA93-changing1.png:HRSCD-4/35-2012-0340-6800-LA93-0M50-E080-changing2.png"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0340-6800-LA93-changing1.png"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2012-0340-6800-LA93-0M50-E080-changing2.png"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001935": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0370-6790-LA93-changing1.tif:HRSCD-4/35-2012-0370-6790-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0370-6790-LA93-changing1.tif"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2012-0370-6790-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001937": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0360-6805-LA93-changing1.tif:HRSCD-5/35-2012-0360-6805-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0360-6805-LA93-changing1.tif"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2012-0360-6805-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001941": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0360-6755-LA93-changing1.tif:HRSCD-4/35-2012-0360-6755-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0360-6755-LA93-changing1.tif"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2012-0360-6755-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001948": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0360-6775-LA93-changing1.tif:HRSCD-4/35-2012-0360-6775-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0360-6775-LA93-changing1.tif"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2012-0360-6775-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001949": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0340-6780-LA93-changing1.png:HRSCD-4/35-2012-0340-6780-LA93-0M50-E080-changing2.png"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0340-6780-LA93-changing1.png"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2012-0340-6780-LA93-0M50-E080-changing2.png"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001953": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0365-6785-LA93-changing1.tif:HRSCD-4/35-2012-0365-6785-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0365-6785-LA93-changing1.tif"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2012-0365-6785-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001974": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0365-6770-LA93-changing1.tif:HRSCD-5/35-2012-0365-6770-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0365-6770-LA93-changing1.tif"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2012-0365-6770-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001977": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0330-6790-LA93-changing3.png:HRSCD-5/35-2012-0330-6790-LA93-0M50-E080-changing4.png"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0330-6790-LA93-changing3.png"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2012-0330-6790-LA93-0M50-E080-changing4.png"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001978": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0370-6780-LA93-changing1.tif:HRSCD-4/35-2012-0370-6780-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0370-6780-LA93-changing1.tif"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2012-0370-6780-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001922": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0355-6755-LA93-changing1.tif:HRSCD-4/35-2012-0355-6755-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0355-6755-LA93-changing1.tif"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2012-0355-6755-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001923": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0330-6795-LA93-changing1.png:HRSCD-4/35-2012-0330-6795-LA93-0M50-E080-changing2.png"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0330-6795-LA93-changing1.png"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2012-0330-6795-LA93-0M50-E080-changing2.png"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001932": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0345-6815-LA93-changing1.png:HRSCD-4/35-2012-0345-6815-LA93-0M50-E080-changing2.png"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0345-6815-LA93-changing1.png"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2012-0345-6815-LA93-0M50-E080-changing2.png"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001934": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0375-6810-LA93-changing1.tif:HRSCD-5/35-2012-0375-6810-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0375-6810-LA93-changing1.tif"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2012-0375-6810-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001936": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0330-6785-LA93-changing3.png:HRSCD-5/35-2012-0330-6785-LA93-0M50-E080-changing4.png"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0330-6785-LA93-changing3.png"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2012-0330-6785-LA93-0M50-E080-changing4.png"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001938": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0360-6805-LA93-changing1.tif:HRSCD-4/35-2012-0360-6805-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0360-6805-LA93-changing1.tif"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2012-0360-6805-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001939": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0335-6815-LA93-changing1.png:HRSCD-4/35-2012-0335-6815-LA93-0M50-E080-changing2.png"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0335-6815-LA93-changing1.png"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2012-0335-6815-LA93-0M50-E080-changing2.png"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001942": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0330-6765-LA93-changing3.png:HRSCD-5/35-2012-0330-6765-LA93-0M50-E080-changing4.png"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0330-6765-LA93-changing3.png"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2012-0330-6765-LA93-0M50-E080-changing4.png"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001943": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0365-6775-LA93-changing1.tif:HRSCD-4/35-2012-0365-6775-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0365-6775-LA93-changing1.tif"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2012-0365-6775-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001944": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0340-6785-LA93-changing1.png:HRSCD-4/35-2012-0340-6785-LA93-0M50-E080-changing2.png"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0340-6785-LA93-changing1.png"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2012-0340-6785-LA93-0M50-E080-changing2.png"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001945": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0345-6780-LA93-changing3.png:HRSCD-5/35-2012-0345-6780-LA93-0M50-E080-changing4.png"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0345-6780-LA93-changing3.png"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2012-0345-6780-LA93-0M50-E080-changing4.png"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001947": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0345-6830-LA93-changing1.png:HRSCD-4/35-2012-0345-6830-LA93-0M50-E080-changing2.png"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0345-6830-LA93-changing1.png"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2012-0345-6830-LA93-0M50-E080-changing2.png"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001950": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0375-6815-LA93-changing1.tif:HRSCD-5/35-2012-0375-6815-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0375-6815-LA93-changing1.tif"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2012-0375-6815-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001951": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0360-6785-LA93-changing1.tif:HRSCD-4/35-2012-0360-6785-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0360-6785-LA93-changing1.tif"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2012-0360-6785-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001952": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0360-6780-LA93-changing1.tif:HRSCD-4/35-2012-0360-6780-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0360-6780-LA93-changing1.tif"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2012-0360-6780-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001956": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0340-6765-LA93-changing3.png:HRSCD-5/35-2012-0340-6765-LA93-0M50-E080-changing4.png"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0340-6765-LA93-changing3.png"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2012-0340-6765-LA93-0M50-E080-changing4.png"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001957": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0340-6785-LA93-changing3.png:HRSCD-5/35-2012-0340-6785-LA93-0M50-E080-changing4.png"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0340-6785-LA93-changing3.png"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2012-0340-6785-LA93-0M50-E080-changing4.png"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001960": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0375-6785-LA93-changing1.tif:HRSCD-4/35-2012-0375-6785-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0375-6785-LA93-changing1.tif"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2012-0375-6785-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001969": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0340-6825-LA93-changing3.png:HRSCD-5/35-2012-0340-6825-LA93-0M50-E080-changing4.png"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0340-6825-LA93-changing3.png"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2012-0340-6825-LA93-0M50-E080-changing4.png"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001973": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0365-6755-LA93-changing1.tif:HRSCD-4/35-2012-0365-6755-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0365-6755-LA93-changing1.tif"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2012-0365-6755-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001975": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0370-6795-LA93-changing1.tif:HRSCD-5/35-2012-0370-6795-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2006-0370-6795-LA93-changing1.tif"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-5/35-2012-0370-6795-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    },
+    "xlrs_001976": {
+      "original_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0355-6760-LA93-changing1.tif:HRSCD-4/35-2012-0355-6760-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "normalized_inputs": {
+        "image0": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2006-0355-6760-LA93-changing1.tif"
+        },
+        "image1": {
+          "type": "image",
+          "uri_or_key": "HRSCD-4/35-2012-0355-6760-LA93-0M50-E080-changing2.tif"
+        }
+      },
+      "reason": "explicit HRSCD paired image keys represent two temporal images"
+    }
+  },
+  "historical_current_validation": {
+    "invalid_count": 148,
+    "invalid_ids": [
+      "mme_rs_perception_remote_sensing_color_0076",
+      "mme_rs_perception_remote_sensing_color_0079",
+      "mme_rs_perception_remote_sensing_color_0091",
+      "mme_rs_perception_remote_sensing_color_0234",
+      "mme_rs_perception_remote_sensing_color_0246",
+      "mme_rs_perception_remote_sensing_color_0276",
+      "mme_rs_perception_remote_sensing_color_0297",
+      "mme_rs_perception_remote_sensing_color_0306",
+      "mme_rs_perception_remote_sensing_color_0315",
+      "mme_rs_perception_remote_sensing_color_0419",
+      "mme_rs_perception_remote_sensing_color_0449",
+      "mme_rs_perception_remote_sensing_color_0693",
+      "mme_rs_perception_remote_sensing_color_0695",
+      "mme_rs_perception_remote_sensing_color_0704",
+      "mme_rs_perception_remote_sensing_color_0714",
+      "mme_rs_perception_remote_sensing_color_0755",
+      "mme_rs_perception_remote_sensing_color_0802",
+      "mme_rs_perception_remote_sensing_color_0854",
+      "mme_rs_perception_remote_sensing_color_0875",
+      "mme_rs_perception_remote_sensing_color_0884",
+      "mme_rs_perception_remote_sensing_color_0923",
+      "mme_rs_perception_remote_sensing_color_0966",
+      "mme_rs_perception_remote_sensing_color_1086",
+      "mme_rs_perception_remote_sensing_color_1104",
+      "mme_rs_perception_remote_sensing_color_1122",
+      "mme_rs_perception_remote_sensing_color_1125",
+      "mme_rs_perception_remote_sensing_color_1308",
+      "mme_rs_perception_remote_sensing_color_1356",
+      "mme_rs_perception_remote_sensing_color_1419",
+      "mme_rs_perception_remote_sensing_color_1437",
+      "mme_rs_perception_remote_sensing_color_1469",
+      "mme_rs_perception_remote_sensing_color_1547",
+      "mme_rs_perception_remote_sensing_color_1629",
+      "mme_rs_perception_remote_sensing_color_1671",
+      "mme_rs_perception_remote_sensing_color_1707",
+      "mme_rs_perception_remote_sensing_color_1740",
+      "mme_rs_perception_remote_sensing_color_1743",
+      "mme_rs_perception_remote_sensing_color_1764",
+      "mme_rs_perception_remote_sensing_color_1806",
+      "mme_rs_perception_remote_sensing_color_1853",
+      "mme_rs_perception_remote_sensing_color_1862",
+      "mme_rs_perception_remote_sensing_color_1898",
+      "mme_rs_perception_remote_sensing_color_1907",
+      "mme_rs_perception_remote_sensing_color_1937",
+      "mme_rs_perception_remote_sensing_color_1943",
+      "mme_rs_perception_remote_sensing_color_1950",
+      "mme_rs_perception_remote_sensing_color_1955",
+      "mme_rs_perception_remote_sensing_color_1958",
+      "mme_rs_perception_remote_sensing_color_1961",
+      "mme_rs_perception_remote_sensing_color_1973",
+      "mme_rs_perception_remote_sensing_color_1995",
+      "mme_rs_perception_remote_sensing_color_1998",
+      "mme_rs_perception_remote_sensing_color_2004",
+      "mme_rs_perception_remote_sensing_color_2007",
+      "mme_rs_perception_remote_sensing_color_2019",
+      "mme_rs_perception_remote_sensing_color_2046",
+      "mme_rs_perception_remote_sensing_color_2058",
+      "mme_rs_perception_remote_sensing_color_2064",
+      "mme_rs_perception_remote_sensing_color_2076",
+      "mme_rs_perception_remote_sensing_color_2079",
+      "mme_rs_perception_remote_sensing_color_2124",
+      "mme_rs_perception_remote_sensing_color_2163",
+      "mme_rs_perception_remote_sensing_color_2172",
+      "mme_rs_perception_remote_sensing_color_2217",
+      "mme_rs_perception_remote_sensing_color_2262",
+      "mme_rs_perception_remote_sensing_color_2325",
+      "mme_rs_perception_remote_sensing_color_2340",
+      "mme_rs_perception_remote_sensing_color_2373",
+      "mme_rs_perception_remote_sensing_color_2448",
+      "mme_rs_perception_remote_sensing_color_2483",
+      "mme_rs_perception_remote_sensing_color_2548",
+      "mme_rs_perception_remote_sensing_color_2557",
+      "mme_rs_perception_remote_sensing_color_2590",
+      "mme_rs_perception_remote_sensing_color_2617",
+      "mme_rs_perception_remote_sensing_color_2626",
+      "mme_rs_perception_remote_sensing_color_2661",
+      "mme_rs_perception_remote_sensing_color_2763",
+      "mme_rs_perception_remote_sensing_color_2775",
+      "mme_rs_perception_remote_sensing_color_2832",
+      "mme_rs_perception_remote_sensing_color_2856",
+      "mme_rs_perception_remote_sensing_color_2868",
+      "mme_rs_perception_remote_sensing_color_2871",
+      "mme_rs_perception_remote_sensing_color_2949",
+      "mme_rs_perception_remote_sensing_color_3047",
+      "mme_rs_perception_remote_sensing_color_3053",
+      "mme_rs_perception_remote_sensing_color_3065",
+      "mme_rs_perception_remote_sensing_color_3143",
+      "mme_rs_perception_remote_sensing_color_3152",
+      "mme_rs_perception_remote_sensing_color_3167",
+      "mme_rs_perception_remote_sensing_color_3324",
+      "mme_rs_perception_remote_sensing_color_3433",
+      "mme_rs_perception_remote_sensing_color_3454",
+      "mme_rs_perception_remote_sensing_color_3466",
+      "mme_rs_perception_remote_sensing_color_3622",
+      "mme_rs_perception_remote_sensing_count_0017",
+      "mme_rs_perception_remote_sensing_count_0175",
+      "mme_rs_perception_remote_sensing_count_0181",
+      "mme_rs_perception_remote_sensing_count_0193",
+      "mme_rs_perception_remote_sensing_count_0235",
+      "mme_rs_perception_remote_sensing_count_0241",
+      "mme_rs_perception_remote_sensing_count_0253",
+      "mme_rs_perception_remote_sensing_count_0256",
+      "mme_rs_perception_remote_sensing_count_0307",
+      "mme_rs_perception_remote_sensing_count_0334",
+      "mme_rs_perception_remote_sensing_count_0967",
+      "mme_rs_perception_remote_sensing_count_1063",
+      "mme_rs_perception_remote_sensing_count_2624",
+      "mme_rs_perception_remote_sensing_count_2698",
+      "mme_rs_perception_remote_sensing_count_2848",
+      "mme_rs_perception_remote_sensing_position_0218",
+      "mme_rs_perception_remote_sensing_position_3708",
+      "xlrs_000037",
+      "xlrs_000208",
+      "xlrs_000270",
+      "xlrs_000350",
+      "xlrs_000385",
+      "xlrs_000391",
+      "xlrs_000395",
+      "xlrs_000407",
+      "xlrs_000428",
+      "xlrs_000448",
+      "xlrs_000457",
+      "xlrs_000468",
+      "xlrs_000491",
+      "xlrs_000511",
+      "xlrs_000516",
+      "xlrs_000523",
+      "xlrs_000633",
+      "xlrs_000643",
+      "xlrs_000683",
+      "xlrs_001922",
+      "xlrs_001923",
+      "xlrs_001952",
+      "xlrs_001956",
+      "xlrs_001957",
+      "xlrs_001960",
+      "xlrs_001988",
+      "xlrs_001989",
+      "xlrs_001994",
+      "xlrs_002010",
+      "xlrs_002015",
+      "xlrs_002017",
+      "xlrs_002020",
+      "xlrs_002046",
+      "xlrs_002050",
+      "xlrs_002053",
+      "xlrs_002056",
+      "xlrs_002058"
+    ],
+    "invalid_records": {
+      "mme_rs_perception_remote_sensing_color_0076": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_0079": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_0091": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_0234": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_0246": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_0276": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_0297": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.2.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='width', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "mme_rs_perception_remote_sensing_color_0306": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.2.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='distance from bottom-left corner', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "mme_rs_perception_remote_sensing_color_0315": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.2.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='height', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "mme_rs_perception_remote_sensing_color_0419": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_0449": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_0693": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_0695": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_0704": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n6 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_0714": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_0755": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n3 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_0802": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_0854": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_0875": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_0884": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_0923": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_0966": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1086": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1104": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1122": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1125": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1308": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1356": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.2.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='height', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "mme_rs_perception_remote_sensing_color_1419": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n6 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1437": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1469": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1547": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n6 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1629": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.2.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='height', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "mme_rs_perception_remote_sensing_color_1671": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.2.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='height', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "mme_rs_perception_remote_sensing_color_1707": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1740": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.6.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='distance to lower left corner of roundabout', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "mme_rs_perception_remote_sensing_color_1743": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1764": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1806": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1853": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1862": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1898": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1907": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n5 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1937": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1943": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1950": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1955": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n6 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1958": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n6 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1961": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1973": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1995": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_1998": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n6 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2004": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2007": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2019": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2046": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2058": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n6 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2064": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n6 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2076": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2079": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n6 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2124": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2163": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2172": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2217": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2262": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2325": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2340": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2373": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2448": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2483": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2548": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2557": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2590": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.2.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='height', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "mme_rs_perception_remote_sensing_color_2617": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n6 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2626": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2661": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n6 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2763": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2775": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2832": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2856": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2868": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2871": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n5 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_2949": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_3047": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_3053": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_3065": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_3143": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_3152": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_3167": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_3324": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n3 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_3433": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_3454": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_3466": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_color_3622": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n6 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_count_0017": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: select_result_not_visual_scope: LOCATE.image cannot consume SELECT result $n4; use the selected entity/region as semantic evidence or a source image scope"
+      },
+      "mme_rs_perception_remote_sensing_count_0175": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.3.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='distance to railway', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "mme_rs_perception_remote_sensing_count_0181": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.2.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='height', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "mme_rs_perception_remote_sensing_count_0193": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n3 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+      },
+      "mme_rs_perception_remote_sensing_count_0235": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.2.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='width', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "mme_rs_perception_remote_sensing_count_0241": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.1.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='width', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "mme_rs_perception_remote_sensing_count_0253": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.2.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='width', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "mme_rs_perception_remote_sensing_count_0256": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.1.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='width', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "mme_rs_perception_remote_sensing_count_0307": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: select_result_not_visual_scope: LOCATE.image cannot consume SELECT result $n6; use the selected entity/region as semantic evidence or a source image scope"
+      },
+      "mme_rs_perception_remote_sensing_count_0334": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.2.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='height', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "mme_rs_perception_remote_sensing_count_0967": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: select_result_not_visual_scope: LOCATE.image cannot consume SELECT result $n4; use the selected entity/region as semantic evidence or a source image scope"
+      },
+      "mme_rs_perception_remote_sensing_count_1063": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.2.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='width', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "mme_rs_perception_remote_sensing_count_2624": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: select_result_not_visual_scope: LOCATE.image cannot consume SELECT result $n4; use the selected entity/region as semantic evidence or a source image scope"
+      },
+      "mme_rs_perception_remote_sensing_count_2698": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: select_result_not_visual_scope: LOCATE.image cannot consume SELECT result $n6; use the selected entity/region as semantic evidence or a source image scope"
+      },
+      "mme_rs_perception_remote_sensing_count_2848": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.3.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='width', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "mme_rs_perception_remote_sensing_position_0218": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.1.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='height', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "mme_rs_perception_remote_sensing_position_3708": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: select_result_not_visual_scope: LOCATE.image cannot consume SELECT result $n2; use the selected entity/region as semantic evidence or a source image scope"
+      },
+      "xlrs_000037": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: select_result_not_visual_scope: LOCATE.image cannot consume SELECT result $n4; use the selected entity/region as semantic evidence or a source image scope"
+      },
+      "xlrs_000208": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: select_result_not_visual_scope: LOCATE.image cannot consume SELECT result $n4; use the selected entity/region as semantic evidence or a source image scope; select_result_not_visual_scope: LOCATE.image cannot consume SELECT result $n4; use the selected entity/region as semantic evidence or a source image scope"
+      },
+      "xlrs_000270": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.4.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='cluster_size', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_000350": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.2.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='length', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_000385": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.4.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='length', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_000391": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.2.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='length', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_000395": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.2.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='length', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_000407": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.2.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='length', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_000428": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.2.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='length', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_000448": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.2.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='length', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_000457": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.4.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='length', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_000468": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.3.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='length', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_000491": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.3.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='roof area', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_000511": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.3.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='color darkness', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_000516": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.1.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='length', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_000523": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.3.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='length', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_000633": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: select_result_not_visual_scope: LOCATE.image cannot consume SELECT result $n3; use the selected entity/region as semantic evidence or a source image scope"
+      },
+      "xlrs_000643": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: select_result_not_visual_scope: LOCATE.image cannot consume SELECT result $n6; use the selected entity/region as semantic evidence or a source image scope; select_result_not_visual_scope: LOCATE.image cannot consume SELECT result $n6; use the selected entity/region as semantic evidence or a source image scope"
+      },
+      "xlrs_000683": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.2.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='length', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_001922": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: select_result_not_visual_scope: LOCATE.image cannot consume SELECT result $n2; use the selected entity/region as semantic evidence or a source image scope; select_result_not_visual_scope: LOCATE.image cannot consume SELECT result $n3; use the selected entity/region as semantic evidence or a source image scope"
+      },
+      "xlrs_001923": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: select_result_not_visual_scope: LOCATE.image cannot consume SELECT result $n2; use the selected entity/region as semantic evidence or a source image scope; select_result_not_visual_scope: LOCATE.image cannot consume SELECT result $n3; use the selected entity/region as semantic evidence or a source image scope"
+      },
+      "xlrs_001952": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: select_result_not_visual_scope: COUNT.image cannot consume SELECT result $n2; use the selected entity/region as semantic evidence or a source image scope; select_result_not_visual_scope: COUNT.image cannot consume SELECT result $n3; use the selected entity/region as semantic evidence or a source image scope"
+      },
+      "xlrs_001956": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: select_result_not_visual_scope: COUNT.image cannot consume SELECT result $n2; use the selected entity/region as semantic evidence or a source image scope; select_result_not_visual_scope: COUNT.image cannot consume SELECT result $n3; use the selected entity/region as semantic evidence or a source image scope"
+      },
+      "xlrs_001957": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: select_result_not_visual_scope: COUNT.image cannot consume SELECT result $n2; use the selected entity/region as semantic evidence or a source image scope; select_result_not_visual_scope: COUNT.image cannot consume SELECT result $n3; use the selected entity/region as semantic evidence or a source image scope"
+      },
+      "xlrs_001960": {
+        "valid": false,
+        "errors": [
+          "current_dsl_rejected"
+        ],
+        "detail": "DSLParseError: DSL lowers to an invalid TaskGraph: select_result_not_visual_scope: COUNT.image cannot consume SELECT result $n2; use the selected entity/region as semantic evidence or a source image scope; select_result_not_visual_scope: COUNT.image cannot consume SELECT result $n3; use the selected entity/region as semantic evidence or a source image scope"
+      },
+      "xlrs_001988": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.7.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='distance', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_001989": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.6.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='distance', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_001994": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.6.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='distance', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_002010": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.1.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='length', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_002015": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.4.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='distance', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_002017": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.6.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='distance', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_002020": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.10.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='distance', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_002046": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.4.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='distance', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_002050": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.4.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='length', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_002053": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.9.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='number of tennis courts', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_002056": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.5.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='distance', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      },
+      "xlrs_002058": {
+        "valid": false,
+        "errors": [
+          "production_graph_rejected"
+        ],
+        "production_validation": {
+          "valid": false,
+          "bridge": "Qwen3VLPlannerProvider._to_production_graph",
+          "errors": [
+            "production_graph_rejected"
+          ],
+          "detail": "ValidationError: 1 validation error for TaskGraph\nnodes.8.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='distance', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum",
+          "model_loaded": false
+        }
+      }
+    },
+    "remaining_invalid_count": 0,
+    "remaining_invalid_ids": [],
+    "all_release_rows_current_valid": true
+  },
+  "leakage": {
+    "historical_question_overlap_count": 12,
+    "historical_id_overlap_count": 0,
+    "new_cross_split_allowed": false
+  },
+  "source_sha256": {
+    "seed": "e5b8f6725ff2fb2cd1e3be8e68b910670d30dc247ec4bbb21527b99a42eca504",
+    "base_train": "fec2f0c4f7dbe5b996973bd22c2b2c9831598d222792961823b4b87f08ced9ad",
+    "fixed_test": "6e4b9b15c3809faa6b67b9264bbc44c7589e64e77de5eaabf5e3be22291f7571",
+    "system_prompt": "c70dc835cf931ab8e6221d5ad533e1e0cff19f87176a0ff7a4dc43c13a957ed6",
+    "plans": {
+      "legacy_rank_mme.jsonl": "47ca545a89173d6bc86e47dd9a0dd89bfc67f979f399f66bfe69485232ec9d1d",
+      "legacy_rank_xlrs.jsonl": "0c6f031b935e3681140e95753a5daad95d226f1d2bc1611499104673a4fb39e1",
+      "legacy_revisions.jsonl": "2a745e7a598ca9d6e2770071565dca96805851bba360a632f8d922dd34378f16",
+      "mme_a.jsonl": "533ff72e431d841145195867eca8574b818e1f0a771e3610a999129888c8726a",
+      "mme_b.jsonl": "ba5f2af8c80d660300e0ac53ea6c87c4946304cef154b2781c0ff67de79c2547",
+      "xlrs.jsonl": "73fa7241ff61d07797d830b85dbe42185361dcb35116111f8e8678836ed79fa8",
+      "xlrs_bbox.jsonl": "c814c36fdc67c7eb6f41cd3d4281eeeafe0bfd5cef7f6daede641e94fd01fb7c",
+      "xlrs_pending.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  }
+}

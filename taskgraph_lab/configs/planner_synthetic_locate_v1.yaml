@@ -1,0 +1,15 @@
+generator_version: planner-synthetic-locate-v1
+seed: 20261010
+count: 2000
+validation_fraction: 0.10
+ratios:
+  category: 0.45
+  intrinsic: 0.25
+  region: 0.15
+  extreme: 0.05
+  ordinal: 0.05
+  semantic: 0.05
+max_output_tokens: 512
+max_sequence_length: 1088
+symbolic_image: synthetic/image0.png
+symbolic_image_size: 4096

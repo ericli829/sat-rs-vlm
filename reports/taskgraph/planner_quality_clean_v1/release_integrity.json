@@ -1,0 +1,36 @@
+{
+  "valid": true,
+  "retained_rows": 5965,
+  "train_id_overlap": 0,
+  "train_question_overlap_with_clean_holdout": 0,
+  "quarantine_train_id_overlap": 0,
+  "remaining_semantic_lint_findings": 0,
+  "source_hashes_unchanged": true,
+  "original_test_reference_byte_identical": true,
+  "split_counts": {
+    "choice_train": 3813,
+    "choice_test": 152,
+    "locate_train": 1800,
+    "locate_validation": 200
+  },
+  "labels_revised_and_retained": 1113,
+  "heldout_overlap_rows": 277,
+  "heldout_overlap_unique_questions": 12,
+  "train_source_counts": {
+    "MME": 1974,
+    "XLRS": 1839,
+    "synthetic": 1800
+  },
+  "files_sha256": {
+    "choice_test.jsonl": "63190bf6f6cbb1d9699765ad0199df9ddf3b14466be363a0beca0ff48ec092e0",
+    "choice_train.jsonl": "5ee86681606d6c6381bc8f5fb4f48f1eb42b51fc2d25bf03a594527b63e28184",
+    "decisions.jsonl": "9930b6846e55ae3d1158a4201796a542b887583ad7f7050b68a8af86143726c3",
+    "locate_train.jsonl": "37ef555ba418bb11570e8ee2f26809bdbbacc5d887bb9e06a50873fda61e2a15",
+    "locate_validation.jsonl": "51349d78e23906fdfc12953c2dabfc5f29110542e9b6f6a762cf62fe28b0b7aa",
+    "original_test_reference.jsonl": "6e4b9b15c3809faa6b67b9264bbc44c7589e64e77de5eaabf5e3be22291f7571",
+    "quarantine.jsonl": "90cdf1426b8133e5c0d75ea9fef1d533510998c2a82b13f5ee7f368a2f277b28",
+    "test.jsonl": "63190bf6f6cbb1d9699765ad0199df9ddf3b14466be363a0beca0ff48ec092e0",
+    "train.jsonl": "2c0c28788421dbf9cb3a866b25e21db430c656d7aabbe61effa6204838e0d49c",
+    "validation.jsonl": "51349d78e23906fdfc12953c2dabfc5f29110542e9b6f6a762cf62fe28b0b7aa"
+  }
+}

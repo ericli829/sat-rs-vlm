@@ -1,0 +1,90 @@
+{
+  "training_count": 4500,
+  "training_unique_ids": 4500,
+  "new_count": 1685,
+  "new_semantic_rows": 694,
+  "new_semantic_nodes": 776,
+  "new_semantic_modes": {
+    "SINGLE": 513,
+    "MULTI": 263
+  },
+  "new_datasets": {
+    "MME_RealWorld_RS": 850,
+    "XLRS_Bench": 835
+  },
+  "all_datasets": {
+    "MME_RealWorld_RS": 2223,
+    "XLRS_Bench": 2277
+  },
+  "all_semantic_nodes": 989,
+  "production_schema_errors": [],
+  "source_hashes_unchanged": {
+    "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\taskgraph_lab\\data\\planner_sft_hard_augmented_v1_20260901_173936\\train.jsonl": true,
+    "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\taskgraph_lab\\data\\planner_sft_hard_augmented_v1_20260901_173936\\test.jsonl": true,
+    "D:\\Desktop\\tzb-2026\\MME_RealWorld.json": true,
+    "D:\\Desktop\\tzb-2026\\xlrs_questions_answers.json": true
+  },
+  "semantic_system_conflicts": [],
+  "train_sha256": "67d2fd13520b023e4159f08f2548d1df660c3d4b83dfea531487f6c49d88a55e",
+  "fixed_test_preserved_bytes": true,
+  "production_validation_path": "Qwen3VLPlannerProvider._to_production_graph with original question/choices/inputs",
+  "fixed_test_current_production_errors": [
+    {
+      "id": "mme_rs_perception_remote_sensing_color_1383",
+      "error": "DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_1964",
+      "error": "DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n6 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_1970",
+      "error": "DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n6 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_2733",
+      "error": "DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_color_3544",
+      "error": "DSL lowers to an invalid TaskGraph: attribute_requires_singleton: ATTRIBUTE.entity=$n4 requires a singleton SELECT; add RANK, ORDINAL, or EXTREME before ATTRIBUTE"
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1178",
+      "error": "1 validation error for TaskGraph\nnodes.2.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='upstream position', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum"
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_1420",
+      "error": "1 validation error for TaskGraph\nnodes.1.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='distance from bottom right', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum"
+    },
+    {
+      "id": "mme_rs_perception_remote_sensing_count_3150",
+      "error": "1 validation error for TaskGraph\nnodes.2.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='height', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum"
+    },
+    {
+      "id": "xlrs_000298",
+      "error": "1 validation error for TaskGraph\nnodes.2.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='height', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum"
+    },
+    {
+      "id": "xlrs_000386",
+      "error": "1 validation error for TaskGraph\nnodes.2.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='radius', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum"
+    },
+    {
+      "id": "xlrs_000513",
+      "error": "1 validation error for TaskGraph\nnodes.5.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='distance to nearest edge', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum"
+    },
+    {
+      "id": "xlrs_000771",
+      "error": "DSL lowers to an invalid TaskGraph: select_result_not_visual_scope: LOCATE.image cannot consume SELECT result $n4; use the selected entity/region as semantic evidence or a source image scope"
+    },
+    {
+      "id": "xlrs_001998",
+      "error": "1 validation error for TaskGraph\nnodes.6.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='distance', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum"
+    },
+    {
+      "id": "xlrs_002019",
+      "error": "1 validation error for TaskGraph\nnodes.6.criterion\n  Input should be 'bbox_area' or 'score' [type=enum, input_value='distance to start', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum"
+    }
+  ],
+  "valid": true
+}

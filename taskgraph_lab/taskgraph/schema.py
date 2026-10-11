@@ -260,6 +260,12 @@ class FinalSpec(StrictModel):
     question: str | None = None
     answer_type: AnswerType
 
+    @model_validator(mode="after")
+    def bbox_has_one_source(self) -> FinalSpec:
+        if self.answer_type is AnswerType.BBOX and len(self.sources) != 1:
+            raise ValueError("BBOX final requires exactly one visual source")
+        return self
+
     @field_validator("sources")
     @classmethod
     def node_refs_only(cls, value: list[str]) -> list[str]:

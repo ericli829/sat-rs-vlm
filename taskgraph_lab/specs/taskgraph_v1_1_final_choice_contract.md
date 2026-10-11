@@ -37,12 +37,12 @@ Question final (the final sources still require semantic or visual judgment):
   deterministically.
 - Visual or semantic outputs such as `Region`, `RegionSet`, `Entity`,
   `EntitySet`, `RouteContext`, and `EvidenceSet` require a residual `question`
-  that states only the unresolved final judgment.
+  that states only the unresolved final judgment, except for unique BBOX output.
 - A residual `question` must not contain predicted counts, labels, booleans, or
   other runtime results. Referring expressions already resolved by the DAG
   should be removed.
 - `answer_type` uses `CHOICE_SINGLE`, `CHOICE_MULTI`, `INTEGER`, `BOOLEAN`,
-  `LABEL`, `LABEL_SET`, or `TEXT`; runtime types such as `Answer` and
+  `LABEL`, `LABEL_SET`, `TEXT`, or `BBOX`; runtime types such as `Answer` and
   `ScalarInt` are not answer types.
 - `choices` is not a `FinalSpec` field. The Planner must not copy, reorder, or
   rewrite dataset options.
@@ -50,6 +50,21 @@ Question final (the final sources still require semantic or visual judgment):
 The compatibility loader accepts legacy `source: "$nX"` and canonicalizes it
 to `sources: ["$nX"]`. It does not invent a generic final question: absence is
 meaningful for an authoritative structured final.
+
+`BBOX` final is an additional deterministic output contract:
+
+```json
+{"sources": ["$n1"], "answer_type": "BBOX"}
+```
+
+It requires one single-target LOCATE, REGION/REGION_FROM_BBOX, or singleton
+SELECT (RANK, ORDINAL, EXTREME, SUBREGION, or SEMANTIC SINGLE) source. A raw image,
+arbitrary EntitySet/RegionSet, GROUP, SELECT RELATION, SEMANTIC MULTI, or multiple
+sources cannot supply this contract. Static acceptance of terminal LOCATE does
+not assert visual uniqueness: runtime must reject zero/multiple/unresolved
+objects and validate the unique Entity/Region. BBOX normally omits `question`
+and bypasses final choice/text generation. The competition answer layer returns
+the original-image pixel_xyxy array; Planner labels contain no coordinate answer.
 
 ## Future runtime contract
 

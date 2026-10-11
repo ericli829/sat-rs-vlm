@@ -56,3 +56,16 @@ data/evaluation/tiers_v2/e2_standard.jsonl
 data/evaluation/tiers_v2/e3_full.jsonl
 scripts/training/run_autodl_qwen3vl_4b_stage_a_v2.sh
 tests/unit/training/test_stage_a_v2_launcher.py
+
+# Local experiment downloads, credentials and process state.
+reports/experiments/change_agent_mci_*/
+reports/experiments/**/logs/
+reports/experiments/**/partial_predictions.json
+reports/training/**/logs/
+reports/training/**/downloads/
+reports/training/**/askpass.*
+reports/training/**/*.pid
+reports/training/**/*.log
+reports/training/**/*.zip
+reports/training/**/bundle/inputs/
+reports/taskgraph/planner_*/*.log
