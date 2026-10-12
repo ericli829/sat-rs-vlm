@@ -5,7 +5,12 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Iterable, Sequence
 
-from .geometry import greedy_match, iou, nms, point_in_bbox
+from sat_rs_vlm.integrations.detectors.instance_postprocess import (
+    conservative_nms_indices,
+    same_instance_dedup_indices,
+)
+
+from .geometry import greedy_match, iou, point_in_bbox
 from .runtime import Detection, DetectionSet
 from .tiling import Tile
 
@@ -35,7 +40,16 @@ def same_scale_dedup(
         by_scale[det.scale_id].append(det)
     out: list[Detection] = []
     for group in by_scale.values():
-        out.extend(nms(group, iou_thr=nms_iou))
+        boxes = [detection.bbox_xyxy_global for detection in group]
+        scores = [detection.score for detection in group]
+        indices = conservative_nms_indices(boxes, scores, nms_iou)
+        indices = same_instance_dedup_indices(
+            boxes,
+            scores,
+            indices,
+            [detection.tile_id for detection in group],
+        )
+        out.extend(group[index] for index in indices)
     return out
 
 

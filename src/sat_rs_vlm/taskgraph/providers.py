@@ -1238,6 +1238,7 @@ class ProposalDetectionAdapter:
                         provenance={
                             "provider": result.provider,
                             "coordinate_mode": "absolute_original_pixel_xyxy",
+                            "instance_status": "CONFIRMED_INSTANCE",
                             "candidate_id": candidate_id,
                         },
                     ),
@@ -1247,6 +1248,7 @@ class ProposalDetectionAdapter:
                         "provider": result.provider,
                         "model_id": result.model_id,
                         "candidate_id": candidate_id,
+                        "instance_status": "CONFIRMED_INSTANCE",
                         "scale_tile_metadata": result_metadata,
                     },
                 )
@@ -1285,6 +1287,13 @@ class ProposalDetectionAdapter:
                     "candidate_count_before_limit": raw_candidate_count,
                     "candidate_count_after_limit": len(entities),
                     "candidate_pool_complete": pool_complete,
+                    "instance_search_regions": list(
+                        result_metadata.get("instance_search_regions", [])
+                    ),
+                    "unresolved_instance_regions": list(
+                        result_metadata.get("unresolved_instance_regions", [])
+                    ),
+                    "instance_postprocess": result_metadata.get("instance_postprocess"),
                 },
             ),
             latency_ms=(time.perf_counter() - started) * 1000.0,

@@ -95,6 +95,44 @@ def test_count_entity_set_is_deterministic_and_does_not_call_provider(tmp_path: 
     assert result.value == ScalarInt(3, {"provider": "cardinality", "source": "EntitySet"})
 
 
+def test_count_entity_set_counts_confirmed_instances_and_skips_collection_regions(
+    tmp_path: Path,
+) -> None:
+    image = ImageRef(str(tmp_path / "memory.png"), width=32, height=16)
+    entities = EntitySet(
+        (
+            Entity(
+                Region(image, (0.0, 0.0, 4.0, 4.0)),
+                "ship",
+                0.9,
+                {"instance_status": "CONFIRMED_INSTANCE"},
+            ),
+            Entity(
+                Region(image, (5.0, 0.0, 30.0, 15.0)),
+                "ship",
+                0.8,
+                {"instance_status": "AGGREGATE_REGION"},
+            ),
+        ),
+        {"candidate_pool_complete": True},
+    )
+
+    result = CountExecutor(_NoCallCountingProvider()).execute(
+        _count_node("entities"),
+        {"entities": entities},
+        OperatorContext("How many ships?", (), InputComposer()),
+    )
+
+    assert result.value == ScalarInt(
+        1,
+        {
+            "provider": "cardinality",
+            "source": "EntitySet",
+            "ignored_aggregate_regions": 1,
+        },
+    )
+
+
 def test_count_image_uses_exhaustive_counting_and_global_boxes(tmp_path: Path) -> None:
     provider = CountingSystemProvider.from_config(_counting_config())
     try:

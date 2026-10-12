@@ -1008,9 +1008,34 @@ class CountExecutor:
                 raise TypeError("COUNT.entities must be EntitySet")
             if entities.provenance.get("candidate_pool_complete") is False:
                 raise ValueError("COUNT.entities refuses an incomplete/unverified candidate pool")
+            countable = tuple(
+                entity
+                for entity in entities.entities
+                if entity.provenance.get("instance_status", "CONFIRMED_INSTANCE")
+                == "CONFIRMED_INSTANCE"
+            )
+            unresolved_entities = [
+                entity
+                for entity in entities.entities
+                if entity.provenance.get("instance_status", "CONFIRMED_INSTANCE")
+                not in {"CONFIRMED_INSTANCE", "AGGREGATE_REGION"}
+            ]
+            if unresolved_entities:
+                raise ValueError("COUNT.entities contains unconfirmed instance candidates")
+            aggregate_count = sum(
+                entity.provenance.get("instance_status") == "AGGREGATE_REGION"
+                for entity in entities.entities
+            )
             return OperatorOutcome(
                 ScalarInt(
-                    len(entities.entities), {"provider": "cardinality", "source": "EntitySet"}
+                    len(countable),
+                    {
+                        "provider": "cardinality",
+                        "source": "EntitySet",
+                        "ignored_aggregate_regions": aggregate_count,
+                    }
+                    if aggregate_count
+                    else {"provider": "cardinality", "source": "EntitySet"},
                 ),
                 "cardinality",
             )

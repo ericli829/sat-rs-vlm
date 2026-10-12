@@ -356,16 +356,19 @@ class LAEDinoSidecarProvider:
                 self._clients = [session.client]
             return self._session
 
-    def _options(self) -> dict[str, Any]:
+    def _options(self, *, raw_proposals: bool = False) -> dict[str, Any]:
         nms = self.config.get("nms_threshold")
         nms_threshold = None
         if nms is not None and nms not in ("", "null"):
             nms_threshold = float(nms)
-        return {
+        options = {
             "score_threshold": float(self.config.get("score_threshold", 0.3)),
             "top_k": int(self.config.get("top_k", 100)),
             "nms_threshold": nms_threshold,
         }
+        if raw_proposals:
+            options["raw_proposals"] = True
+        return options
 
     def predict(self, image_path: Path, target_phrase: str) -> ProposalResult:
         session = self._worker_session()
@@ -374,6 +377,18 @@ class LAEDinoSidecarProvider:
                 raise ProposalError("LAE-DINO provider is closed")
             response = session.client.request(image_path, target_phrase, options=self._options())
         return self._result(response, target_phrase)
+
+    def predict_raw(self, image_path: Path, target_phrase: str) -> ProposalResult:
+        """Return thresholded proposals before per-image post-processing."""
+
+        session = self._worker_session()
+        with session.lock:
+            if self._closed:
+                raise ProposalError("LAE-DINO provider is closed")
+            response = session.client.request(
+                image_path, target_phrase, options=self._options(raw_proposals=True)
+            )
+        return self._result(response, target_phrase, raw_proposals=True)
 
     def predict_batch(self, image_paths: list[Path], target_phrase: str) -> list[ProposalResult]:
         if not image_paths:
@@ -393,7 +408,38 @@ class LAEDinoSidecarProvider:
                 )
         return [self._result(response, target_phrase) for response in responses]
 
-    def _result(self, response: dict[str, Any], target_phrase: str) -> ProposalResult:
+    def predict_batch_raw(
+        self, image_paths: list[Path], target_phrase: str
+    ) -> list[ProposalResult]:
+        """Batch thresholded proposals without tile-local NMS/top-k."""
+
+        if not image_paths:
+            return []
+        session = self._worker_session()
+        responses = []
+        with session.lock:
+            if self._closed:
+                raise ProposalError("LAE-DINO provider is closed")
+            for start in range(0, len(image_paths), self.inference_batch_size):
+                responses.extend(
+                    session.client.request_batch(
+                        image_paths[start : start + self.inference_batch_size],
+                        target_phrase,
+                        options=self._options(raw_proposals=True),
+                    )
+                )
+        return [
+            self._result(response, target_phrase, raw_proposals=True)
+            for response in responses
+        ]
+
+    def _result(
+        self,
+        response: dict[str, Any],
+        target_phrase: str,
+        *,
+        raw_proposals: bool = False,
+    ) -> ProposalResult:
         stderr_path = str(self._client.stderr_path)
         metadata = dict(response.get("metadata", {}))
         try:
@@ -409,7 +455,7 @@ class LAEDinoSidecarProvider:
             image_width=image_width,
             image_height=image_height,
             coordinate_mode="pixel",
-            top_k=int(self.config.get("top_k", 100)),
+            top_k=None if raw_proposals else int(self.config.get("top_k", 100)),
         )
         metadata.update(
             {
@@ -429,10 +475,10 @@ class LAEDinoSidecarProvider:
                 "batch_size_configured": self.inference_batch_size,
                 "candidate_truncated": bool(metadata.get("candidate_truncated"))
                 or len(response.get("bbox_list", [])) > len(boxes)
-                or (
+                or (not raw_proposals and (
                     "candidate_truncated" not in metadata
                     and len(boxes) >= int(self.config.get("top_k", 100))
-                ),
+                )),
             }
         )
         metadata["candidate_pool_complete"] = (

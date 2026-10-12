@@ -11,13 +11,13 @@ from collections import OrderedDict
 from collections.abc import Iterator, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from PIL import Image
 
 from .parallel import resolve_parallel_workers
+from .instance_postprocess import conservative_nms_indices, postprocess_instances
 from .protocol import (
-    BatchedProposalProvider,
     ProposalError,
     ProposalProvider,
     ProposalResult,
@@ -87,16 +87,14 @@ def global_nms(
     *,
     top_k: int | None = None,
 ) -> tuple[list[list[float]], list[float], list[int]]:
-    if not 0.0 <= threshold <= 1.0:
-        raise ProposalError("global_nms_iou must be between 0 and 1")
-    order = sorted(range(len(scores)), key=lambda index: (-scores[index], index))
-    keep: list[int] = []
-    while order:
-        current = order.pop(0)
-        keep.append(current)
-        if top_k is not None and len(keep) >= top_k:
-            break
-        order = [index for index in order if _iou(boxes[current], boxes[index]) <= threshold]
+    try:
+        keep = conservative_nms_indices(boxes, scores, threshold)
+    except ValueError as exc:
+        raise ProposalError(str(exc)) from exc
+    if top_k is not None:
+        if top_k < 0:
+            raise ProposalError("top_k must be non-negative")
+        keep = keep[:top_k]
     return (
         [boxes[index] for index in keep],
         [scores[index] for index in keep],
@@ -131,7 +129,11 @@ class TiledProposalProvider:
         )
         if self.batch_size < 1:
             raise ProposalError("tiled detector batch_size must be positive")
-        self._uses_batches = callable(getattr(base_provider, "predict_batch", None))
+        self._raw_predict_batch = getattr(base_provider, "predict_batch_raw", None)
+        self._normal_predict_batch = getattr(base_provider, "predict_batch", None)
+        self._uses_batches = callable(self._raw_predict_batch) or callable(
+            self._normal_predict_batch
+        )
         self.proposal_cache_size = int(self.config.get("proposal_cache_size", 8))
         self.tile_image_format = tile_image_format(self.config.get("tile_image_format", "bmp"))
         self.tile_prefetch = bool(self.config.get("tile_prefetch", True))
@@ -156,6 +158,15 @@ class TiledProposalProvider:
             "parallel_max_workers": self.parallel_max_workers,
             "batch_size": self.batch_size,
             "batched_inference": self._uses_batches,
+            "instance_nms_iou": float(
+                self.config.get("instance_nms_iou", max(0.6, self.global_nms_iou))
+            ),
+            "instance_max_refinement_regions": int(
+                self.config.get("instance_max_refinement_regions", 4)
+            ),
+            "instance_large_box_area_fraction": float(
+                self.config.get("instance_large_box_area_fraction", 0.20)
+            ),
         }
         encoded = json.dumps(tiling_identity, sort_keys=True, separators=(",", ":"))
         self.tiling_sha256 = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -294,7 +305,9 @@ class TiledProposalProvider:
                 def predict_tile(
                     item: tuple[int, tuple[int, int, int, int], Path],
                 ) -> Any:
-                    return finish_tile(item, self.base_provider.predict(item[2], target_phrase))
+                    raw_predict = getattr(self.base_provider, "predict_raw", None)
+                    predictor = raw_predict if callable(raw_predict) else self.base_provider.predict
+                    return finish_tile(item, predictor(item[2], target_phrase))
 
                 def finish_tile(
                     item: tuple[int, tuple[int, int, int, int], Path], result: ProposalResult
@@ -345,7 +358,13 @@ class TiledProposalProvider:
                 tile_results: list[Any]
                 if self._uses_batches:
                     tile_results = []
-                    batch_provider = cast(BatchedProposalProvider, self.base_provider)
+                    batch_predict = (
+                        self._raw_predict_batch
+                        if callable(self._raw_predict_batch)
+                        else self._normal_predict_batch
+                    )
+                    if not callable(batch_predict):
+                        raise ProposalError("tiled batch provider has no batch prediction method")
                     with cpu_prepared_batches(
                         enumerate(tiles),
                         prepare_tile,
@@ -354,7 +373,7 @@ class TiledProposalProvider:
                         prefetch=self.tile_prefetch,
                     ) as batches:
                         for batch in batches:
-                            results = batch_provider.predict_batch(
+                            results = batch_predict(
                                 [item[2] for item in batch], target_phrase
                             )
                             if len(results) != len(batch):
@@ -425,12 +444,79 @@ class TiledProposalProvider:
                                 "score": score,
                             }
                         )
-        boxes, scores, keep = global_nms(
+        source_ids = [int(record["raw_index"]) for record in raw_records]
+        tile_by_id = {int(tile["tile_id"]): tile for tile in tile_records}
+        reference_areas = [
+            float(
+                (tile_by_id[int(record["tile_id"])]["tile_xyxy"][2]
+                 - tile_by_id[int(record["tile_id"])]["tile_xyxy"][0])
+                * (tile_by_id[int(record["tile_id"])]["tile_xyxy"][3]
+                   - tile_by_id[int(record["tile_id"])]["tile_xyxy"][1])
+            )
+            for record in raw_records
+        ]
+
+        def refine_region(parent: list[float]) -> tuple[list[list[float]], list[float]]:
+            from PIL import Image
+
+            padding = float(self.config.get("instance_refinement_padding_ratio", 0.12))
+            with Image.open(resolved_image) as source:
+                source_image = source.convert("RGB")
+            try:
+                image_width, image_height = source_image.size
+                pad_x = max(8, round((parent[2] - parent[0]) * padding))
+                pad_y = max(8, round((parent[3] - parent[1]) * padding))
+                crop_box = (
+                    max(0, int(parent[0] - pad_x)),
+                    max(0, int(parent[1] - pad_y)),
+                    min(image_width, int(parent[2] + pad_x + 0.999)),
+                    min(image_height, int(parent[3] + pad_y + 0.999)),
+                )
+                with tempfile.TemporaryDirectory(prefix="uhr_instance_refine_") as temp_dir:
+                    crop_path = Path(temp_dir) / f"refine.{self.tile_image_format}"
+                    crop = source_image.crop(crop_box)
+                    try:
+                        save_tile_image(crop, crop_path, self.tile_image_format)
+                    finally:
+                        crop.close()
+                    raw_predict = getattr(self.base_provider, "predict_raw", None)
+                    predictor = raw_predict if callable(raw_predict) else self.base_provider.predict
+                    refined = predictor(crop_path, target_phrase)
+            finally:
+                source_image.close()
+            dx, dy = crop_box[0], crop_box[1]
+            mapped = [
+                [box[0] + dx, box[1] + dy, box[2] + dx, box[3] + dy]
+                for box in refined.boxes_xyxy
+            ]
+            return mapped, list(refined.scores)
+
+        instance_nms_iou = float(
+            self.config.get("instance_nms_iou", max(0.6, self.global_nms_iou))
+        )
+        boxes, scores, instance_trace = postprocess_instances(
             raw_boxes,
             raw_scores,
-            self.global_nms_iou,
-            top_k=self.global_top_k,
+            nms_iou=instance_nms_iou,
+            source_ids=source_ids,
+            source_groups=[int(record["tile_id"]) for record in raw_records],
+            reference_areas=reference_areas,
+            refine=refine_region,
+            max_refinement_regions=int(self.config.get("instance_max_refinement_regions", 4)),
+            large_box_area_fraction=float(
+                self.config.get("instance_large_box_area_fraction", 0.20)
+            ),
         )
+        final_source_ids = list(instance_trace["final_source_ids"])
+        # Refinement children inherit the parent's raw proposal id. This keeps
+        # the existing source trace shape while the detailed split is recorded
+        # separately in ``instance_postprocess``.
+        keep = [int(source_id) for source_id in final_source_ids if source_id is not None]
+        before_global_top_k = len(boxes)
+        if self.global_top_k is not None:
+            boxes = boxes[: self.global_top_k]
+            scores = scores[: self.global_top_k]
+            keep = keep[: self.global_top_k]
         latency_ms = (time.perf_counter() - started) * 1000.0
         result = ProposalResult(
             boxes_xyxy=boxes,
@@ -467,13 +553,23 @@ class TiledProposalProvider:
                 "raw_proposal_count": len(raw_boxes),
                 "deduplicated_proposal_count": len(boxes),
                 "candidate_truncated": any(tile["candidate_truncated"] for tile in tile_records)
-                or (self.global_top_k is not None and len(boxes) >= self.global_top_k),
+                or (self.global_top_k is not None and before_global_top_k > len(boxes)),
                 "candidate_pool_complete": all(
                     tile["candidate_pool_complete"] for tile in tile_records
                 )
-                and (self.global_top_k is None or len(boxes) < self.global_top_k),
+                and not instance_trace["unresolved_regions"]
+                and (
+                    self.global_top_k is None
+                    or (
+                        before_global_top_k <= self.global_top_k
+                        and before_global_top_k == len(boxes)
+                    )
+                ),
                 "raw_proposals": raw_records,
                 "kept_raw_indices": keep,
+                "instance_postprocess": instance_trace,
+                "instance_search_regions": instance_trace["aggregate_regions"],
+                "unresolved_instance_regions": instance_trace["unresolved_regions"],
                 "base_latency_ms": base_latency_ms,
                 "wrapper_latency_ms": latency_ms,
             },

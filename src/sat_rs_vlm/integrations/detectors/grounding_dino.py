@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import contextlib
 import io
+import math
+import tempfile
 import time
 from collections.abc import Mapping
 from pathlib import Path
@@ -15,33 +17,16 @@ from .protocol import (
     canonicalize_proposals,
     stable_file_identity,
 )
-
-
-def _iou(left: list[float], right: list[float]) -> float:
-    x1 = max(left[0], right[0])
-    y1 = max(left[1], right[1])
-    x2 = min(left[2], right[2])
-    y2 = min(left[3], right[3])
-    intersection = max(0.0, x2 - x1) * max(0.0, y2 - y1)
-    if intersection <= 0.0:
-        return 0.0
-    left_area = (left[2] - left[0]) * (left[3] - left[1])
-    right_area = (right[2] - right[0]) * (right[3] - right[1])
-    union = left_area + right_area - intersection
-    return intersection / union if union > 0.0 else 0.0
+from .instance_postprocess import conservative_nms_indices, postprocess_instances
 
 
 def _nms(
     boxes: list[list[float]], scores: list[float], threshold: float
 ) -> tuple[list[list[float]], list[float]]:
-    if threshold < 0.0 or threshold > 1.0:
-        raise ProposalError("nms_threshold must be between 0 and 1")
-    order = sorted(range(len(scores)), key=lambda index: (-scores[index], index))
-    keep: list[int] = []
-    while order:
-        current = order.pop(0)
-        keep.append(current)
-        order = [index for index in order if _iou(boxes[current], boxes[index]) <= threshold]
+    try:
+        keep = conservative_nms_indices(boxes, scores, threshold)
+    except ValueError as exc:
+        raise ProposalError(str(exc)) from exc
     return [boxes[index] for index in keep], [scores[index] for index in keep]
 
 
@@ -106,7 +91,13 @@ class GroundingDinoProvider:
             raise ProposalError(f"failed to load local Grounding DINO: {exc}") from exc
         self._torch = torch
 
-    def predict(self, image_path: Path, target_phrase: str) -> ProposalResult:
+    def predict_raw(self, image_path: Path, target_phrase: str) -> ProposalResult:
+        """Return canonical proposals before NMS/refinement/top-k.
+
+        TiledProposalProvider uses this method so overlapping tiles are fused
+        once in original-image coordinates, rather than independently per tile.
+        """
+
         self._ensure_loaded()
         try:
             from PIL import Image
@@ -154,9 +145,6 @@ class GroundingDinoProvider:
                 # final top-k is applied only after suppression.
                 top_k=None,
             )
-            if self.nms_threshold is not None:
-                boxes, scores = _nms(boxes, scores, self.nms_threshold)
-            boxes, scores = boxes[: self.top_k], scores[: self.top_k]
         except Exception as exc:
             raise ProposalError(f"Grounding DINO inference failed: {exc}") from exc
         latency_ms = (time.perf_counter() - started) * 1000.0
@@ -179,7 +167,91 @@ class GroundingDinoProvider:
                 "image_height": image.height,
                 "validation": stats,
                 "model_identity": self._model_identity,
+                "candidate_truncated": False,
+                "candidate_pool_complete": stats["invalid_count"] == 0,
             },
+        )
+
+    def predict(self, image_path: Path, target_phrase: str) -> ProposalResult:
+        started = time.perf_counter()
+        raw = self.predict_raw(image_path, target_phrase)
+        nms_iou = (
+            self.nms_threshold
+            if self.nms_threshold is not None
+            else float(self.config.get("instance_nms_iou", 0.6))
+        )
+        padding = float(self.config.get("instance_refinement_padding_ratio", 0.12))
+        max_regions = int(self.config.get("instance_max_refinement_regions", 4))
+
+        def refine(parent: list[float]) -> tuple[list[list[float]], list[float]]:
+            from PIL import Image
+
+            with Image.open(str(image_path)) as source:
+                image = source.convert("RGB")
+            try:
+                width, height = image.size
+                pad_x = max(8, round((parent[2] - parent[0]) * padding))
+                pad_y = max(8, round((parent[3] - parent[1]) * padding))
+                crop_box = (
+                    max(0, math.floor(parent[0] - pad_x)),
+                    max(0, math.floor(parent[1] - pad_y)),
+                    min(width, math.ceil(parent[2] + pad_x)),
+                    min(height, math.ceil(parent[3] + pad_y)),
+                )
+                with tempfile.TemporaryDirectory(prefix="dino_instance_refine_") as tmp:
+                    crop_path = Path(tmp) / "search_region.png"
+                    crop = image.crop(crop_box)
+                    try:
+                        crop.save(crop_path)
+                    finally:
+                        crop.close()
+                    refined = self.predict_raw(crop_path, target_phrase)
+                dx, dy = crop_box[0], crop_box[1]
+                mapped = [
+                    [box[0] + dx, box[1] + dy, box[2] + dx, box[3] + dy]
+                    for box in refined.boxes_xyxy
+                ]
+                return mapped, refined.scores
+            finally:
+                image.close()
+
+        width = int(raw.metadata["image_width"])
+        height = int(raw.metadata["image_height"])
+        boxes, scores, instance_trace = postprocess_instances(
+            raw.boxes_xyxy,
+            raw.scores,
+            nms_iou=float(nms_iou),
+            reference_areas=[float(width * height)] * len(raw.boxes_xyxy),
+            refine=refine,
+            max_refinement_regions=max_regions,
+            large_box_area_fraction=float(
+                self.config.get("instance_large_box_area_fraction", 0.20)
+            ),
+        )
+        candidate_count_before_top_k = len(boxes)
+        boxes, scores = boxes[: self.top_k], scores[: self.top_k]
+        metadata = dict(raw.metadata)
+        metadata.update(
+            {
+                "instance_postprocess": instance_trace,
+                "instance_search_regions": instance_trace["aggregate_regions"],
+                "unresolved_instance_regions": instance_trace["unresolved_regions"],
+                "candidate_truncated": candidate_count_before_top_k > len(boxes),
+                "candidate_pool_complete": (
+                    raw.metadata.get("candidate_pool_complete") is not False
+                    and not instance_trace["unresolved_regions"]
+                    and candidate_count_before_top_k == len(boxes)
+                ),
+                "postprocess_latency_ms": (time.perf_counter() - started) * 1000.0,
+            }
+        )
+        return ProposalResult(
+            boxes_xyxy=boxes,
+            scores=scores,
+            latency_ms=(time.perf_counter() - started) * 1000.0,
+            provider=raw.provider,
+            model_id=raw.model_id,
+            metadata=metadata,
         )
 
     def close(self) -> None:

@@ -12,6 +12,7 @@ import json
 import math
 import os
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -25,31 +26,19 @@ from sat_rs_vlm.integrations.detectors.protocol import (  # noqa: E402
     ProposalError,
     canonicalize_proposals,
 )
-
-
-def _iou(left: list[float], right: list[float]) -> float:
-    x1, y1 = max(left[0], right[0]), max(left[1], right[1])
-    x2, y2 = min(left[2], right[2]), min(left[3], right[3])
-    intersection = max(0.0, x2 - x1) * max(0.0, y2 - y1)
-    union = (
-        ((left[2] - left[0]) * (left[3] - left[1]))
-        + ((right[2] - right[0]) * (right[3] - right[1]))
-        - intersection
-    )
-    return intersection / union if union > 0.0 else 0.0
+from sat_rs_vlm.integrations.detectors.instance_postprocess import (  # noqa: E402
+    conservative_nms_indices,
+    postprocess_instances,
+)
 
 
 def _nms(
     boxes: list[list[float]], scores: list[float], threshold: float
 ) -> tuple[list[list[float]], list[float]]:
-    if threshold < 0.0 or threshold > 1.0:
-        raise ProposalError("nms_threshold must be between 0 and 1")
-    order = sorted(range(len(scores)), key=lambda index: (-scores[index], index))
-    keep: list[int] = []
-    while order:
-        current = order.pop(0)
-        keep.append(current)
-        order = [index for index in order if _iou(boxes[current], boxes[index]) <= threshold]
+    try:
+        keep = conservative_nms_indices(boxes, scores, threshold)
+    except ValueError as exc:
+        raise ProposalError(str(exc)) from exc
     return [boxes[index] for index in keep], [scores[index] for index in keep]
 
 
@@ -243,13 +232,82 @@ def _predict(
             text_prompt=query,
             custom_entities=True,
         )
-    return _prediction_response(result, request, args, image_width, image_height, started)
+
+    def run_one(path: Path, text: str) -> Any:
+        with contextlib.redirect_stdout(io.StringIO()):
+            return inference_detector(
+                model,
+                str(path),
+                text_prompt=text,
+                custom_entities=True,
+            )
+
+    refine = lambda parent: _refine_region(  # noqa: E731 - request-local detector callback
+        image_path, query, parent, args, run_one
+    )
+    return _prediction_response(
+        result, request, args, image_width, image_height, started, refine=refine
+    )
+
+
+def _refine_region(
+    image_path: Path,
+    query: str,
+    parent: list[float],
+    args: argparse.Namespace,
+    run_one: Any,
+) -> tuple[list[list[float]], list[float]]:
+    """Re-run the same detector once on an expanded search crop."""
+
+    from PIL import Image
+
+    with Image.open(str(image_path)) as source:
+        image = source.convert("RGB")
+    try:
+        width, height = image.size
+        pad_x = max(8, round((parent[2] - parent[0]) * 0.12))
+        pad_y = max(8, round((parent[3] - parent[1]) * 0.12))
+        crop_box = (
+            max(0, math.floor(parent[0] - pad_x)),
+            max(0, math.floor(parent[1] - pad_y)),
+            min(width, math.ceil(parent[2] + pad_x)),
+            min(height, math.ceil(parent[3] + pad_y)),
+        )
+        with tempfile.TemporaryDirectory(prefix="lae_instance_refine_") as tmp:
+            crop_path = Path(tmp) / "search_region.png"
+            crop = image.crop(crop_box)
+            try:
+                crop.save(crop_path)
+            finally:
+                crop.close()
+            result = run_one(crop_path, query)
+        boxes, scores = _extract_predictions(result)
+        filtered = [
+            (box, score)
+            for box, score in zip(boxes, scores)  # noqa: B905 - sidecar supports Python 3.9
+            if float(score) >= args.score_threshold
+        ]
+        local_boxes, local_scores, _ = canonicalize_proposals(
+            [item[0] for item in filtered],
+            [item[1] for item in filtered],
+            image_width=crop_box[2] - crop_box[0],
+            image_height=crop_box[3] - crop_box[1],
+            coordinate_mode="pixel",
+            top_k=None,
+        )
+        dx, dy = crop_box[0], crop_box[1]
+        return (
+            [[box[0] + dx, box[1] + dy, box[2] + dx, box[3] + dy] for box in local_boxes],
+            local_scores,
+        )
+    finally:
+        image.close()
 
 
 def _request_options(args: argparse.Namespace, request: dict[str, Any]) -> argparse.Namespace:
     """Postprocessing is request-local so LOCATE and COUNT may share one model."""
     options = request.get("options", {})
-    allowed = {"score_threshold", "top_k", "nms_threshold"}
+    allowed = {"score_threshold", "top_k", "nms_threshold", "raw_proposals"}
     if not isinstance(options, dict) or set(options) - allowed:
         raise ValueError("invalid detector request options")
     current = argparse.Namespace(**vars(args))
@@ -261,6 +319,10 @@ def _request_options(args: argparse.Namespace, request: dict[str, Any]) -> argpa
     if isinstance(current.top_k, bool) or int(current.top_k) != current.top_k or current.top_k < 1:
         raise ValueError("top_k must be a positive integer")
     current.top_k = int(current.top_k)
+    raw_proposals = options.get("raw_proposals", False)
+    if not isinstance(raw_proposals, bool):
+        raise ValueError("raw_proposals must be a boolean")
+    current.raw_proposals = raw_proposals
     if current.nms_threshold is not None:
         current.nms_threshold = float(current.nms_threshold)
         if not math.isfinite(current.nms_threshold) or not 0 <= current.nms_threshold <= 1:
@@ -275,6 +337,8 @@ def _prediction_response(
     image_width: int,
     image_height: int,
     started: float,
+    *,
+    refine: Any = None,
 ) -> dict[str, Any]:
     query = str(request["target_phrase"]).strip().lower()
     boxes, scores = _extract_predictions(result)
@@ -298,10 +362,20 @@ def _prediction_response(
         # Apply final top-k after optional NMS, never before suppression.
         top_k=None,
     )
-    if args.nms_threshold is not None:
-        boxes, scores = _nms(boxes, scores, args.nms_threshold)
+    instance_trace = None
+    if not args.raw_proposals:
+        boxes, scores, instance_trace = postprocess_instances(
+            boxes,
+            scores,
+            nms_iou=(args.nms_threshold if args.nms_threshold is not None else 0.6),
+            reference_areas=[float(image_width * image_height)] * len(boxes),
+            refine=refine,
+            max_refinement_regions=4,
+            large_box_area_fraction=0.20,
+        )
     candidate_count_before_top_k = len(boxes)
-    boxes, scores = boxes[: args.top_k], scores[: args.top_k]
+    if not args.raw_proposals:
+        boxes, scores = boxes[: args.top_k], scores[: args.top_k]
     return {
         "id": request["id"],
         "status": "ok",
@@ -323,14 +397,33 @@ def _prediction_response(
             "score_threshold": args.score_threshold,
             "top_k": args.top_k,
             "candidate_count_before_top_k": candidate_count_before_top_k,
-            "candidate_truncated": candidate_count_before_top_k > len(boxes),
-            "candidate_pool_complete": candidate_count_before_top_k == len(boxes)
-            and stats["invalid_count"] == 0,
+            "candidate_truncated": (
+                False if args.raw_proposals else candidate_count_before_top_k > len(boxes)
+            ),
+            "candidate_pool_complete": (
+                stats["invalid_count"] == 0
+                and (
+                    args.raw_proposals
+                    or (
+                        candidate_count_before_top_k == len(boxes)
+                        and instance_trace is not None
+                        and not instance_trace["unresolved_regions"]
+                    )
+                )
+            ),
             "nms_threshold": args.nms_threshold,
             "coordinate_mode": "absolute_pixel_xyxy",
             "image_width": image_width,
             "image_height": image_height,
             "validation": stats,
+            "raw_proposals": args.raw_proposals,
+            "instance_postprocess": instance_trace,
+            "instance_search_regions": (
+                instance_trace["aggregate_regions"] if instance_trace is not None else []
+            ),
+            "unresolved_instance_regions": (
+                instance_trace["unresolved_regions"] if instance_trace is not None else []
+            ),
         },
     }
 
@@ -419,8 +512,33 @@ def _predict_batch(
             for index, prediction in enumerate(predictions):
                 item_index = offset + index
                 width, height = dimensions[item_index]
+                current_item = items[item_index]
+                current_options = options[item_index]
+
+                def run_refinement(path: Path, text: str) -> Any:
+                    return batch_inference([{"image": str(path), "target_phrase": text}])[0]
+
+                def refine(
+                    parent: list[float],
+                    current_item: dict[str, Any] = current_item,
+                    current_options: argparse.Namespace = current_options,
+                ) -> tuple[list[list[float]], list[float]]:
+                    return _refine_region(
+                        Path(str(current_item["image"])).expanduser().resolve(),
+                        str(current_item["target_phrase"]).strip().lower(),
+                        parent,
+                        current_options,
+                        run_refinement,
+                    )
+
                 response = _prediction_response(
-                    prediction, items[item_index], options[item_index], width, height, started
+                    prediction,
+                    current_item,
+                    current_options,
+                    width,
+                    height,
+                    started,
+                    refine=refine,
                 )
                 response["metadata"]["effective_batch_size"] = len(chunk)
                 current.append(response)
