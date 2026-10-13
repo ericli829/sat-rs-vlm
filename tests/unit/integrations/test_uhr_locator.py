@@ -164,6 +164,57 @@ def test_tiled_proposal_converts_local_boxes_to_global_coordinates(tmp_path: Pat
     assert base.closed is True
 
 
+def test_tiled_refinement_failure_preserves_proposals_and_candidate_completeness(
+    tmp_path: Path,
+) -> None:
+    from PIL import Image
+
+    image_path = tmp_path / "unresolved.png"
+    Image.new("RGB", (200, 120), "white").save(image_path)
+
+    class BaseProvider:
+        provider_name = "fixture"
+        model_id = "fixture-v1"
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def predict(self, _path: Path, _query: str) -> ProposalResult:
+            self.calls += 1
+            if self.calls > 1:
+                raise RuntimeError("local refinement failed")
+            return ProposalResult(
+                boxes_xyxy=[
+                    [0.0, 0.0, 200.0, 120.0],
+                    [30.0, 35.0, 45.0, 50.0],
+                    [150.0, 70.0, 165.0, 85.0],
+                ],
+                scores=[0.9, 0.8, 0.79],
+                latency_ms=1.0,
+                provider=self.provider_name,
+                model_id=self.model_id,
+            )
+
+        def close(self) -> None:
+            pass
+
+    base = BaseProvider()
+    provider = TiledProposalProvider(
+        base,
+        {"tile_size": 200, "overlap_ratio": 0, "instance_nms_iou": 0.6},
+        base_provider_name="fixture",
+    )
+    try:
+        result = provider.predict(image_path, "buildings")
+    finally:
+        provider.close()
+
+    assert len(result.boxes_xyxy) == 3
+    assert result.metadata["candidate_pool_complete"] is True
+    assert result.metadata["instance_resolution_complete"] is False
+    assert result.metadata["unresolved_instance_regions"][0]["status"] == "UNRESOLVED"
+
+
 def test_tiled_global_nms_deduplicates_overlap_without_summing_counts() -> None:
     boxes, scores, keep = global_nms(
         [[40.0, 10.0, 60.0, 30.0], [41.0, 10.0, 61.0, 30.0], [80.0, 10.0, 90.0, 20.0]],

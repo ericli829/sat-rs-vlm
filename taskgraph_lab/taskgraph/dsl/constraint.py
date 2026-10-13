@@ -206,25 +206,41 @@ class CanonicalDSLPrefixGrammar:
         nodes = tuple(f"$n{index}" for index in range(1, node_count + 1))
         return tuple(chain(self.image_refs, nodes))
 
-    def _count_compact_references(
-        self, references: tuple[str, ...], outputs: dict[str, set]
+    def _count_role_references(
+        self,
+        role: str,
+        references: tuple[str, ...],
+        outputs: dict[str, set],
     ) -> tuple[str, ...]:
+        """Return references whose inferred types satisfy one COUNT input role."""
+
+        allowed_types = SIGNATURES[OperatorName.COUNT][role]
         allowed: list[str] = []
         for reference in references:
             if reference.startswith("$image"):
-                # Importing RuntimeType solely for this branch would obscure the
-                # contract; image refs can match COUNT.image and never entities.
-                candidates = ["image"]
+                actual = {RuntimeType.IMAGE_REF}
             else:
                 actual = outputs.get(reference, set())
-                candidates = [
-                    role
-                    for role in ("image", "entities")
-                    if actual.intersection(SIGNATURES[OperatorName.COUNT][role])
-                ]
-            if len(candidates) == 1:
+            if actual.intersection(allowed_types):
                 allowed.append(reference)
         return tuple(allowed)
+
+    def _count_compact_references(
+        self, references: tuple[str, ...], outputs: dict[str, set]
+    ) -> tuple[str, ...]:
+        """COUNT shorthand is valid only when its source has one unique role."""
+
+        image_references = set(
+            self._count_role_references("image", references, outputs)
+        )
+        entity_references = set(
+            self._count_role_references("entities", references, outputs)
+        )
+        return tuple(
+            reference
+            for reference in references
+            if (reference in image_references) != (reference in entity_references)
+        )
 
     def _node_pattern(self, state: _ProgramState) -> regex.Pattern:
         node_index = len(state.node_lines) + 1
@@ -233,6 +249,12 @@ class CanonicalDSLPrefixGrammar:
         ref_or_null = rf"(?:{ref}|null)"
         ref_or_list = rf"(?:{ref}|{_reference_list(ref)})"
         count_ref = _reference_pattern(self._count_compact_references(references, state.output_map))
+        count_image_ref = _reference_pattern(
+            self._count_role_references("image", references, state.output_map)
+        )
+        count_entities_ref = _reference_pattern(
+            self._count_role_references("entities", references, state.output_map)
+        )
         select_refs = {
             role: _select_reference_pattern(role, references, state.output_map)
             for role in SIGNATURES[OperatorName.SELECT]
@@ -282,8 +304,8 @@ class CanonicalDSLPrefixGrammar:
             rf"SELECT_SUBREGION\({ref},{ref_or_null},{subregion}\)",
             rf"GROUP\({ref},{group}\)",
             rf"COUNT\({count_ref},{TARGET},(?:true|false)\)",
-            rf"COUNT_IMAGE\({ref},{TARGET},(?:true|false)\)",
-            rf"COUNT_ENTITIES\({ref},{TARGET},(?:true|false)\)",
+            rf"COUNT_IMAGE\({count_image_ref},{TARGET},(?:true|false)\)",
+            rf"COUNT_ENTITIES\({count_entities_ref},{TARGET},(?:true|false)\)",
             rf"ATTRIBUTE\({ref},{JSON_STRING}(?:,{JSON_STRING})?\)",
             rf"CLASSIFY\({ref}(?:,{STRING_LIST})?\)",
             rf"MULTILABEL_CLASSIFY\({ref},{NONEMPTY_STRING_LIST}\)",

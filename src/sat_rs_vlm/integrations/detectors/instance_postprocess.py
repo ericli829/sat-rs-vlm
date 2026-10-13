@@ -140,25 +140,6 @@ def _contained_children(
     return same_instance_dedup_indices(boxes, [0.0] * len(boxes), children, source_groups)
 
 
-def _independent(boxes: Sequence[Box], indices: Sequence[int]) -> bool:
-    """Require spatial separation as well as low overlap for a proposed split."""
-
-    for offset, left_index in enumerate(indices):
-        left = boxes[left_index]
-        left_center = _center(left)
-        for right_index in indices[offset + 1 :]:
-            right = boxes[right_index]
-            right_center = _center(right)
-            distance = math.hypot(
-                left_center[0] - right_center[0], left_center[1] - right_center[1]
-            )
-            if box_iou(left, right) > 0.45 or distance < 0.75 * max(
-                _diagonal(left), _diagonal(right)
-            ):
-                return False
-    return True
-
-
 def postprocess_instances(
     boxes: Sequence[Box],
     scores: Sequence[float],
@@ -170,13 +151,13 @@ def postprocess_instances(
     refine: Refine | None = None,
     max_refinement_regions: int = 4,
     large_box_area_fraction: float = 0.20,
-    relative_score_for_large_box: float = 0.6,
 ) -> tuple[list[list[float]], list[float], dict[str, Any]]:
     """Deduplicate, analyse nested proposals, and refine collection regions.
 
     ``refine`` receives an expanded-in-the-caller search bbox and must return
     boxes in the same global coordinate frame. It is called at most once per
-    selected region; output is never recursively refined.
+    selected region; output is never recursively refined. A region is replaced
+    only after a confirmed refinement; unresolved regions keep the base set.
     """
 
     if len(boxes) != len(scores):
@@ -195,8 +176,6 @@ def postprocess_instances(
     initial_count = len(initial)
     kept = same_instance_dedup_indices(boxes, scores, initial, source_groups)
     duplicate_count = initial_count - len(kept)
-    max_score = max((float(scores[index]) for index in kept), default=0.0)
-
     suspects: list[tuple[float, int, list[int]]] = []
     for index in kept:
         children = _contained_children(boxes, index, kept, source_groups)
@@ -208,12 +187,13 @@ def postprocess_instances(
         )
         area_fraction = box_area(boxes[index]) / reference_area if reference_area > 0.0 else 0.0
         high_support = len(children) >= 2
-        nested_region_review = len(children) == 1 and area_fraction >= 0.15
-        strong_large = (
-            area_fraction >= large_box_area_fraction
-            and float(scores[index]) >= relative_score_for_large_box * max_score
+        # A large proposal alone is not evidence of an aggregate. A single
+        # nested proposal can justify one review only when the parent is also
+        # large; multiple enclosed proposals are the primary trigger.
+        nested_region_review = (
+            len(children) == 1 and area_fraction >= large_box_area_fraction
         )
-        if high_support or nested_region_review or strong_large:
+        if high_support or nested_region_review:
             # Prefer regions with multiple spatially separate children, then
             # larger regions; score only breaks ties to retain likely ships.
             priority = len(children) * 10.0 + area_fraction + float(scores[index]) * 0.01
@@ -253,7 +233,6 @@ def postprocess_instances(
                     "reason": "refinement_unavailable_or_budget_exhausted",
                 }
             )
-            replacement_indices.update(affected)
             processed_regions.append(parent)
             continue
 
@@ -285,7 +264,11 @@ def postprocess_instances(
             for index in refined_indices
             if box_area(refined_boxes[index]) < 0.8 * box_area(parent)
         ]
-        if len(split_indices) >= 2 and _independent(refined_boxes, split_indices):
+        # The refinement proposals have already passed ordinary IoU NMS and
+        # same-instance deduplication. Requiring every pair to be far apart
+        # rejects dense but valid layouts (for example, docked ships); two
+        # surviving proposals are enough evidence to consider this a split.
+        if len(split_indices) >= 2:
             replacement_indices.update(affected)
             for index in split_indices:
                 replacements.append(
@@ -328,7 +311,6 @@ def postprocess_instances(
             )
             processed_regions.append(parent)
         else:
-            replacement_indices.update(affected)
             unresolved.append(
                 {
                     "bbox_xyxy": parent,
@@ -383,7 +365,11 @@ def postprocess_instances(
         "local_refinement_latency_ms": refinement_latency_ms,
         "aggregate_regions": aggregate_regions,
         "unresolved_regions": unresolved,
-        "candidate_pool_complete": not unresolved,
+        # This stage never truncates the input candidate set. Unresolved local
+        # instance analysis is diagnostic, not evidence that base proposals
+        # were lost or that the detector pool was incomplete.
+        "candidate_pool_complete": True,
+        "instance_resolution_complete": not unresolved,
         "final_source_ids": final_sources,
         "total_latency_ms": (time.perf_counter() - started) * 1000.0,
     }

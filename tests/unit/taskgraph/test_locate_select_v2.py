@@ -445,6 +445,27 @@ def test_twenty_candidates_relation_count_does_not_redetect_or_truncate(scene):
     assert not provider.semantic_calls and not provider.calls and not counter_provider.calls
 
 
+def test_semantic_select_uses_base_candidates_despite_unresolved_instance_regions(scene):
+    image, composer = scene
+    source = candidates(image, 2)
+    source.provenance.update(
+        {
+            "candidate_pool_complete": True,
+            "instance_resolution_complete": False,
+            "unresolved_instance_regions": [{"status": "UNRESOLVED"}],
+        }
+    )
+    provider = SemanticFixture(("A",))
+    selected = SelectExecutor(provider).execute(
+        select_node(query="the first of the retained candidates"),
+        {"candidates": source},
+        OperatorContext("", (), composer),
+    ).value
+
+    assert selected.status is SelectStatus.OK
+    assert selected.selected.entities[0].provenance["candidate_id"] == "id-0"
+
+
 def test_ordinal_area_rank_and_group_retain_the_full_pool(scene):
     from sat_rs_vlm.taskgraph.operators import GeometryExecutor
 

@@ -36,6 +36,8 @@ providers:
     trust_remote_code: true
     max_new_tokens: 512
     max_prompt_tokens: 2048
+    system_prompt_path: taskgraph_lab/prompts/planner_student_system_prompt.txt
+    system_prompt_version: planner_student_system_prompt_v1
     max_attempts: 2
     constrained_decoding: true
     constraint_top_k: 64
@@ -154,6 +156,9 @@ providers:
     kind: qwen3_vl
     backend: huggingface
     model_id: ${QWEN3VL_4B_MODEL_DIR}
+    # Bi-temporal change requests use the ChangeChat continuation with the
+    # original visual tower frozen; set this to the downloaded LLM-only LoRA.
+    adapter_path: ${QWEN3VL_4B_CHANGECHAT_LLM_ONLY_LORA}
     device: auto
     dtype: bfloat16
     local_files_only: true

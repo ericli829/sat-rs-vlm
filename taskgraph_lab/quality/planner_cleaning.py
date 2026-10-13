@@ -22,7 +22,7 @@ from taskgraph_lab.taskgraph.dsl import (
 from taskgraph_lab.taskgraph.dsl.constraint import CanonicalDSLPrefixGrammar
 from taskgraph_lab.taskgraph.validator import validate_candidate
 
-VERSION = "planner-quality-clean-v1"
+VERSION = "planner-quality-clean-v1.1"
 COUNT_OPS = {"COUNT", "COUNT_ENTITIES", "COUNT_IMAGE"}
 ALIASES = {
     "cars": "car",
@@ -124,6 +124,37 @@ COMPLEX_COUNT = re.compile(
     r"largest|smallest|most|least|more|fewer|total|respectively)\b",
     re.I,
 )
+# High-recall guard for the legacy count rewrite. This is intentionally only a
+# veto: it does not decide which entity a region modifies or create a REGION.
+ABSOLUTE_REGION_MENTION = re.compile(
+    r"\b(?:in|at|on|toward|towards|within|from)\s+"
+    r"(?:(?:the|far)\s+)?"
+    r"(?:upper|lower|top|bottom|left|right|center|middle)"
+    r"(?:[ -](?:upper|lower|top|bottom|left|right|center|middle))?"
+    r"(?:\s+(?:hand\s+)?(?:corner|side|area|half|region|part|portion|edge))?"
+    r"(?:\s+of\s+(?:the\s+)?(?:image|picture|photo|map|frame))?",
+    re.I,
+)
+_IMAGE_ANCHORS = {"image", "picture", "photo", "map", "frame"}
+RELATIVE_RELATION_MENTION = re.compile(
+    r"\b(?:(?:to\s+the\s+)?(?:left|right)(?:\s+side)?\s+of|"
+    r"above|below|near|next\s+to|beside|inside|within|outside|between|surrounded\s+by)\b",
+    re.I,
+)
+
+
+def has_absolute_region_phrase(question: str) -> bool:
+    """High-recall image-region candidate check, excluding obvious object-relative spans."""
+    for match in ABSOLUTE_REGION_MENTION.finditer(question):
+        tail = question[match.end() :]
+        reference = re.match(r"\s+of\s+(?:(?:the|this)\s+)?([a-z]+)", tail, re.I)
+        if reference and reference.group(1).casefold() not in _IMAGE_ANCHORS:
+            continue
+        if re.search(r"\bof\s+(?:(?:the|this)\s+)?(?:image|picture|photo|map|frame)\b", match.group(0), re.I):
+            return True
+        if not reference:
+            return True
+    return False
 
 
 def digest(value: str) -> str:
@@ -216,11 +247,14 @@ def validate(dsl: str, user: dict, sample_id: str) -> dict:
 
 
 def _count_repair(graph: dict, user: dict) -> tuple[dict, list[dict]]:
-    """Restore omitted conditions only for a simple single-image COUNT path.
+    """Restore omitted conditions only when this cannot erase spatial scope.
 
     No GROUP/ORDINAL/RANK/RELATION/multiple counts are replaced. The question
     must name the existing count category (or a known subclass). Every condition
     is copied verbatim into a MULTI selector; candidate generation is broad.
+    Existing REGION nodes and high-recall absolute-location mentions veto the
+    legacy whole-image rewrite. The veto is not a semantic classification; such
+    rows stay unchanged for explicit review.
     """
     nodes = graph["nodes"]
     counts = [n for n in nodes if n["op"] == "COUNT" and "image" in n["inputs"]]
@@ -232,6 +266,12 @@ def _count_repair(graph: dict, user: dict) -> tuple[dict, list[dict]]:
     ):
         return graph, []
     q = user["question"].strip()
+    if (
+        any(n["op"] == "REGION" for n in nodes)
+        or ABSOLUTE_REGION_MENTION.search(q)
+        or RELATIVE_RELATION_MENTION.search(q)
+    ):
+        return graph, []
     match = COUNT_QUESTION.fullmatch(q)
     if not match or COMPLEX_COUNT.search(q):
         return graph, []
@@ -245,8 +285,8 @@ def _count_repair(graph: dict, user: dict) -> tuple[dict, list[dict]]:
     )
     if not category_words <= head_words and not subtype:
         return graph, []
-    # Pure image-area language is already expressible by REGION. Only add
-    # selection when an external object/state/attribute condition is present.
+    # Only restore non-spatial conditions here. Spatial wording is handled by
+    # a human semantic review so an automatic rewrite cannot replace REGION.
     simple_area = words(
         "in on at the this picture image top bottom left right center "
         "corner side area part region of there visible shown satellite "
@@ -426,6 +466,41 @@ def semantic_findings(user: dict, dsl: str) -> list[dict]:
                 "not represented in contributing nodes; may be omitted or "
                 "deferred to final VLM.",
                 terms=missing,
+            )
+        )
+    if has_absolute_region_phrase(q):
+        regions = [n for n in nodes if n["op"] == "REGION"]
+        if not regions:
+            findings.append(
+                issue(
+                    "absolute_region_missing",
+                    "High-recall location scan found an absolute image-region phrase "
+                    "without REGION. This is a review candidate, not an automatic verdict.",
+                )
+            )
+        else:
+            region_refs = {"$" + n["id"] for n in regions}
+            consumed = any(
+                ref in node.get("inputs", {}).values()
+                for node in nodes
+                if node["op"] != "REGION"
+                for ref in region_refs
+            )
+            if not consumed:
+                findings.append(
+                    issue(
+                        "absolute_region_branch_unattached",
+                        "REGION does not feed a later node; verify the constrained entity branch.",
+                    )
+                )
+    if RELATIVE_RELATION_MENTION.search(q) and not any(
+        n["op"] == "SELECT" and n["params"].get("mode") == "RELATION" for n in nodes
+    ):
+        findings.append(
+            issue(
+                "relative_relation_requires_operator_review",
+                "Question contains a likely relative/containment relation without SELECT_REL. "
+                "Check the reference branch; this scan does not create a plan.",
             )
         )
     if q.lower().startswith("how many") and not any(n["op"] in COUNT_OPS for n in nodes):

@@ -86,11 +86,48 @@ def test_count_entity_set_is_deterministic_and_does_not_call_provider(tmp_path: 
             for index in range(3)
         )
     )
-    result = CountExecutor(_NoCallCountingProvider()).execute(
-        _count_node("entities"),
-        {"entities": entities},
-        OperatorContext("How many ships?", (), InputComposer()),
+    composer = InputComposer(tmp_path / "model_inputs")
+    try:
+        result = CountExecutor(_NoCallCountingProvider()).execute(
+            _count_node("entities"),
+            {"entities": entities},
+            OperatorContext("How many ships?", (), composer),
+        )
+    finally:
+        composer.close()
+
+    assert result.value == ScalarInt(3, {"provider": "cardinality", "source": "EntitySet"})
+
+
+def test_count_accepts_complete_pool_with_unresolved_instance_diagnostics(
+    tmp_path: Path,
+) -> None:
+    image = ImageRef(str(tmp_path / "memory.png"), width=32, height=16)
+    entities = EntitySet(
+        tuple(
+            Entity(
+                Region(image, (index * 4.0, 0.0, index * 4.0 + 2.0, 2.0)),
+                "ship",
+                0.9,
+            )
+            for index in range(3)
+        ),
+        {
+            "candidate_pool_complete": True,
+            "instance_resolution_complete": False,
+            "unresolved_instance_regions": [{"status": "UNRESOLVED"}],
+        },
     )
+
+    composer = InputComposer(tmp_path / "model_inputs")
+    try:
+        result = CountExecutor(_NoCallCountingProvider()).execute(
+            _count_node("entities"),
+            {"entities": entities},
+            OperatorContext("How many ships?", (), composer),
+        )
+    finally:
+        composer.close()
 
     assert result.value == ScalarInt(3, {"provider": "cardinality", "source": "EntitySet"})
 

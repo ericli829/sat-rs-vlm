@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -76,6 +77,23 @@ def test_runtime_from_config_registers_qwen3vl_lora_planner(tmp_path: Path) -> N
         runtime.close()
 
 
+def test_runtime_config_prompt_path_is_used_by_production_planner(tmp_path: Path) -> None:
+    base, adapter = _planner_dirs(tmp_path)
+    config = _config(base, adapter)
+    prompt_path = ROOT / "taskgraph_lab/prompts/planner_student_system_prompt_roi_priority_v1.txt"
+    config["providers"]["planner"]["system_prompt_path"] = str(prompt_path)
+    config["providers"]["planner"]["system_prompt_version"] = "roi_priority_v1"
+
+    runtime = runtime_from_config(config)
+    try:
+        planner = runtime.providers.planner
+        assert isinstance(planner, Qwen3VLPlannerProvider)
+        assert '"right half"' in planner._system_prompt()
+        assert planner._prompt_metadata["system_prompt_version"] == "roi_priority_v1"
+    finally:
+        runtime.close()
+
+
 def test_planner_missing_local_base_has_actionable_code(tmp_path: Path) -> None:
     adapter = tmp_path / "planner-lora"
     adapter.mkdir()
@@ -89,6 +107,44 @@ def test_planner_missing_local_base_has_actionable_code(tmp_path: Path) -> None:
                 "local_files_only": True,
             }
         )
+
+
+@pytest.mark.parametrize(
+    "prompt_name",
+    [
+        "planner_student_system_prompt.txt",
+        "planner_student_system_prompt_roi_priority_v1.txt",
+    ],
+)
+def test_planner_config_selects_prompt_and_records_file_hash(
+    tmp_path: Path, prompt_name: str
+) -> None:
+    base, adapter = _planner_dirs(tmp_path)
+    prompt_path = ROOT / "taskgraph_lab" / "prompts" / prompt_name
+    provider = Qwen3VLPlannerProvider(
+        {
+            "model_id": str(base),
+            "adapter_path": str(adapter),
+            "local_files_only": True,
+            "system_prompt_path": str(prompt_path),
+            "system_prompt_version": "ab-test",
+        }
+    )
+
+    prompt = provider._system_prompt()
+
+    assert prompt
+    assert provider._prompt_metadata["system_prompt_path"] == str(prompt_path.resolve())
+    assert provider._prompt_metadata["system_prompt_sha256"] == hashlib.sha256(
+        prompt_path.read_bytes()
+    ).hexdigest()
+    assert provider._prompt_metadata["system_prompt_version"] == "ab-test"
+
+
+def test_planner_rejects_prompt_truncation() -> None:
+    Qwen3VLPlannerProvider._validate_prompt_budget(1536, 1536)
+    with pytest.raises(ValueError, match="PLANNER_PROMPT_TOKEN_BUDGET_EXCEEDED"):
+        Qwen3VLPlannerProvider._validate_prompt_budget(1537, 1536)
 
 
 def test_planner_converts_lab_dsl_to_production_taskgraph() -> None:

@@ -15,8 +15,8 @@ from typing import Any
 
 from PIL import Image
 
-from .parallel import resolve_parallel_workers
 from .instance_postprocess import conservative_nms_indices, postprocess_instances
+from .parallel import resolve_parallel_workers
 from .protocol import (
     ProposalError,
     ProposalProvider,
@@ -557,7 +557,6 @@ class TiledProposalProvider:
                 "candidate_pool_complete": all(
                     tile["candidate_pool_complete"] for tile in tile_records
                 )
-                and not instance_trace["unresolved_regions"]
                 and (
                     self.global_top_k is None
                     or (
@@ -570,6 +569,9 @@ class TiledProposalProvider:
                 "instance_postprocess": instance_trace,
                 "instance_search_regions": instance_trace["aggregate_regions"],
                 "unresolved_instance_regions": instance_trace["unresolved_regions"],
+                "instance_resolution_complete": instance_trace[
+                    "instance_resolution_complete"
+                ],
                 "base_latency_ms": base_latency_ms,
                 "wrapper_latency_ms": latency_ms,
             },

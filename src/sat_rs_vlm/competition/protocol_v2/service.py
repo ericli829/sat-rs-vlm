@@ -61,31 +61,42 @@ class CompetitionService:
             raise ValueError("Competition request logs must contain only safe metadata")
         if runtime.choice_resolver.config.legacy_regex_fallback:
             raise ValueError("Competition choices require cached finite scoring")
-        # Competition legal values must all remain available, including absence options.
-        choice_resolver = type(runtime.choice_resolver)(
-            runtime.choice_resolver.provider,
-            runtime.composer,
-            replace(runtime.choice_resolver.config, forbid_non_feature_options=False),
-        )
         self.package = package
         self.runtime = runtime
         self.adapter = CompetitionRequestAdapter(
             CompetitionRoutingConfig(**config.get("routing", {}))
         )
-        self.resolver = AnswerResolver(
-            runtime.providers.semantic_2b,
-            runtime.composer,
-            choice_resolver,
-            SemanticDecisionLayer(
-                runtime.providers.semantic_2b,
-                SemanticDecisionConfig.from_mapping(config.get("enum", {})),
-            ),
-            config.get("short_text", {}).get(
-                "instruction", "Return only the shortest direct answer. No explanation."
-            ),
-            bbox_model_coordinate_format=config.get("bbox", {}).get(
-                "model_output_coordinate_format"
-            ),
+        enum_config = SemanticDecisionConfig.from_mapping(config.get("enum", {}))
+        short_text_instruction = config.get("short_text", {}).get(
+            "instruction", "Return only the shortest direct answer. No explanation."
+        )
+        bbox_model_coordinate_format = config.get("bbox", {}).get(
+            "model_output_coordinate_format"
+        )
+
+        def make_resolver(provider, choice_provider):
+            final_choice_resolver = type(runtime.choice_resolver)(
+                choice_provider,
+                runtime.composer,
+                replace(
+                    runtime.choice_resolver.config,
+                    forbid_non_feature_options=False,
+                ),
+            )
+            return AnswerResolver(
+                provider,
+                runtime.composer,
+                final_choice_resolver,
+                SemanticDecisionLayer(provider, enum_config),
+                short_text_instruction,
+                bbox_model_coordinate_format=bbox_model_coordinate_format,
+            )
+
+        self.resolver = make_resolver(
+            runtime.providers.semantic_2b, runtime.choice_resolver.provider
+        )
+        self.temporal_change_resolver = make_resolver(
+            runtime.providers.route_4b, runtime.providers.route_4b
         )
         self.last_diagnostics: dict = {}
         self.last_trace = None
@@ -134,12 +145,17 @@ class CompetitionService:
             self.last_diagnostics["execution_mode"] = result.execution_mode.value
             self.last_trace = result.trace
             originals = tuple(ImageRef(str(x.path), x.width, x.height) for x in images)
-            value = self.resolver.resolve(
+            resolver = (
+                self.temporal_change_resolver
+                if adapted.task_category == "temporal_change" and len(images) == 2
+                else self.resolver
+            )
+            value = resolver.resolve(
                 result.output, result.trace.final_question or request.question, contract, originals
             )
-            if self.resolver.last_bbox_conversion is not None:
+            if resolver.last_bbox_conversion is not None:
                 result.trace.telemetry["competition_bbox_conversion"] = (
-                    self.resolver.last_bbox_conversion
+                    resolver.last_bbox_conversion
                 )
             return serialize_response(request, contract, value)
         except ProtocolError:

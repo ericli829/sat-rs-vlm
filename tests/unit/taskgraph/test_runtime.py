@@ -485,7 +485,7 @@ def test_case_g_vrs_count_routes_through_direct_vlm_with_visuals() -> None:
 
 
 def test_case_h_levir_two_image_direct_path_bypasses_taskgraph() -> None:
-    runtime = fake_runtime(semantic_responses={"direct_vlm": "change description"})
+    runtime = fake_runtime(route_responses={"direct_vlm": "change description"})
     try:
         result = runtime.run(
             RuntimeRequest(
@@ -499,6 +499,30 @@ def test_case_h_levir_two_image_direct_path_bypasses_taskgraph() -> None:
         assert result.execution_mode is ExecutionMode.DIRECT_VLM
         assert result.output.text == "change description"
         assert result.trace.taskgraph is None
+        assert result.trace.telemetry["direct_model_role"] == "route_4b"
+        assert len(runtime.providers.route_4b.calls) == 1
+        assert runtime.providers.semantic_2b.calls == []
+    finally:
+        runtime.close()
+
+
+def test_bitemporal_change_choice_uses_route_4b() -> None:
+    runtime = fake_runtime(route_choice_scores={"final_choice": {"A": -1.0, "B": 1.0}})
+    try:
+        result = runtime.run(
+            RuntimeRequest(
+                "bitemporal-choice",
+                "LEVIR_CC",
+                "change_detection",
+                "Which change occurred?",
+                (IMAGE, SECOND_IMAGE),
+                ("A: construction", "B: demolition"),
+            )
+        )
+        assert result.output.choice_id == "B"
+        assert len(runtime.providers.route_4b.choice_calls) == 1
+        assert runtime.providers.semantic_2b.choice_calls == []
+        assert result.trace.telemetry["direct_model_role"] == "route_4b"
     finally:
         runtime.close()
 

@@ -11,13 +11,13 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from .instance_postprocess import conservative_nms_indices, postprocess_instances
 from .protocol import (
     ProposalError,
     ProposalResult,
     canonicalize_proposals,
     stable_file_identity,
 )
-from .instance_postprocess import conservative_nms_indices, postprocess_instances
 
 
 def _nms(
@@ -236,10 +236,12 @@ class GroundingDinoProvider:
                 "instance_postprocess": instance_trace,
                 "instance_search_regions": instance_trace["aggregate_regions"],
                 "unresolved_instance_regions": instance_trace["unresolved_regions"],
+                "instance_resolution_complete": instance_trace[
+                    "instance_resolution_complete"
+                ],
                 "candidate_truncated": candidate_count_before_top_k > len(boxes),
                 "candidate_pool_complete": (
                     raw.metadata.get("candidate_pool_complete") is not False
-                    and not instance_trace["unresolved_regions"]
                     and candidate_count_before_top_k == len(boxes)
                 ),
                 "postprocess_latency_ms": (time.perf_counter() - started) * 1000.0,

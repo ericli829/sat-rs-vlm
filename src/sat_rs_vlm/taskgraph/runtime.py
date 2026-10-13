@@ -89,6 +89,26 @@ from .tracing import (
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
+def _is_bitemporal_change_request(request: RuntimeRequest, image_count: int) -> bool:
+    """Return whether a direct request is a two-image change task."""
+
+    if image_count != 2:
+        return False
+    dataset = "".join(character for character in request.dataset.casefold() if character.isalnum())
+    task = "".join(
+        character for character in request.task_category.casefold() if character.isalnum()
+    )
+    return dataset == "levircc" or task in {
+        "change",
+        "changedetection",
+        "changecaption",
+        "changevqa",
+        "temporalchange",
+        "bitemporalchange",
+        "bitemporalchangeunderstanding",
+    }
+
+
 def _override_nested_detector_threshold(
     config: Mapping[str, Any], threshold: float
 ) -> dict[str, Any]:
@@ -426,6 +446,9 @@ class TaskGraphRuntime:
             self.final_choice_fusion_config,
         )
         self.choice_resolver = ChoiceResolver(providers.choice, self.composer, self.choice_config)
+        self.route_choice_resolver = ChoiceResolver(
+            providers.route_4b, self.composer, self.choice_config
+        )
         self.answerability = EvidenceSufficiencyExecutor(
             providers.semantic_2b,
             self.composer,
@@ -705,12 +728,20 @@ class TaskGraphRuntime:
     def _direct_vlm(self, request: RuntimeRequest, images: dict[str, ImageRef]) -> RuntimeResult:
         sources = tuple(images.values())
         trace = ExecutionTrace(request.sample_id, ExecutionMode.DIRECT_VLM.value)
+        temporal_change = _is_bitemporal_change_request(request, len(sources))
+        direct_provider = (
+            self.providers.route_4b if temporal_change else self.providers.semantic_2b
+        )
+        direct_choice_resolver = (
+            self.route_choice_resolver if temporal_change else self.choice_resolver
+        )
+        trace.telemetry["direct_model_role"] = "route_4b" if temporal_change else "semantic_2b"
         if request.defer_final_answer:
             trace.final_question = request.question
             return RuntimeResult(ExecutionMode.DIRECT_VLM, sources, trace)
         if request.options and not request.defer_final_answer:
             choice_started = time.perf_counter()
-            choice_output = self.choice_resolver.resolve(
+            choice_output = direct_choice_resolver.resolve(
                 ChoiceRequest(
                     sources,
                     request.question,
@@ -721,8 +752,9 @@ class TaskGraphRuntime:
             )
             trace.telemetry["choice_ms"] = (time.perf_counter() - choice_started) * 1000.0
             trace.telemetry["choice_model_called"] = bool(
-                self.choice_resolver.last_score_result is not None
-                and self.choice_resolver.last_score_result.provider != "structured_deterministic"
+                direct_choice_resolver.last_score_result is not None
+                and direct_choice_resolver.last_score_result.provider
+                != "structured_deterministic"
             )
             trace.telemetry["choice_status"] = (
                 "executed"
@@ -735,7 +767,7 @@ class TaskGraphRuntime:
         else:
             model_input = self.composer.compose(list(sources), question=request.question)
             semantic_started = time.perf_counter()
-            result = self.providers.semantic_2b.infer(VLMRequest(model_input, "direct_vlm"))
+            result = direct_provider.infer(VLMRequest(model_input, "direct_vlm"))
             trace.telemetry["semantic_vlm_ms"] = (time.perf_counter() - semantic_started) * 1000.0
             trace.telemetry["choice_model_called"] = False
             trace.telemetry["choice_status"] = "not_used"

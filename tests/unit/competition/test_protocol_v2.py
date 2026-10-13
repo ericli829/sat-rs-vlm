@@ -244,14 +244,42 @@ def test_cached_choice_preserves_ids_and_rejects_illegal(service, monkeypatch):
 def test_enum_canonical_typed_and_kv_cache(service, requests):
     request = parse_request(requests["enum"])
     contract = AnswerContract.from_request(request)
-    resolver = service.resolver
+    resolver = service.temporal_change_resolver
     assert resolver.resolve(Boolean(True), "Changed?", contract, ()) == "Yes"
     insensitive = replace(contract, case_insensitive=True)
     assert resolver.resolve(Label("yes"), "Changed?", insensitive, ()) == "Yes"
     images = tuple(ImageRef(str(x.path)) for x in service.package.resolve_all(request.images))
     assert resolver.resolve(images, "Changed?", contract, images) in contract.values
-    assert service.runtime.providers.semantic_2b.semantic_calls[-1].candidate_ids == ("Yes", "No")
+    assert service.runtime.providers.route_4b.semantic_calls[-1].candidate_ids == ("Yes", "No")
     assert resolver.decision_layer.config.legacy_text_fallback is False
+
+
+def test_two_image_temporal_change_final_answer_uses_route_4b(service, package):
+    assets = list(package.assets.values())[:2]
+    payload = {
+        "protocol_version": "2.0",
+        "request_id": "temporal-route-test",
+        "item_id": "temporal-route-test",
+        "question": "Describe the changes between these images.",
+        "images": [
+            ImageDescriptor(
+                asset_id=asset.asset_id,
+                sha256=asset.sha256,
+                mime_type=asset.mime_type,
+            ).model_dump()
+            for asset in assets
+        ],
+        "response_constraint": {"type": "short_text", "min_length": 1},
+        "answer_type": "short_text",
+    }
+
+    result = service.predict(parse_request(payload))
+
+    assert result["answer"]
+    assert [call.output_contract for call in service.runtime.providers.route_4b.calls] == [
+        "short_text"
+    ]
+    assert service.runtime.providers.semantic_2b.calls == []
 
 
 @pytest.mark.parametrize("source", [Answer("3"), ScalarInt(True), ScalarInt(-1), Label("3")])
@@ -668,7 +696,7 @@ def test_graph_integer_returns_scalar_without_reasking(service, requests):
     "change", [{"cache_reused": False}, {"selected_ids": ("illegal",), "scores": {"illegal": 1}}]
 )
 def test_enum_rejects_uncached_or_illegal_decision(service, requests, monkeypatch, change):
-    provider = service.runtime.providers.semantic_2b
+    provider = service.runtime.providers.route_4b
     original = provider.reason_and_decide
     monkeypatch.setattr(provider, "reason_and_decide", lambda req: replace(original(req), **change))
     with TestClient(create_app(service=service, api_key=SECRET)) as client:

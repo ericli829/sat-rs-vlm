@@ -220,6 +220,48 @@ def test_dynamic_count_role_requires_explicit_surface_for_ambiguous_select() -> 
     assert _grammar().accepts(explicit)
 
 
+@pytest.mark.parametrize(
+    ("node", "expected"),
+    [
+        ('n1=COUNT_IMAGE($image0,T("ship"),false)', True),
+        (
+            'n1=REGION($image0,TOP_RIGHT)\n'
+            'n2=COUNT_IMAGE($n1,T("ship"),false)',
+            True,
+        ),
+        (
+            'n1=LOCATE($image0,T("ship"))\n'
+            'n2=COUNT_ENTITIES($n1,T("ship"),false)',
+            True,
+        ),
+        ('n1=COUNT_ENTITIES($image0,T("ship"),false)', False),
+        (
+            'n1=LOCATE($image0,T("ship"))\n'
+            'n2=COUNT_IMAGE($n1,T("ship"),false)',
+            False,
+        ),
+        (
+            'n1=REGION($image0,TOP_RIGHT)\n'
+            'n2=COUNT_ENTITIES($n1,T("ship"),false)',
+            False,
+        ),
+    ],
+)
+def test_explicit_count_surface_matches_reference_role(node: str, expected: bool) -> None:
+    lines = node.splitlines()
+    final = f"FINAL($n{len(lines)},INTEGER)"
+    assert _grammar().accepts("\n".join([*lines, final])) is expected
+
+
+def test_invalid_intent_enum_is_not_an_accepted_prefix() -> None:
+    text = (
+        "INTENT(RELATIONAL_REASONING)\n"
+        'n1=LOCATE($image0,T("frame"))\n'
+        "FINAL($n1,CHOICE_SINGLE)"
+    )
+    assert not _grammar().accepts(text)
+
+
 def test_repeat_guard_and_node_budget_are_operational_not_language_constraints() -> None:
     repeated = (
         'n1=LOCATE($image0,T("ship"))\n'

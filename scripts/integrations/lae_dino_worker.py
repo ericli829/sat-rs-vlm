@@ -22,13 +22,13 @@ SRC_ROOT = PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from sat_rs_vlm.integrations.detectors.protocol import (  # noqa: E402
-    ProposalError,
-    canonicalize_proposals,
-)
 from sat_rs_vlm.integrations.detectors.instance_postprocess import (  # noqa: E402
     conservative_nms_indices,
     postprocess_instances,
+)
+from sat_rs_vlm.integrations.detectors.protocol import (  # noqa: E402
+    ProposalError,
+    canonicalize_proposals,
 )
 
 
@@ -407,7 +407,6 @@ def _prediction_response(
                     or (
                         candidate_count_before_top_k == len(boxes)
                         and instance_trace is not None
-                        and not instance_trace["unresolved_regions"]
                     )
                 )
             ),
@@ -423,6 +422,11 @@ def _prediction_response(
             ),
             "unresolved_instance_regions": (
                 instance_trace["unresolved_regions"] if instance_trace is not None else []
+            ),
+            "instance_resolution_complete": (
+                instance_trace["instance_resolution_complete"]
+                if instance_trace is not None
+                else True
             ),
         },
     }

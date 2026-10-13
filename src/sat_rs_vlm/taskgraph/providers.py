@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gc
+import hashlib
 import json
 import math
 import re
@@ -455,6 +456,7 @@ class Qwen3VLPlannerProvider:
         self._model_load_ms = 0.0
         self.last_metadata: dict[str, Any] = {}
         self.last_generation_telemetry: dict[str, Any] = {}
+        self._prompt_metadata: dict[str, Any] = {}
         self._validate_config()
 
     @staticmethod
@@ -681,7 +683,22 @@ class Qwen3VLPlannerProvider:
         prompt = path.read_text(encoding="utf-8").strip()
         if not prompt:
             raise ValueError(f"PLANNER_SYSTEM_PROMPT_EMPTY: {path}")
+        self._prompt_metadata = {
+            "system_prompt_path": str(path.resolve()),
+            "system_prompt_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "system_prompt_version": str(
+                self.config.get("system_prompt_version") or path.stem
+            ),
+        }
         return prompt
+
+    @staticmethod
+    def _validate_prompt_budget(prompt_tokens: int, max_prompt_tokens: int) -> None:
+        if prompt_tokens > max_prompt_tokens:
+            raise ValueError(
+                "PLANNER_PROMPT_TOKEN_BUDGET_EXCEEDED: rendered conversation uses "
+                f"{prompt_tokens} tokens, limit is {max_prompt_tokens}; input was not truncated"
+            )
 
     def _input_device(self, model: Any, torch: Any) -> Any:
         if self.device != "auto":
@@ -721,10 +738,11 @@ class Qwen3VLPlannerProvider:
             images=None,
             videos=None,
             padding=True,
-            truncation=True,
-            max_length=self.max_prompt_tokens,
+            truncation=False,
             return_tensors="pt",
         )
+        prompt_width = int(encoded["input_ids"].shape[1])
+        self._validate_prompt_budget(prompt_width, self.max_prompt_tokens)
         input_device = self._input_device(model, torch)
         if hasattr(encoded, "to"):
             encoded = encoded.to(input_device)
@@ -793,6 +811,8 @@ class Qwen3VLPlannerProvider:
         ]
         telemetry.vision_input = visual_input_telemetry([[]])
         generation = telemetry.to_dict()
+        generation["prompt_tokens"] = prompt_width
+        generation["prompt_token_budget"] = self.max_prompt_tokens
         self.last_generation_telemetry = generation
         metadata = constraint.diagnostics(
             0,
@@ -971,6 +991,8 @@ class Qwen3VLPlannerProvider:
             "provider": self.provider_name,
             "status": "running",
             "attempts": attempts,
+            **self._prompt_metadata,
+            "max_prompt_tokens": self.max_prompt_tokens,
         }
         messages = self._messages(request, system_prompt)
         for attempt_number in range(1, self.max_attempts + 1):
@@ -996,6 +1018,8 @@ class Qwen3VLPlannerProvider:
                         "planner_output": prediction,
                         "attempts": attempts,
                         "load": self.load_info,
+                        **self._prompt_metadata,
+                        "max_prompt_tokens": self.max_prompt_tokens,
                     }
                     self.last_metadata = failure_metadata
                     raise PlannerFailedError(
@@ -1031,6 +1055,8 @@ class Qwen3VLPlannerProvider:
                 "attempts": attempts,
                 "load": self.load_info,
                 "vision_inputs": 0,
+                **self._prompt_metadata,
+                "max_prompt_tokens": self.max_prompt_tokens,
             }
             return graph
         raise AssertionError("Planner generated no attempts")
@@ -1292,6 +1318,9 @@ class ProposalDetectionAdapter:
                     ),
                     "unresolved_instance_regions": list(
                         result_metadata.get("unresolved_instance_regions", [])
+                    ),
+                    "instance_resolution_complete": result_metadata.get(
+                        "instance_resolution_complete", True
                     ),
                     "instance_postprocess": result_metadata.get("instance_postprocess"),
                 },

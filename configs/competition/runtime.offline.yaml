@@ -18,6 +18,8 @@ providers:
   route_4b:
     kind: fake
     default: urban
+    choice_scores:
+      competition_enum: {"Yes": 1, "No": -1}
   choice:
     reuse: semantic_2b
   region_retriever:
