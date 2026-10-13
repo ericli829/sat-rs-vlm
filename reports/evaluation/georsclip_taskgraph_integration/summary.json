@@ -1,0 +1,36 @@
+{
+  "date": "2026-10-13",
+  "scope": "DINO and GeoRSCLIP TaskGraph integration",
+  "decision_policy": "binary_always_output",
+  "unit_and_regression_tests": {
+    "tests": 195,
+    "passed": 195,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "providers": "fake",
+    "duration_seconds": 20.197
+  },
+  "checks": {
+    "ruff_modified_files": "passed (UP038 excluded for existing Python 3.9 sidecar compatibility)",
+    "git_diff_check": "passed",
+    "production_configuration_validation": "passed"
+  },
+  "real_model_tests": {
+    "executed": false,
+    "reason": "Skipped at the user's request"
+  },
+  "entry_points": [
+    "LOCATE DINO branch",
+    "COUNT(image/Region)",
+    "COUNT(EntitySet)",
+    "DIRECT_DETECTION counting"
+  ],
+  "scoring": {
+    "coarse": "positive category ensemble - negative category ensemble",
+    "attribute": "0.8 * (qualified - unrestricted) + 0.2 * (qualified - contrast)",
+    "ranking": "0.5 * coarse_margin + 0.5 * attribute_margin",
+    "selection": "coarse_margin > 0 and every required attribute_margin > 0",
+    "on_clip_error": "keep available DINO candidates with diagnostics"
+  }
+}

@@ -226,15 +226,28 @@ def _predict(
         # Pinned LAE-DINO exposes text_prompt/custom_entities on its inference
         # API.  This is target-conditioned inference, even for fine-tuned
         # checkpoints whose training regime is dataset-specific.
-        result = inference_detector(
-            model,
-            str(image_path),
-            text_prompt=query,
-            custom_entities=True,
-        )
+        if not args.spatial_resize_enabled:
+            result = _build_batch_inference(model)([request])[0]
+        else:
+            result = inference_detector(
+                model,
+                str(image_path),
+                text_prompt=query,
+                custom_entities=True,
+            )
 
     def run_one(path: Path, text: str) -> Any:
         with contextlib.redirect_stdout(io.StringIO()):
+            if not args.spatial_resize_enabled:
+                return _build_batch_inference(model)(
+                    [
+                        {
+                            "image": str(path),
+                            "target_phrase": text,
+                            "options": {"spatial_resize_enabled": False},
+                        }
+                    ]
+                )[0]
             return inference_detector(
                 model,
                 str(path),
@@ -307,7 +320,13 @@ def _refine_region(
 def _request_options(args: argparse.Namespace, request: dict[str, Any]) -> argparse.Namespace:
     """Postprocessing is request-local so LOCATE and COUNT may share one model."""
     options = request.get("options", {})
-    allowed = {"score_threshold", "top_k", "nms_threshold", "raw_proposals"}
+    allowed = {
+        "score_threshold",
+        "top_k",
+        "nms_threshold",
+        "raw_proposals",
+        "spatial_resize_enabled",
+    }
     if not isinstance(options, dict) or set(options) - allowed:
         raise ValueError("invalid detector request options")
     current = argparse.Namespace(**vars(args))
@@ -323,6 +342,9 @@ def _request_options(args: argparse.Namespace, request: dict[str, Any]) -> argpa
     if not isinstance(raw_proposals, bool):
         raise ValueError("raw_proposals must be a boolean")
     current.raw_proposals = raw_proposals
+    current.spatial_resize_enabled = options.get("spatial_resize_enabled", True)
+    if not isinstance(current.spatial_resize_enabled, bool):
+        raise ValueError("spatial_resize_enabled must be a boolean")
     if current.nms_threshold is not None:
         current.nms_threshold = float(current.nms_threshold)
         if not math.isfinite(current.nms_threshold) or not 0 <= current.nms_threshold <= 1:
@@ -404,10 +426,7 @@ def _prediction_response(
                 stats["invalid_count"] == 0
                 and (
                     args.raw_proposals
-                    or (
-                        candidate_count_before_top_k == len(boxes)
-                        and instance_trace is not None
-                    )
+                    or (candidate_count_before_top_k == len(boxes) and instance_trace is not None)
                 )
             ),
             "nms_threshold": args.nms_threshold,
@@ -416,6 +435,7 @@ def _prediction_response(
             "image_height": image_height,
             "validation": stats,
             "raw_proposals": args.raw_proposals,
+            "spatial_resize_enabled": args.spatial_resize_enabled,
             "instance_postprocess": instance_trace,
             "instance_search_regions": (
                 instance_trace["aggregate_regions"] if instance_trace is not None else []
@@ -432,6 +452,22 @@ def _prediction_response(
     }
 
 
+def _without_spatial_resize(config: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Remove spatial resize only; keep decoding, normalization, packing and padding."""
+    from copy import deepcopy
+
+    kept = []
+    for raw in config:
+        item = deepcopy(raw)
+        kind = str(item.get("type", "")).rsplit(".", 1)[-1].casefold()
+        if "resize" in kind:
+            continue
+        if isinstance(item.get("transforms"), list):
+            item["transforms"] = _without_spatial_resize(item["transforms"])
+        kept.append(item)
+    return kept
+
+
 def _build_batch_inference(model: Any) -> Any:
     """Build the original pipeline once; call test_step ONCE for a whole batch.
 
@@ -442,11 +478,14 @@ def _build_batch_inference(model: Any) -> Any:
     from mmcv.transforms import Compose
     from mmdet.utils import get_test_pipeline_cfg
 
-    pipeline = Compose(get_test_pipeline_cfg(model.cfg.copy()))
+    pipeline_cfg = get_test_pipeline_cfg(model.cfg.copy())
+    pipelines = {True: Compose(pipeline_cfg), False: Compose(_without_spatial_resize(pipeline_cfg))}
 
     def infer(requests: list[dict[str, Any]]) -> list[Any]:
         inputs, samples = [], []
         for index, request in enumerate(requests):
+            resize = request.get("options", {}).get("spatial_resize_enabled", True)
+            pipeline = pipelines[resize]
             data = pipeline(
                 dict(
                     img_path=str(Path(request["image"]).expanduser().resolve()),
@@ -519,8 +558,20 @@ def _predict_batch(
                 current_item = items[item_index]
                 current_options = options[item_index]
 
-                def run_refinement(path: Path, text: str) -> Any:
-                    return batch_inference([{"image": str(path), "target_phrase": text}])[0]
+                def run_refinement(
+                    path: Path,
+                    text: str,
+                    resize_enabled: bool = current_options.spatial_resize_enabled,
+                ) -> Any:
+                    return batch_inference(
+                        [
+                            {
+                                "image": str(path),
+                                "target_phrase": text,
+                                "options": {"spatial_resize_enabled": resize_enabled},
+                            }
+                        ]
+                    )[0]
 
                 def refine(
                     parent: list[float],

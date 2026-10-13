@@ -44,6 +44,9 @@ class TaskGraphExecutionError(RuntimeError):
             "retryable": retryable,
         }
         super().__init__(str(self.details))
+        provider_metadata = getattr(exception, "metadata", None)
+        if isinstance(provider_metadata, dict):
+            self.details["provider_metadata"] = dict(provider_metadata)
 
 
 @dataclass(frozen=True)
@@ -182,7 +185,11 @@ class CapabilityRouter:
                             )
                         ):
                             raise ValueError(f"{node.op.value} has no located/selected target")
-                        if getattr(item, "provenance", {}).get("candidate_pool_complete") is False:
+                        if getattr(item, "provenance", {}).get(
+                            "candidate_pool_complete"
+                        ) is False and not getattr(item, "provenance", {}).get(
+                            "allow_partial_output"
+                        ):
                             raise ValueError(
                                 f"{node.op.value} refuses incomplete or unverified "
                                 "upstream candidates"

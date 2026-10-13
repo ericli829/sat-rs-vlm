@@ -239,8 +239,11 @@ def unique_bbox_evidence(value: RuntimeObject) -> Entity | Region:
     def resolved(item: RuntimeObject) -> None:
         provenance = getattr(item, "provenance", {})
         if (
-            provenance.get("candidate_pool_complete") is False
-            or provenance.get("candidate_truncated") is True
+            (
+                provenance.get("candidate_pool_complete") is False
+                or provenance.get("candidate_truncated") is True
+            )
+            and not provenance.get("allow_partial_output")
             or provenance.get("resolution_status")
             in {"EMPTY", "PARTIAL", "UNRESOLVED", "AMBIGUOUS", "ERROR"}
         ):

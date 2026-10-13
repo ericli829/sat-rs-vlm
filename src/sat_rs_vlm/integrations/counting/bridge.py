@@ -44,7 +44,10 @@ def to_counting_scope(scope: ImageRef | Region) -> CountImageRef | CountRegion:
 
 
 def to_counting_target(target: GraphTargetSpec) -> CountTargetSpec:
-    spec = build_target(target.category)
+    spec = build_target(target.category, prompt=target.detection_phrase())
+    # CountingSystem's legacy car profile canonicalizes to vehicle. Strategy
+    # selection and verification must preserve the upstream TargetSpec category.
+    spec.category = target.category
     spec.attributes = dict(target.attributes)
     return spec
 
@@ -63,6 +66,11 @@ def to_taskgraph_entity(detection: CountDetection, image: ImageRef) -> Entity:
             {
                 "provider": "counting_system",
                 "coordinate_mode": "absolute_original_pixel_xyxy",
+                **{
+                    key: provenance[key]
+                    for key in ("candidate_id", "instance_status")
+                    if key in provenance
+                },
             },
         ),
         detection.label,

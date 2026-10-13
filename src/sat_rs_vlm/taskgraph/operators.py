@@ -29,6 +29,7 @@ from .providers import (
     VLMRequest,
     VLMResult,
     parse_selection_indices,
+    require_complete_count,
 )
 from .referent_refinement import ReferentRefiner
 from .runtime_types import (
@@ -808,7 +809,7 @@ class LocateExecutor:
             {
                 "candidate_pool_complete": not provider_partial,
                 "resolution_status": "PARTIAL"
-                if provider_partial
+                if provider_partial and not value.provenance.get("allow_partial_output")
                 else "MULTIPLE_VALID"
                 if raw_count > 1
                 else "PRIMARY_RESOLVED"
@@ -825,7 +826,14 @@ class LocateExecutor:
                 "attributes": {"policy": "not_required", "verified": True},
             }
         )
-        if target.attributes and value.entities:
+        clip_verification = detected.metadata.get("clip_verification", {})
+        if isinstance(clip_verification, dict) and clip_verification.get("enabled"):
+            trace["attributes"] = {
+                "policy": "georsclip",
+                **clip_verification,
+                "verified": clip_verification.get("candidate_pool_complete", False),
+            }
+        elif target.attributes and value.entities:
             policy = self.refiner.config.attribute_policy if self.refiner else "unresolved"
             trace["attributes"] = {
                 "policy": policy,
@@ -897,6 +905,11 @@ class LocateExecutor:
                         "attribute_verification": "uncalibrated_no_reliable_verifier",
                     }
                 )
+        if single and len(value.entities) > 1 and value.provenance.get("allow_partial_output"):
+            value = EntitySet(
+                (value.entities[0],), {**value.provenance, "resolution_status": "PRIMARY_RESOLVED"}
+            )
+            trace["fallback_selection"] = {"method": "georsclip_combined_score_top_one"}
         if single and len(value.entities) > 1:
             # Detector fallback must not pick its highest score as identity.
             if self.refiner is not None and value.provenance["candidate_pool_complete"]:
@@ -930,6 +943,7 @@ class LocateExecutor:
             and not value.entities
             and trace["fallback_reason"]
             and value.provenance["resolution_status"] == "EMPTY"
+            and not value.provenance.get("allow_partial_output")
         ):
             value.provenance.update(
                 {"candidate_pool_complete": False, "resolution_status": "UNRESOLVED"}
@@ -1006,13 +1020,21 @@ class CountExecutor:
             )
             if not isinstance(entities, EntitySet):
                 raise TypeError("COUNT.entities must be EntitySet")
-            if entities.provenance.get("candidate_pool_complete") is False:
+            allow_partial = entities.provenance.get("allow_partial_output") is True
+            if entities.provenance.get("candidate_pool_complete") is False and not allow_partial:
                 raise ValueError("COUNT.entities refuses an incomplete/unverified candidate pool")
+            if any(
+                entity.provenance.get("verification_status", "MATCH") != "MATCH"
+                for entity in entities.entities
+            ):
+                raise ValueError("COUNT.entities contains unresolved CLIP candidate verification")
             countable = tuple(
                 entity
                 for entity in entities.entities
                 if entity.provenance.get("instance_status", "CONFIRMED_INSTANCE")
                 == "CONFIRMED_INSTANCE"
+                or allow_partial
+                and entity.provenance.get("instance_status") != "AGGREGATE_REGION"
             )
             unresolved_entities = [
                 entity
@@ -1020,7 +1042,7 @@ class CountExecutor:
                 if entity.provenance.get("instance_status", "CONFIRMED_INSTANCE")
                 not in {"CONFIRMED_INSTANCE", "AGGREGATE_REGION"}
             ]
-            if unresolved_entities:
+            if unresolved_entities and not allow_partial:
                 raise ValueError("COUNT.entities contains unconfirmed instance candidates")
             aggregate_count = sum(
                 entity.provenance.get("instance_status") == "AGGREGATE_REGION"
@@ -1069,6 +1091,7 @@ class CountExecutor:
         counted = self.counting.count(
             CountingRequest(scope=scope, target=params.target, entire=params.entire)
         )
+        count_value = require_complete_count(counted)
         total_provenance: dict[str, Any] = {
             "provider": counted.provider,
             "detection": counted.detections.provenance,
@@ -1083,7 +1106,7 @@ class CountExecutor:
             )
         return OperatorOutcome(
             ScalarInt(
-                counted.count,
+                count_value,
                 total_provenance,
             ),
             counted.provider,
@@ -1185,6 +1208,10 @@ class SelectExecutor:
         provenance: dict[str, object],
     ) -> EntitySet | Region | RegionSet:
         items = SelectExecutor._items(source)
+        if "clip_verification" in source.provenance:
+            provenance = {**source.provenance, **provenance}
+            if source.provenance.get("candidate_pool_complete") is False:
+                provenance["candidate_pool_complete"] = False
         if source.provenance.get("semantic_selection_ancestor"):
             provenance = {**provenance, "semantic_selection_ancestor": True}
         selected = tuple(items[index] for index in indices)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 from PIL import Image
@@ -28,15 +29,20 @@ def ensure_size(image: ImageRef, pil: Image.Image | None = None) -> ImageRef:
 
 
 def crop_tile(pil: Image.Image, tile: Tile) -> Image.Image:
-    x0, y0, x1, y1 = (int(round(v)) for v in tile.crop_xyxy)
+    x0, y0 = (math.floor(v) for v in tile.crop_xyxy[:2])
+    x1, y1 = (math.ceil(v) for v in tile.crop_xyxy[2:])
     x0 = max(0, min(x0, pil.width))
     x1 = max(0, min(x1, pil.width))
     y0 = max(0, min(y0, pil.height))
     y1 = max(0, min(y1, pil.height))
     if x1 <= x0 or y1 <= y0:
         raise ValueError(f"empty crop for tile {tile.tile_id}: {tile.crop_xyxy}")
+    tile.crop_xyxy = (float(x0), float(y0), float(x1), float(y1))
     crop = pil.crop((x0, y0, x1, y1))
-    return resize_for_detector(crop, tile)
+    resized = resize_for_detector(crop, tile)
+    if resized is not crop:
+        crop.close()
+    return resized
 
 
 def resize_for_detector(crop: Image.Image, tile: Tile) -> Image.Image:

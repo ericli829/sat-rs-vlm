@@ -99,11 +99,37 @@ class CountingRequest:
 
 @dataclass(frozen=True)
 class CountingResult:
-    count: int
+    count: int | None
     detections: EntitySet
     provider: str
     latency_ms: float
     metadata: dict[str, Any] = field(default_factory=dict)
+
+
+class IncompleteCountingError(ValueError):
+    def __init__(self, result: CountingResult) -> None:
+        super().__init__("COUNT refuses incomplete or unresolved candidate verification")
+        self.metadata = dict(result.metadata)
+        self.detections = result.detections
+        self.execution_trace: Any = None
+
+
+def require_complete_count(result: CountingResult) -> int:
+    if result.metadata.get("count_output_available") is True and isinstance(result.count, int):
+        return max(0, result.count)
+    if (
+        result.count is None
+        or result.metadata.get("candidate_pool_complete") is False
+        or result.detections.provenance.get("candidate_pool_complete") is False
+        or any(
+            entity.provenance.get("verification_status", "MATCH") != "MATCH"
+            for entity in result.detections.entities
+        )
+    ):
+        raise IncompleteCountingError(result)
+    if not isinstance(result.count, int) or isinstance(result.count, bool) or result.count < 0:
+        raise ValueError("count must be a non-negative integer")
+    return int(result.count)
 
 
 class CountingProvider(Protocol):
@@ -686,9 +712,7 @@ class Qwen3VLPlannerProvider:
         self._prompt_metadata = {
             "system_prompt_path": str(path.resolve()),
             "system_prompt_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-            "system_prompt_version": str(
-                self.config.get("system_prompt_version") or path.stem
-            ),
+            "system_prompt_version": str(self.config.get("system_prompt_version") or path.stem),
         }
         return prompt
 
@@ -1209,6 +1233,38 @@ class ProposalDetectionAdapter:
             else:
                 result = self._provider.predict(detector_path, proposal_query)
         result_metadata = dict(result.metadata)
+        if offset != (0.0, 0.0):
+
+            def shift_diagnostics(value: Any) -> Any:
+                if isinstance(value, list):
+                    return [shift_diagnostics(item) for item in value]
+                if isinstance(value, dict):
+                    shifted = {}
+                    for key, item in value.items():
+                        if (
+                            "bbox" in key
+                            and isinstance(item, (list, tuple))
+                            and len(item) == 4
+                            and all(isinstance(v, (int, float)) for v in item)
+                        ):
+                            shifted[key] = [
+                                item[0] + offset[0],
+                                item[1] + offset[1],
+                                item[2] + offset[0],
+                                item[3] + offset[1],
+                            ]
+                        else:
+                            shifted[key] = shift_diagnostics(item)
+                    return shifted
+                return value
+
+            for key in (
+                "instance_search_regions",
+                "unresolved_instance_regions",
+                "instance_postprocess",
+            ):
+                if key in result_metadata:
+                    result_metadata[key] = shift_diagnostics(result_metadata[key])
         raw_candidate_count = len(result.boxes_xyxy)
         order = sorted(
             range(raw_candidate_count),
@@ -1246,6 +1302,14 @@ class ProposalDetectionAdapter:
                 float(box[2]) + offset[0],
                 float(box[3]) + offset[1],
             )
+            clipped = (
+                _bbox_intersection(scope_box, global_box)
+                if isinstance(request.scope, Region)
+                and _bbox_contains((0.0, 0.0, *original_size), global_box)
+                else None
+            )
+            if clipped is not None:
+                global_box = clipped
             if (
                 not all(math.isfinite(v) for v in global_box)
                 or global_box[0] >= global_box[2]
@@ -1255,7 +1319,12 @@ class ProposalDetectionAdapter:
             ):
                 invalid_indices.append(index)
                 continue
-            candidate_id = f"candidate_{len(entities) + 1:04d}"
+            supplied_ids = result_metadata.get("candidate_ids", ())
+            candidate_id = (
+                str(supplied_ids[index])
+                if len(supplied_ids) > index and supplied_ids[index] is not None
+                else f"candidate_{index + 1:04d}"
+            )
             entities.append(
                 Entity(
                     region=Region(

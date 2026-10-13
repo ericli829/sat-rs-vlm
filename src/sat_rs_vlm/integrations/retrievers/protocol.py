@@ -65,3 +65,52 @@ class RetrievalResult:
             "model_id": self.model_id,
             "metadata": dict(self.metadata),
         }
+
+
+@dataclass(frozen=True)
+class PromptGroupRetrievalResult:
+    """One cosine score per region for each normalized prompt prototype."""
+
+    scores_by_group: dict[str, list[float]]
+    latency_ms: float
+    provider: str
+    model_id: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        canonical = {
+            str(group): [float(score) for score in scores]
+            for group, scores in self.scores_by_group.items()
+        }
+        if not all(math.isfinite(score) for values in canonical.values() for score in values):
+            raise RetrievalError("prompt-group scores must all be finite")
+        lengths = {len(values) for values in canonical.values()}
+        if len(lengths) > 1:
+            raise RetrievalError("all prompt groups must return the same number of scores")
+        latency = float(self.latency_ms)
+        if not math.isfinite(latency) or latency < 0.0:
+            raise RetrievalError("latency_ms must be finite and non-negative")
+        if not str(self.provider).strip() or not str(self.model_id).strip():
+            raise RetrievalError("retrieval provider and model_id must not be empty")
+        object.__setattr__(self, "scores_by_group", canonical)
+        object.__setattr__(self, "latency_ms", latency)
+
+    def validate_length(self, expected: int) -> PromptGroupRetrievalResult:
+        for group, values in self.scores_by_group.items():
+            if len(values) != expected:
+                raise RetrievalError(
+                    f"prompt-group score length mismatch for {group!r}: "
+                    f"{len(values)} != {expected}"
+                )
+        return self
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "scores_by_group": {
+                group: list(scores) for group, scores in self.scores_by_group.items()
+            },
+            "latency_ms": self.latency_ms,
+            "provider": self.provider,
+            "model_id": self.model_id,
+            "metadata": dict(self.metadata),
+        }

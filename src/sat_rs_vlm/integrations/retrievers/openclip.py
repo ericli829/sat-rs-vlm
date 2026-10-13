@@ -11,7 +11,12 @@ from pathlib import Path
 from typing import Any
 
 from .cache import RetrievalCache, retrieval_cache_key, retrieval_image_identity
-from .protocol import RegionXYXY, RetrievalError, RetrievalResult
+from .protocol import (
+    PromptGroupRetrievalResult,
+    RegionXYXY,
+    RetrievalError,
+    RetrievalResult,
+)
 
 
 class OpenCLIPRetrieverProvider:
@@ -31,6 +36,13 @@ class OpenCLIPRetrieverProvider:
         if self.batch_size < 1:
             raise RetrievalError("OpenCLIP batch_size must be positive")
         self.model_id = str(self.config.get("model_id", self.checkpoint.stem))
+        self.region_crop_policy = (
+            str(self.config.get("region_crop_policy", "direct")).strip().lower()
+        )
+        if self.region_crop_policy not in {"direct", "square_letterbox_gray"}:
+            raise RetrievalError(
+                "OpenCLIP region_crop_policy must be 'direct' or 'square_letterbox_gray'"
+            )
         self.cache = (
             RetrievalCache(self.config["cache_dir"]) if self.config.get("cache_dir") else None
         )
@@ -61,10 +73,15 @@ class OpenCLIPRetrieverProvider:
             "arch": self.arch,
             "batch_size": self.batch_size,
             "device": self.device,
+            "region_crop_policy": self.region_crop_policy,
         }
         self._model = self._preprocess = self._tokenizer = self._torch = None
         self._resolved_device = "cpu"
         self._query_cache: dict[str, Any] = {}
+        self._prototype_cache: OrderedDict[tuple[str, ...], Any] = OrderedDict()
+        self.prompt_prototype_cache_size = max(
+            0, int(self.config.get("prompt_prototype_cache_size", 128))
+        )
         self._decoded_image_cache: OrderedDict[tuple[str, int, int], Any] = OrderedDict()
         self._image_embedding_cache: OrderedDict[tuple[Any, ...], Any] = OrderedDict()
         self._load_info: dict[str, Any] = {}
@@ -237,14 +254,22 @@ class OpenCLIPRetrieverProvider:
             raise RetrievalError(f"degenerate OpenCLIP region at index {index}")
         return values
 
-    @staticmethod
-    def _crop(image: Any, region: RegionXYXY, index: int) -> tuple[Any, list[float]]:
+    def _crop(self, image: Any, region: RegionXYXY, index: int) -> tuple[Any, list[float]]:
         values = OpenCLIPRetrieverProvider._canonical_region(image.size, region, index)
         box = tuple(
             math.floor(values[position]) if position < 2 else math.ceil(values[position])
             for position in range(4)
         )
-        return image.crop(box).convert("RGB"), values
+        crop = image.crop(box).convert("RGB")
+        if self.region_crop_policy == "square_letterbox_gray":
+            from PIL import Image
+
+            side = max(crop.size)
+            square = Image.new("RGB", (side, side), (127, 127, 127))
+            square.paste(crop, ((side - crop.width) // 2, (side - crop.height) // 2))
+            crop.close()
+            crop = square
+        return crop, values
 
     def _decoded_image(self, path: Path) -> tuple[Any, bool, tuple[str, int, int]]:
         from PIL import Image
@@ -433,8 +458,162 @@ class OpenCLIPRetrieverProvider:
             },
         ).validate_length(len(regions))
 
+    def score_prompt_groups(
+        self,
+        image_path: Path,
+        prompt_groups: Mapping[str, Sequence[str]],
+        regions_xyxy: Sequence[RegionXYXY],
+    ) -> PromptGroupRetrievalResult:
+        """Score crops against normalized means of fixed prompt groups.
+
+        Every crop embedding is produced once and compared with all group
+        prototypes. Each text prompt is normalized before its group mean is
+        normalized, matching the GeoRSCLIP prompt-ensemble convention used by
+        the project's prior analysis scripts.
+        """
+
+        started = time.perf_counter()
+        groups: dict[str, tuple[str, ...]] = {}
+        for raw_name, raw_prompts in prompt_groups.items():
+            name = str(raw_name).strip()
+            prompts = tuple(str(prompt).strip() for prompt in raw_prompts)
+            if not name:
+                raise RetrievalError("prompt-group names must not be empty")
+            if not prompts or any(not prompt for prompt in prompts):
+                raise RetrievalError(f"prompt group {name!r} must contain non-empty prompts")
+            groups[name] = prompts
+        if not groups:
+            raise RetrievalError("at least one prompt group is required")
+
+        resolved = Path(image_path).expanduser().resolve()
+        if not resolved.is_file():
+            raise RetrievalError(f"OpenCLIP image does not exist: {resolved}")
+        regions = list(regions_xyxy)
+        from PIL import Image
+
+        with Image.open(resolved) as source:
+            boxes = [
+                self._canonical_region(source.size, box, index) for index, box in enumerate(regions)
+            ]
+        if not boxes:
+            return PromptGroupRetrievalResult(
+                {name: [] for name in groups},
+                (time.perf_counter() - started) * 1000.0,
+                self.provider_name,
+                self.model_id,
+                {"prompt_count_by_group": {name: len(prompts) for name, prompts in groups.items()}},
+            )
+
+        self._load()
+        torch = self._torch
+        assert (
+            torch is not None
+            and self._model is not None
+            and self._preprocess is not None
+            and self._tokenizer is not None
+        )
+        prototype_rows = []
+        for prompts in groups.values():
+            cached = self._prototype_cache.get(prompts)
+            if cached is not None:
+                self._prototype_cache.move_to_end(prompts)
+                prototype_rows.append(cached.to(self._resolved_device))
+                continue
+            tokens = self._tokenizer(list(prompts)).to(self._resolved_device)
+            with torch.inference_mode():
+                text_features = torch.nn.functional.normalize(
+                    self._model.encode_text(tokens), dim=-1
+                )
+                prototype = torch.nn.functional.normalize(
+                    text_features.mean(dim=0, keepdim=True), dim=-1
+                )[0]
+            prototype_rows.append(prototype)
+            if self.prompt_prototype_cache_size:
+                self._prototype_cache[prompts] = prototype.detach().cpu()
+                while len(self._prototype_cache) > self.prompt_prototype_cache_size:
+                    self._prototype_cache.popitem(last=False)
+        prototypes = torch.stack(prototype_rows, dim=1)
+
+        stat = resolved.stat()
+        image_identity = (str(resolved), stat.st_size, stat.st_mtime_ns)
+        embedding_keys = [(*image_identity, *(round(value, 6) for value in box)) for box in boxes]
+        embeddings: list[Any | None] = [None] * len(boxes)
+        cache_hits = 0
+        uncached: list[int] = []
+        for index, key in enumerate(embedding_keys):
+            value = self._embedding_cache_get(key)
+            if value is None:
+                uncached.append(index)
+            else:
+                embeddings[index] = value
+                cache_hits += 1
+
+        crop_batches = 0
+        decoded_cache_hit = image_identity in self._decoded_image_cache
+        image = None
+        close_decoded_image = False
+        if uncached:
+            image, decoded_cache_hit, _ = self._decoded_image(resolved)
+            close_decoded_image = image_identity not in self._decoded_image_cache
+        try:
+            for offset in range(0, len(uncached), self.batch_size):
+                indices = uncached[offset : offset + self.batch_size]
+                batch = []
+                for index in indices:
+                    crop, _ = self._crop(image, boxes[index], index)
+                    try:
+                        batch.append(self._preprocess(crop))
+                    finally:
+                        crop.close()
+                with torch.inference_mode():
+                    image_batch = torch.stack(batch).to(self._resolved_device)
+                    image_features = torch.nn.functional.normalize(
+                        self._model.encode_image(image_batch), dim=-1
+                    )
+                crop_batches += 1
+                for index, feature in zip(indices, image_features, strict=True):
+                    cached = feature.detach().cpu()
+                    embeddings[index] = cached
+                    self._embedding_cache_put(embedding_keys[index], cached)
+        finally:
+            if close_decoded_image and image is not None:
+                image.close()
+
+        group_names = list(groups)
+        scores_by_group = {name: [] for name in group_names}
+        for offset in range(0, len(boxes), self.batch_size):
+            indices = range(offset, min(offset + self.batch_size, len(boxes)))
+            image_features = torch.stack([embeddings[index] for index in indices]).to(
+                self._resolved_device
+            )
+            scores = (image_features @ prototypes).float().cpu().tolist()
+            for row in scores:
+                for group_index, name in enumerate(group_names):
+                    scores_by_group[name].append(float(row[group_index]))
+
+        return PromptGroupRetrievalResult(
+            scores_by_group,
+            (time.perf_counter() - started) * 1000.0,
+            self.provider_name,
+            self.model_id,
+            {
+                "regions_xyxy": boxes,
+                "crop_count": len(boxes),
+                "crop_batch_count": crop_batches,
+                "image_embedding_cache_hits": cache_hits,
+                "prompt_count_by_group": {name: len(prompts) for name, prompts in groups.items()},
+                "region_crop_policy": self.region_crop_policy,
+                "load_info": dict(self._load_info),
+                "model_load_ms": self._model_load_ms,
+                "device": self._resolved_device,
+                "generation_used": False,
+                "decoded_image_cache_hit": decoded_cache_hit,
+            },
+        ).validate_length(len(regions))
+
     def close(self) -> None:
         self._query_cache.clear()
+        self._prototype_cache.clear()
         self._decoded_image_cache.clear()
         self._image_embedding_cache.clear()
         self._model = self._preprocess = self._tokenizer = self._torch = None

@@ -15,7 +15,7 @@ ensure_counting_system_importable()
 
 from counting_system.executor import CountExecutor, CountParams  # noqa: E402
 
-_EXECUTOR_CONFIG_KEYS = ("scale", "count", "gate", "detector", "retriever")
+_EXECUTOR_CONFIG_KEYS = ("scale", "count", "gate", "detector", "retriever", "detection_strategies")
 _TILED_KINDS = {"tiled"}
 _FORBIDDEN_MAIN_ENV_KINDS = {"auto", "lae_mmdet", "grounding_dino"}
 _SIDECAR_KINDS = {"lae_dino_lae1m", "lae_dino_dior", "lae_dino_dota"}
@@ -142,10 +142,27 @@ class CountingSystemProvider:
                 "entire": entire,
                 "requested_entire": request.entire,
                 "entire_source": entire_source,
+                **{
+                    key: result.provenance[key]
+                    for key in (
+                        "candidate_pool_complete",
+                        "candidate_truncated",
+                        "instance_resolution_complete",
+                        "unresolved_instance_regions",
+                        "instance_postprocess",
+                        "detection_strategy",
+                    )
+                    if key in result.provenance
+                },
             },
         )
         return CountingResult(
-            count=int(result.count),
+            count=(
+                int(result.count)
+                if result.provenance.get("candidate_pool_complete") is not False
+                and result.provenance.get("instance_resolution_complete") is not False
+                else None
+            ),
             detections=detections,
             provider=self.provider_name,
             latency_ms=(time.perf_counter() - started) * 1000.0,
@@ -158,6 +175,20 @@ class CountingSystemProvider:
                 "entire": entire,
                 "requested_entire": request.entire,
                 "entire_source": entire_source,
+                **{
+                    key: result.provenance[key]
+                    for key in (
+                        "candidate_pool_complete",
+                        "candidate_truncated",
+                        "instance_resolution_complete",
+                        "unresolved_instance_regions",
+                        "instance_postprocess",
+                        "detection_strategy",
+                        "tile_diagnostics",
+                        "detector_error",
+                    )
+                    if key in result.provenance
+                },
             },
         )
 

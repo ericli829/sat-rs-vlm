@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Iterator
+
+from sat_rs_vlm.integrations.detectors.strategies import resolve_detection_strategy
 
 from .runtime import BBox, ImageRef, Region
 from .target import TargetSpec
@@ -27,6 +29,7 @@ class Tile:
     core_xyxy: BBox
     detector_input: int
     scope_xyxy: BBox
+    spatial_resize_enabled: bool | None = None
 
     @property
     def crop_size(self) -> tuple[int, int]:
@@ -62,8 +65,6 @@ def _clamp_box(box: BBox, scope: BBox) -> BBox:
 
 def _window_boxes(scope: BBox, tile_size: int, overlap: int) -> list[BBox]:
     sx0, sy0, sx1, sy1 = scope
-    width = sx1 - sx0
-    height = sy1 - sy0
     tile_size = max(int(tile_size), 1)
     overlap = min(max(int(overlap), 0), tile_size - 1)
     stride = max(tile_size - overlap, 1)
@@ -186,7 +187,12 @@ def build_scale_policy(
         pass
     if not specs:
         specs.append(
-            ScaleSpec(scale_id="native", tile_size=native_tile, overlap=native_overlap, detector_input=source_scale)
+            ScaleSpec(
+                scale_id="native",
+                tile_size=native_tile,
+                overlap=native_overlap,
+                detector_input=source_scale,
+            )
         )
     return specs
 
@@ -229,6 +235,38 @@ def plan_tiles(
     entire: bool,
     source_scale: int | None = None,
 ) -> list[Tile]:
+    strategy = resolve_detection_strategy(target.category, config.get("detection_strategies"))
+    if strategy["name"] != "legacy":
+        if strategy["name"] == "dense_small":
+            size = int(strategy["tile_size"])
+            overlap = int(round(size * float(strategy["overlap_ratio"])))
+            crops = _window_boxes(scope, size, overlap)
+            cores = [ownership_core(crop, scope, overlap) for crop in crops]
+        else:
+            # True quadrants of the requested scope, preserving its aspect ratio.
+            x0, y0, x1, y1 = scope
+            mx, my = round((x0 + x1) / 2), round((y0 + y1) / 2)
+            pad_x = round((x1 - x0) * float(strategy["overlap_ratio"]) / 4)
+            pad_y = round((y1 - y0) * float(strategy["overlap_ratio"]) / 4)
+            cores = [(x0, y0, mx, my), (mx, y0, x1, my), (x0, my, mx, y1), (mx, my, x1, y1)]
+            crops = [
+                _clamp_box((a - pad_x, b - pad_y, c + pad_x, d + pad_y), scope)
+                for a, b, c, d in cores
+            ]
+        return [
+            Tile(
+                tile_id=f"{strategy['name']}:{index}",
+                scale_id=strategy["name"],
+                image=image,
+                crop_xyxy=crop,
+                core_xyxy=core,
+                detector_input=0,
+                scope_xyxy=scope,
+                spatial_resize_enabled=bool(strategy["spatial_resize_enabled"]),
+            )
+            for index, (crop, core) in enumerate(zip(crops, cores, strict=False))
+            if crop[0] < crop[2] and crop[1] < crop[3]
+        ]
     scale_cfg = config.get("scale") or {}
     native_cfg = scale_cfg.get("native") or {}
     fine_cfg = scale_cfg.get("fine") or {}

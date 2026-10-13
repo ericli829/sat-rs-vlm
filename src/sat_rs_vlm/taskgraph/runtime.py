@@ -41,6 +41,7 @@ from .providers import (
     FakeRegionRetriever,
     FakeSemanticVLMProvider,
     FixturePlannerProvider,
+    IncompleteCountingError,
     LazyQwenSemanticProvider,
     LocatorRegionRetrieverAdapter,
     ModelTaskGraphPlannerProvider,
@@ -52,6 +53,7 @@ from .providers import (
     ScoredGridRegionRetrieverAdapter,
     SemanticVLMProvider,
     VLMRequest,
+    require_complete_count,
 )
 from .referent_refinement import ReferentRefinementConfig, ReferentRefiner
 from .routing import DatasetExecutionPolicy, ExecutionMode, ExecutionModeRouter
@@ -195,6 +197,8 @@ def _provider_children(provider: Any) -> tuple[Any, ...]:
         "detector_provider",
         "_engine",
         "base_provider",
+        "_verifier",
+        "retriever",
     ):
         child = getattr(provider, name, None)
         if child is not None and child is not provider:
@@ -793,11 +797,24 @@ class TaskGraphRuntime:
             counting = self.providers.counting
             if counting is None:
                 raise RuntimeError("COUNT requires RuntimeProviders.counting")
+            normalize = getattr(counting, "normalize_target", None)
+            if callable(normalize):
+                target = normalize(
+                    target if request.target_category else TargetSpec(category=request.question)
+                )
+            direct_normalize = getattr(counting, "normalize_direct_target", None)
+            if callable(direct_normalize):
+                target = direct_normalize(target, request.question)
             counted = counting.count(CountingRequest(scope, target, entire=True))
             trace.telemetry["counting_ms"] = (time.perf_counter() - counting_started) * 1000.0
             trace.telemetry["counting_metadata"] = dict(counted.metadata)
+            try:
+                count_value = require_complete_count(counted)
+            except IncompleteCountingError as exc:
+                exc.execution_trace = trace
+                raise
             source: RuntimeObject = ScalarInt(
-                counted.count,
+                count_value,
                 {"provider": counted.provider, "detection": counted.detections.provenance},
             )
             trace.result = runtime_summary(source)
@@ -1298,6 +1315,10 @@ def runtime_from_config(
     providers = config.get("providers", {})
     if not isinstance(providers, dict):
         raise TypeError("providers config must be a mapping")
+    verification_section = config.get("candidate_verification", {})
+    verification_requested = isinstance(verification_section, Mapping) and bool(
+        verification_section.get("enabled", False)
+    )
 
     detection_cfg = dict(providers.get("detection", {"kind": "fake"}))
     detection_kind = str(detection_cfg.pop("kind", "fake"))
@@ -1305,6 +1326,9 @@ def runtime_from_config(
     if not isinstance(locate_detector_value, Mapping):
         raise TypeError("providers.detection.locate_detector must be a mapping")
     locate_detector_cfg = dict(locate_detector_value)
+    strategies = config.get("detection_strategies", {})
+    if not isinstance(strategies, Mapping):
+        raise TypeError("detection_strategies must be a mapping")
     locate_score_threshold_value = locate_detector_cfg.get("score_threshold")
     locate_score_threshold = (
         float(locate_score_threshold_value) if locate_score_threshold_value is not None else None
@@ -1332,12 +1356,26 @@ def runtime_from_config(
     else:
         from sat_rs_vlm.integrations.detectors.registry import create_proposal_provider
 
-        detection = ProposalDetectionAdapter(
-            create_proposal_provider(detection_kind, detection_cfg),
-            locate_max_candidates=locate_max_candidates,
-            locate_score_threshold=locate_score_threshold,
-            locate_clip_rerank_top_k=locate_clip_rerank_top_k,
-        )
+        try:
+            proposal_provider = create_proposal_provider(detection_kind, detection_cfg)
+            if strategies:
+                from sat_rs_vlm.integrations.counting.proposals import StrategyProposalProvider
+
+                proposal_provider = StrategyProposalProvider(proposal_provider, strategies)
+            detection = ProposalDetectionAdapter(
+                proposal_provider,
+                locate_max_candidates=locate_max_candidates,
+                locate_score_threshold=locate_score_threshold,
+                locate_clip_rerank_top_k=locate_clip_rerank_top_k,
+            )
+        except Exception as exc:
+            if not verification_requested:
+                raise
+            from sat_rs_vlm.integrations.retrievers.candidate_verification import (
+                UnavailableCandidateProvider,
+            )
+
+            detection = UnavailableCandidateProvider(f"{type(exc).__name__}: {exc}")
 
     counting_cfg = dict(providers.get("counting", {"kind": "fake"}))
     counting_kind = str(counting_cfg.pop("kind", "fake"))
@@ -1346,11 +1384,69 @@ def runtime_from_config(
     elif counting_kind == "counting_system":
         from sat_rs_vlm.integrations.counting import CountingSystemProvider
 
-        counting = CountingSystemProvider.from_config(counting_cfg)
+        if strategies:
+            counting_cfg["detection_strategies"] = dict(strategies)
+        try:
+            counting = CountingSystemProvider.from_config(counting_cfg)
+        except Exception as exc:
+            if not verification_requested:
+                raise
+            from sat_rs_vlm.integrations.retrievers.candidate_verification import (
+                UnavailableCandidateProvider,
+            )
+
+            counting = UnavailableCandidateProvider(f"{type(exc).__name__}: {exc}")
     else:
         raise ValueError(
             f"unsupported counting provider kind: {counting_kind}; use fake or counting_system"
         )
+
+    verification_cfg = config.get("candidate_verification", {})
+    if not isinstance(verification_cfg, Mapping):
+        raise TypeError("candidate_verification must be a mapping")
+    if verification_cfg.get("enabled", False):
+        verification_cfg = dict(verification_cfg)
+        import yaml
+
+        from sat_rs_vlm.integrations.retrievers.candidate_verification import (
+            GeoRSCLIPCandidateVerifier,
+            UnavailablePromptScorer,
+            VerifiedCountingProvider,
+            VerifiedDetectionProvider,
+        )
+        from sat_rs_vlm.integrations.retrievers.registry import create_retriever_provider
+
+        catalog_path = Path(
+            str(
+                verification_cfg.get(
+                    "prompt_catalog", "configs/prompts/georsclip_major_categories.yaml"
+                )
+            )
+        ).expanduser()
+        if not catalog_path.is_absolute():
+            catalog_path = PROJECT_ROOT / catalog_path
+        try:
+            catalog = yaml.safe_load(catalog_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            catalog = {"groups": {}}
+            verification_cfg["prompt_catalog_error"] = f"{type(exc).__name__}: {exc}"
+        if not isinstance(catalog, Mapping):
+            raise ValueError("candidate verification prompt catalog must be a mapping")
+        section = verification_cfg.get("retriever", {})
+        if not isinstance(section, Mapping):
+            raise TypeError("candidate_verification.retriever must be a mapping")
+        try:
+            scorer = create_retriever_provider(
+                str(section.get("provider", "georsclip")), section.get("config", {})
+            )
+        except Exception as exc:
+            scorer = UnavailablePromptScorer(
+                f"{type(exc).__name__}: {exc}",
+                str(section.get("config", {}).get("model_id", "GeoRSCLIP")),
+            )
+        verifier = GeoRSCLIPCandidateVerifier(scorer, catalog, verification_cfg)
+        detection = VerifiedDetectionProvider(detection, verifier)
+        counting = VerifiedCountingProvider(counting, verifier)
 
     def semantic_provider(name: str, role: str) -> SemanticVLMProvider:
         section = dict(providers.get(name, {"kind": "fake"}))

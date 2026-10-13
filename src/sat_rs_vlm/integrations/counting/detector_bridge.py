@@ -40,6 +40,8 @@ class _PreparedTile:
     label: str
     tile_id: str
     scale_id: str
+    spatial_resize_enabled: bool | None
+    score_threshold: float
 
 
 class CountingProposalDetectorBridge:
@@ -79,6 +81,8 @@ class CountingProposalDetectorBridge:
             request.target.name,
             request.tile.tile_id,
             request.tile.scale_id,
+            request.tile.spatial_resize_enabled,
+            request.score_threshold,
         )
 
     def detect_many(self, requests: Iterable[DetectionRequest]) -> Iterator[DetectionResponse]:
@@ -114,14 +118,37 @@ class CountingProposalDetectorBridge:
                     for batch in batches:
                         # Keep query roles and padding shape bounded without
                         # collecting raw requests whose source owns their images.
-                        for _, grouped in groupby(batch, key=lambda t: (t.phrase, t.local_size)):
+                        for _, grouped in groupby(
+                            batch,
+                            key=lambda t: (
+                                t.phrase,
+                                t.local_size,
+                                t.spatial_resize_enabled,
+                                t.score_threshold,
+                            ),
+                        ):
                             tiles = list(grouped)
                             self.call_count += len(tiles)
                             try:
                                 provider = cast(BatchedProposalProvider, self._provider)
-                                results = provider.predict_batch(
-                                    [tile.path for tile in tiles], tiles[0].phrase
-                                )
+                                raw_predict = getattr(provider, "predict_batch_raw", None)
+                                if tiles[0].spatial_resize_enabled is not None and callable(
+                                    raw_predict
+                                ):
+                                    results = raw_predict(
+                                        [tile.path for tile in tiles],
+                                        tiles[0].phrase,
+                                        options={
+                                            "spatial_resize_enabled": tiles[
+                                                0
+                                            ].spatial_resize_enabled,
+                                            "score_threshold": tiles[0].score_threshold,
+                                        },
+                                    )
+                                else:
+                                    results = provider.predict_batch(
+                                        [tile.path for tile in tiles], tiles[0].phrase
+                                    )
                             except Exception as exc:
                                 raise RuntimeError(f"LAE sidecar batch failure: {exc}") from exc
                             if len(results) != len(tiles):
@@ -139,7 +166,18 @@ class CountingProposalDetectorBridge:
         # Retain a scalar diagnostic, never requests that own full tile images.
         self.call_count += 1
         try:
-            result = self._provider.predict(tile.path, tile.phrase)
+            raw_predict = getattr(self._provider, "predict_raw", None)
+            if tile.spatial_resize_enabled is not None and callable(raw_predict):
+                result = raw_predict(
+                    tile.path,
+                    tile.phrase,
+                    options={
+                        "spatial_resize_enabled": tile.spatial_resize_enabled,
+                        "score_threshold": tile.score_threshold,
+                    },
+                )
+            else:
+                result = self._provider.predict(tile.path, tile.phrase)
         except ProposalError as exc:
             raise RuntimeError(f"LAE sidecar failure: {exc}") from exc
         except Exception as exc:
@@ -151,7 +189,7 @@ class CountingProposalDetectorBridge:
     def _response(self, tile: _PreparedTile, result: ProposalResult) -> DetectionResponse:
         local_w, local_h = tile.local_size
         detections: list[Detection] = []
-        for box, score in zip(result.boxes_xyxy, result.scores, strict=True):
+        for index, (box, score) in enumerate(zip(result.boxes_xyxy, result.scores, strict=True)):
             global_box = local_to_global(box, tile.crop_xyxy, local_size=(local_w, local_h))
             detections.append(
                 Detection(
@@ -167,6 +205,8 @@ class CountingProposalDetectorBridge:
                         "local_size": [local_w, local_h],
                         "coordinate_mode": "absolute_original_pixel_xyxy",
                         "model_id": result.model_id,
+                        "candidate_id": f"{tile.tile_id}:proposal:{index + 1}",
+                        "instance_status": "CONFIRMED_INSTANCE",
                     },
                 )
             )

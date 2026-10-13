@@ -1,0 +1,40 @@
+detector:
+  provider: tiled
+  config:
+    tile_size: 1333
+    overlap_ratio: 0.15
+    global_nms_iou: 0.4
+    base_provider: lae_dino_lae1m
+    base_config:
+      source_root: ${LAE_DINO_SOURCE_ROOT}
+      config_path: ${LAE_DINO_CONFIG_LAE1M}
+      checkpoint: ${LAE_DINO_CHECKPOINT_LAE1M}
+      bert_root: ${LAE_DINO_BERT_ROOT}
+      worker_python: ${LAE_DINO_PYTHON}
+      stderr_log: ${LAE_DINO_STDERR_LOG}
+      score_threshold: 0.20
+      top_k: 500
+
+retriever:
+  provider: georsclip
+  config:
+    checkpoint: ${GEORSCLIP_CHECKPOINT}
+    model_id: GeoRSCLIP-ViT-B-32
+    arch: ViT-B-32
+    device: auto
+    region_crop_policy: square_letterbox_gray
+    batch_size: 48
+    cache_dir: reports/cache/georsclip_two_stage
+    decoded_image_cache_size: 2
+    decoded_image_cache_max_pixels: 4000000
+    image_embedding_cache_size: 1024
+
+coarse_filter:
+  margin_threshold: 0.0
+
+attribute_filter:
+  target_margin_threshold: 0.0
+  unrestricted_weight: 0.80
+  contrast_weight: 0.20
+  coarse_score_weight: 0.50
+  attribute_score_weight: 0.50

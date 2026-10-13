@@ -9,9 +9,13 @@
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import asdict, dataclass
 from typing import Any
+
+from sat_rs_vlm.integrations.detectors.instance_postprocess import postprocess_instances
+from sat_rs_vlm.integrations.detectors.strategies import resolve_detection_strategy
 
 from .contracts import resolve_count_scope, validate_count_inputs
 from .detector.base import DetectionRequest
@@ -245,6 +249,11 @@ class CountExecutor:
     ) -> CountResult:
         count_cfg = self.config.get("count") or {}
         gate_cfg = self.config.get("gate") or {}
+        strategy = resolve_detection_strategy(
+            spec.category, self.config.get("detection_strategies")
+        )
+        if strategy["name"] != "legacy":
+            gate_cfg = {"enabled": False}
         image, region = _split_visual(inputs)
         pil = load_image(image)
         image = ensure_size(image, pil)
@@ -263,6 +272,9 @@ class CountExecutor:
         detector = self._ensure_detector()
         raw: list[Detection] = []
         calls = 0
+        tile_diagnostics = []
+        invalid_global_candidates = 0
+        detector_error = None
 
         def requests():
             for tile in gated:
@@ -273,7 +285,10 @@ class CountExecutor:
                         target=spec,
                         tile=tile,
                         score_threshold=float(
-                            (self.config.get("detector") or {}).get("score_threshold") or 0.0
+                            strategy.get(
+                                "score_threshold",
+                                (self.config.get("detector") or {}).get("score_threshold") or 0.0,
+                            )
                         ),
                         texts=spec.texts(),
                     )
@@ -291,8 +306,27 @@ class CountExecutor:
             )
             try:
                 for response in responses:
-                    raw.extend(response.detections)
+                    for det in response.detections:
+                        a, b, c, d = det.bbox_xyxy_global
+                        box = (
+                            max(a, scope[0]),
+                            max(b, scope[1]),
+                            min(c, scope[2]),
+                            min(d, scope[3]),
+                        )
+                        if box[0] >= box[2] or box[1] >= box[3]:
+                            invalid_global_candidates += 1
+                            continue
+                        if box != det.bbox_xyxy_global:
+                            det.provenance["bbox_before_scope_clip"] = list(det.bbox_xyxy_global)
+                            det.bbox_xyxy_global = box
+                        raw.append(det)
+                    tile_diagnostics.append(dict(response.extra.get("proposal_metadata", {})))
                     calls += 1
+            except Exception as exc:
+                if strategy["name"] == "legacy":
+                    raise
+                detector_error = f"{type(exc).__name__}: {exc}"
             finally:
                 close_responses = getattr(responses, "close", None)
                 if callable(close_responses):
@@ -303,7 +337,7 @@ class CountExecutor:
         thr = float(
             score_threshold
             if score_threshold is not None
-            else count_cfg.get("score_threshold", 0.2)
+            else strategy.get("score_threshold", count_cfg.get("score_threshold", 0.2))
         )
         fused, stats = fuse_detections(
             raw,
@@ -312,6 +346,106 @@ class CountExecutor:
             nms_iou=float(count_cfg.get("nms_iou", 0.4)),
             cross_iou=float(count_cfg.get("cross_scale_iou", 0.5)),
         )
+        instance_trace = None
+        refinement_calls = 0
+        if strategy["name"] != "legacy":
+            by_tile = {tile.tile_id: tile for tile in tiles}
+
+            def refine_region(parent):
+                nonlocal refinement_calls
+                pad_x = max(8, round((parent[2] - parent[0]) * 0.12))
+                pad_y = max(8, round((parent[3] - parent[1]) * 0.12))
+                crop_box = (
+                    max(scope[0], math.floor(parent[0] - pad_x)),
+                    max(scope[1], math.floor(parent[1] - pad_y)),
+                    min(scope[2], math.ceil(parent[2] + pad_x)),
+                    min(scope[3], math.ceil(parent[3] + pad_y)),
+                )
+                tile = Tile(
+                    tile_id=f"instance_refinement:{refinement_calls}",
+                    scale_id=strategy["name"],
+                    image=image,
+                    crop_xyxy=crop_box,
+                    core_xyxy=crop_box,
+                    detector_input=0,
+                    scope_xyxy=scope,
+                    spatial_resize_enabled=bool(strategy["spatial_resize_enabled"]),
+                )
+                with load_image(image) as refinement_image:
+                    crop = crop_tile(refinement_image, tile)
+                    try:
+                        response = detector.detect(
+                            DetectionRequest(
+                                image=crop,
+                                target=spec,
+                                tile=tile,
+                                score_threshold=thr,
+                                texts=spec.texts(),
+                            )
+                        )
+                    finally:
+                        crop.close()
+                refinement_calls += 1
+                tile_diagnostics.append(dict(response.extra.get("proposal_metadata", {})))
+                return (
+                    [list(det.bbox_xyxy_global) for det in response.detections],
+                    [det.score for det in response.detections],
+                )
+
+            boxes, scores, instance_trace = postprocess_instances(
+                [list(det.bbox_xyxy_global) for det in fused],
+                [det.score for det in fused],
+                nms_iou=max(0.6, float(count_cfg.get("nms_iou", 0.4))),
+                source_ids=list(range(len(fused))),
+                reference_areas=[
+                    float(by_tile[det.tile_id].crop_size[0] * by_tile[det.tile_id].crop_size[1])
+                    if det.tile_id in by_tile
+                    else 0.0
+                    for det in fused
+                ],
+                refine=refine_region,
+                max_refinement_regions=int(strategy["max_refinement_regions"]),
+                large_box_area_fraction=float(strategy["large_box_area_fraction"]),
+            )
+            resolved = []
+            source_occurrences = {}
+            for box, score, source_id in zip(
+                boxes, scores, instance_trace["final_source_ids"], strict=False
+            ):
+                original = fused[int(source_id)]
+                occurrence = source_occurrences.get(source_id, 0)
+                source_occurrences[source_id] = occurrence + 1
+                provenance = dict(original.provenance)
+                if tuple(box) != original.bbox_xyxy_global or occurrence:
+                    provenance["source_candidate_id"] = provenance.get("candidate_id")
+                    provenance["candidate_id"] = (
+                        f"{provenance.get('candidate_id')}:refined:{occurrence + 1}"
+                    )
+                resolved.append(
+                    Detection(
+                        tuple(box),
+                        score,
+                        original.label,
+                        original.tile_id,
+                        original.scale_id,
+                        provenance=provenance,
+                    )
+                )
+            fused = resolved
+            stats["after_instance_postprocess"] = len(fused)
+        pool_complete = (
+            calls == len(gated) == len(tiles)
+            and invalid_global_candidates == 0
+            and all(
+                d.get("candidate_pool_complete") is not False and not d.get("candidate_truncated")
+                for d in tile_diagnostics
+            )
+        )
+        instance_complete = all(
+            d.get("instance_resolution_complete") is not False for d in tile_diagnostics
+        )
+        if instance_trace is not None:
+            instance_complete = instance_complete and instance_trace["instance_resolution_complete"]
         for i, det in enumerate(fused):
             det.provenance = dict(det.provenance)
             det.provenance["kept"] = True
@@ -333,12 +467,30 @@ class CountExecutor:
                 "tiles_run": len(gated),
                 "detector": getattr(detector, "impl_name", getattr(detector, "name", "unknown")),
                 "provider": getattr(detector, "impl_name", getattr(detector, "name", "unknown")),
-                "detector_calls": calls,
+                "detector_calls": calls + refinement_calls,
+                "instance_refinement_calls": refinement_calls,
                 "raw_proposals": [asdict(d) for d in raw]
                 if count_cfg.get("keep_raw_proposals", True)
                 else len(raw),
                 "raw_count": len(raw),
                 "fusion": stats,
+                "detection_strategy": strategy,
+                "tile_diagnostics": tile_diagnostics,
+                "invalid_global_candidate_count": invalid_global_candidates,
+                "detector_error": detector_error,
+                "candidate_pool_complete": pool_complete,
+                "candidate_truncated": any(d.get("candidate_truncated") for d in tile_diagnostics),
+                "instance_resolution_complete": instance_complete,
+                "instance_postprocess": instance_trace,
+                "unresolved_instance_regions": (
+                    instance_trace["unresolved_regions"]
+                    if instance_trace
+                    else [
+                        region
+                        for d in tile_diagnostics
+                        for region in d.get("unresolved_instance_regions", [])
+                    ]
+                ),
                 "gate": gate_trace,
                 "duplicate_rate": duplicate_rate(fused),
             },

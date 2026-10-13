@@ -378,7 +378,9 @@ class LAEDinoSidecarProvider:
             response = session.client.request(image_path, target_phrase, options=self._options())
         return self._result(response, target_phrase)
 
-    def predict_raw(self, image_path: Path, target_phrase: str) -> ProposalResult:
+    def predict_raw(
+        self, image_path: Path, target_phrase: str, *, options: Mapping[str, Any] | None = None
+    ) -> ProposalResult:
         """Return thresholded proposals before per-image post-processing."""
 
         session = self._worker_session()
@@ -386,7 +388,13 @@ class LAEDinoSidecarProvider:
             if self._closed:
                 raise ProposalError("LAE-DINO provider is closed")
             response = session.client.request(
-                image_path, target_phrase, options=self._options(raw_proposals=True)
+                image_path,
+                target_phrase,
+                options={
+                    **self._options(raw_proposals=True),
+                    **dict(options or {}),
+                    "raw_proposals": True,
+                },
             )
         return self._result(response, target_phrase, raw_proposals=True)
 
@@ -409,7 +417,11 @@ class LAEDinoSidecarProvider:
         return [self._result(response, target_phrase) for response in responses]
 
     def predict_batch_raw(
-        self, image_paths: list[Path], target_phrase: str
+        self,
+        image_paths: list[Path],
+        target_phrase: str,
+        *,
+        options: Mapping[str, Any] | None = None,
     ) -> list[ProposalResult]:
         """Batch thresholded proposals without tile-local NMS/top-k."""
 
@@ -425,13 +437,14 @@ class LAEDinoSidecarProvider:
                     session.client.request_batch(
                         image_paths[start : start + self.inference_batch_size],
                         target_phrase,
-                        options=self._options(raw_proposals=True),
+                        options={
+                            **self._options(raw_proposals=True),
+                            **dict(options or {}),
+                            "raw_proposals": True,
+                        },
                     )
                 )
-        return [
-            self._result(response, target_phrase, raw_proposals=True)
-            for response in responses
-        ]
+        return [self._result(response, target_phrase, raw_proposals=True) for response in responses]
 
     def _result(
         self,
@@ -475,10 +488,13 @@ class LAEDinoSidecarProvider:
                 "batch_size_configured": self.inference_batch_size,
                 "candidate_truncated": bool(metadata.get("candidate_truncated"))
                 or len(response.get("bbox_list", [])) > len(boxes)
-                or (not raw_proposals and (
-                    "candidate_truncated" not in metadata
-                    and len(boxes) >= int(self.config.get("top_k", 100))
-                )),
+                or (
+                    not raw_proposals
+                    and (
+                        "candidate_truncated" not in metadata
+                        and len(boxes) >= int(self.config.get("top_k", 100))
+                    )
+                ),
             }
         )
         metadata["candidate_pool_complete"] = (

@@ -1,0 +1,287 @@
+version: 1
+
+# Fixed class nouns for the coarse GeoRSCLIP screen. No random or per-crop
+# negative-term selection is performed. Each term receives all three templates.
+templates:
+  - "satellite imagery of a {term}."
+  - "aerial photograph of a {term} viewed from above."
+  - "an overhead remote sensing image showing a {term}."
+
+groups:
+  road_vehicle:
+    aliases:
+      - car
+      - automobile
+      - van
+      - pickup truck
+      - truck
+      - bus
+      - vehicle
+      - motorcycle
+      - motorbike
+      - moped
+      - bicycle
+      - bike
+      - tricycle
+      - awning tricycle
+      - light rail vehicle
+      - train
+      - tram
+      - trailer
+    positive_terms:
+      - car
+      - automobile
+      - van
+      - pickup truck
+      - truck
+      - bus
+      - vehicle
+    negative_terms:
+      - rooftop
+      - roof structure
+      - rooftop air conditioner
+      - tree
+      - parking space
+      - road marking
+      - shadow
+      - building feature
+
+  person:
+    aliases:
+      - person
+      - persons
+      - people
+      - pedestrian
+      - cyclist
+      - bicyclist
+    positive_terms:
+      - person
+      - pedestrian
+      - cyclist
+    negative_terms:
+      - car
+      - truck
+      - ship
+      - building
+      - rooftop
+      - tree
+      - parking space
+      - shadow
+
+  built_environment:
+    aliases:
+      - building
+      - building complex
+      - house
+      - cabin
+      - factory
+      - greenhouse
+      - shed
+      - tower
+      - bridge
+      - container
+      - storage tank
+    positive_terms:
+      - building
+      - house
+      - factory
+      - greenhouse
+      - shed
+      - storage tank
+      - tower
+    negative_terms:
+      - car
+      - ship
+      - road
+      - tree
+      - parking space
+      - swimming pool
+      - shadow
+      - rooftop air conditioner
+
+  watercraft:
+    aliases:
+      - ship
+      - boat
+      - cargo ship
+      - cruise ship
+      - sailboat
+      - yacht
+      - ferry
+      - vessel
+      - watercraft
+      - warship
+      - steamship
+    positive_terms:
+      - ship
+      - boat
+      - cargo ship
+      - yacht
+      - ferry
+      - vessel
+      - watercraft
+    negative_terms:
+      - car
+      - truck
+      - airplane
+      - bridge
+      - pier
+      - building
+      - road
+      - shadow
+
+  aircraft:
+    aliases:
+      - airplane
+      - plane
+      - aircraft
+      - helicopter
+    positive_terms:
+      - airplane
+      - plane
+    negative_terms:
+      - car
+      - truck
+      - ship
+      - building
+      - bridge
+      - road
+      - tree
+      - shadow
+
+  transport_infrastructure:
+    aliases:
+      - road
+      - lane
+      - parking lot
+      - parking space
+      - railway
+      - railway line
+      - roundabout
+      - intersection
+      - traffic cone
+      - traffic sign
+      - traffic light
+      - traffic island
+      - traffic box
+      - bollard
+      - barrier
+      - road marking
+      - zebra crossing
+      - streetlight
+      - pier
+      - path
+    positive_terms:
+      - road
+      - lane
+      - parking lot
+      - railway
+      - roundabout
+      - traffic cone
+      - traffic sign
+      - traffic light
+      - barrier
+      - bollard
+    negative_terms:
+      - car
+      - bus
+      - ship
+      - building
+      - tree
+      - tennis court
+      - rooftop
+      - shadow
+
+  sports_facility:
+    aliases:
+      - tennis court
+      - basketball court
+      - badminton court
+      - soccer field
+      - football field
+      - sports field
+      - sports ground
+      - swimming pool
+      - track
+      - running track
+      - playground
+      - stadium
+      - ping pong table
+    positive_terms:
+      - tennis court
+      - basketball court
+      - soccer field
+      - swimming pool
+      - running track
+      - playground
+      - sports field
+    negative_terms:
+      - building
+      - road
+      - parking space
+      - vehicle
+      - lake
+      - tree
+      - roof structure
+      - shadow
+
+  natural_feature:
+    aliases:
+      - tree
+      - forest
+      - forest patch
+      - lake
+      - pond
+      - river
+      - island
+      - farm
+      - farmland
+      - grass patch
+      - lawn
+      - soil patch
+    positive_terms:
+      - tree
+      - forest
+      - lake
+      - pond
+      - river
+      - island
+      - farm
+    negative_terms:
+      - building
+      - road
+      - parking space
+      - vehicle
+      - ship
+      - sports field
+      - roof structure
+      - shadow
+
+  industrial_equipment:
+    aliases:
+      - crane
+      - excavator
+      - bulldozer
+      - forklift
+      - construction vehicle
+      - lifting equipment
+      - hoisting equipment
+      - machinery
+      - wind turbine
+    positive_terms:
+      - crane
+      - excavator
+      - bulldozer
+      - forklift
+      - construction vehicle
+      - wind turbine
+      - industrial machine
+    negative_terms:
+      - car
+      - bus
+      - ship
+      - building
+      - bridge
+      - tree
+      - road
+      - shadow
