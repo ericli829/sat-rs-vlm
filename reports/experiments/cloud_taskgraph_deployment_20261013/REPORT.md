@@ -1,5 +1,11 @@
 # 完整 TaskGraph 云端部署验证，2026-10-13
 
+更新：用户随后更正目标 Planner 日期为 **2026-10-11**。已核对该 adapter 的云端 SHA256
+`d7169cce768dcd01e86f1c2fd2847f7fddf85e45f9d61db3e23180a97211a4e6`，并切换主服务至 PID `30837`。
+现有 HTTPS 隧道 PID `30076` 保留，原始部署的 PID `29050` 已正常退出。
+以下五类冒烟耗时是切换前的历史记录；后续 25 条 UHR 原题使用 10 月 11 日 Planner。
+后续结果见同目录 `UHR25_REPORT.md`。
+
 ## 部署结果
 
 在用户指定的 AutoDL 机器上，完整生产入口
@@ -49,12 +55,14 @@
 4B 底座：`/root/autodl-tmp/models/Qwen3-VL-4B-Instruct`。
 2B 底座：`/root/autodl-tmp/models/Qwen3-VL-2B-Instruct`。
 
-本次实际 Planner adapter：
+首次部署时的 Planner adapter（后续已替换）：
 `/root/autodl-tmp/outputs/taskgraph/qwen3vl_4b_planner_hard_refine_v1_20260902_234235`。
 `adapter_model.safetensors` 大小 132195448 字节，mtime 为 2026-09-03 00:05:05 +0800，SHA256：
 `defad37c62a53cb928d8879d8f690cc55806dffee7a81a547f121c9975511570`。
 这是已有老 Planner 路径，**不能称为已验证的 10 月 10 日冻结版本**。
-本次确认的是完整服务可部署，最终比赛 Planner 版本选择仍需单独落实。
+用户更正目标日期后，实际服务已改用
+`/root/autodl-fs/data/sat-rs-vlm-training/planner_4b_clean_20261011/output/training`，
+权重大小同为 132195448 字节，mtime 为 2026-10-11 14:30:26 +0800，SHA256 见本文更新。
 启动器要求显式指定 Planner adapter，不会把这个旧目录自动固定为所有部署的默认值。
 
 双时相 adapter：
@@ -99,7 +107,8 @@ LAE worker 使用 `/root/miniconda3/envs/lae-dino-gpu/bin/python3`，实测 Pyth
 
 ## 仍需关注
 
-- Planner 10 月 10 日版本的确切来源未确认。本次旧 Planner 不能替代冻结版本审计。
+- 用户更正的 10 月 11 日 Planner 来源已匹配既有训练、下载和评测记录；
+  不再把不存在证据的 10 月 10 日版本作为本次部署目标。
 - 24 GB 显存余量较小，保持单请求锁、一个 worker，不提高模型/语义候选并发。
 - 候选验证计数器按当前既有策略在部分检测异常时仍可输出零值；本次修复的是实际
   worker 崩溃，未更改这项计数回退产品策略。真实部署故障排查必须看 worker 日志。
@@ -113,14 +122,14 @@ LAE worker 使用 `/root/miniconda3/envs/lae-dino-gpu/bin/python3`，实测 Pyth
 云端查看状态：
 
 ```bash
-ps -p 29050,29351,30076 -o pid,etime,comm
-tail -n 30 /root/autodl-fs/experiments/sat-rs-vlm_protocol_v2_20261013/service_v2/server.stderr.log
+ps -p 30837,30076 -o pid,etime,comm
+tail -n 30 /root/autodl-fs/experiments/sat-rs-vlm_protocol_v2_20261013/service_planner_20261011/server.stderr.log
 ```
 
 需要主动停止时，由用户执行（本次没有执行）：
 
 ```bash
-kill -TERM 30076 29050
+kill -TERM 30076 30837
 ```
 
 主服务正常退出会调用既有 runtime/provider 关闭流程并回收 LAE sidecar。
