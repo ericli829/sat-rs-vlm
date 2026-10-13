@@ -11,11 +11,12 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import Callable, Sequence
-from typing import Any
+from typing import Any, Callable, List, Sequence, Tuple  # noqa: UP035 -- Python 3.8 worker
 
 Box = Sequence[float]
-Refine = Callable[[list[float]], tuple[list[list[float]], list[float]]]
+# Type aliases execute at import time, unlike postponed function annotations.
+# LAE-DINO's isolated Python 3.8 environment needs typing's generic aliases.
+Refine = Callable[[List[float]], Tuple[List[List[float]], List[float]]]  # noqa: UP006
 
 
 def box_area(box: Box) -> float:

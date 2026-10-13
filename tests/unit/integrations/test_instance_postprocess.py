@@ -1,10 +1,29 @@
 from __future__ import annotations
 
+import os
+import subprocess
+from pathlib import Path
+
+import pytest
+
 from sat_rs_vlm.integrations.detectors.instance_postprocess import (
     box_iou,
     intersection_over_smaller,
     postprocess_instances,
 )
+
+
+def test_worker_imports_under_configured_isolated_python_without_loading_weights():
+    worker_python = os.environ.get("LAE_DINO_PYTHON")
+    if not worker_python:
+        pytest.skip("LAE_DINO_PYTHON is not configured on this host")
+    worker = Path(__file__).resolve().parents[3] / "scripts/integrations/lae_dino_worker.py"
+    result = subprocess.run(
+        [worker_python, str(worker), "--help"],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--checkpoint" in result.stdout
 
 
 def test_nested_repeat_is_removed_without_merging_neighboring_instances() -> None:

@@ -1,0 +1,45 @@
+{
+  "package": "sat-rs-vlm-runtime_20261013_3fdd87e.zip",
+  "created_utc": "2026-10-13T14:29:04.661826+00:00",
+  "source_commit": "3fdd87e668aed92f9a986fe84531b18830a53c82",
+  "runtime_implementation_commit": "90be53c95745bf99ba79f115190ec998aef584b0",
+  "cloud_checkout": "/root/sat-rs-vlm-deploy-aee1e1d",
+  "cloud_run_root": "/root/autodl-fs/experiments/sat-rs-vlm_protocol_v2_20261013",
+  "entrypoint": "scripts/competition/start_cloud_protocol_v2.sh",
+  "selected_planner": {
+    "version": "2026-10-11 Planner LoRA",
+    "path": "/root/autodl-fs/data/sat-rs-vlm-training/planner_4b_clean_20261011/output/training",
+    "adapter_model_safetensors_bytes": 132195448,
+    "adapter_model_safetensors_sha256": "d7169cce768dcd01e86f1c2fd2847f7fddf85e45f9d61db3e23180a97211a4e6"
+  },
+  "external_runtime_dependencies": {
+    "qwen3vl_4b_base": "/root/autodl-tmp/models/Qwen3-VL-4B-Instruct",
+    "qwen3vl_2b_base": "/root/autodl-tmp/models/Qwen3-VL-2B-Instruct",
+    "changechat_4b_llm_only_lora": "/root/autodl-fs/experiments/sat-rs-vlm_cloud_eval_20261012_125359/changechat_4b_continuation_retry3/runs/llm_only",
+    "semantic_2b_lora": "/root/autodl-tmp/outputs/vrsbench_levircc_replay_formal/round_2_adapter",
+    "georsclip_checkpoint": "/root/autodl-fs/models/GeoRSCLIP/GeoRSCLIP-ViT-B-32.pt",
+    "lae_dino_source": "/root/autodl-fs/rs_detectors/lae_dino/source/LAE-DINO",
+    "lae_dino_config": "/root/autodl-fs/rs_detectors/lae_dino/source/LAE-DINO/mmdetection_lae/configs/lae_dino/lae_dino_swin-t_pretrain_LAE-1M.py",
+    "lae_dino_checkpoint": "/root/autodl-fs/rs_detectors/lae_dino/checkpoints/lae_dino_swint_lae1m-28ca3a15.pth",
+    "lae_dino_bert": "/root/autodl-fs/rs_detectors/lae_dino/weights/bert-base-uncased",
+    "competition_images": "/root/autodl-fs/dev100-images",
+    "api_key_source": "/root/autodl_env.sh (not bundled; secret value omitted)"
+  },
+  "validation_reference": {
+    "uhr_requests": 25,
+    "protocol_valid": 25,
+    "direct_taskgraph": 10,
+    "vlm_fallback": 15,
+    "report_workspace_path": "reports/experiments/cloud_taskgraph_deployment_20261013/UHR25_REPORT.md"
+  },
+  "excluded": [
+    "model weights/checkpoints",
+    "image datasets and request images",
+    "API credentials",
+    "evaluation reports/results",
+    "training data/output directories",
+    "pytest caches",
+    "uncommitted workspace changes"
+  ],
+  "external_weight_hash_table": "D:\\Desktop\\SHA256\\模型\\SHA256_TABLE.md"
+}

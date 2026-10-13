@@ -165,6 +165,49 @@ runtime_config 引用原有模型工厂和参数，可以改为部署现有 runt
 LAE-DINO worker 环境和权重按原项目部署说明准备。
 协议开发环境仅需 pip install -e ".[dev]"。Linux 用 export NAME=value 设置变量，服务命令相同。
 
+AutoDL 等 Linux 云机可用仓库启动器运行完整 TaskGraph Protocol 2.0 服务：
+
+~~~bash
+cd /path/to/sat-rs-vlm
+# /root/autodl_env.sh 可保存 MODEL_API_KEY 和自定义模型/LoRA 路径；启动器不会打印 key。
+export QWEN3VL_4B_PLANNER_LORA="<本次选定的 Planner adapter 绝对目录>"
+bash scripts/competition/start_cloud_protocol_v2.sh 8000
+~~~
+
+启动器默认使用云机已有的 2B/4B、ChangeChat LLM-only、GeoRSCLIP、LAE-DINO
+及 `/root/autodl-fs/dev100-images`；环境变量可覆盖默认路径。它显式加入
+`04_counting_system_plan/src` 并切换至部署仓库根目录，只启动一个 Uvicorn worker，
+拒绝覆盖已有监听端口或运行目录。Planner adapter 必须显式指定，不默认冻结旧 checkpoint。
+`AUTODL_ENV_FILE=/dev/null` 可跳过云机的通用环境文件。Uvicorn 配置会启用协议元数据日志，
+记录实际路由、HTTP 错误与耗时，仍不记录题目全文或 API Key。
+进程默认按需加载权重，`/healthz` 显示完整 runtime 是否装配成功及模型是否仍处于 lazy 状态；
+收到真实推理请求前，需确认 GPU 已有足够显存。日志和 PID 写入独立的私有运行目录。
+
+在配置好同一组云端路径后，无模型验收可运行：
+
+~~~bash
+CUDA_VISIBLE_DEVICES='' RUN_CLOUD_STARTUP_TESTS=1 "$PYTHON" -m pytest \
+  tests/integration/test_competition_cloud_startup.py \
+  tests/integration/test_competition_protocol_v2.py -q
+~~~
+
+第一组用正式生产配置检查真实组件装配，并禁止 Qwen/CLIP 权重加载及 LAE worker 启动；
+第二组用明确的 fixture runtime 跑五种答案契约的本机 HTTP 请求。这些测试不证明模型答案准确率。
+
+LAE-DINO 的隔离环境可能仍使用 Python 3.8。`instance_postprocess` 中立即执行的类型别名
+必须使用 `typing` 的泛型，不能依赖 `from __future__ import annotations` 延迟别名求值。
+设置 `LAE_DINO_PYTHON` 后，以下回归会在真实 worker 解释器中执行 `--help`，不加载检测器权重：
+
+~~~bash
+"$PYTHON" -m pytest tests/unit/integrations/test_instance_postprocess.py -q
+~~~
+
+验收真实模型服务时，除健康状态和响应格式外，还需检查实际路由、检测器 worker 日志，
+以及 Planner/ChangeChat 共享管理器的 adapter 切换计数。合法的整数 `0` 本身不能证明
+检测器执行成功；当前候选验证计数器在部分检测失败情况下会保留可输出零值的回退策略。
+2026-10-13 云端完整链路验证与具体测试范围见
+`reports/experiments/cloud_taskgraph_deployment_20261013/REPORT.md`。
+
 长时间服务器按 AGENTS 规则后台启动，保存 PID、stdout/stderr；
 Windows Start-Process 使用 -WindowStyle Hidden。以下 key 通过继承环境变量传递，不写入参数：
 
