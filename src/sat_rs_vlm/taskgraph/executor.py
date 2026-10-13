@@ -221,6 +221,10 @@ class CapabilityRouter:
                     provider=binding.primary.provider_name,
                     input_refs=node.inputs,
                     exception=primary_error,
+                    retryable=(
+                        isinstance(primary_error, (ConnectionError, TimeoutError))
+                        and type(primary_error).__name__ != "RuntimeBudgetExceeded"
+                    ),
                 ) from primary_error
             try:
                 outcome = binding.fallback.execute(node, inputs, context)
@@ -239,6 +243,10 @@ class CapabilityRouter:
                     provider=binding.fallback.provider_name,
                     input_refs=node.inputs,
                     exception=fallback_error,
+                    retryable=(
+                        isinstance(fallback_error, (ConnectionError, TimeoutError))
+                        and type(fallback_error).__name__ != "RuntimeBudgetExceeded"
+                    ),
                 ) from fallback_error
 
 
@@ -321,6 +329,7 @@ class GraphExecutor:
             ),
         )
         for node in graph.nodes:
+            context.ensure_budget()
             hint = plan.hint_for(node.id)
             node_context = replace(
                 context,

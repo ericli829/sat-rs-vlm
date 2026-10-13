@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from dataclasses import replace
 
 from sat_rs_vlm.taskgraph.choice import ChoiceRequest, ChoiceResolver
@@ -145,15 +146,54 @@ class AnswerResolver:
             )
             return decision.values[0]
         if contract.kind == "integer":
-            if len(sources) != 1 or not isinstance(sources[0], ScalarInt):
-                raise AnswerContractViolation("Integer requires authoritative ScalarInt evidence")
-            value = sources[0].value
+            if len(sources) == 1 and isinstance(sources[0], ScalarInt):
+                value = sources[0].value
+            elif sources and all(isinstance(source, ImageRef) for source in sources):
+                prompt = (
+                    question
+                    + "\nReturn only one base-10 integer answer. Do not include units, prose, "
+                    "punctuation, or intermediate calculations."
+                )
+                raw = self.provider.infer(
+                    VLMRequest(self._compose(sources, prompt), "integer")
+                ).text
+                match = re.fullmatch(r"\s*-?(?:0|[1-9][0-9]*)\s*", raw)
+                if match is None:
+                    raise AnswerContractViolation("Integer VLM output is not one exact integer")
+                value = int(raw.strip())
+            else:
+                raise AnswerContractViolation(
+                    "Integer requires ScalarInt evidence or original image input"
+                )
             if type(value) is not int or (
                 contract.minimum is not None and value < contract.minimum
             ):
                 raise AnswerContractViolation()
             return value
         if contract.kind == "bbox":
+            if sources and all(isinstance(source, ImageRef) for source in sources):
+                image_count = len(sources)
+                coordinate_format = self.bbox_model_coordinate_format
+                instruction = (
+                    "\nReturn exactly one JSON object with keys bbox and coordinate_format; "
+                    "bbox is [x1,y1,x2,y2] for the single requested target. "
+                    f"Use coordinate_format {coordinate_format!r}."
+                )
+                if image_count > 1:
+                    instruction += (
+                        " Include image_index as a zero-based integer for the image containing "
+                        "the target."
+                    )
+                model_input = self._compose(sources, question + instruction)
+                raw = self.provider.infer(VLMRequest(model_input, "bbox_json")).text.strip()
+                source = Answer(
+                    raw,
+                    provenance={
+                        "coordinate_format": coordinate_format,
+                        "image_index": 0 if image_count == 1 else None,
+                    },
+                )
+                sources = (source,)
             if len(sources) != 1:
                 raise BBoxValidationError()
             source = sources[0]
@@ -178,9 +218,16 @@ class AnswerResolver:
                 except (TypeError, ValueError) as exc:
                     raise BBoxValidationError("Bbox output must be strict JSON") from exc
                 if isinstance(payload, dict):
-                    if set(payload) - {"label", "bbox"} or "bbox" not in payload:
+                    if (
+                        set(payload) - {"label", "bbox", "image_index", "coordinate_format"}
+                        or "bbox" not in payload
+                    ):
                         raise BBoxValidationError("Expected one model bbox")
                     box = payload["bbox"]
+                    if "image_index" in payload:
+                        provenance["image_index"] = payload["image_index"]
+                    if "coordinate_format" in payload:
+                        provenance["coordinate_format"] = payload["coordinate_format"]
                 else:
                     box = payload
                 index = provenance.get("image_index", 0 if len(original_images) == 1 else None)

@@ -10,10 +10,10 @@ from sat_rs_vlm.taskgraph.routing import ExecutionMode
 from sat_rs_vlm.taskgraph.runtime_memory import RuntimeMemory, hash_question
 
 
-def _memory(tmp_path, rows):
+def _memory(tmp_path, rows, *, require_verified=False):
     path = tmp_path / "memory.jsonl"
     path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
-    return RuntimeMemory(path)
+    return RuntimeMemory(path, require_verified=require_verified)
 
 
 def _row(image, question="Question?", **extra):
@@ -68,7 +68,18 @@ def test_record_preserves_hashes_and_rebuilds_lookup(tmp_path):
 def test_runtime_uses_joint_hash_and_resets_variant_on_miss(tmp_path):
     image = str(Path("tests/fixtures/miniature_dataset/images/counting.ppm").resolve())
     digest = hashlib.sha256(Path(image).read_bytes()).hexdigest()
-    memory = _memory(tmp_path, [{**_row(b"unused"), "image_sha256": digest, "variant": "tight"}])
+    row = {
+        **_row(b"unused"),
+        "image_sha256": digest,
+        "variant": "tight",
+        "model_role": "semantic_2b",
+        "correctness_status": "verified_correct",
+        "correctness_evidence": {
+            "sample_id": "old-id",
+            "evidence_sha256": "a" * 64,
+        },
+    }
+    memory = _memory(tmp_path, [row], require_verified=True)
     def fail_if_rehashed(path):
         raise AssertionError("Package-verified hashes should not reread image files")
     memory._file_hash = fail_if_rehashed
@@ -78,6 +89,7 @@ def test_runtime_uses_joint_hash_and_resets_variant_on_miss(tmp_path):
         "new-online-id", "competition_protocol_v2", "semantic", "Question?\nInstruction",
         (image,), execution_mode=ExecutionMode.TASKGRAPH_UHR, defer_final_answer=True,
         memory_question="Question?", verified_image_sha256s=(digest,), allow_hash_memory=True,
+        memory_route_eligible=True,
     )
     try:
         result = runtime.run(request)
@@ -101,3 +113,39 @@ def test_runtime_uses_joint_hash_and_resets_variant_on_miss(tmp_path):
 
 def test_question_hash_uses_exact_utf8_without_unicode_normalization():
     assert hash_question("é") != hash_question("e\u0301")
+
+
+def test_verified_memory_requires_independent_2b_correctness_metadata(tmp_path):
+    row = _row(b"image")
+    memory = _memory(tmp_path, [row], require_verified=True)
+    assert memory.lookup_hashes((row["image_sha256"],), row["question_sha256"]) is None
+    valid = {
+        **row,
+        "model_role": "semantic_2b",
+        "correctness_status": "verified_correct",
+        "correctness_evidence": {
+            "sample_id": "old-id",
+            "evidence_sha256": "b" * 64,
+        },
+    }
+    memory = _memory(tmp_path, [valid], require_verified=True)
+    assert memory.lookup_hashes((row["image_sha256"],), row["question_sha256"]).sample_id == (
+        "old-id"
+    )
+    assert (
+        _memory(tmp_path, [{**valid, "model_role": "route_4b"}], require_verified=True)
+        .lookup_hashes((row["image_sha256"],), row["question_sha256"])
+        is None
+    )
+
+
+def test_duplicate_sample_id_is_ambiguous_even_with_one_matching_row(tmp_path):
+    row = _row(b"image")
+    path = tmp_path / "memory.jsonl"
+    path.write_text(
+        json.dumps(row) + "\n" + json.dumps({**row, "mode": "TASKGRAPH_UHR"}) + "\n",
+        encoding="utf-8",
+    )
+    memory = RuntimeMemory(path)
+    assert memory.lookup_hashes((row["image_sha256"],), row["question_sha256"]) is None
+    assert memory.lookup(row["sample_id"]) is None

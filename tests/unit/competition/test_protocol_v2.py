@@ -14,7 +14,10 @@ import yaml
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from sat_rs_vlm.competition.protocol_v2.adapter import CompetitionRequestAdapter
+from sat_rs_vlm.competition.protocol_v2.adapter import (
+    CompetitionRequestAdapter,
+    CompetitionRoutingConfig,
+)
 from sat_rs_vlm.competition.protocol_v2.answers import serialize_response, validate_bbox
 from sat_rs_vlm.competition.protocol_v2.errors import (
     AnswerContractViolation,
@@ -37,6 +40,7 @@ from sat_rs_vlm.competition.protocol_v2.smoke import (
     smoke_requests,
 )
 from sat_rs_vlm.taskgraph.choice import ChoiceRequest
+from sat_rs_vlm.taskgraph.executor import TaskGraphExecutionError
 from sat_rs_vlm.taskgraph.providers import ChoiceScoringRequest, FixturePlannerProvider
 from sat_rs_vlm.taskgraph.routing import ExecutionMode
 from sat_rs_vlm.taskgraph.runtime_memory import RuntimeMemory, hash_question
@@ -79,7 +83,7 @@ def test_parse_contracts(requests, kind):
     assert AnswerContract.from_request(request).kind == kind
 
 
-def test_online_joint_hash_overrides_adapter_route_using_raw_question(service, requests, tmp_path):
+def test_unverified_memory_does_not_override_low_resolution_route(service, requests, tmp_path):
     request = parse_request(requests["short_text"])
     image = service.package.resolve_all(request.images)[0]
     path = tmp_path / "memory.jsonl"
@@ -88,9 +92,9 @@ def test_online_joint_hash_overrides_adapter_route_using_raw_question(service, r
         "image_sha256": image.descriptor.sha256,
         "question_sha256": hash_question(request.question),
     }) + "\n", encoding="utf-8")
-    service.runtime.runtime_memory = RuntimeMemory(path)
+    service.runtime.runtime_memory = RuntimeMemory(path, require_verified=True)
     service.predict(request)
-    assert service.last_trace.telemetry["runtime_memory_hash_hit"] is True
+    assert service.last_trace.telemetry["runtime_memory_hash_hit"] is False
     assert service.last_diagnostics["execution_mode"] == "DIRECT_VLM"
 
 
@@ -100,7 +104,10 @@ def test_adapter_preserves_raw_question_before_appending_instructions(package, r
     if kind == "integer":
         payload["question"] = "How many ships are left of the airport?"
     request = parse_request(payload)
-    images = package.resolve_all(request.images)
+    images = tuple(
+        replace(image, width=1024, height=1024)
+        for image in package.resolve_all(request.images)
+    )
     adapted = CompetitionRequestAdapter().adapt(
         request, images, AnswerContract.from_request(request)
     )
@@ -424,40 +431,112 @@ def test_invalid_manifest_and_symlink_escape(tmp_path, package, requests):
         package.resolve(asset)
 
 
-def test_competition_routing_uses_semantics_not_dimensions(package, requests):
+def test_competition_routing_uses_temporal_then_original_resolution(package, requests):
     adapter = CompetitionRequestAdapter()
     for kind, payload in requests.items():
         request = parse_request(payload)
         adapted = adapter.adapt(
             request, package.resolve_all(request.images), AnswerContract.from_request(request)
         )
-        expected = {
-            "integer": ExecutionMode.DIRECT_DETECTION,
-            "bbox": ExecutionMode.TASKGRAPH_UHR,
-        }.get(kind, ExecutionMode.DIRECT_VLM)
+        expected = ExecutionMode.DIRECT_VLM
         assert adapted.execution_mode == expected
         assert adapted.defer_final_answer
         assert adapted.dataset == "competition_protocol_v2"
         if kind == "enum":
             assert adapted.image_paths[0].endswith(request.images[0].asset_id)
             assert adapted.task_category == "temporal_change"
+        if len(request.images) == 1:
+            assert adapted.expected_final_answer_type is not None
+            assert adapted.memory_route_eligible is False
     request = parse_request(
         {**requests["integer"], "question": "How many ships are left of the port?"}
     )
-    assert (
-        adapter.adapt(
-            request, package.resolve_all(request.images), AnswerContract.from_request(request)
-        ).execution_mode
-        == ExecutionMode.TASKGRAPH_UHR
+    low = package.resolve_all(request.images)
+    assert adapter.adapt(request, low, AnswerContract.from_request(request)).execution_mode == (
+        ExecutionMode.DIRECT_VLM
     )
+    at_limit = (replace(low[0], width=640, height=640),)
+    above_limit = (replace(low[0], width=641, height=640),)
+    assert (
+        adapter.adapt(request, at_limit, AnswerContract.from_request(request)).routing_reason
+        ==
+        "single_image_within_direct_vlm_resolution"
+    )
+    high = adapter.adapt(request, above_limit, AnswerContract.from_request(request))
+    assert high.execution_mode == ExecutionMode.TASKGRAPH_UHR
+    assert high.routing_reason == "high_resolution_complex_taskgraph"
+    assert high.memory_route_eligible
+
+
+@pytest.mark.parametrize("kind", ["integer", "bbox", "short_text", "single_choice", "enum"])
+def test_low_resolution_complex_and_contract_routes_to_direct_vlm(package, requests, kind):
+    request = parse_request(requests[kind])
+    image = package.resolve_all(request.images)[0]
+    if kind in {"integer", "short_text"}:
+        request = request.model_copy(update={"question": "How many ships are left of the port?"})
+    adapted = CompetitionRequestAdapter().adapt(
+        request, (image,), AnswerContract.from_request(request)
+    )
+    assert adapted.execution_mode == ExecutionMode.DIRECT_VLM
+    assert adapted.routing_reason == "single_image_within_direct_vlm_resolution"
+
+
+def test_high_resolution_unmatched_question_defaults_to_taskgraph(package, requests):
     request = parse_request(requests["short_text"])
+    image = package.resolve_all(request.images)[0]
+    high = replace(image, width=2048, height=2048)
+    adapted = CompetitionRequestAdapter().adapt(
+        request, (high,), AnswerContract.from_request(request)
+    )
+    assert adapted.execution_mode == ExecutionMode.TASKGRAPH_UHR
+    assert adapted.routing_reason == "high_resolution_default_taskgraph"
+
+
+def test_taskgraph_retries_once_then_falls_back_to_original_images(service, requests):
+    service.adapter = CompetitionRequestAdapter(
+        CompetitionRoutingConfig(direct_vlm_max_pixels=1)
+    )
+    attempts = []
+
+    def unavailable(_request):
+        attempts.append(1)
+        service.runtime.last_route_diagnostics = {
+            "execution_mode": ExecutionMode.TASKGRAPH_UHR.value,
+            "routing_reason": "high_resolution_default_taskgraph",
+        }
+        raise TaskGraphExecutionError(
+            node_id="n1",
+            operator="VLM_REASON",
+            provider="temporary_network_failure",
+            input_refs={},
+            exception=ConnectionError("transient provider failure"),
+            retryable=True,
+        )
+
+    service.runtime.run = unavailable
+    response = service.predict(parse_request(requests["short_text"]))
+
+    assert response["answer"] == "urban"
+    assert len(attempts) == 2
+    assert service.last_diagnostics["taskgraph_attempts"] == 2
+    assert service.last_diagnostics["fallback_triggered"] is True
+    assert service.last_diagnostics["fallback_model_role"] == "semantic_2b"
+    assert service.last_diagnostics["fallback_success"] is True
+
+
+def test_dual_image_route_wins_over_resolution_and_bbox_contract(package, requests):
+    request = parse_request({**requests["bbox"], "images": requests["enum"]["images"]})
     images = tuple(
-        replace(x, width=16000, height=16000) for x in package.resolve_all(request.images)
+        replace(image, width=8192, height=8192)
+        for image in package.resolve_all(request.images)
     )
-    assert (
-        adapter.adapt(request, images, AnswerContract.from_request(request)).execution_mode
-        == ExecutionMode.DIRECT_VLM
+    adapted = CompetitionRequestAdapter().adapt(
+        request, images, AnswerContract.from_request(request)
     )
+    assert adapted.execution_mode == ExecutionMode.DIRECT_VLM
+    assert adapted.task_category == "temporal_change"
+    assert adapted.routing_reason == "dual_image_temporal_priority"
+    assert adapted.image_paths == tuple(str(image.path) for image in images)
 
 
 def test_production_never_defaults_to_fake():
@@ -484,7 +563,9 @@ def test_http_auth_echo_five_contracts_and_safe_logs(service, requests, caplog):
             "status": "ready",
             "protocol_version": "2.0",
             "dataset_id": service.package.dataset_id,
+            "model_readiness": service.readiness(),
         }
+        assert health.json()["model_readiness"]["model_load_policy"] == "on_demand"
         caplog.set_level(logging.INFO, logger="sat_rs_vlm.competition")
         for kind, payload in requests.items():
             response = client.post("/v1/predict", headers=HEADERS, json=payload)
@@ -649,22 +730,31 @@ def test_dynamic_dataset_id_from_manifest(package, monkeypatch):
         )
 
 
-def test_two_image_bbox_selects_global_image_evidence(service, requests):
+def test_two_image_bbox_uses_temporal_4b_and_strict_image_identity(service, requests):
     payload = {**requests["bbox"], "images": requests["enum"]["images"]}
     request = parse_request(payload)
-    contract = AnswerContract.from_request(request)
-    adapted = service.adapter.adapt(request, service.package.resolve_all(request.images), contract)
-    graph = json.loads(Path("tests/fixtures/competition/planner.json").read_text())["smoke-bbox"]
-    graph["question"] = adapted.question
-    graph["inputs"]["image1"] = {"type": "image", "uri_or_key": "dataset:image1"}
-    graph["nodes"][0]["inputs"]["image"] = "$image1"
-    service.runtime.providers.planner = FixturePlannerProvider({"smoke-bbox": graph})
+    service.runtime.providers.route_4b.responses["bbox_json"] = json.dumps(
+        {
+            "bbox": [0.1, 0.1, 0.5, 0.5],
+            "coordinate_format": "normalized_0_1",
+            "image_index": 1,
+        }
+    )
     response = service.predict(request)
     check_response(payload, response)
     assert response["answer"] == [64, 48, 320, 240]
+    assert service.last_diagnostics["routing_reason"] == "dual_image_temporal_priority"
+    assert service.last_diagnostics["execution_mode"] == "DIRECT_VLM"
+    assert service.runtime.providers.route_4b.calls[-1].output_contract == "bbox_json"
 
 
 def test_graph_integer_returns_scalar_without_reasking(service, requests):
+    from sat_rs_vlm.competition.protocol_v2.adapter import (
+        CompetitionRequestAdapter,
+        CompetitionRoutingConfig,
+    )
+
+    service.adapter = CompetitionRequestAdapter(CompetitionRoutingConfig(direct_vlm_max_pixels=1))
     payload = {**requests["integer"], "question": "How many ships are left of the port?"}
     request = parse_request(payload)
     contract = AnswerContract.from_request(request)

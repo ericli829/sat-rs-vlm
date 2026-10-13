@@ -26,6 +26,7 @@ from .operators import (
     GeometryExecutor,
     LocateExecutor,
     OperatorContext,
+    RuntimeBudgetExceeded,
     SelectExecutor,
     SemanticExecutor,
 )
@@ -144,6 +145,12 @@ class RuntimeRequest:
     memory_question: str | None = None
     verified_image_sha256s: tuple[str, ...] = ()
     allow_hash_memory: bool = False
+    memory_route_eligible: bool = False
+    routing_reason: str | None = None
+    expected_final_answer_type: str | None = None
+    answer_contract: Mapping[str, Any] | None = None
+    deadline_monotonic: float | None = None
+    minimum_remaining_seconds: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -163,6 +170,7 @@ class RuntimeProviders:
     choice: SemanticVLMProvider
     planner: PlannerProvider | None = None
     counting: CountingProvider | None = None
+    shared_model_manager: Any | None = None
 
     def __post_init__(self) -> None:
         if self.counting is None:
@@ -184,6 +192,8 @@ class RuntimeProviders:
             if id(provider) not in seen:
                 provider.close()
                 seen.add(id(provider))
+        if self.shared_model_manager is not None:
+            self.shared_model_manager.close()
 
 
 def _provider_children(provider: Any) -> tuple[Any, ...]:
@@ -199,6 +209,7 @@ def _provider_children(provider: Any) -> tuple[Any, ...]:
         "base_provider",
         "_verifier",
         "retriever",
+        "shared_model_manager",
     ):
         child = getattr(provider, name, None)
         if child is not None and child is not provider:
@@ -384,6 +395,7 @@ class TaskGraphRuntime:
     ) -> None:
         self.providers = providers
         self.runtime_memory = runtime_memory
+        self.last_route_diagnostics: dict[str, Any] = {}
         self._memory_variant_applied = False
         self.composer = composer or InputComposer()
         self._default_entity_tight_crops = self.composer.entity_tight_crops
@@ -512,6 +524,7 @@ class TaskGraphRuntime:
                 else parse_taskgraph(request.graph)
             )
         elif self.providers.planner is not None:
+            self._ensure_request_budget(request)
             planner_started = time.perf_counter()
             try:
                 graph = self.providers.planner.plan(
@@ -521,6 +534,8 @@ class TaskGraphRuntime:
                         request.options,
                         {f"${key}": value for key, value in images.items()},
                         request.sample_id,
+                        request.expected_final_answer_type,
+                        request.answer_contract,
                     )
                 )
             except Exception as exc:
@@ -569,13 +584,30 @@ class TaskGraphRuntime:
             raise ValueError("TaskGraph question differs from the dataset question")
         if tuple(graph.choices or ()) != request.options:
             raise ValueError("TaskGraph choices differ from the original dataset options")
+        if (
+            request.expected_final_answer_type is not None
+            and graph.final.answer_type.value != request.expected_final_answer_type
+        ):
+            raise ValueError(
+                "TaskGraph FINAL answer type does not satisfy the request contract: "
+                f"expected {request.expected_final_answer_type}, "
+                f"got {graph.final.answer_type.value}"
+            )
+        contract_kind = str((request.answer_contract or {}).get("kind", ""))
+        if contract_kind in {"bbox", "integer", "single_choice", "enum"} and len(
+            graph.final.sources
+        ) != 1:
+            raise ValueError(f"{contract_kind} contract requires one final evidence source")
         store = RuntimeStore({f"${key}": value for key, value in images.items()})
         context = OperatorContext(
             request.question,
             request.options,
             self.composer,
             defer_final_answer=request.defer_final_answer,
+            deadline_monotonic=request.deadline_monotonic,
+            minimum_remaining_seconds=request.minimum_remaining_seconds,
         )
+        self._ensure_request_budget(request)
         graph_started = time.perf_counter()
         try:
             trace = self.graph_executor.execute(
@@ -1098,7 +1130,16 @@ class TaskGraphRuntime:
         self.composer.entity_tight_crops = tight or self._default_entity_tight_crops
         self._memory_variant_applied = tight
 
+    @staticmethod
+    def _ensure_request_budget(request: RuntimeRequest) -> None:
+        if request.deadline_monotonic is not None and (
+            request.deadline_monotonic - time.monotonic()
+            <= request.minimum_remaining_seconds
+        ):
+            raise RuntimeBudgetExceeded("request budget reserved for answer resolution")
+
     def run(self, request: RuntimeRequest) -> RuntimeResult:
+        self.last_route_diagnostics = {}
         torch = _provider_torch(self.providers)
         monitor = SystemTelemetry(
             "taskgraph_runtime_request",
@@ -1130,7 +1171,28 @@ class TaskGraphRuntime:
                     else None
                 )
                 if memory_entry is not None:
-                    mode = ExecutionMode(memory_entry.mode)
+                    if (
+                        mode is ExecutionMode.TASKGRAPH_UHR
+                        and len(images) == 1
+                        and request.memory_route_eligible
+                        and memory_entry.mode == ExecutionMode.DIRECT_VLM.value
+                    ):
+                        mode = ExecutionMode.DIRECT_VLM
+                routing_reason = (
+                    "verified_2b_correctness_memory"
+                    if memory_entry is not None and mode is ExecutionMode.DIRECT_VLM
+                    else request.routing_reason
+                )
+                self.last_route_diagnostics = {
+                    "initial_route": (
+                        request.execution_mode.value
+                        if request.execution_mode is not None
+                        else mode.value
+                    ),
+                    "execution_mode": mode.value,
+                    "memory_hit": memory_entry is not None,
+                    "routing_reason": routing_reason,
+                }
                 self._apply_memory_variant(memory_entry.variant if memory_entry else None)
                 routing_ms = (time.perf_counter() - routing_started) * 1000.0
                 if mode is ExecutionMode.DIRECT_VLM:
@@ -1146,6 +1208,7 @@ class TaskGraphRuntime:
                 result.trace.telemetry.update(
                     {
                         "runtime_memory_hash_hit": memory_entry is not None,
+                        "routing_reason": routing_reason,
                         "input_image_paths": list(result.trace.input_image_paths),
                         "intermediate_output_paths": list(result.trace.intermediate_output_paths),
                     }
@@ -1215,6 +1278,10 @@ class TaskGraphRuntime:
             if not result.trace.nodes and not generation_events:
                 generation_events.extend(self._generation_events_from(result.trace.result))
             result.trace.telemetry["generation_events"] = generation_events
+            if self.providers.shared_model_manager is not None:
+                result.trace.telemetry["shared_4b_model"] = (
+                    self.providers.shared_model_manager.metrics
+                )
             return result
         except Exception as exc:
             failed_trace = getattr(exc, "execution_trace", None)
@@ -1319,6 +1386,69 @@ def runtime_from_config(
     verification_requested = isinstance(verification_section, Mapping) and bool(
         verification_section.get("enabled", False)
     )
+
+    sharing_cfg = config.get("model_sharing", {})
+    if not isinstance(sharing_cfg, Mapping):
+        raise TypeError("model_sharing config must be a mapping")
+    shared_model_manager = None
+    planner_adapter_name = str(sharing_cfg.get("planner_adapter_name", "planner"))
+    route_4b_adapter_name = str(sharing_cfg.get("route_4b_adapter_name", "changechat"))
+    if sharing_cfg.get("enabled", False):
+        planner_share_cfg = dict(providers.get("planner", {}))
+        route_share_cfg = dict(providers.get("route_4b", {}))
+        if (
+            planner_share_cfg.get("kind") != "qwen3vl_lora"
+            or route_share_cfg.get("kind") != "qwen3_vl"
+        ):
+            raise ValueError("model_sharing requires qwen3vl_lora Planner and qwen3_vl route_4b")
+        planner_base = str(planner_share_cfg.get("model_id") or "")
+        route_base = str(route_share_cfg.get("model_id") or "")
+        planner_processor = str(planner_share_cfg.get("processor_id") or planner_base)
+        if not planner_base or planner_base != route_base or planner_processor != planner_base:
+            raise ValueError(
+                "shared Planner and ChangeChat require the same base and processor paths"
+            )
+        if str(planner_share_cfg.get("device", "auto")) != str(
+            route_share_cfg.get("device", "auto")
+        ):
+            raise ValueError("shared Planner and ChangeChat device settings must match")
+        if str(planner_share_cfg.get("dtype", "auto")) != str(route_share_cfg.get("dtype", "auto")):
+            raise ValueError("shared Planner and ChangeChat dtype settings must match")
+        from sat_rs_vlm.models.qwen3vl_shared import SharedQwen3VLModelManager
+
+        shared_model_manager = SharedQwen3VLModelManager(
+            base_model=planner_base,
+            processor_source=planner_processor,
+            adapters={
+                planner_adapter_name: str(planner_share_cfg.get("adapter_path") or ""),
+                route_4b_adapter_name: str(route_share_cfg.get("adapter_path") or ""),
+            },
+            model_kwargs={
+                "trust_remote_code": bool(planner_share_cfg.get("trust_remote_code", True)),
+                "local_files_only": bool(planner_share_cfg.get("local_files_only", True)),
+                "dtype": str(planner_share_cfg.get("dtype", "auto")),
+                **(
+                    {"device_map": "auto"}
+                    if str(planner_share_cfg.get("device", "auto")) == "auto"
+                    else {}
+                ),
+                **(
+                    {"attn_implementation": planner_share_cfg["attn_implementation"]}
+                    if planner_share_cfg.get("attn_implementation")
+                    else {}
+                ),
+            },
+            processor_kwargs={
+                "trust_remote_code": bool(planner_share_cfg.get("trust_remote_code", True)),
+                "local_files_only": bool(planner_share_cfg.get("local_files_only", True)),
+                **(
+                    {"max_pixels": int(route_share_cfg["max_pixels"])}
+                    if route_share_cfg.get("max_pixels") is not None
+                    else {}
+                ),
+            },
+            default_adapter=planner_adapter_name,
+        )
 
     detection_cfg = dict(providers.get("detection", {"kind": "fake"}))
     detection_kind = str(detection_cfg.pop("kind", "fake"))
@@ -1458,6 +1588,13 @@ def runtime_from_config(
                 choice_scores=section.get("choice_scores"),
             )
         if kind == "qwen3_vl":
+            if name == "route_4b" and shared_model_manager is not None:
+                return LazyQwenSemanticProvider(
+                    ModelConfig.model_validate(section),
+                    role=role,
+                    shared_model_manager=shared_model_manager,
+                    shared_adapter_name=route_4b_adapter_name,
+                )
             return LazyQwenSemanticProvider(ModelConfig.model_validate(section), role=role)
         raise ValueError(f"unsupported semantic provider kind: {kind}")
 
@@ -1554,7 +1691,14 @@ def runtime_from_config(
             payload = json.loads(fixture_path.read_text(encoding="utf-8"))
             planner = FixturePlannerProvider(payload)
         elif kind == "qwen3vl_lora":
-            planner = Qwen3VLPlannerProvider(planner_cfg, role="planner_4b")
+            planner = Qwen3VLPlannerProvider(
+                planner_cfg,
+                role="planner_4b",
+                shared_model_manager=shared_model_manager,
+                shared_adapter_name=(
+                    planner_adapter_name if shared_model_manager is not None else None
+                ),
+            )
         elif kind == "semantic":
             provider_name = str(planner_cfg.get("provider", "route_4b"))
             semantic_providers = {
@@ -1631,7 +1775,16 @@ def runtime_from_config(
         compact_trace=bool(composer_cfg.get("compact_trace", False)),
     )
     return TaskGraphRuntime(
-        RuntimeProviders(detection, semantic_2b, route_4b, retriever, choice, planner, counting),
+        RuntimeProviders(
+            detection,
+            semantic_2b,
+            route_4b,
+            retriever,
+            choice,
+            planner,
+            counting,
+            shared_model_manager,
+        ),
         policy=policy,
         composer=composer,
         semantic_categories=set(config.get("semantic_region_categories", [])),

@@ -11,6 +11,10 @@ import yaml
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from sat_rs_vlm.competition.protocol_v2.adapter import (
+    CompetitionRequestAdapter,
+    CompetitionRoutingConfig,
+)
 from sat_rs_vlm.competition.protocol_v2.errors import BBoxValidationError
 from sat_rs_vlm.competition.protocol_v2.image_package import ImagePackage
 from sat_rs_vlm.competition.protocol_v2.models import AnswerContract, parse_request
@@ -67,6 +71,7 @@ def service(tmp_path):
     config = yaml.safe_load(Path("configs/competition/runtime.offline.yaml").read_text())
     config["locate_refinement"] = {"single_detector_fallback": False}
     active = CompetitionService.from_config(package, config, offline=True)
+    active.adapter = CompetitionRequestAdapter(CompetitionRoutingConfig(direct_vlm_max_pixels=1))
     active.runtime.providers.planner = DSLPlanner(SINGLE_DSL)
     active.runtime.providers.semantic_2b.responses["locate_single"] = json.dumps(
         {"status": "OK", "bbox": [64, 48, 320, 240]}
@@ -117,10 +122,19 @@ def test_bbox_request_dsl_to_unique_global_evidence(service, monkeypatch, dsl, m
     }
     assert planner.user_payload == {
         "question": payload["question"]
-        + "\nResolve the referred target using localization and selection. "
-        "Final evidence must be one Entity or Region in original global pixel coordinates.",
+        + "\nResolve one target and provide final evidence in original global pixel coordinates.",
         "question_type": "FREE_FORM",
         "choices": None,
+        "answer_contract": {
+            "kind": "bbox",
+            "values": [],
+            "case_insensitive": False,
+            "minimum": None,
+            "min_length": 0,
+            "image_width": 640,
+            "image_height": 480,
+        },
+        "expected_final_answer_type": "BBOX",
         "inputs": {
             "image0": {
                 "type": "image",
@@ -155,8 +169,27 @@ def test_bbox_request_dsl_to_unique_global_evidence(service, monkeypatch, dsl, m
         {"status": "OK", "boxes": [[1, 2, 3, 4], [5, 6, 7, 8]]},
     ],
 )
-def test_invalid_single_locate_never_becomes_success(service, output):
+def test_invalid_single_locate_falls_back_to_original_image(service, output):
     service.runtime.providers.semantic_2b.responses["locate_single"] = json.dumps(output)
+    with TestClient(create_app(service=service, api_key="mock-only")) as client:
+        response = client.post(
+            "/v1/predict",
+            headers={"Authorization": "Bearer mock-only"},
+            json=bbox_request(service),
+        )
+    assert response.status_code == 200
+    assert response.json()["answer"] == [64, 48, 320, 240]
+    assert service.last_diagnostics["fallback_triggered"] is True
+    assert service.last_diagnostics["fallback_model_role"] == "semantic_2b"
+    assert service.last_diagnostics["fallback_success"] is True
+    assert not service.runtime.providers.semantic_2b.choice_calls
+
+
+def test_invalid_single_locate_and_invalid_vlm_fallback_fail_closed(service):
+    service.runtime.providers.semantic_2b.responses["locate_single"] = json.dumps(
+        {"status": "UNRESOLVED"}
+    )
+    service.runtime.providers.semantic_2b.responses["bbox_json"] = "not valid bbox JSON"
     with TestClient(create_app(service=service, api_key="mock-only")) as client:
         response = client.post(
             "/v1/predict",
@@ -165,7 +198,8 @@ def test_invalid_single_locate_never_becomes_success(service, output):
         )
     assert response.status_code == 500
     assert "answer" not in response.json()
-    assert not service.runtime.providers.semantic_2b.choice_calls
+    assert service.last_diagnostics["fallback_triggered"] is True
+    assert service.last_diagnostics["fallback_success"] is False
 
 
 @pytest.mark.parametrize("cardinality", [0, 2])

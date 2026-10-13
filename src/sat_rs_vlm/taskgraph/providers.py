@@ -10,6 +10,7 @@ import re
 import tempfile
 import time
 from collections.abc import Mapping, Sequence
+from contextlib import nullcontext
 from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum
@@ -345,6 +346,8 @@ class PlannerRequest:
     choices: tuple[str, ...]
     inputs: Mapping[str, ImageRef]
     sample_id: str | None = None
+    expected_final_answer_type: str | None = None
+    answer_contract: Mapping[str, Any] | None = None
 
 
 class PlannerProvider(Protocol):
@@ -443,9 +446,18 @@ class Qwen3VLPlannerProvider:
 
     provider_name = "qwen3vl_lora"
 
-    def __init__(self, config: Mapping[str, Any], *, role: str = "planner_4b") -> None:
+    def __init__(
+        self,
+        config: Mapping[str, Any],
+        *,
+        role: str = "planner_4b",
+        shared_model_manager: Any | None = None,
+        shared_adapter_name: str | None = None,
+    ) -> None:
         self.config = dict(config)
         self.role = role
+        self.shared_model_manager = shared_model_manager
+        self.shared_adapter_name = shared_adapter_name
         self.model_id = str(
             self.config.get("model_id")
             or self.config.get("base_model")
@@ -587,6 +599,34 @@ class Qwen3VLPlannerProvider:
             raise RuntimeError(
                 "PLANNER_DEPENDENCY_MISSING: install the model extras for Qwen3-VL Planner"
             ) from exc
+        if self.shared_model_manager is not None:
+            model, processor, tokenizer, torch = self.shared_model_manager.load()
+            model_device = getattr(model, "device", None)
+            if model_device is None:
+                try:
+                    model_device = next(model.parameters()).device
+                except (AttributeError, StopIteration):
+                    model_device = self.device
+            self._model, self._processor, self._tokenizer, self._torch = (
+                model,
+                processor,
+                tokenizer,
+                torch,
+            )
+            self._load_info = {
+                "base_model_path": str(self.base_path),
+                "adapter_path": str(self.adapter_dir),
+                "adapter_config": dict(self.adapter_config),
+                "model_class": type(model).__name__,
+                "dtype": self.dtype,
+                "device": str(model_device),
+                "role": self.role,
+                "shared_model": True,
+                "shared_adapter_name": self.shared_adapter_name,
+            }
+            self._model_load_ms = float(self.shared_model_manager.metrics.get("load_ms") or 0.0)
+            self._load_info["model_load_ms"] = self._model_load_ms
+            return model, processor, tokenizer, torch
         from sat_rs_vlm.models.qwen3vl_loader import load_qwen3vl
 
         torch_dtype = None if self.dtype == "auto" else getattr(torch, self.dtype, None)
@@ -672,6 +712,8 @@ class Qwen3VLPlannerProvider:
                 request.question_type, request.choices
             ),
             "choices": list(request.choices) if request.choices else None,
+            "answer_contract": dict(request.answer_contract or {}) or None,
+            "expected_final_answer_type": request.expected_final_answer_type,
             "inputs": inputs,
         }
         messages: list[dict[str, str]] = [
@@ -736,6 +778,16 @@ class Qwen3VLPlannerProvider:
             return torch.device("cpu")
 
     def _generate(
+        self,
+        request: PlannerRequest,
+        messages: list[dict[str, str]],
+    ) -> tuple[str, dict[str, Any]]:
+        if self.shared_model_manager is None:
+            return self._generate_impl(request, messages)
+        with self.shared_model_manager.activate(self.shared_adapter_name):
+            return self._generate_impl(request, messages)
+
+    def _generate_impl(
         self,
         request: PlannerRequest,
         messages: list[dict[str, str]],
@@ -1003,7 +1055,20 @@ class Qwen3VLPlannerProvider:
             **canonical,
             "final": final,
         }
-        return TaskGraph.model_validate(payload)
+        graph = TaskGraph.model_validate(payload)
+        if request.expected_final_answer_type is not None:
+            actual = graph.final.answer_type.value
+            if actual != request.expected_final_answer_type:
+                raise ValueError(
+                    "FINAL answer type does not satisfy the competition contract: "
+                    f"expected {request.expected_final_answer_type}, got {actual}"
+                )
+        contract_kind = str((request.answer_contract or {}).get("kind", ""))
+        if contract_kind in {"bbox", "integer", "single_choice", "enum"} and len(
+            graph.final.sources
+        ) != 1:
+            raise ValueError(f"{contract_kind} contract requires exactly one final evidence source")
+        return graph
 
     def plan(self, request: PlannerRequest) -> TaskGraph:
         if not request.question.strip():
@@ -1086,6 +1151,12 @@ class Qwen3VLPlannerProvider:
         raise AssertionError("Planner generated no attempts")
 
     def close(self) -> None:
+        if self.shared_model_manager is not None:
+            self._model = None
+            self._processor = None
+            self._tokenizer = None
+            self._torch = None
+            return
         model = self._model
         torch = self._torch
         close = getattr(model, "close", None)
@@ -1755,9 +1826,18 @@ class LazyQwenSemanticProvider:
 
     provider_name = "qwen3_vl"
 
-    def __init__(self, model_config: ModelConfig, *, role: str = "semantic") -> None:
+    def __init__(
+        self,
+        model_config: ModelConfig,
+        *,
+        role: str = "semantic",
+        shared_model_manager: Any | None = None,
+        shared_adapter_name: str | None = None,
+    ) -> None:
         self.model_config = model_config
         self.role = role
+        self.shared_model_manager = shared_model_manager
+        self.shared_adapter_name = shared_adapter_name
         self._engine: HuggingFaceVLMEngine | None = None
 
     def preload(self) -> None:
@@ -1769,17 +1849,40 @@ class LazyQwenSemanticProvider:
 
     def _load(self) -> HuggingFaceVLMEngine:
         if self._engine is None:
-            self._engine = HuggingFaceVLMEngine(
-                model_id=self.model_config.model_id,
-                adapter_path=self.model_config.adapter_path,
-                device=self.model_config.device,
-                dtype=self.model_config.dtype,
-                max_new_tokens=self.model_config.max_new_tokens,
-                trust_remote_code=self.model_config.trust_remote_code,
-                local_files_only=self.model_config.local_files_only,
-                max_pixels=getattr(self.model_config, "max_pixels", None),
-            )
+            if self.shared_model_manager is None:
+                self._engine = HuggingFaceVLMEngine(
+                    model_id=self.model_config.model_id,
+                    adapter_path=self.model_config.adapter_path,
+                    device=self.model_config.device,
+                    dtype=self.model_config.dtype,
+                    max_new_tokens=self.model_config.max_new_tokens,
+                    trust_remote_code=self.model_config.trust_remote_code,
+                    local_files_only=self.model_config.local_files_only,
+                    max_pixels=getattr(self.model_config, "max_pixels", None),
+                )
+            else:
+                model, processor, _, torch = self.shared_model_manager.load()
+                self._engine = HuggingFaceVLMEngine(
+                    model_id=self.model_config.model_id,
+                    adapter_path=self.model_config.adapter_path,
+                    device=self.model_config.device,
+                    dtype=self.model_config.dtype,
+                    max_new_tokens=self.model_config.max_new_tokens,
+                    trust_remote_code=self.model_config.trust_remote_code,
+                    local_files_only=self.model_config.local_files_only,
+                    max_pixels=getattr(self.model_config, "max_pixels", None),
+                    shared_components=(model, processor, torch),
+                    shared_adapter_name=self.shared_adapter_name,
+                )
+                self.shared_model_manager.register_cache_releaser(
+                    self.shared_adapter_name, self._engine.release_idle_sessions
+                )
         return self._engine
+
+    def _adapter_context(self):
+        if self.shared_model_manager is None:
+            return nullcontext()
+        return self.shared_model_manager.activate(self.shared_adapter_name)
 
     def release_idle_sessions(self) -> None:
         if self._engine is not None:
@@ -1810,6 +1913,10 @@ class LazyQwenSemanticProvider:
         return "\n\n".join(prompt_parts)
 
     def infer(self, request: VLMRequest) -> VLMResult:
+        with self._adapter_context():
+            return self._infer_activated(request)
+
+    def _infer_activated(self, request: VLMRequest) -> VLMResult:
         model_input = request.model_input
         prompt = self._prompt(model_input)
         engine = self._load()
@@ -1876,6 +1983,12 @@ class LazyQwenSemanticProvider:
         )
 
     def reason_and_decide(self, request: FiniteDecisionRequest) -> FiniteDecisionResult:
+        with self._adapter_context():
+            return self._reason_and_decide_activated(request)
+
+    def _reason_and_decide_activated(
+        self, request: FiniteDecisionRequest
+    ) -> FiniteDecisionResult:
         engine = self._load()
         scorer = getattr(engine, "reason_and_choose", None)
         if not callable(scorer):

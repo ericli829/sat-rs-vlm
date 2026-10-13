@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import time
 from dataclasses import dataclass, field, replace
 from math import hypot
 from statistics import median
@@ -79,6 +80,18 @@ class OperatorContext:
     final_question: str | None = None
     graph_nodes: tuple[GraphNode, ...] = ()
     defer_final_answer: bool = False
+    deadline_monotonic: float | None = None
+    minimum_remaining_seconds: float = 0.0
+
+    def ensure_budget(self) -> None:
+        if self.deadline_monotonic is not None and (
+            self.deadline_monotonic - time.monotonic() <= self.minimum_remaining_seconds
+        ):
+            raise RuntimeBudgetExceeded("request budget reserved for final answer fallback")
+
+
+class RuntimeBudgetExceeded(TimeoutError):
+    """The runtime stopped before starting another expensive stage."""
 
 
 class OperatorExecutor(Protocol):

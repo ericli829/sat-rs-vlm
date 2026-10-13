@@ -73,7 +73,9 @@ def create_app(
             raise ValueError("Competition request timeout must be in (0, 120]")
         app.state.lock = asyncio.Lock()
         app.state.inflight = None
-        capture_path = question_capture_path or config.get("logging", {}).get("question_capture_path")
+        capture_path = question_capture_path or config.get("logging", {}).get(
+            "question_capture_path"
+        )
         app.state.question_capture = QuestionCapture(capture_path) if capture_path else None
         try:
             if config.get("server", {}).get("preload", False):
@@ -128,10 +130,12 @@ def create_app(
 
     @app.get("/healthz")
     async def healthz():
+        readiness = app.state.service.readiness()
         return {
-            "status": "ready",
+            "status": readiness["status"],
             "protocol_version": "2.0",
             "dataset_id": app.state.service.package.dataset_id,
+            "model_readiness": readiness,
         }
 
     @app.post("/v1/predict")

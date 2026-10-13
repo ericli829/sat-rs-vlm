@@ -148,6 +148,8 @@ class HuggingFaceVLMEngine:
         max_pixels: int | None = None,
         attn_implementation: str | None = None,
         max_memory: dict[int | str, int | str] | None = None,
+        shared_components: tuple[Any, Any, Any] | None = None,
+        shared_adapter_name: str | None = None,
     ) -> None:
         """初始化 HuggingFace 模型和处理器。
 
@@ -183,6 +185,25 @@ class HuggingFaceVLMEngine:
         self.dtype = dtype
         self.max_new_tokens = max_new_tokens
         self.last_generation_telemetry: dict[str, Any] = {}
+        self._shared_model = shared_components is not None
+        self.shared_adapter_name = shared_adapter_name
+
+        if shared_components is not None:
+            if len(shared_components) != 3:
+                raise ValueError("shared Qwen3-VL components must be (model, processor, torch)")
+            self._model, self._processor, shared_torch = shared_components
+            self._torch = shared_torch
+            self._model_class_name = type(self._model).__name__
+            model_device = getattr(self._model, "device", None)
+            if model_device is not None:
+                self.device = str(model_device)
+            self._model_identity = (
+                f"{self.model_id}:{self._model_class_name}:shared:{shared_adapter_name}:"
+                f"{id(self._model)}"
+            )
+            self._active_sessions: dict[str, CachedGenerationSession] = {}
+            self.model_load_ms = 0.0
+            return
 
         processor_cls = transformers.AutoProcessor
         model_cls = self._resolve_model_class(transformers)
@@ -1300,6 +1321,12 @@ class HuggingFaceVLMEngine:
             session.close()
         model = self._model
         torch = self._torch
+        if self._shared_model:
+            self._active_sessions.clear()
+            self._model = None
+            self._processor = None
+            self._image_module = None
+            return
         close = getattr(model, "close", None)
         if callable(close):
             close()

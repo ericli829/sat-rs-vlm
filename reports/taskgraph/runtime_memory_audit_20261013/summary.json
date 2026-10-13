@@ -1,0 +1,23 @@
+{
+  "source": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\configs\\taskgraph\\taskgraph_qwen_test.jsonl",
+  "source_sha256": "f649cf1b972dc06e339d8c17c69733f7ef43017ce8f6192399b2f0e23dee2cbe",
+  "backup": "reports\\taskgraph\\runtime_memory_audit_20261013\\original_memory.jsonl",
+  "backup_sha256": "f649cf1b972dc06e339d8c17c69733f7ef43017ce8f6192399b2f0e23dee2cbe",
+  "original_count": 3738,
+  "verified_2b_correct_count": 0,
+  "final_whitelist_count": 0,
+  "direct_vlm_count": 2410,
+  "taskgraph_count": 1328,
+  "missing_model_role_count": 3738,
+  "missing_correctness_status_count": 3738,
+  "missing_correctness_evidence_count": 3738,
+  "duplicate_sample_id_groups": 0,
+  "duplicate_or_conflicting_hash_key_groups": 1,
+  "exclusion_reasons": {
+    "duplicate_or_conflicting_hash_key": 2,
+    "missing_or_non_2b_model_role": 2410,
+    "not_direct_vlm": 1326
+  },
+  "audit_index": "reports\\taskgraph\\runtime_memory_audit_20261013\\audit_index.jsonl",
+  "whitelist": "D:\\Desktop\\tzb-2026\\sat-rs-vlm\\configs\\taskgraph\\taskgraph_qwen_verified.jsonl"
+}

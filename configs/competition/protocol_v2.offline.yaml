@@ -7,8 +7,12 @@ server:
   timeout_seconds: 120
   preload: false
 routing:
-  simple_count_detection: true
-  graph_for_relational_questions: true
+  direct_vlm_max_pixels: 409600
+retry:
+  taskgraph_graph_retries: 1
+  fallback_reserve_seconds: 20
+  fallback_minimum_seconds: 6
+  response_reserve_seconds: 1
 short_text:
   instruction: "Return only the shortest direct answer. No explanation."
 enum:

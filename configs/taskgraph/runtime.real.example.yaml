@@ -23,6 +23,11 @@ dataset_policy:
   XLRS_Bench:
     default: TASKGRAPH_UHR
 
+model_sharing:
+  enabled: true
+  planner_adapter_name: planner
+  route_4b_adapter_name: changechat
+
 providers:
   planner:
     kind: qwen3vl_lora
@@ -236,8 +241,9 @@ answerability:
   prompt_version: answerability-v1
 
 runtime_memory:
-  path: configs/taskgraph/taskgraph_qwen_test.jsonl
-  recording: true
+  path: configs/taskgraph/taskgraph_qwen_verified.jsonl
+  recording: false
+  require_verified: true
 
 choice:
   backend: kv_cached_logits

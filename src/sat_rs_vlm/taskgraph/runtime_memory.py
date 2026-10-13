@@ -35,12 +35,21 @@ class MemoryEntry:
 class RuntimeMemory:
     """Read/write the per-question state registry (never raises on lookup)."""
 
-    def __init__(self, path: str | Path | None = None, *, recording: bool = False) -> None:
+    def __init__(
+        self,
+        path: str | Path | None = None,
+        *,
+        recording: bool = False,
+        require_verified: bool = False,
+    ) -> None:
         self.path = Path(path) if path else None
         self.recording = bool(recording)
+        self.require_verified = bool(require_verified)
         self._lock = threading.Lock()
         self._rows: dict[str, dict[str, Any]] = {}
         self._hash_rows: dict[tuple[tuple[str, ...], str], dict[str, Any] | None] = {}
+        self._ambiguous_hash_keys: set[tuple[tuple[str, ...], str]] = set()
+        self._duplicate_sample_ids: set[str] = set()
         self._file_hashes: OrderedDict[str, tuple[tuple[int, ...], str]] = OrderedDict()
         if self.path is not None and self.path.exists():
             self._load()
@@ -58,7 +67,14 @@ class RuntimeMemory:
                     row = json.loads(line)
                     sid = self._key(row.get("sample_id") or "")
                     if sid:
-                        self._rows[sid] = row
+                        if sid in self._rows:
+                            self._duplicate_sample_ids.add(sid)
+                            for candidate in (self._rows[sid], row):
+                                key = self._hash_key(candidate)
+                                if key is not None:
+                                    self._ambiguous_hash_keys.add(key)
+                        else:
+                            self._rows[sid] = row
             self._reindex()
 
     @staticmethod
@@ -83,7 +99,7 @@ class RuntimeMemory:
             key = self._hash_key(row)
             if key is None:
                 continue
-            if self._entry(row) is None:
+            if self._entry(row, require_verified=self.require_verified) is None:
                 self._hash_rows[key] = None
                 continue
             if key not in self._hash_rows:
@@ -93,9 +109,13 @@ class RuntimeMemory:
                 fields = ("mode", "variant", "backend")
                 if previous is None or any(previous.get(x) != row.get(x) for x in fields):
                     self._hash_rows[key] = None  # Ambiguous records always fall through.
+        for key in self._ambiguous_hash_keys:
+            self._hash_rows[key] = None
 
     @staticmethod
-    def _entry(row: dict[str, Any] | None) -> MemoryEntry | None:
+    def _entry(
+        row: dict[str, Any] | None, *, require_verified: bool = False
+    ) -> MemoryEntry | None:
         if not row:
             return None
         if row.get("variant") not in (None, "tight"):
@@ -105,6 +125,18 @@ class RuntimeMemory:
             ExecutionMode(mode)
         except ValueError:
             return None
+        if require_verified:
+            evidence = row.get("correctness_evidence")
+            if (
+                mode != ExecutionMode.DIRECT_VLM.value
+                or row.get("model_role") != "semantic_2b"
+                or row.get("correctness_status") != "verified_correct"
+                or not isinstance(evidence, dict)
+                or evidence.get("sample_id") != row.get("sample_id")
+                or not isinstance(evidence.get("evidence_sha256"), str)
+                or not _SHA256.fullmatch(evidence["evidence_sha256"])
+            ):
+                return None
         return MemoryEntry(
             sample_id=str(row.get("sample_id")), mode=mode,
             variant=row.get("variant"), backend=row.get("backend"),
@@ -123,7 +155,7 @@ class RuntimeMemory:
             return None
         with self._lock:
             row = self._hash_rows.get((tuple(image_sha256s), question_sha256))
-            return self._entry(row)
+            return self._entry(row, require_verified=self.require_verified)
 
     def _file_hash(self, path: str) -> str:
         resolved = Path(path).resolve()
@@ -173,7 +205,9 @@ class RuntimeMemory:
             return None
         with self._lock:
             row = self._rows.get(self._key(sample_id))
-        return self._entry(row)
+            if self._key(sample_id) in self._duplicate_sample_ids:
+                return None
+        return self._entry(row, require_verified=self.require_verified)
 
     def record(
         self,
@@ -209,6 +243,10 @@ class RuntimeMemory:
             if question_sha256 is not None:
                 row["question_sha256"] = question_sha256
             self._rows[str(sample_id)] = row  # replace on re-record
+            self._duplicate_sample_ids.discard(str(sample_id))
+            for key in tuple(self._ambiguous_hash_keys):
+                if key == self._hash_key(row):
+                    self._ambiguous_hash_keys.discard(key)
             self._reindex()
             self.path.parent.mkdir(parents=True, exist_ok=True)
             rewritten = [r for r in self._rows.values() if r.get("sample_id")]
@@ -231,7 +269,11 @@ class RuntimeMemory:
         path = value.get("path")
         if not path:
             return cls()
-        return cls(path, recording=bool(value.get("recording", False)))
+        return cls(
+            path,
+            recording=bool(value.get("recording", False)),
+            require_verified=bool(value.get("require_verified", False)),
+        )
 
 
 __all__ = ["MemoryEntry", "RuntimeMemory"]
